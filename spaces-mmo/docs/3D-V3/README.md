@@ -22,9 +22,9 @@ everything here is the client's view of the same room data: the grid, walkabilit
 | --- | --- | --- |
 | 1 Light and picture | sky and sun from the world's clock, the sky's light as an environment map, a filmic tone curve, shadows that turn with the sun, ambient occlusion, bloom, the close-up blur as a pass | done, except rain and wet surfaces |
 | 2 Asset pipeline | glTF models with Meshopt, KTX2 textures, a catalogue from today's builder keys to model files with three levels of detail, the procedural builder as the fallback | open |
-| 3 Terrain and water | a smoothed height field instead of hard terraces, PBR ground materials blended at the seams, rock on the block's sides; the water's surface | water and ground materials done; the height field and the block's sides open |
+| 3 Terrain and water | a smoothed height field instead of hard terraces, PBR ground materials blended at the seams, rock on the block's sides; the water's surface | water, ground materials and the block's sides done; the height field open |
 | 4 Vegetation | tree and bush models with leaf cards, wind, translucent leaves, instanced grass, crops per stage | open |
-| 5 Buildings and things | models in the order hut, site, ruin, later epochs, scenery; a small shared set of materials; lit interiors | open |
+| 5 Buildings and things | models in the order hut, site, ruin, later epochs, scenery; a small shared set of materials; lit interiors | a first step for every model: rounded shading and a surface grain (below) |
 | 6 Figures and animals | rigged figures with skeletal animation, the chosen look (`shared/appearance.ts`) as parts and colour masks | open |
 | 7 Zoom ladder and distance | neighbours as simplified models on the island level, soft changes of level, loading in the background | open |
 | 8 Acceptance | comparison pictures per phase, the frame rate on a real phone | open |
@@ -70,13 +70,24 @@ tile kind without a surface keeps the tile art; until the pictures are loaded, o
 photographed paving. The pictures are served by the page (`/materials/…`), not by the world's asset route, which serves
 PNG only.
 
+**The block's sides (`client/block3d.ts`, `rockSide`).** The land sides of a room's block and of its neighbours carry
+the photographed rock; v2's strata bands tint it and waver a little along the side. Until the rock has loaded the bands
+are the side's colour, as before.
+
+**Every model's surface (`client/props3d.ts`, `client/modelDetail3d.ts`).** The procedural models (plants, buildings,
+things, animals) are no longer faceted: `merge` gives faces that meet at less than 50° a shared normal
+(`creaseNormals`), so a trunk, a barrel or a bevelled beam is round and a box keeps its edges; round primitives have
+more segments (10 at room level, 16 near), and a ball larger than a berry (a crown, a bush, a boulder) is a lumpy mass
+instead of a sphere. The one model material adds a grain by the place on the model: it varies colour and roughness a
+little and bumps the surface, fading with distance. This is not yet phase 4 or 5: crowns are still solid masses without
+leaves, and the figures of `figure3d.ts` are unchanged.
+
 Dev probes on the canvas (not in a production build): `probeHour(hour)`, `probeFog(level)`, `probeLight()`,
 `probeTune(light, post)`.
 
 ## Open in phase 3
 
 - The smoothed height field: the ground still stands on v2's rounded terraces.
-- Rock on the block's sides (they keep the strata bands).
 
 ## Open in phase 1
 

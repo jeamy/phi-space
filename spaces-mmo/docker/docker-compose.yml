@@ -475,6 +475,7 @@ services:
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
       - ../app:/opt/phi-spaces/spaces-mmo/app
       - ../client:/opt/phi-spaces/spaces-mmo/client
+      - ../public:/opt/phi-spaces/spaces-mmo/public
       - ../server:/opt/phi-spaces/spaces-mmo/server
       - ../shared:/opt/phi-spaces/spaces-mmo/shared
       - ../worlds:/opt/phi-spaces/spaces-mmo/worlds

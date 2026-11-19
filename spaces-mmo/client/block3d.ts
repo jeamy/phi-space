@@ -4,6 +4,7 @@
 import { tile3d } from "./terrain3d.ts";
 import { fishModel, type FishKind } from "./fish3d.ts";
 import { propMaterial } from "./props3d.ts";
+import { groundMaps } from "./ground3d.ts";
 
 type T = typeof import("three");
 type Geo = import("three").BufferGeometry;
@@ -12,7 +13,8 @@ type Geo = import("three").BufferGeometry;
 export const BLOCK_DEPTH = 2.6;
 
 let strata: import("three").CanvasTexture | null = null;
-/** The rock strata of a land side, top to bottom: earth, sand, a dark seam, sandstone, clay, grey rock. */
+/** The rock strata of a land side, top to bottom: earth, sand, a dark seam, sandstone, clay, grey rock. Until the
+ *  photographed rock has loaded this is the side's colour, afterwards its tint over the rock. */
 function strataTexture(t: T): import("three").CanvasTexture {
 	if (strata) return strata;
 	const c = document.createElement("canvas"); c.width = 8; c.height = 256;
@@ -20,8 +22,33 @@ function strataTexture(t: T): import("three").CanvasTexture {
 	const bands: Array<[number, string]> = [[0.08, "#5b4632"], [0.2, "#6b5a46"], [0.26, "#4a3a2c"], [0.44, "#7a6a56"], [0.5, "#3e3025"], [0.7, "#6e6152"], [0.78, "#56493c"], [1, "#4a4a4e"]];
 	let from = 0;
 	for (const [to, colour] of bands) { g.fillStyle = colour; g.fillRect(0, from * 256, 8, (to - from) * 256 + 1); from = to; }
-	strata = new t.CanvasTexture(c); strata.colorSpace = t.SRGBColorSpace; strata.magFilter = t.NearestFilter; strata.userData.shared = true;
+	strata = new t.CanvasTexture(c); strata.colorSpace = t.SRGBColorSpace; strata.userData.shared = true;
 	return strata;
+}
+
+/** How much brighter the strata's tint is over the photographed rock than as a colour of its own. */
+const STRATA_GAIN = 2.3;
+/** The material of a block's land sides: photographed rock (ground3d.ts) tinted by the strata, whose bands waver a
+ *  little along the side. The uv is in cells (u along the side, v down from the top); `depth` is the block's depth. */
+function rockSide(t: T, depth: number, anisotropy: number): import("three").MeshStandardMaterial {
+	const material = new t.MeshStandardMaterial({ roughness: 1, metalness: 0 });
+	const uniforms = { uStrata: { value: strataTexture(t) }, uStrataGain: { value: 1 }, uDepth: { value: depth } };
+	material.onBeforeCompile = (shader) => {
+		Object.assign(shader.uniforms, uniforms);
+		shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vBlockUv;")
+			.replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvBlockUv = uv;");
+		shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uStrata;\nuniform float uStrataGain;\nuniform float uDepth;\nvarying vec2 vBlockUv;")
+			.replace("#include <color_fragment>", `#include <color_fragment>
+	float strataAt = vBlockUv.y / uDepth + 0.022 * sin( vBlockUv.x * 0.53 + 1.0 ) + 0.012 * sin( vBlockUv.x * 1.7 );
+	diffuseColor.rgb *= texture2D( uStrata, vec2( 0.5, clamp( strataAt, 0.004, 0.996 ) ) ).rgb * uStrataGain;`);
+	};
+	material.customProgramCacheKey = () => "block3d:rock";
+	void groundMaps(t, "rock", 2, anisotropy).then((m) => {
+		if (!m) return;
+		material.map = m.color; material.normalMap = m.normal; material.roughnessMap = m.arm; material.aoMap = m.arm;
+		uniforms.uStrataGain.value = STRATA_GAIN; material.needsUpdate = true;
+	});
+	return material;
 }
 
 let blob: import("three").CanvasTexture | null = null;
@@ -64,7 +91,7 @@ export function sides(t: T, ground: string[], water: (key: string) => boolean, d
 			// the back wall from the top of the slope up to the water
 			tri(bed, [nbx + fx, top - 0.05, nbz + fz, nax + fx, top - 0.05, naz + fz, nbx + fx, rise, nbz + fz, nax + fx, top - 0.05, naz + fz, nax + fx, rise, naz + fz, nbx + fx, rise, nbz + fz], [dark, dark, dark, dark, dark, dark]);
 		}
-		else { land.pos.push(...p); const u0 = ax + az, u1 = bx + bz; land.uv.push(u1, 1, u0, 1, u1, 0, u0, 1, u0, 0, u1, 0); }
+		else { land.pos.push(...p); const u0 = ax + az, u1 = bx + bz; land.uv.push(u1, depth, u0, depth, u1, 0, u0, depth, u0, 0, u1, 0); }
 	};
 	const x0 = -w / 2, z0 = -h / 2;
 	for (let x = 0; x < w; x++) {
@@ -82,12 +109,11 @@ export function sides(t: T, ground: string[], water: (key: string) => boolean, d
 }
 
 /** The block under a room's tiles: its sides and the shadow it casts on the void below. */
-export function blockUnder(t: T, ground: string[], tiles: Record<string, { walk: boolean }>, depth = BLOCK_DEPTH): import("three").Group {
+export function blockUnder(t: T, ground: string[], tiles: Record<string, { walk: boolean }>, depth = BLOCK_DEPTH, anisotropy = 4): import("three").Group {
 	const group = new t.Group(), h = ground.length, w = ground[0]?.length ?? 0;
 	const water = (key: string) => tile3d(key, !!tiles[key]?.walk).water;
 	const { land, sea, bed, edges } = sides(t, ground, water, depth);
-	const tex = strataTexture(t);
-	group.add(new t.Mesh(land, new t.MeshStandardMaterial({ map: tex, roughness: 1 })));
+	group.add(new t.Mesh(land, rockSide(t, depth, anisotropy)));
 	// the seabed and its back wall first, then the sea's side over them: lighter at the surface, deep below, a little
 	// light of its own (the hemisphere's ground colour would turn a side face green), and clear enough to see the sand
 	// slope and the fish through it

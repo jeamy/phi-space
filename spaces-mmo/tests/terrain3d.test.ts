@@ -158,7 +158,7 @@ test("plants are models: every sort of the world has a form, each stage is its o
 		assert.ok(c.model, c.key);
 		const g = fieldCropGeometry(t, c.model!, 4, 4, 1, 0xd9b44a, false);
 		g.computeBoundingBox();
-		assert.ok(g.boundingBox!.max.x <= 2.1 && g.boundingBox!.min.x >= -2.1 && g.boundingBox!.max.y > 0.1, c.key);
+		assert.ok(g.boundingBox!.max.x <= 2.15 && g.boundingBox!.min.x >= -2.15 && g.boundingBox!.max.y > 0.1, c.key);
 	}
 	for (const d of Object.values(w.decor ?? {})) assert.ok(d.model, "every plant of the ground is a model");
 	const flower = plantGeometry(t, "flower", 1, 0xffd54a);
@@ -208,7 +208,7 @@ test("fish: three kinds with a body and a tail at every detail level, finer up c
 		assert.equal(fishBody(t, kind, smoked), fishBody(t, kind, smoked), "made once and shared");
 		const tail = fishTail(t, kind, smoked);
 		tail.computeBoundingBox();
-		assert.ok(tail.boundingBox!.max.x <= 0.01 && tail.boundingBox!.min.x < -0.04, `${kind}: the tail reaches back from its root`);
+		assert.ok(tail.boundingBox!.max.x <= 0.0125 && tail.boundingBox!.min.x < -0.04, `${kind}: the tail reaches back from its root`);
 		room!.computeBoundingBox();
 		assert.ok(room!.boundingBox!.max.x > 0.1 && room!.boundingBox!.max.x < 0.2, `${kind}: nose towards +x`);
 	}
@@ -216,4 +216,20 @@ test("fish: three kinds with a body and a tail at every detail level, finer up c
 	assert.deepEqual(fishItem("items/raeucherfisch.png"), { kind: "hering", smoked: true });
 	assert.equal(fishItem("items/brot.png"), null);
 	assert.equal(fishItem(undefined), null);
+});
+
+test("a model's normals are smooth across a shallow edge and sharp across a steep one (3D v3)", async () => {
+	const { creaseNormals } = await import("../client/props3d.ts");
+	// two triangles sharing the edge from (0,0,0) to (0,0,1): one flat on the ground, the other tilted up by `angle`
+	const pair = (angle: number) => {
+		const c = Math.cos(angle), s = Math.sin(angle);
+		const pos = [0, 0, 0, 0, 0, 1, 1, 0, 0, /* second */ 0, 0, 1, 0, 0, 0, -c, s, 0];
+		return creaseNormals(pos, [0, 1, 0, s, c, 0]);
+	};
+	const shallow = pair(30 * Math.PI / 180), steep = pair(80 * Math.PI / 180);
+	// the shared corner (0,0,0) of the first face: leaning towards the second face's normal, or straight up
+	assert.ok(shallow[0]! > 0.2 && Math.abs(Math.hypot(shallow[0]!, shallow[1]!, shallow[2]!) - 1) < 1e-9, "a shallow edge shares its normal");
+	assert.deepEqual(steep.slice(0, 3), [0, 1, 0], "a steep edge keeps the face's own normal");
+	// the corner no other face touches keeps its face's normal
+	assert.deepEqual(shallow.slice(6, 9), [0, 1, 0]);
 });

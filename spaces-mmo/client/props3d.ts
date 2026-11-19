@@ -34,19 +34,25 @@ export function rand(seed: string): () => number {
 	return () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 10_000) / 10_000; };
 }
 
-/** The parts merged into one geometry: positions, flat normals and a colour per face (a little lighter or darker). */
+/** Faces that meet at less than this angle shade as one rounded surface; sharper edges stay edges. */
+const CREASE = Math.cos(50 * Math.PI / 180);
+
+/** The parts merged into one geometry: positions, a colour per part, and normals that are smooth across faces meeting
+ *  at a shallow angle (a trunk, a crown, a bevel are round) and sharp where they meet steeply (a box keeps its edges). */
 export function merge(t: T, parts: Part[], seed: string): Geo {
-	const pos: number[] = [], col: number[] = [], glow: number[] = [];
+	const pos: number[] = [], col: number[] = [], glow: number[] = [], faces: number[] = [];
 	const m = new t.Matrix4(), q = new t.Quaternion(), e = new t.Euler(), c = new t.Color(), edgeA = new t.Vector3(), edgeB = new t.Vector3(), origin = new t.Vector3(), normal = new t.Vector3();
 	for (const part of parts) {
 		const primitive = modelPrimitive(t, part.g), g = primitive.index ? primitive.toNonIndexed() : primitive;
 		m.compose(new t.Vector3(...(part.p ?? [0, 0, 0])), q.setFromEuler(e.set(...(part.r ?? [0, 0, 0]))), new t.Vector3(...(part.s ?? [1, 1, 1])));
 		g.applyMatrix4(m);
 		const a = g.getAttribute("position");
+		c.setHex(part.c);
+		const lit = LAMPLIGHT.has(part.c) ? 1 : 0;
 		for (let i = 0; i < a.count; i += 3) {
-			origin.fromBufferAttribute(a, i); edgeA.fromBufferAttribute(a, i + 1).sub(origin); edgeB.fromBufferAttribute(a, i + 2).sub(origin); normal.crossVectors(edgeA, edgeB).normalize();
-			c.setHex(part.c).multiplyScalar(normal.y + normal.x * 0.4 + normal.z * 0.2 > 0.1 ? 1.04 : 0.82);
-			const lit = LAMPLIGHT.has(part.c) ? 1 : 0;
+			origin.fromBufferAttribute(a, i); edgeA.fromBufferAttribute(a, i + 1).sub(origin); edgeB.fromBufferAttribute(a, i + 2).sub(origin); normal.crossVectors(edgeA, edgeB);
+			// the face's normal, its length the face's size (so a large face weighs more at a shared corner)
+			faces.push(normal.x, normal.y, normal.z);
 			for (let k = 0; k < 3; k++) { pos.push(a.getX(i + k), a.getY(i + k), a.getZ(i + k)); col.push(c.r, c.g, c.b); glow.push(lit); }
 		}
 		g.dispose(); if (g !== primitive) primitive.dispose();
@@ -55,11 +61,44 @@ export function merge(t: T, parts: Part[], seed: string): Geo {
 	out.setAttribute("position", new t.Float32BufferAttribute(pos, 3));
 	out.setAttribute("color", new t.Float32BufferAttribute(col, 3));
 	out.setAttribute("glow", new t.Float32BufferAttribute(glow, 1));
-	out.computeVertexNormals(); // not indexed: every face keeps its own normal (faceted)
+	out.setAttribute("normal", new t.Float32BufferAttribute(creaseNormals(pos, faces), 3));
 	out.computeBoundingSphere();
 	out.userData.shared = true; out.userData.model = seed;
 	return out;
 }
+
+/** A normal per corner of a triangle list: the sum of the normals of the faces around that point which lie within
+ *  CREASE of the corner's own face. `faces` holds each face's normal, unnormalised. */
+export function creaseNormals(pos: readonly number[], faces: readonly number[]): number[] {
+	const count = pos.length / 3, around = new Map<string, number[]>(), unit: number[] = new Array(faces.length);
+	for (let f = 0; f < faces.length; f += 3) { const l = Math.hypot(faces[f]!, faces[f + 1]!, faces[f + 2]!) || 1; unit[f] = faces[f]! / l; unit[f + 1] = faces[f + 1]! / l; unit[f + 2] = faces[f + 2]! / l; }
+	const key = (i: number) => `${Math.round(pos[i * 3]! * 2000)},${Math.round(pos[i * 3 + 1]! * 2000)},${Math.round(pos[i * 3 + 2]! * 2000)}`;
+	const keys: string[] = new Array(count);
+	for (let i = 0; i < count; i++) { const k = keys[i] = key(i), f = Math.floor(i / 3); let list = around.get(k); if (!list) around.set(k, list = []); if (!list.includes(f)) list.push(f); }
+	const out: number[] = new Array(pos.length);
+	for (let i = 0; i < count; i++) {
+		const own = Math.floor(i / 3) * 3, ox = unit[own]!, oy = unit[own + 1]!, oz = unit[own + 2]!;
+		let x = 0, y = 0, z = 0;
+		for (const f of around.get(keys[i]!)!) { const j = f * 3; if (unit[j]! * ox + unit[j + 1]! * oy + unit[j + 2]! * oz >= CREASE) { x += faces[j]!; y += faces[j + 1]!; z += faces[j + 2]!; } }
+		const l = Math.hypot(x, y, z);
+		if (l > 0) { out[i * 3] = x / l; out[i * 3 + 1] = y / l; out[i * 3 + 2] = z / l; } else { out[i * 3] = ox; out[i * 3 + 1] = oy; out[i * 3 + 2] = oz; }
+	}
+	return out;
+}
+
+/** The grain every model's surface carries, by its place on the model (so it stays with a moving animal): two octaves
+ *  of value noise, 0 to 1. It varies the colour and the roughness a little and bumps the surface. */
+const GRAIN = /* glsl */ `
+uniform float uNight;
+varying float vGlow;
+varying vec3 vModelPos;
+float modelHash( vec3 p ) { p = fract( p * 0.3183099 + 0.1 ); p *= 17.0; return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) ); }
+float modelNoise( vec3 p ) {
+	vec3 i = floor( p ), f = fract( p ), u = f * f * ( 3.0 - 2.0 * f );
+	return mix( mix( mix( modelHash( i ), modelHash( i + vec3( 1, 0, 0 ) ), u.x ), mix( modelHash( i + vec3( 0, 1, 0 ) ), modelHash( i + vec3( 1, 1, 0 ) ), u.x ), u.y ),
+		mix( mix( modelHash( i + vec3( 0, 0, 1 ) ), modelHash( i + vec3( 1, 0, 1 ) ), u.x ), mix( modelHash( i + vec3( 0, 1, 1 ) ), modelHash( i + vec3( 1, 1, 1 ) ), u.x ), u.y ), u.z );
+}
+float modelGrain( vec3 p ) { return 0.62 * modelNoise( p * 9.0 ) + 0.38 * modelNoise( p * 23.0 + 5.0 ); }`;
 
 let material: import("three").MeshStandardMaterial | null = null;
 /** How dark it is, 0 by day to 1 at night: the lamplit faces of every model glow by it (setNight). */
@@ -68,11 +107,24 @@ const night = { value: 0 };
  *  their own colour, so windows, lanterns and kiln mouths light up without a light per house. */
 export function propMaterial(t: T): import("three").MeshStandardMaterial {
 	if (!material) {
-		material = new t.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88, metalness: 0 });
+		material = new t.MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0 });
 		material.onBeforeCompile = (shader) => {
 			shader.uniforms.uNight = night;
-			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nattribute float glow;\nvarying float vGlow;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow;");
-			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uNight;\nvarying float vGlow;").replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * uNight * 4.0;");
+			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nattribute float glow;\nvarying float vGlow;\nvarying vec3 vModelPos;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow;\nvModelPos = position;");
+			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\n${GRAIN}`)
+				.replace("#include <color_fragment>", "#include <color_fragment>\n\tfloat grain = modelGrain( vModelPos );\n\tdiffuseColor.rgb *= 0.9 + 0.2 * grain;")
+				.replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+	{
+		// the grain as a bump: the surface leans by the slope of the grain, less with distance (it would flicker there)
+		vec3 gx = dFdx( vViewPosition ), gy = dFdy( vViewPosition );
+		vec3 r1 = cross( gy, normal ), r2 = cross( normal, gx );
+		float det = dot( gx, r1 ), fine = modelGrain( vModelPos * 3.1 + 11.0 );
+		float bump = ( grain + 0.5 * fine ) * 0.012 * smoothstep( 34.0, 5.0, length( vViewPosition ) );
+		vec3 slope = sign( det ) * ( dFdx( bump ) * r1 + dFdy( bump ) * r2 );
+		normal = normalize( abs( det ) * normal - slope );
+	}`)
+				.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n\troughnessFactor = clamp( roughnessFactor + ( grain - 0.5 ) * 0.2, 0.0, 1.0 );")
+				.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * uNight * 4.0;");
 		};
 		material.userData.shared = true;
 	}

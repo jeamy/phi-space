@@ -12,7 +12,7 @@ export function atModelLevel<R>(next: ModelLevel, build: () => R): R {
 export function modelPrimitive(t: T, source: BufferGeometry): BufferGeometry {
 	const p = (source as BufferGeometry & { parameters?: Record<string, number> }).parameters;
 	if (!p) return source;
-	const segments = level === "far" ? 4 : level === "room" ? 6 : 12;
+	const segments = level === "far" ? 5 : level === "room" ? 10 : 16;
 	let out: BufferGeometry = source;
 	if (source.type === "BoxGeometry" && level !== "far") {
 		const { width: w, height: h, depth: d } = p, bevel = Math.min(w!, h!, d!) * (level === "near" ? 0.12 : 0.06);
@@ -24,11 +24,25 @@ export function modelPrimitive(t: T, source: BufferGeometry): BufferGeometry {
 	else if (source.type === "ConeGeometry") out = new t.ConeGeometry(p.radius, p.height, segments, 1, !!p.openEnded, p.thetaStart, p.thetaLength);
 	else if (source.type === "SphereGeometry") out = new t.SphereGeometry(p.radius, segments, Math.max(3, segments / 2), p.phiStart, p.phiLength, p.thetaStart, p.thetaLength);
 	else if (source.type === "CapsuleGeometry") out = new t.CapsuleGeometry(p.radius, p.height, level === "near" ? 4 : 2, segments);
-	else if (source.type === "IcosahedronGeometry") out = level === "far" ? new t.OctahedronGeometry(p.radius, 0) : new t.IcosahedronGeometry(p.radius, level === "near" ? 1 : 0);
+	else if (source.type === "IcosahedronGeometry") out = level === "far" ? new t.IcosahedronGeometry(p.radius, 0) : lumpy(new t.IcosahedronGeometry(p.radius, p.radius! > LUMP_FROM ? (level === "near" ? 3 : 2) : 1), p.radius!);
 	else if (source.type === "DodecahedronGeometry" && level === "far") out = new t.IcosahedronGeometry(p.radius, 0);
 	else if (source.type === "TorusGeometry") out = new t.TorusGeometry(p.radius, p.tube, level === "near" ? 6 : 3, segments * 2, p.arc);
 	if (out !== source) source.dispose();
 	return out;
+}
+
+/** A ball this large is a crown, a bush or a boulder and gets lumps; a smaller one (a berry, a nut) stays round. */
+const LUMP_FROM = 0.19;
+/** Pushes a large ball's points in and out by their direction, so a crown is a lumpy mass and not a sphere. */
+function lumpy(g: BufferGeometry, radius: number): BufferGeometry {
+	if (radius <= LUMP_FROM) return g;
+	const a = g.getAttribute("position");
+	for (let i = 0; i < a.count; i++) {
+		const x = a.getX(i) / radius, y = a.getY(i) / radius, z = a.getZ(i) / radius;
+		const k = 1 + 0.12 * Math.sin(3.3 * x + 1.7) * Math.sin(2.9 * y + 0.4) * Math.sin(3.7 * z + 2.2) + 0.05 * Math.sin(5.1 * x + 4.3 * z + 0.9) * Math.sin(4.7 * y + 1.1);
+		a.setXYZ(i, a.getX(i) * k, a.getY(i) * k, a.getZ(i) * k);
+	}
+	return g;
 }
 
 export function detailLevelAt(zoom: number, distance: number, current: ModelLevel): ModelLevel {

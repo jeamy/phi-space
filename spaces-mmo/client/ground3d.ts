@@ -26,7 +26,7 @@ const EARTH: Spec = { name: "rock", cells: 2, tint: 0xb89a78 };
 type Maps = { color: Texture; normal: Texture; arm: Texture };
 const loading = new Map<string, Promise<Maps | null>>();
 /** The three pictures of a material, loaded once and shared between rooms; null where they are not served. */
-function maps(t: T, name: string, cells: number, anisotropy: number): Promise<Maps | null> {
+export function groundMaps(t: T, name: string, cells: number, anisotropy: number): Promise<Maps | null> {
 	const id = `${name}@${cells}`;
 	let p = loading.get(id);
 	if (!p) {
@@ -78,7 +78,7 @@ export function groundLooks(t: T, ground: readonly string[], water: (key: string
 		};
 		material.customProgramCacheKey = () => `ground3d:${wet}`;
 		material.userData.dispose = () => near.dispose();
-		void maps(t, spec.name, spec.cells, anisotropy).then((m) => {
+		void groundMaps(t, spec.name, spec.cells, anisotropy).then((m) => {
 			if (!m) return;
 			material.map = m.color; material.normalMap = m.normal; material.roughnessMap = m.arm; material.aoMap = m.arm;
 			material.roughness = 1; material.color.setHex(spec.tint).multiplyScalar(shade * (spec.gain ?? 1)); material.needsUpdate = true;

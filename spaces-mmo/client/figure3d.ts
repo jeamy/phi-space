@@ -53,7 +53,7 @@ export function makeFigure(t: T, look: Look): Figure {
 	const tunic = look.ai ? AI_TUNIC : st ? COATS[st.coat]!.color : look.own ? OWN_TUNIC : TUNIC[s % TUNIC.length]!;
 	const trousers = TROUSERS[(st ? st.coat : s) % TROUSERS.length]!;
 	const build = BUILD[st?.body ?? 0]!;
-	const mat = (color: number, roughness = 0.82) => new t.MeshStandardMaterial({ color, roughness, flatShading: true });
+	const mat = (color: number, roughness = 0.82) => new t.MeshStandardMaterial({ color, roughness });
 	const mesh = (geo: import("three").BufferGeometry, m: import("three").Material, x = 0, y = 0, z = 0) => { const o = new t.Mesh(geo, m); o.position.set(x, y, z); return o; };
 	const group = new t.Group(); group.userData.owned = true;
 	const blob = mesh(new t.CircleGeometry(0.34, 20), new t.MeshBasicMaterial({ map: shadow(t), transparent: true, depthWrite: false }), 0, 0.012);
