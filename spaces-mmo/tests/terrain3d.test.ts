@@ -358,3 +358,16 @@ test("a drop of the resolution is judged by the frames after it settled, not by 
 	assert.ok(lowest <= SHARP.step * SHARP.step, `the resolution gave way: ${lowest}`);
 	assert.ok(p.scale < 1, `and stayed down: ${p.scale}`);
 });
+
+test("slow frames that vary from second to second let the resolution give way to its lowest step within seconds", async () => {
+	const { sharpen, sharpness, SHARP } = await import("../client/closeup3d.ts");
+	// 120 ms at full resolution, by the pixels, each second a quarter slower or a fifth faster than the frames would be
+	const p = sharpness();
+	let now = 0, noise = 1, second = -1;
+	while (now < 15_000) {
+		if (Math.floor(now / 1000) !== second) { second = Math.floor(now / 1000); noise = [0.8, 1.25, 1.25][second % 3]!; }
+		const e = 120 * p.scale * p.scale * noise;
+		now += e; sharpen(p, e, now);
+	}
+	assert.equal(p.scale, SHARP.min);
+});

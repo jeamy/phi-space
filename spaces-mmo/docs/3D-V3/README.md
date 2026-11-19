@@ -217,7 +217,10 @@ What follows from it, and what was done:
 - The resolution judged a drop by the second right after it, when the picture's targets and the shadow map are made
   anew: a phone found it "no faster", took it back and drew at 85 % of the screen's resolution for half a minute (87 ms
   a frame where 873×393 pixels took 41). The frames of the first 700 ms after a change are no longer counted
-  (`closeup3d.ts` `SETTLE_MS`), and a drop is taken back only when it made frames less than 5 % faster.
+  (`closeup3d.ts` `SETTLE_MS`), and a drop is taken back only when it made frames less than 5 % faster. Still the phone
+  stopped at 72 % (1261×567, 64 ms a frame): its frames vary so much from one second to the next that a drop was judged
+  no faster. A drop is now taken back only for frames of 38 ms or less (`SHARP.held`), where a page held to 30 frames a
+  second or a phone saving power is what keeps them; slower frames are the drawing's, and the resolution goes down.
 
 ### The night
 

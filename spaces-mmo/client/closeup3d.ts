@@ -30,7 +30,7 @@ export function frameSummary(times: number[], calls: number[], triangles: number
  *  `hold` seconds, it rises again, up to the screen's. Never below `floor` pixels per CSS pixel. A drop that brings no
  *  faster frames (the browser holds the page to 30 frames, a phone saving power) is taken back, and the resolution stays
  *  for `rest` seconds; so does it when a rise makes frames slow again. */
-export const SHARP = { slow: 1000 / 42, fast: 1000 / 56, step: 0.85, min: 0.5, floor: 0.75, hold: 4, rest: 30 };
+export const SHARP = { slow: 1000 / 42, fast: 1000 / 56, step: 0.85, min: 0.5, floor: 0.75, hold: 4, rest: 30, held: 1000 / 26 };
 /** The shadow map's side in texels by how far the picture's resolution gave way (`scale`, 1 to SHARP.min): it gives
  *  way with the picture. A phone that draws the picture at half the screen's resolution drew a map of 4096² texels for
  *  it at every frame something moved; a quarter of that is still finer than the picture's own pixels. */
@@ -50,8 +50,10 @@ export function sharpen(p: Sharpness, elapsed: number, now: number): boolean {
 	const frame = p.sum / p.frames; p.sum = p.frames = 0; p.at = now;
 	if (p.before !== null) {
 		const before = p.before; p.before = null;
-		// the last drop made frames no faster: not the drawing holds them back
-		if (frame > before * 0.95) { p.scale = Math.min(1, p.scale / SHARP.step); p.restUntil = now + SHARP.rest * 1000; p.settle = now + SETTLE_MS; return true; }
+		// the last drop made frames no faster: not the drawing holds them back (a page held to 30 frames a second, a
+		// phone saving power). Only for frames that fast: slower ones are the drawing's, and a phone's frames vary so much
+		// from one second to the next that a drop from 64 ms was once judged no faster and taken back
+		if (before <= SHARP.held && frame > before * 0.95) { p.scale = Math.min(1, p.scale / SHARP.step); p.restUntil = now + SHARP.rest * 1000; p.settle = now + SETTLE_MS; return true; }
 	}
 	if (now < p.restUntil) return false;
 	if (frame > SHARP.slow && p.scale > SHARP.min) {
