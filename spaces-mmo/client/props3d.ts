@@ -117,7 +117,13 @@ float modelNoise( vec3 p ) {
 	return mix( mix( mix( modelHash( i ), modelHash( i + vec3( 1, 0, 0 ) ), u.x ), mix( modelHash( i + vec3( 0, 1, 0 ) ), modelHash( i + vec3( 1, 1, 0 ) ), u.x ), u.y ),
 		mix( mix( modelHash( i + vec3( 0, 0, 1 ) ), modelHash( i + vec3( 1, 0, 1 ) ), u.x ), mix( modelHash( i + vec3( 0, 1, 1 ) ), modelHash( i + vec3( 1, 1, 1 ) ), u.x ), u.y ), u.z );
 }
-float modelGrain( vec3 p ) { return 0.62 * modelNoise( p * 9.0 ) + 0.38 * modelNoise( p * 23.0 + 5.0 ); }`;
+float modelGrain( vec3 p ) { return 0.62 * modelNoise( p * 9.0 ) + 0.38 * modelNoise( p * 23.0 + 5.0 ); }
+// the grain where a pixel covers px world units: an octave finer than two pixels would only flicker, its mean stands
+// in for it and it is not worked out (the same on every screen: what is smaller than a pixel is not drawn)
+float modelGrainAt( vec3 p, float px ) {
+	float fine = smoothstep( 0.035, 0.02, px );
+	return 0.62 * modelNoise( p * 9.0 ) + 0.38 * ( fine > 0.0 ? mix( 0.5, modelNoise( p * 23.0 + 5.0 ), fine ) : 0.5 );
+}`;
 
 let material: import("three").MeshStandardMaterial | null = null;
 /** How dark it is, 0 by day to 1 at night: the lamplit faces of every model glow by it (setNight). */
@@ -133,14 +139,15 @@ export function propMaterial(t: T): import("three").MeshStandardMaterial {
 				// an instance's colour (setColorAt) tints only the parts marked for it (TINTED), not the whole model
 				.replace("#include <color_vertex>", "#include <color_vertex>\n#ifdef USE_INSTANCING_COLOR\n\tvColor.rgb = color * mix( vec3( 1.0 ), instanceColor.rgb, tint );\n#endif");
 			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\n${GRAIN}\n${SURFACE_HEAD}`)
-				.replace("#include <color_fragment>", `#include <color_fragment>\n\tfloat grain = modelGrain( vModelPos );\n\tdiffuseColor.rgb *= 0.9 + 0.2 * grain;\n${SURFACE_COLOUR}`)
+				.replace("#include <color_fragment>", `#include <color_fragment>\n\tfloat modelPx = max( length( dFdx( vViewPosition ) ), length( dFdy( vViewPosition ) ) );\n\tfloat grain = modelGrainAt( vModelPos, modelPx );\n\tdiffuseColor.rgb *= 0.9 + 0.2 * grain;\n${SURFACE_COLOUR}`)
 				.replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
 	{
 		// the grain as a bump: the surface leans by the slope of the grain, less with distance (it would flicker there)
 		vec3 gx = dFdx( vViewPosition ), gy = dFdy( vViewPosition );
 		vec3 r1 = cross( gy, normal ), r2 = cross( normal, gx );
-		// far away the bump is nothing: its fine grain (16 noise values) is worked out only where it shows
-		float det = dot( gx, r1 ), bumpNear = smoothstep( 34.0, 5.0, length( vViewPosition ) ), bump = 0.0;
+		// far away the bump is nothing: its fine grain (16 noise values, up to 71 waves a unit) is worked out only where it
+		// shows, near the camera and where a pixel is small enough for it
+		float det = dot( gx, r1 ), bumpNear = smoothstep( 34.0, 5.0, length( vViewPosition ) ) * smoothstep( 0.03, 0.015, modelPx ), bump = 0.0;
 		if ( bumpNear > 0.0 ) bump = ( ( grain + 0.5 * modelGrain( vModelPos * 3.1 + 11.0 ) ) * 0.012 + surfaceHigh * 0.03 ) * bumpNear;
 		vec3 slope = sign( det ) * ( dFdx( bump ) * r1 + dFdy( bump ) * r2 );
 		normal = normalize( abs( det ) * normal - slope );

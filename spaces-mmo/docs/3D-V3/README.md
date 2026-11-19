@@ -221,6 +221,12 @@ What follows from it, and what was done:
   stopped at 72 % (1261×567, 64 ms a frame): its frames vary so much from one second to the next that a drop was judged
   no faster. A drop is now taken back only for frames of 38 ms or less (`SHARP.held`), where a page held to 30 frames a
   second or a phone saving power is what keeps them; slower frames are the drawing's, and the resolution goes down.
+- With the resolution at half the screen's, the phone drew 26 frames a second (39 ms at night, about 20 of them the
+  floor): the things and figures 13 ms, the shadows 5, the plants 5, the bloom 3. The models' material worked out four
+  octaves of noise in every pixel: the colour's grain (9 and 23 waves a unit) and the bump's (up to 71). An octave finer
+  than two pixels only flickers; it is now left out where a pixel covers too much of the world (`props3d.ts`
+  `modelGrainAt`, the bump by `modelPx`), the same rule on every screen. Graue Bucht has no plant drawn as a picture (the
+  world has none), so the sprites were not what the plants cost.
 
 ### The night
 
