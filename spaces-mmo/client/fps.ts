@@ -1,6 +1,7 @@
 // The FPS measurement of the 3D map (MapView3D measures, the top bar's button starts it and shows the result): two window
 // events, so that the bar need not reach into the renderer.
-export type FpsState = { running: true; remaining: number } | { running: false; fps: number | null; note?: string };
+/** `detail`: where the time of a frame went, as lines for the eye (shown under the bar until tapped away). */
+export type FpsState = { running: true; remaining: number } | { running: false; fps: number | null; note?: string; detail?: string[] };
 const START = "mmo-fps-start", STATE = "mmo-fps-state";
 
 export const startFps = () => window.dispatchEvent(new Event(START));

@@ -44,7 +44,8 @@ type Scene3D = {
 	shadowAt: number;
 	/** the resolution as it follows the frame rate (sharpness) */
 	sharp: Sharpness;
-	measurement: { at: number; times: number[]; calls: number[]; zooms: number[]; remaining: number } | null;
+	/** a running measurement: per frame its time, its draw calls, and the JavaScript in it (moving things, drawing) */
+	measurement: { at: number; times: number[]; calls: number[]; moves: number[]; draws: number[]; remaining: number } | null;
 	detailAt: number;
 	catalogue?: boolean;
 	scene: import("three").Scene;
@@ -131,7 +132,7 @@ export function MapView3D(props: MapRendererProps) {
 	useEffect(() => onFpsStart(() => {
 		const s = state.current;
 		if (!s || s.measurement) return;
-		s.measurement = { at: performance.now(), times: [], calls: [], zooms: [], remaining: 32 };
+		s.measurement = { at: performance.now(), times: [], calls: [], moves: [], draws: [], remaining: 32 };
 		sayFps({ running: true, remaining: 32 });
 	}), []);
 
@@ -180,6 +181,7 @@ export function MapView3D(props: MapRendererProps) {
 					}
 					if (sharpen(s.sharp, elapsed, now)) setRatio(s);
 					s.renderer.info.reset();
+					const began = s.measurement ? performance.now() : 0;
 					const moved = step(s, dt, now / 1000, latest.current.me);
 					bubbleTick(s);
 					// on the island level the fish are too small to see: neither moved nor drawn
@@ -190,13 +192,23 @@ export function MapView3D(props: MapRendererProps) {
 					// a model's level of detail, a new object)
 					const shadows = moved || now - s.shadowAt >= SHADOW_EVERY_MS;
 					if (shadows) s.shadowAt = now;
+					const drawing = s.measurement ? performance.now() : 0;
 					s.post.render(closeBlur(s.zoom), shadows);
 					if (s.measurement) {
 						const m = s.measurement, seconds = Math.max(0, 32 - Math.floor((now - m.at) / 1000));
 						if (seconds !== m.remaining) { m.remaining = seconds; sayFps({ running: true, remaining: seconds }); }
-						if (now - m.at >= 2000) { m.times.push(elapsed); m.calls.push(renderer.info.render.calls); m.zooms.push(s.zoom); }
+						if (now - m.at >= 2000) { m.times.push(elapsed); m.calls.push(renderer.info.render.calls); m.moves.push(drawing - began); m.draws.push(performance.now() - drawing); }
 						if (now - m.at >= 32000) {
-							sayFps({ running: false, fps: frameSummary(m.times, m.calls, renderer.info.render.triangles, renderer.info.memory.geometries).fps });
+							const sum = frameSummary(m.times, m.calls, renderer.info.render.triangles, renderer.info.memory.geometries);
+							const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0), size = renderer.getDrawingBufferSize(new t.Vector2());
+							// what tells a slow graphics card from slow JavaScript: the time inside the frame's own code against the frame's
+							// whole time (the rest is the card and the browser), the work handed over, and how far the resolution gave way
+							sayFps({ running: false, fps: sum.fps, detail: [
+								`${sum.fps.toFixed(1)} FPS · Frame ${sum.p50Ms.toFixed(0)} ms (95 %: ${sum.p95Ms.toFixed(0)} ms)`,
+								`JavaScript: bewegen ${mean(m.moves).toFixed(1)} ms, zeichnen ${mean(m.draws).toFixed(1)} ms`,
+								`${Math.round(sum.drawCalls)} Draw-Calls · ${Math.round(sum.triangles / 1000)} Tsd. Dreiecke · Zoom ${s.zoom.toFixed(2)}`,
+								`Bild ${size.x}×${size.y} px · Schärfe ${Math.round(s.sharp.scale * 100)} % · Gerät ${fullRatio().toFixed(2)}×`,
+							] });
 							s.measurement = null;
 						}
 					}
