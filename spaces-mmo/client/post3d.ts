@@ -4,7 +4,7 @@
 // background (v2), and last the filmic tone curve and the display's colour space. Names and speech bubbles (layer 1) are
 // drawn afterwards, straight to the screen, so they stay sharp and keep their colours.
 import type { Line, Mesh, Object3D, PerspectiveCamera, Points, Scene, Sprite, WebGLRenderer } from "three";
-import { DepthTexture, HalfFloatType, NoToneMapping, Vector2, WebGLRenderTarget } from "three";
+import { HalfFloatType, NoToneMapping, Vector2, WebGLRenderTarget } from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
@@ -18,9 +18,7 @@ export const POST = { samples: 4, aoScale: 0.5, aoRadius: 0.45, aoIntensity: 1, 
 
 export function createPost(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera) {
 	const ratio = renderer.getPixelRatio();
-	// each of the composer's two targets keeps the scene's depth (resolved from the multisampling), so the occlusion can read
-	// it instead of drawing the scene once more (fromPicture); the composer clones the first target with its depth texture
-	const composer = new EffectComposer(renderer, new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: POST.samples, depthTexture: new DepthTexture(1, 1) }));
+	const composer = new EffectComposer(renderer, new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: POST.samples }));
 	composer.setPixelRatio(ratio);
 	composer.addPass(new RenderPass(scene, camera));
 	const ao = new GTAOPass(scene, camera, 1, 1);
@@ -62,37 +60,15 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 		r.setRenderTarget(bokeh.renderToScreen ? null : writeBuffer);
 		blur._fsQuad.render(r);
 	};
-	// The occlusion from the picture's own depth: no pass of its own over the scene, the normals worked out from the depth.
-	// The target the scene was drawn into is the one the occlusion reads (readBuffer), and its depth is that target's.
-	const gtao = ao as unknown as { _renderGBuffer: boolean; gtaoMaterial: import("three").ShaderMaterial; pdMaterial: import("three").ShaderMaterial; normalTexture: unknown; depthTexture: DepthTexture };
-	const own = { depth: gtao.depthTexture, normal: gtao.normalTexture };
-	let fromPicture = false;
-	const useDepth = (depth: DepthTexture, normal: unknown) => {
-		gtao.depthTexture = depth;
-		for (const m of [gtao.gtaoMaterial, gtao.pdMaterial]) { m.uniforms.tDepth!.value = depth; m.uniforms.tNormal!.value = normal; }
-	};
-	const pictureDepth = (on: boolean) => {
-		if (on === fromPicture) return;
-		fromPicture = on; gtao._renderGBuffer = !on;
-		for (const m of [gtao.gtaoMaterial, gtao.pdMaterial]) { m.defines.NORMAL_VECTOR_TYPE = on ? 0 : 1; m.needsUpdate = true; }
-		if (!on) useDepth(own.depth, own.normal);
-	};
-	const aoRender = ao.render.bind(ao);
-	ao.render = (r: WebGLRenderer, writeBuffer: WebGLRenderTarget, readBuffer: WebGLRenderTarget, ...rest: unknown[]) => {
-		if (fromPicture && readBuffer.depthTexture && gtao.depthTexture !== readBuffer.depthTexture) useDepth(readBuffer.depthTexture, null);
-		(aoRender as (...a: unknown[]) => void)(r, writeBuffer, readBuffer, ...rest);
-	};
 	const direction = camera.position.clone();
 	let noBlur = false, direct = false;
 	return {
 		/** The passes, for measurements. */
 		composer,
 		/** For measurements: the occlusion (and with it the blur, which reads its depth) or the bloom left out. */
-		leaveOut(parts: { ao?: boolean; bloom?: boolean; smooth?: boolean; aoSamples?: number; aoFromPicture?: boolean; post?: boolean }) {
+		leaveOut(parts: { ao?: boolean; bloom?: boolean; smooth?: boolean; aoSamples?: number; post?: boolean }) {
 			ao.enabled = !parts.ao; bloom.enabled = !parts.bloom; direct = !!parts.post;
-			// the blur would read the depth of the target it draws into when that has no multisampling
-			noBlur = !!parts.ao || !!parts.post || (!!parts.aoFromPicture && !!parts.smooth);
-			pictureDepth(!!parts.aoFromPicture);
+			noBlur = !!parts.ao || !!parts.post;
 			ao.updateGtaoMaterial({ samples: parts.aoSamples ?? 16 });
 			// the edges' smoothing is the targets' multisampling: a target with another count is made anew
 			const samples = parts.smooth ? 0 : POST.samples;

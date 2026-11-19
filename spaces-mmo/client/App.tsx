@@ -1380,7 +1380,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 					{mapMode === "3d" && <button className="hud-btn hud-fps" disabled={fps.running} onClick={startFps} title={!fps.running && fps.note ? fps.note : "Bildrate der 3D-Karte messen (2 s Anlauf, 30 s Messung)"} aria-label="FPS messen">{fps.running ? `${fps.remaining} s` : fps.fps !== null ? `${Math.round(fps.fps)} FPS` : "FPS"}</button>}
 					{mapMode === "3d" && !fps.running && fps.detail && <div className="hud-fps-detail">
 						<button onClick={() => setFps({ running: false, fps: fps.fps })} aria-label="Messwerte schließen">{fps.detail.map((line) => <span key={line}>{line}</span>)}</button>
-						<button className="hud-fps-parts" onClick={startFpsParts}>Nach Teilen messen (45 s)</button>
+						<button className="hud-fps-parts" onClick={startFpsParts}>Nach Teilen messen (40 s)</button>
 					</div>}
 					<button className="hud-btn" onClick={() => setPanel("stats")} aria-label="Statistik"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><rect x="2" y="8" width="3" height="6" rx="1" /><rect x="6.5" y="4" width="3" height="10" rx="1" /><rect x="11" y="1" width="3" height="13" rx="1" /></svg></button>
 					<button className="hud-btn" onClick={() => { setCmdHelp(null); setHelp(true); }} aria-label="Hilfe / Help">?</button>
