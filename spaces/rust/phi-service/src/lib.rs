@@ -928,7 +928,7 @@ impl Service {
 				let miss = status != Some("found") && (until <= now || (if_exists && status == Some("none")));
 				if status == Some("found") || miss {
 					let result = or_null(p.get("entry"));
-					let bytes = result.to_json_text().len() as f64;
+					let bytes = result.json_bytes() as f64;
 					if bytes > budget {
 						return Err(too_small(bytes));
 					}

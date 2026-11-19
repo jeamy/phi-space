@@ -395,7 +395,7 @@ impl MemberLifecycle {
 				let admission = floor.max(after);
 				s.touch(now);
 				let proof = self.proof(&q, s, admission);
-				if proof.get("stock").map_or(0, |v| v.to_json_text().len()) > 65536 {
+				if proof.get("stock").map_or(0, |v| v.json_bytes()) > 65536 {
 					return Err(routing("stock proof exceeds inspection budget"));
 				}
 				let mut steps = steps.clone();

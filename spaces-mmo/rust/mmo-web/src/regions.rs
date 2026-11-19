@@ -47,6 +47,8 @@ impl RegionSpaces {
 	pub fn next_start(&self) -> (String, Space, String) {
 		if self.spaces.len() == 1 { let (r, s) = &self.spaces[0]; return (r.clone(), s.clone(), j::s(&self.w, "start").to_owned()); }
 		let regions: Vec<Json> = regions_of(&self.w).into_iter().filter(|g| self.get(j::s(g, "regionId")).is_some()).collect();
+		// no region of the world has a space here: the first space and the world's start, as without regions
+		if regions.is_empty() { let (r, s) = &self.spaces[0]; return (r.clone(), s.clone(), j::s(&self.w, "start").to_owned()); }
 		let i = self.next.get();
 		self.next.set(i + 1);
 		let g = &regions[i % regions.len()];

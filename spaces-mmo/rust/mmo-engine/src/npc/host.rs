@@ -12,7 +12,7 @@ use super::minds::claim_role;
 use super::scripts::Script;
 use super::{present_at, ClockCache, Npc, Session, SESSION_LEASE_MS};
 use crate::j;
-use crate::room_growth::spatial_world;
+use crate::room_growth::Spatial;
 use crate::source::{hex, random_bytes};
 use crate::space::{tmpl, Result, Space};
 use crate::world_host::{announce, connect, env_ms};
@@ -37,7 +37,7 @@ async fn at_plan(n: &Npc, clock: &ClockCache) -> Result<bool> {
 }
 
 /// One role, claimed again and again until the process stops.
-async fn play(n: Rc<Npc>, full: Rc<Json>, regional: bool, owner: Rc<String>, world_clock: Rc<ClockCache>, ready: Rc<dyn Fn()>) {
+async fn play(n: Rc<Npc>, full: Rc<Json>, spatial: Rc<Spatial>, regional: bool, owner: Rc<String>, world_clock: Rc<ClockCache>, ready: Rc<dyn Fn()>) {
 	let space = n.space.clone();
 	let def0 = n.def();
 	let npc_id = j::s(&def0, "npcId").to_owned();
@@ -66,9 +66,9 @@ async fn play(n: Rc<Npc>, full: Rc<Json>, regional: bool, owner: Rc<String>, wor
 		};
 		while !n.halted() && !lost.get() && !gone.get() {
 			let r: Result<()> = async {
-				let w = spatial_world(&space, &full).await?;
+				let w = spatial.world(&space, &full).await?;
 				let def = j::a(&w, "npcs").iter().find(|d| j::s(d, "npcId") == npc_id).cloned().unwrap_or_else(|| def0.clone());
-				*n.world.borrow_mut() = Rc::new(w);
+				*n.world.borrow_mut() = w;
 				*n.def.borrow_mut() = def;
 				if at_plan(&n, &world_clock).await? { script.round(&n).await } else { n.sleep(n.pace(5_000.0, 200.0)).await; Ok(()) }
 			}.await;
@@ -94,6 +94,8 @@ pub async fn run_npcs(root: PathBuf, ready: impl FnOnce(), halt: watch::Receiver
 	let waiting = Rc::new(Cell::new(0usize));
 	let all_ready = Rc::new(Notify::new());
 	let mut runs = Vec::new();
+	// one grown world for all NPCs of this host
+	let spatial = Rc::new(Spatial::default());
 	for def in j::a(&full, "npcs") {
 		let npc_id = j::s(def, "npcId");
 		if !only.is_empty() && !only.iter().any(|o| o == npc_id) { continue; }
@@ -105,7 +107,7 @@ pub async fn run_npcs(root: PathBuf, ready: impl FnOnce(), halt: watch::Receiver
 		waiting.set(waiting.get() + 1);
 		let done = Rc::new(Cell::new(false));
 		let signal: Rc<dyn Fn()> = { let (waiting, all_ready, done) = (waiting.clone(), all_ready.clone(), done.clone()); Rc::new(move || { if !done.replace(true) { waiting.set(waiting.get() - 1); if waiting.get() == 0 { all_ready.notify_one(); } } }) };
-		runs.push(tokio::task::spawn_local(play(n, full.clone(), regional, owner.clone(), world_clock.clone(), signal)));
+		runs.push(tokio::task::spawn_local(play(n, full.clone(), spatial.clone(), regional, owner.clone(), world_clock.clone(), signal)));
 	}
 	if waiting.get() > 0 {
 		let mut h = halt.clone();

@@ -23,7 +23,7 @@ test("the avatar line is read strictly and round-trips", () => {
 test("a chosen look builds its figure: glasses, gloves and the hat add parts, the colour is the chosen one", () => {
 	const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
 	Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => ({ getContext: () => ({ createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} }) }) } });
-	return import("../client/figure3d.ts").then(({ makeFigure }) => {
+	return import("../client/figure3d.ts").then(({ makeFigure, animateFigure }) => {
 		// a figure's shapes are merged into one mesh per moving part: more shapes show as more triangles
 		const count = (g: t.Object3D) => { let n = 0; g.traverse((o) => { const m = o as t.Mesh; if (m.isMesh) n += m.geometry.getAttribute("position").count / 3; }); return n; };
 		const plain = makeFigure(t, { id: "x", skin: 0, own: true, ai: false, style: DEFAULT_APPEARANCE });
@@ -35,7 +35,19 @@ test("a chosen look builds its figure: glasses, gloves and the hat add parts, th
 		let meshes = 0; dressed.group.traverse((o) => { if ((o as t.Mesh).isMesh) meshes++; });
 		assert.ok(meshes <= 10, `a figure is a handful of draw calls, not one per shape: ${meshes}`);
 		// the tall type stands taller than the plain one
-		assert.ok(makeFigure(t, { id: "x", skin: 0, own: false, ai: false, style: { ...DEFAULT_APPEARANCE, body: 3 } }).body.scale.y > plain.body.scale.y);
+		const tall = makeFigure(t, { id: "x", skin: 0, own: false, ai: false, style: { ...DEFAULT_APPEARANCE, body: 3 } });
+		assert.ok(tall.body.scale.y > plain.body.scale.y);
+		// and still does when it stands and breathes (the breath once set every figure's height to 1), each at its own moment
+		const before = tall.body.scale.y, other = makeFigure(t, { id: "y", skin: 0, own: false, ai: false, style: { ...DEFAULT_APPEARANCE, body: 3 } });
+		for (const time of [0, 0.4, 3.1]) {
+			animateFigure(tall, 0, 0, 0.016, time); animateFigure(plain, 0, 0, 0.016, time); animateFigure(other, 0, 0, 0.016, time);
+			assert.ok(Math.abs(tall.body.scale.y / before - 1) <= 0.0081, `the breath moves the height by under a hundredth: ${tall.body.scale.y} of ${before}`);
+			assert.ok(tall.body.scale.y > plain.body.scale.y * 1.05);
+		}
+		assert.notEqual(tall.body.scale.y, other.body.scale.y, "two figures do not breathe as one");
+		// the shadow under a figure and the ring under one's own are shared by all figures
+		assert.equal((plain.group.children[0] as t.Mesh).geometry, (dressed.group.children[0] as t.Mesh).geometry);
+		assert.equal((plain.group.children[0] as t.Mesh).material, (dressed.group.children[0] as t.Mesh).material);
 	}).finally(() => { if (previous) Object.defineProperty(globalThis, "document", previous); else Reflect.deleteProperty(globalThis, "document"); });
 });
 

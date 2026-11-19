@@ -90,6 +90,10 @@ pub fn open_files(path: &Path) -> Result<StoreFiles> {
 			put.execute(["store_id", &id])?;
 			put.execute(["commit_seq", "0"])?;
 		}
+		Some(v) if v.is_nan() => {
+			// neither newer nor older than anything: a store whose format cannot be read is not opened as if it were current
+			return Err(StoreError::Unavailable(format!("the store {} has the unreadable format {:?}", path.display(), format.unwrap_or_default())));
+		}
 		Some(v) if v > FORMAT_VERSION as f64 => {
 			return Err(StoreError::Unavailable(format!("the store {} has format {}; this version reads up to {FORMAT_VERSION}", path.display(), format.unwrap_or_default())));
 		}

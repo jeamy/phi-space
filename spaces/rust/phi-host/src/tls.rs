@@ -21,11 +21,18 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
 	use std::os::unix::fs::OpenOptionsExt as _;
 	let failed = |e: std::io::Error| format!("{}: {e}", path.display());
 	let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path).map_err(failed)?;
+	// `mode` only counts for a file made here: one that was there keeps its own, so it is set before the bytes go in
+	f.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600)).map_err(failed)?;
 	f.write_all(bytes).and_then(|()| f.sync_all()).map_err(failed)
 }
 
 /// `privateFile` (src/keys.ts): a regular file of this user, no link, mode 0600 at most.
 pub fn private_file(path: &Path) -> Result<Vec<u8>, String> {
+	// Linux gives the flag a number of its own on the arm and powerpc families (where 0o400_000 is O_DIRECT: no guard
+	// against a link, and a read that fails on its alignment)
+	#[cfg(any(target_arch = "aarch64", target_arch = "arm", target_arch = "powerpc", target_arch = "powerpc64"))]
+	const O_NOFOLLOW: i32 = 0o100_000;
+	#[cfg(not(any(target_arch = "aarch64", target_arch = "arm", target_arch = "powerpc", target_arch = "powerpc64")))]
 	const O_NOFOLLOW: i32 = 0o400_000;
 	let wrong = || format!("{}: provisioned file must be a regular private file (0600)", path.display());
 	let mut f = std::fs::OpenOptions::new().read(true).custom_flags(O_NOFOLLOW).open(path).map_err(|e| format!("{}: {e}", path.display()))?;

@@ -85,12 +85,18 @@ pub type Merged = Vec<(String, Rc<Command>)>;
 pub fn merge(mut sets: Vec<CmdSet>) -> Merged {
 	sets.sort_by_key(|s| s.priority);
 	let mut out: Merged = Vec::new();
+	// where each name stands in `out`: a look through the list for every name of some 250 commands was the larger part
+	// of a command that is not a step
+	let mut at: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 	for s in &sets {
-		if s.merge == Merge::Replace { out.clear(); }
+		if s.merge == Merge::Replace { out.clear(); at.clear(); }
 		for cmd in &s.commands {
 			for name in cmd.names().map(|n| n.to_lowercase()) {
-				if s.merge == Merge::Remove { out.retain(|(k, _)| *k != name); continue; }
-				match out.iter_mut().find(|(k, _)| *k == name) { Some(slot) => slot.1 = cmd.clone(), None => out.push((name, cmd.clone())) }
+				if s.merge == Merge::Remove {
+					if at.remove(&name).is_some() { out.retain(|(k, _)| *k != name); at = out.iter().enumerate().map(|(i, (k, _))| (k.clone(), i)).collect(); }
+					continue;
+				}
+				match at.get(&name) { Some(&i) => out[i].1 = cmd.clone(), None => { at.insert(name.clone(), out.len()); out.push((name, cmd.clone())); } }
 			}
 		}
 	}
@@ -99,8 +105,8 @@ pub fn merge(mut sets: Vec<CmdSet>) -> Merged {
 
 /// `distinct`: the distinct commands of a merged map, in key order.
 pub fn distinct(m: &Merged) -> Vec<Rc<Command>> {
-	let mut out: Vec<Rc<Command>> = Vec::new();
-	for (_, c) in m { if !out.iter().any(|x| Rc::ptr_eq(x, c)) { out.push(c.clone()); } }
+	let mut seen = std::collections::HashSet::new();
+	let mut out: Vec<Rc<Command>> = m.iter().filter(|(_, c)| seen.insert(Rc::as_ptr(c))).map(|(_, c)| c.clone()).collect();
 	out.sort_by(|a, b| crate::js::locale_compare(&a.key, &b.key));
 	out
 }

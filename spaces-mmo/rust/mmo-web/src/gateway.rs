@@ -592,7 +592,8 @@ impl Gateway {
 		let touch = |entry: &str, f: Option<&Json>, types: &[Json], chars: &mut Vec<(String, Option<String>)>, objs: &mut Vec<(String, Option<String>)>, fogs: &mut Vec<String>| {
 			let st = self.st.borrow();
 			let has = |t: &str| types.iter().any(|x| x.as_str() == Some(t));
-			let field = |k: &str| f.map(|f| txt(j::at(f, k)).replace("null", "undefined"));
+			// `String(f.charId)` of a missing field; an id that only contains "null" stays as it is
+			let field = |k: &str| f.map(|f| { let v = j::at(f, k); if v.is_null() { "undefined".to_owned() } else { txt(v) } });
 			let char_id = st.char_of.get(entry).cloned().or_else(|| st.sessions.get(entry).cloned()).or_else(|| if f.is_some() && (has("Character") || has("Session")) { field("charId") } else { None });
 			if let Some(cid) = char_id { if !chars.iter().any(|(c, _)| *c == cid) { let before = st.chars.get(&cid).map(|c| j::s(c, "room").to_owned()); chars.push((cid, before)); } }
 			let obj_id = st.obj_of.get(entry).cloned().or_else(|| st.flame_of.get(entry).cloned()).or_else(|| {
@@ -631,7 +632,8 @@ impl Gateway {
 		let clients: Vec<Rc<Client>> = self.clients.borrow().clone();
 		for c in &clients { if c.room.borrow().is_some() && (trade || seeking.contains(&c.me.char_id)) { c.ws.send(&obj! { "t" => "trade", "trade" => self.trade(c) }); } }
 		if !chars.is_empty() || !fogs.is_empty() || !objs.is_empty() { self.atlas_changed(false); }
-		for room in &fogs { let level = self.st.borrow().fog.get(room).copied().unwrap_or(0.0); for c in &clients { if c.room.borrow().as_deref() == Some(room.as_str()) { c.ws.send(&obj! { "t" => "fog", "level" => level }); } } }
+		// one text for all who stand in the room
+		for room in &fogs { let level = self.st.borrow().fog.get(room).copied().unwrap_or(0.0); let text = obj! { "t" => "fog", "level" => level }.to_json_text(); for c in &clients { if c.room.borrow().as_deref() == Some(room.as_str()) { c.ws.send_text(&text); } } }
 		for m in &msgs {
 			let to = j::s(m, "to");
 			let who = (j::s(m, "kind") == "who").then(|| self.player_names());
@@ -651,6 +653,9 @@ impl Gateway {
 			st.clock = None;
 			st.chars.clear(); st.char_of.clear(); st.char_entry.clear(); st.sessions.clear(); st.online.clear(); st.rooms.clear(); st.objs.clear(); st.obj_of.clear(); st.obj_entry.clear(); st.objs_by_loc.clear(); st.atlas_objs.clear(); st.recent.clear(); st.flames.clear(); st.flame_of.clear(); st.fog.clear();
 			st.offers.clear(); st.orders.clear(); st.listings.clear(); st.wanted.clear(); st.notices.clear(); st.notices_by_char.clear(); st.seed_rests.clear(); st.epochs.clear(); st.mill_loads.clear(); st.herds.clear();
+			// also what the stream's site orders and winds showed: an order or a wind that went while the stream was
+			// away would stay for good
+			st.site_orders.clear(); st.winds.clear();
 			return;
 		}
 		let pre = format!("{region}:");
@@ -859,7 +864,9 @@ impl Gateway {
 				let island = txt(j::at(f, "island"));
 				self.st.borrow_mut().winds.insert(island.clone(), j::n(f, "level"));
 				let cs: Vec<Rc<Client>> = self.clients.borrow().clone();
-				for c in cs { let Some(room) = c.room() else { continue }; let here = self.st.borrow().rooms.get(&room).is_some_and(|r| j::s(r, "island") == island); if here { c.ws.send(&obj! { "t" => "wind", "wind" => self.wind_in(&room) }); } }
+				// the wind is the island's: one text for all on it
+				let mut text: Option<String> = None;
+				for c in cs { let Some(room) = c.room() else { continue }; let here = self.st.borrow().rooms.get(&room).is_some_and(|r| j::s(r, "island") == island); if here { c.ws.send_text(text.get_or_insert_with(|| obj! { "t" => "wind", "wind" => self.wind_in(&room) }.to_json_text())); } }
 			}
 			"Fog" => { self.st.borrow_mut().fog.set(&txt(j::at(f, "room")), j::n(f, "level")); }
 			"Offer" => self.st.borrow_mut().offers.set(id, f.clone()),
@@ -948,6 +955,7 @@ impl Gateway {
 			if st.obj_entry.get(&oid).map(String::as_str) == Some(id) {
 				st.obj_entry.remove(&oid);
 				st.atlas_objs.delete(&oid);
+				st.herds.remove(&oid); // a building's herd goes with the building
 				if let Some(old) = st.objs.delete(&oid) {
 					let loc = j::s(&old, "location");
 					if let Some(m) = st.objs_by_loc.get_mut(loc) { m.delete(&oid); if m.is_empty() { st.objs_by_loc.remove(loc); } }

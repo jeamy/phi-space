@@ -66,7 +66,7 @@ pub fn rotate_key_in(s: &mut Space, now: f64, o: &Json, requested_by: &str) -> R
 		return Err(denied("replacement key already exists"));
 	}
 	let old_fields = fields(&old);
-	let cost = old_fields.to_json_text().len() * 2 + c.to_json_text().len() + 1024;
+	let cost = old_fields.json_bytes() * 2 + c.json_bytes() + 1024;
 	if cost as f64 > s.limits().max_commit_bytes {
 		return Err(error("ResourceExhausted", "rotation exceeds the atomic commit budget"));
 	}

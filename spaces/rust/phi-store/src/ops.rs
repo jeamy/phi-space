@@ -35,7 +35,7 @@ impl WriteOp {
 /// The deltas of `ops`, as one JSON array.
 pub fn deltas(ops: &[WriteOp]) -> Json { Json::Array(ops.iter().map(WriteOp::delta).collect()) }
 /// `Buffer.byteLength(JSON.stringify(ops))` of the TypeScript rows: what a primary's journal budget counts.
-pub fn delta_bytes(ops: &[WriteOp]) -> usize { deltas(ops).to_json_text().len() }
+pub fn delta_bytes(ops: &[WriteOp]) -> usize { deltas(ops).json_bytes() }
 
 pub const DOC: &str = "INSERT INTO documents (kind, key, version, value) VALUES (?, ?, ?, ?) ON CONFLICT (kind, key) DO UPDATE SET version = excluded.version, value = excluded.value";
 pub const RETIRE: &str = "DELETE FROM documents WHERE kind = ? AND key = ?";

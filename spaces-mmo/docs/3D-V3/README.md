@@ -125,6 +125,42 @@ a mesh of its own (309 meshes for the figures, 160 for the road). Since then:
 The same frame is now about 630 draw calls (560 close up) and 3.7 ms of JavaScript. The share of the graphics card is
 not measured yet: that needs the `FPS` button on a real device.
 
+### After the code analysis of 19 November 2026
+
+The points of `docs/code-analyse-2026-11-19.md` (it says which were taken and which were left, and why):
+
+- The soft shadows under a room's trees, bushes and palms are one instanced mesh (`propShadows`), not a mesh a plant.
+- The wild flowers are one instanced mesh per sort and shape instead of one per colour as well: the blossoms are white
+  in the geometry (`TINTED`, the attribute `tint`) and take the instance's colour (`setColorAt`); the model material
+  tints only what is marked, so the stems stay green.
+- The world's own small plants (flower, herb, grass, fern) are bundled in patches of 8×8 cells instead of 4×4, and its
+  flowers of every colour are one mesh (the instance's colour again); trees and bushes keep 4×4, since the close level
+  of detail is set per mesh. Counted over the world's 37 rooms: 427 meshes of such plants before, 383 after.
+- A railway line is two meshes (sleepers, rails), a planned road's marks one, a cart, a train and a tree's fruit one
+  each (made once and shared, with their levels of detail), a bed and a field one or two (`solidMesh`, `plainMaterial`).
+- The fish are one instanced mesh per kind for the bodies and one for the tails (`fishSchool`, at most six draw calls);
+  on the island level they are neither moved nor drawn.
+- The model material reads a surface's pictures only for a part that has one (`textureGrad` with the slopes taken
+  outside the branch, so the picture is the same): a leaf, a figure's neighbour, every plain part read nothing. The
+  fine grain of the bump is worked out only within 34 units, where the bump shows.
+- The pass that hides flat things from the occlusion and the blur skips what is invisible with all that is in it; so
+  does the pass that sets the models' level of detail, which no longer allocates per mesh.
+- A figure's primitives are data (`Prim`): the key of a part no longer builds and frees every geometry. The shadow
+  under a figure and the ring under one's own are shared.
+- `creaseNormals` keys a point by a whole number instead of a text; the normals are the same byte for byte.
+- `sync` works out the raised cells, the things and the plants only when the objects changed, not at every step of a
+  figure. The view is stored 300 ms after it last moved, not at every step of a zoom.
+- What a room made and never used stays unmade (the water's material and shore texture in a dry room, the earth
+  material, the box of the lesser waters, the ground's wall and wetness texture): it was never freed. The tile art is
+  loaded only for a room with a kind of land that has no photographed ground. The stones of geometry on the paving,
+  which never showed since the paving is photographed, are gone.
+- Faults: a figure's breath set its height to 1, so every figure was as tall as the next and breathed in step with it
+  (`Figure.tall`, `Figure.breath`); a figure made anew lost its speech bubble; during a change of room figures stood on
+  the old ground; the chapel's roof sat beside its nave; the greenhouse had its ridge twice.
+
+Graue Bucht at zoom 1.4, headless Chromium (software rendering), before and after: 693 and 520 draw calls, 303 and 220
+meshes. The share of the graphics card is still not measured.
+
 ### The night
 
 By moonlight the land was hardly to be seen on a real screen. The moon is brighter (`LIGHT.moon` 2.4 instead of 1.6),

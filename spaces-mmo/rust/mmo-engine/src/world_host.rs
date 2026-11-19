@@ -325,7 +325,7 @@ pub async fn run_world(o: HostOptions, ready: impl FnOnce(), halt: watch::Receiv
 		let (m, halt) = (m.clone(), halt.clone());
 		tokio::task::spawn_local(async move { m.follow(halt, 20_000.0).await });
 	}
-	let worker = Rc::new(Worker { space: space.clone(), w: Rc::new(w.clone()), msg_lease_ms, txn_ms, mirror, elsewhere: others.clone(), batch: batching });
+	let worker = Rc::new(Worker { space: space.clone(), w: Rc::new(w.clone()), msg_lease_ms, txn_ms, mirror, elsewhere: others.clone(), batch: batching, spatial: Default::default() });
 	ready();
 
 	let mut tasks: Vec<tokio::task::JoinHandle<()>> = vec![proc];
@@ -423,7 +423,8 @@ async fn serve(worker: &Worker, char_id: &str, slow_ms: f64, typed: f64, line: &
 	let r = match worker.serve(char_id).await { Ok(r) => r, Err(e) => format!("failed: {e}") };
 	if r == "held" { return "held"; }
 	if let Some(why) = r.strip_prefix("failed: ") {
-		if regex::Regex::new(r"could write \d+ bytes; the limit is").unwrap().is_match(why) {
+		thread_local! { static TOO_LARGE: regex::Regex = regex::Regex::new(r"could write \d+ bytes; the limit is").unwrap(); }
+		if TOO_LARGE.with(|r| r.is_match(why)) {
 			eprintln!("[world] command too large: {char_id} {why}");
 			if let Ok(Some(a)) = worker.space.peek(&tmpl("Character", obj! { "charId" => char_id }), None).await { worker.refuse(fields(&a), "Das ist zu viel auf einmal. Versuch es mit einer kleineren Menge.").await; }
 			return "ran";

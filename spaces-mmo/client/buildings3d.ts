@@ -16,20 +16,20 @@ const ball = (t: T, r: number, c: number, x: number, y: number, z: number, s?: V
 const dome = (t: T, rx: number, ry: number, rz: number, c: number, x: number, y: number, z: number, seg = 9): Part => ({ g: new t.SphereGeometry(1, seg, Math.ceil(seg / 2), 0, Math.PI * 2, 0, Math.PI / 2), c, p: [x, y, z], s: [rx, ry, rz] });
 
 /** A gable roof over walls `ww`×`dd` whose top is at `y`: the two gables, the two slabs, the ridge along x. */
-function gable(t: T, parts: Part[], ww: number, dd: number, y: number, rise: number, wall: number, roof: number, over = 0.08): void {
+function gable(t: T, parts: Part[], ww: number, dd: number, y: number, rise: number, wall: number, roof: number, over = 0.08, x = 0): void {
 	const tri = new t.Shape(); tri.moveTo(-dd / 2, 0); tri.lineTo(dd / 2, 0); tri.lineTo(0, rise); tri.closePath();
-	parts.push({ g: new t.ExtrudeGeometry(tri, { depth: ww, bevelEnabled: false }), c: wall, p: [-ww / 2, y, 0], r: [0, Math.PI / 2, 0] });
+	parts.push({ g: new t.ExtrudeGeometry(tri, { depth: ww, bevelEnabled: false }), c: wall, p: [x - ww / 2, y, 0], r: [0, Math.PI / 2, 0] });
 	const slope = Math.atan2(rise, dd / 2), len = Math.hypot(rise, dd / 2) + 0.14;
 	for (const side of [-1, 1]) {
-		parts.push(b(t, ww + 2 * over, 0.06, len, roof, 0, y + rise / 2 + 0.04, side * (dd / 4 + 0.04), [side * slope, 0, 0]));
+		parts.push(b(t, ww + 2 * over, 0.06, len, roof, x, y + rise / 2 + 0.04, side * (dd / 4 + 0.04), [side * slope, 0, 0]));
 		if (modelLevel() === "near") for (let row = 0; row < 5; row++) {
 			const offset = (row / 4 - 0.5) * len * 0.88;
-			parts.push(b(t, ww + 2 * over, 0.012, 0.014, WOOD_DARK, 0, y + rise / 2 + 0.04 - Math.sin(side * slope) * offset + Math.cos(slope) * 0.036, side * (dd / 4 + 0.04) + Math.cos(slope) * offset + Math.sin(side * slope) * 0.036, [side * slope, 0, 0]));
+			parts.push(b(t, ww + 2 * over, 0.012, 0.014, WOOD_DARK, x, y + rise / 2 + 0.04 - Math.sin(side * slope) * offset + Math.cos(slope) * 0.036, side * (dd / 4 + 0.04) + Math.cos(slope) * offset + Math.sin(side * slope) * 0.036, [side * slope, 0, 0]));
 		}
 		// v2: a fascia board along the eave, so the roof shows an edge and a thickness from below
-		parts.push(b(t, ww + 2 * over + 0.02, 0.08, 0.05, WOOD_DARK, 0, y + rise / 2 + 0.03 - (len / 2) * Math.sin(slope), side * (dd / 4 + 0.04 + (len / 2) * Math.cos(slope)), [side * slope, 0, 0]));
+		parts.push(b(t, ww + 2 * over + 0.02, 0.08, 0.05, WOOD_DARK, x, y + rise / 2 + 0.03 - (len / 2) * Math.sin(slope), side * (dd / 4 + 0.04 + (len / 2) * Math.cos(slope)), [side * slope, 0, 0]));
 	}
-	parts.push(b(t, ww + 2 * over, 0.07, 0.1, WOOD_DARK, 0, y + rise + 0.05, 0));
+	parts.push(b(t, ww + 2 * over, 0.07, 0.1, WOOD_DARK, x, y + rise + 0.05, 0));
 }
 /** A plain house: a plinth, walls with corner posts, a gable roof. The door and the rest are the caller's. */
 function house(t: T, parts: Part[], w: number, d: number, o: { wall: number; roof: number; wh: number; rise: number; wide?: number }): { ww: number; dd: number; top: number } {
@@ -135,7 +135,7 @@ function brickworks(t: T, w: number, d: number): Geo {
 function chapel(t: T, w: number, d: number): Geo {
 	return cached(`kapelle:${w}x${d}`, () => {
 		const dd = d * 0.78, nw = w * 0.6, cx = -w * 0.12, tw = Math.min(0.62, w * 0.2), tx = cx + nw / 2 + tw / 2 - 0.04, parts: Part[] = [b(t, w * 0.94, 0.1, d * 0.9, STONE, 0, 0.05, 0), b(t, nw, 0.62, dd, PLASTER, cx, 0.41, 0)];
-		gable(t, parts, nw, dd, 0.72, 0.42, PLASTER, SLATE);
+		gable(t, parts, nw, dd, 0.72, 0.42, PLASTER, SLATE, 0.08, cx); // over the nave, which stands left of the middle
 		parts.push(b(t, tw, 1.5, tw, PLASTER, tx, 0.85, 0), b(t, tw + 0.08, 0.06, tw + 0.08, STONE, tx, 1.62, 0), b(t, 0.2, 0.3, tw + 0.02, IRON, tx, 1.3, 0));
 		parts.push({ g: new t.ConeGeometry(tw * 0.78, 0.8, 4), c: SLATE, p: [tx, 2.05, 0], r: [0, Math.PI / 4, 0] }, b(t, 0.04, 0.26, 0.04, 0xd8b84a, tx, 2.58, 0), b(t, 0.16, 0.04, 0.04, 0xd8b84a, tx, 2.62, 0));
 		const front = dd / 2 + 0.02;
@@ -340,8 +340,8 @@ function greenhouse(t: T, w: number, d: number): Geo {
 		}
 		for (const sx of [-1, 1]) parts.push(b(t, 0.05, 0.05, dd, WOOD_DARK, (sx * ww) / 2, 0.1, 0), b(t, 0.05, 0.05, dd, WOOD_DARK, (sx * ww) / 2, 0.1 + wh, 0), b(t, 0.04, wh * 0.45, dd * 0.9, glass, (sx * ww) / 2, 0.1 + wh * 0.25, 0));
 		const slope = Math.atan2(rise, dd / 2), len = Math.hypot(rise, dd / 2);
+		parts.push(b(t, ww + 0.1, 0.05, 0.05, WOOD_DARK, 0, 0.1 + wh + rise + 0.02, 0)); // the ridge, once
 		for (const side of [-1, 1]) {
-			parts.push(b(t, ww + 0.1, 0.05, 0.05, WOOD_DARK, 0, 0.1 + wh + rise + 0.02, 0));
 			for (let i = 0; i < 5; i++) parts.push(b(t, ww / 6, 0.025, len * 0.9, glass, -ww / 2 + ww / 10 + (i * ww) / 5 + ww / 20, 0.1 + wh + rise / 2 + 0.03, side * (dd / 4), [side * slope, 0, 0]));
 			for (let i = 0; i <= 4; i++) parts.push(b(t, 0.035, 0.035, len, WOOD_DARK, -ww / 2 + (i * ww) / 4, 0.1 + wh + rise / 2 + 0.02, side * (dd / 4), [side * slope, 0, 0]));
 		}

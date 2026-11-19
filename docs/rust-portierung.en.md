@@ -1407,3 +1407,41 @@ Security and federation decisions from the reviews of 2026-11-01 (`review-typesc
 | S-D9 | A revoked key keeps working on an open connection until the next revalidation | **decided 2026-11-01:** kept, as plan 4.4 says: revalidation every 15 s, the grant TTL of 60 s is the bound; recorded here as the contract |
 | S-D10 | The one-attempt-per-minute enrollment limit is per process and not durable | **decided 2026-11-01:** kept; the durable bound is the `attempts` counter (3 per token). A durable limit would cost a commit per failed attempt |
 | S-D11 | A `commandId` re-submitted after `RESULT_RETENTION_MS` (7 days) acts twice | **decided 2026-11-01:** that window is the contract; callers use ids that do not recur after it, as `rotate:<peer>:<nonce>` does |
+
+## 10. After the code analysis of 19 November 2026
+
+`docs/code-analyse-2026-11-19.md` lists what was found in the Rust code and says for each point whether it was taken.
+What changed, and where Rust is now stricter than the TypeScript it was ported from:
+
+- **Core.** `private_file` opens with the `O_NOFOLLOW` of the machine it is built for (the arm and powerpc families
+  give the flag another number; the fixed one was `O_DIRECT` there). `write_private` sets mode 0600 on a file that was
+  there already. The text frame server (`phi-wire/src/texts.rs`) counts and weighs the answers that wait to be written,
+  as the space service does, and ends a connection over the limit. `serve_replica` waits after a failed accept and puts
+  a time limit on a request's body and on its answer; `serve_register` no longer ends on a failed accept. The call ids
+  of `phi-host/src/remote.rs` wrap to 1. Sizes are counted with `json_bytes()` where the text was written only for
+  its length. Stricter than TypeScript: a store whose `format_version` is no number is refused (TypeScript opens it
+  as current), and a journal entry whose revision is no number does not bind its marker instead of stopping the
+  process.
+- **`phi-space-server`.** The Root and the primary/sync Spaces of a running host are given the authority the host
+  follows (an installed successor of a control restore), as `configured-runtime.ts` does; the configured one disagreed
+  with the control key after a restore. In the recovery-only provisioning a `null` register endpoint counts as none.
+- **`mmo-engine`.** `room_growth::Spatial` keeps the grown world between a worker's commands and between the rounds of
+  an NPC host's NPCs, and hands out the definition itself while no room has grown (before: a copy of the whole world
+  each time). The copy of the world (`mirror.rs`) keeps a type's indexes in step with a write instead of throwing them
+  away, counts without copying, and reads an id's number without allocating. `commands::merge` keeps an index of the
+  names. Patterns put together at run time are compiled once (`js::re_of`).
+- **`mmo-web`.** A reset of the only region also forgets the site orders and the winds, a building's herd goes with
+  the building, an id that contains "null" is no longer rewritten, the statistics cache keeps a later read's cell, a
+  request head has 15 seconds, and a world none of whose regions has a space here starts new characters at the
+  world's start instead of dividing by zero. Fog and wind go out as one text for all who get them.
+- **`help-space`.** The purge sorts stray likes by a total order (a time that is no number could make the sort
+  panic) and finds the nodes to relink in one pass. It still runs its batches without a pause between them: that
+  needs a `Periodic` that can go on later (`phi-space-host`), which is open.
+- **`mmo-space`.** `positive` reads its numbers as `Number(v) > 0` does: blanks round them do not count, "inf" is none.
+
+Verified on 19 November 2026: `cargo test --release` and `cargo clippy --all-targets` in `spaces/rust` (77 test groups),
+`spaces-mmo/rust` (the 27 engine walks and the model walks against the oracle) and `help-site/rust`; `web-cross.ts`
+without a difference; `test-standalone`, `test-remote`, `test-service`, `test-socket`, `test-gate` and `test-auth`
+against `phi-space-server` (57 of 60, 3 skipped); the help site's tests on `help-space` (67 of 68, one skipped). Not
+run: the local federation test bed (`testbed:federation -- control-restore`), which is what exercises the followed
+authority after a control restore.

@@ -228,19 +228,22 @@ pub(crate) fn register_client(r: &Json) -> RegisterClient {
 fn sync_configs(c: &Json) -> Vec<SyncSpaceConfig> {
 	c.get("syncSpaces").and_then(Json::as_array).map_or(vec![], |a| a.iter().map(|s| SyncSpaceConfig::from_json(s).unwrap_or_else(|e| fail(e))).collect())
 }
-pub(crate) fn sync_context(c: &Json, now: &Now) -> Rc<SyncContext> {
+/// `authority_id`: the authority the primary/sync Spaces are opened under. The running host follows an installed
+/// successor of a control restore (`followed_authority`, as configured-runtime does); the quarantine start and the main
+/// store's own start name the configured one.
+pub(crate) fn sync_context(c: &Json, now: &Now, authority_id: &str) -> Rc<SyncContext> {
 	let register = external_of(c);
 	let key = parse(&String::from_utf8_lossy(&private_file(Path::new(field(c, "keyFile"))).unwrap_or_else(|e| fail(e)))).unwrap_or_else(|e| fail(e));
 	let bind_ip = address_of(c.get("listen").unwrap_or_else(|| fail("the config has no listen"))).0.parse().unwrap_or_else(|_| fail("the listen host is not an address"));
 	let now = Rc::clone(now);
-	Rc::new(SyncContext { host_id: field(c, "hostId").into(), authority_id: field(c, "authorityId").into(), bind_ip, key, register: RegisterLine::spawn(move || register), installed: Rc::new(SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e))), now: Rc::new(move || now()) })
+	Rc::new(SyncContext { host_id: field(c, "hostId").into(), authority_id: authority_id.into(), bind_ip, key, register: RegisterLine::spawn(move || register), installed: Rc::new(SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e))), now: Rc::new(move || now()) })
 }
 
 /// The quarantine start: a host released into quarantine serves nothing; it opens only the journals and listeners of its
 /// primary/sync Spaces, so a primary can run setStandby against it, and ends once the host is active again.
 fn quarantine(c: &Json, now: &Now, configs: Vec<SyncSpaceConfig>) {
 	let runtime = stopping::runtime();
-	let cx = sync_context(c, now);
+	let cx = sync_context(c, now, field(c, "authorityId"));
 	let boot = format!("boot:{}", field(c, "hostId"));
 	tokio::task::LocalSet::new().block_on(&runtime, async move {
 		let mut open = vec![];
@@ -386,7 +389,7 @@ pub fn run(config: &str, store: &str) {
 	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));
 	let mut tasks: Vec<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>> = vec![];
 	if !syncs.is_empty() {
-		let cx = sync_context(&c, &now);
+		let cx = sync_context(&c, &now, authority_id);
 		let make: MakeService = Rc::new(move |store, sp| {
 			let mut options = options_for(sp.primary_epoch());
 			sp.serve_options(&mut options);

@@ -62,7 +62,7 @@ export function fishTail(t: T, kind: FishKind, smoked = false): Geo {
 	return cached(`fish:${kind}:${smoked ? "smoked" : "fresh"}:tail`, () => {
 		const f = SHAPE[kind], fin = smoked ? SMOKED.fin : f.fin, parts: Part[] = [], span = kind === "scholle" ? f.wide * 0.55 : f.high * 0.75;
 		// the stalk, then the two lobes of the fork (one fan for the plaice)
-		parts.push({ g: new t.SphereGeometry(1, 6, 4), c: kind === "scholle" ? f.back : (smoked ? SMOKED.back : f.back), p: [-0.012, 0, 0], s: [0.024, kind === "scholle" ? f.high * 0.6 : f.high * 0.22, kind === "scholle" ? f.wide * 0.18 : f.wide * 0.25] });
+		parts.push({ g: new t.SphereGeometry(1, 6, 4), c: smoked ? SMOKED.back : f.back, p: [-0.012, 0, 0], s: [0.024, kind === "scholle" ? f.high * 0.6 : f.high * 0.22, kind === "scholle" ? f.wide * 0.18 : f.wide * 0.25] });
 		const lobes = kind === "dorsch" || kind === "scholle" ? [0] : [-1, 1];
 		for (const k of lobes) {
 			const g = new t.BoxGeometry(0.06, kind === "scholle" ? 0.004 : span * (lobes.length > 1 ? 0.55 : 1), kind === "scholle" ? span : 0.004);
@@ -72,10 +72,13 @@ export function fishTail(t: T, kind: FishKind, smoked = false): Geo {
 	});
 }
 
+/** Where the tail's root sits on the body (x; the body's back end). */
+export const tailRoot = (kind: FishKind): number => -SHAPE[kind].len / 2 + 0.01;
+
 /** A whole fish as one group: `body` and the `tail` beside it (the tail's pivot is the body's back end). */
 export function fishModel(t: T, kind: FishKind, material: import("three").Material, smoked = false): { group: import("three").Group; tail: import("three").Mesh } {
 	const group = new t.Group(), body = new t.Mesh(fishBody(t, kind, smoked), material), tail = new t.Mesh(fishTail(t, kind, smoked), material);
-	tail.position.x = -SHAPE[kind].len / 2 + 0.01;
+	tail.position.x = tailRoot(kind);
 	group.add(body, tail);
 	return { group, tail };
 }

@@ -51,12 +51,17 @@ export function surfaceUniforms(t: T): Uniforms {
 	};
 	if (typeof document === "undefined") return u;
 	const loader = new t.ImageLoader();
+	// one canvas for all the pictures (a canvas a picture was fourteen of them)
+	let canvas: CanvasRenderingContext2D | null = null;
 	const pixels = (image: HTMLImageElement) => {
-		const c = document.createElement("canvas"); c.width = c.height = SIZE;
-		const g = c.getContext("2d", { willReadFrequently: true })!;
-		// the array's rows start at the bottom, a picture's at the top
-		g.translate(0, SIZE); g.scale(1, -1); g.drawImage(image, 0, 0, SIZE, SIZE);
-		return g.getImageData(0, 0, SIZE, SIZE).data;
+		if (!canvas) {
+			const c = document.createElement("canvas"); c.width = c.height = SIZE;
+			canvas = c.getContext("2d", { willReadFrequently: true })!;
+			// the array's rows start at the bottom, a picture's at the top
+			canvas.translate(0, SIZE); canvas.scale(1, -1);
+		}
+		canvas.clearRect(0, 0, SIZE, SIZE); canvas.drawImage(image, 0, 0, SIZE, SIZE);
+		return canvas.getImageData(0, 0, SIZE, SIZE).data;
 	};
 	void Promise.all(SURFACES.flatMap((s) => [loader.loadAsync(`/materials/${s.name}/color.jpg`), loader.loadAsync(`/materials/${s.name}/arm.jpg`)])).then((images) => {
 		const color = new Uint8Array(SIZE * SIZE * 4 * LAYERS), arm = new Uint8Array(SIZE * SIZE * 4 * LAYERS);
@@ -91,22 +96,29 @@ uniform float uSurfaceSpan[ ${LAYERS} ];
 uniform float uSurfaceOn;
 varying vec3 vModelNormal;
 varying float vSurface;
-// the surface seen from the three axes, mixed by how far the face looks along each; the sides keep the picture upright
-vec3 surfaceSample( sampler2DArray map, vec3 p, vec3 w, float layer ) {
-	return texture( map, vec3( p.zy, layer ) ).rgb * w.x + texture( map, vec3( p.xz, layer ) ).rgb * w.y + texture( map, vec3( p.xy, layer ) ).rgb * w.z;
+// the surface seen from the three axes, mixed by how far the face looks along each; the sides keep the picture upright.
+// dx and dy are the place's slopes across the screen: they choose the picture's level
+vec3 surfaceSample( sampler2DArray map, vec3 p, vec3 dx, vec3 dy, vec3 w, float layer ) {
+	return textureGrad( map, vec3( p.zy, layer ), dx.zy, dy.zy ).rgb * w.x + textureGrad( map, vec3( p.xz, layer ), dx.xz, dy.xz ).rgb * w.y + textureGrad( map, vec3( p.xy, layer ), dx.xy, dy.xy ).rgb * w.z;
 }`;
 /** After `color_fragment`: sets `surfaceArm` (occlusion, roughness) and `surfaceHigh` (the relief) and tints the colour. */
 export const SURFACE_COLOUR = /* glsl */ `
-	// read for every fragment (a texture read inside a branch has no slope to choose its level by), used where there is one
+	// The pictures are read only where the part has one (a leaf, a figure and every plain part read nothing: six reads a
+	// fragment less). A read inside a branch has no slope to choose its level by, so the slopes are taken out here and
+	// handed to the read: the picture is the same as with a read for every fragment.
 	float surfaceLeaf = step( ${LAYERS}.5, vSurface );
 	float surfaceIs = step( 0.5, uSurfaceOn ) * step( 0.5, vSurface ) * ( 1.0 - surfaceLeaf );
 	int surfaceAt = int( clamp( vSurface - 0.5, 0.0, ${LAYERS - 1}.0 ) );
 	float surfaceLayer = float( surfaceAt );
-	vec3 surfaceW = pow( abs( normalize( vModelNormal ) ), vec3( 4.0 ) );
-	surfaceW /= surfaceW.x + surfaceW.y + surfaceW.z;
 	vec3 surfaceP = vModelPos / uSurfaceSpan[ surfaceAt ];
-	vec3 surfaceTint = clamp( surfaceSample( uSurfaceColor, surfaceP, surfaceW, surfaceLayer ) / uSurfaceMean[ surfaceAt ], 0.0, 2.2 );
-	vec3 surfaceArm = surfaceSample( uSurfaceArm, surfaceP, surfaceW, surfaceLayer );
-	diffuseColor.rgb *= mix( vec3( 1.0 ), surfaceTint * mix( 1.0, surfaceArm.r, 0.8 ), surfaceIs );
+	vec3 surfacePx = dFdx( surfaceP ), surfacePy = dFdy( surfaceP );
+	vec3 surfaceTint = vec3( 1.0 ), surfaceArm = vec3( 1.0 );
+	if ( surfaceIs > 0.5 ) {
+		vec3 surfaceW = pow( abs( normalize( vModelNormal ) ), vec3( 4.0 ) );
+		surfaceW /= surfaceW.x + surfaceW.y + surfaceW.z;
+		surfaceTint = clamp( surfaceSample( uSurfaceColor, surfaceP, surfacePx, surfacePy, surfaceW, surfaceLayer ) / uSurfaceMean[ surfaceAt ], 0.0, 2.2 );
+		surfaceArm = surfaceSample( uSurfaceArm, surfaceP, surfacePx, surfacePy, surfaceW, surfaceLayer );
+		diffuseColor.rgb *= surfaceTint * mix( 1.0, surfaceArm.r, 0.8 );
+	}
 	float surfaceHigh = dot( surfaceTint, vec3( 0.333 ) ) * surfaceIs;
 	surfaceArm.g = mix( mix( -1.0, 0.5, surfaceLeaf ), surfaceArm.g, surfaceIs );`;

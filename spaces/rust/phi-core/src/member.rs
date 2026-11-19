@@ -135,7 +135,7 @@ impl Space {
 			let t = txn.and_then(|id| self.state.txns.iter().find(|t| t.id == id));
 			let c = t.and_then(|t| t.rest.get("completion"));
 			let (Some(t), Some(c)) = (t, c) else { return Err(drained("no bounded completion allowance")) };
-			if now >= number(c, "until") || number(c, "remainingCount") < 1.0 || entry.to_json_text().len() as f64 > number(c, "remainingBytes") {
+			if now >= number(c, "until") || number(c, "remainingCount") < 1.0 || entry.json_bytes() as f64 > number(c, "remainingBytes") {
 				return Err(drained("no bounded completion allowance"));
 			}
 			if c.get("preBoundary") != Some(&Json::Bool(true)) {
@@ -156,7 +156,7 @@ impl Space {
 		if !self.draining() {
 			return;
 		}
-		let size = entry.to_json_text().len() as f64;
+		let size = entry.json_bytes() as f64;
 		let Some(c) = txn.and_then(|id| self.state.txns.iter_mut().find(|t| t.id == id)).and_then(|t| t.rest.get_mut("completion")).and_then(Json::as_object_mut) else { return };
 		let (bytes, count) = (c.get("remainingBytes").and_then(Json::as_f64).unwrap_or(0.0), c.get("remainingCount").and_then(Json::as_f64).unwrap_or(0.0));
 		c.insert("remainingBytes", Json::Number(bytes - size));

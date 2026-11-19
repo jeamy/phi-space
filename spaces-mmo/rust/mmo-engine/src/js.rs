@@ -539,6 +539,22 @@ pub fn re(source: &'static str, flags: &'static str) -> std::rc::Rc<JsRegex> {
 	CACHE.with(|c| c.borrow_mut().entry((source, flags)).or_insert_with(|| std::rc::Rc::new(JsRegex::new(source, flags).unwrap_or_else(|e| panic!("/{source}/{flags}: {e}")))).clone())
 }
 
+/// A pattern put together at run time (it names an NPC, a figure, a number word), compiled once and kept: the same few
+/// names come again with every sentence heard. None when it does not compile. The store is emptied when it has grown
+/// to 512 patterns (figures' names are the players' to choose).
+pub fn re_of(source: &str, flags: &'static str) -> Option<std::rc::Rc<JsRegex>> {
+	type Made = std::collections::HashMap<(String, &'static str), Option<std::rc::Rc<JsRegex>>>;
+	thread_local! { static CACHE: std::cell::RefCell<Made> = Default::default(); }
+	CACHE.with(|c| {
+		let mut c = c.borrow_mut();
+		if let Some(r) = c.get(&(source.to_owned(), flags)) { return r.clone(); }
+		if c.len() >= 512 { c.clear(); }
+		let r = JsRegex::new(source, flags).ok().map(std::rc::Rc::new);
+		c.insert((source.to_owned(), flags), r.clone());
+		r
+	})
+}
+
 /// `re.exec(s)` with the groups as owned texts (None: the group took no part); None when nothing matches.
 pub fn caps(r: &JsRegex, s: &str) -> Option<Vec<Option<String>>> {
 	r.exec(s).map(|m| (0..m.groups.len()).map(|i| m.group(s, i).map(str::to_owned)).collect())

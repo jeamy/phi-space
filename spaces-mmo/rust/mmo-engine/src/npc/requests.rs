@@ -16,7 +16,7 @@ fn greeting() -> std::rc::Rc<JsRegex> { js::re(r"\b(hallo|hi|moin|hello|servus|g
 
 /// `requestOf`: what `text` asks of the NPC called `name`; None when the sentence is not meant for her.
 pub fn request_of(text: &str, name: &str) -> Option<Request> {
-	let named = JsRegex::new(&format!("(^|[^\\p{{L}}]){name}([^\\p{{L}}]|$)"), "iu").ok()?;
+	let named = js::re_of(&format!("(^|[^\\p{{L}}]){name}([^\\p{{L}}]|$)"), "iu")?;
 	if !named.test(text) { return None; }
 	let wood = js::re(r"\b(treibholz|holz|scheite?|brennholz|driftwood|wood)\b", "i").test(text);
 	if wood && js::re(r"\b(leg\w*|wirf\w*|werf\w*|füttere\w*|nachlegen|nachlege\w*|feed|put|throw)\b", "i").test(text) && js::re(r"\b(feuer|leuchtfeuer|fire)\b", "i").test(text) { return Some(Request::Feed); }
@@ -24,13 +24,13 @@ pub fn request_of(text: &str, name: &str) -> Option<Request> {
 		let digits = js::caps(&js::re(r"\b(\d+)\b", ""), text).and_then(|m| m[1].clone());
 		let count = match digits {
 			Some(d) => js::to_number(&d),
-			None => NUMBER.iter().find(|(w, _)| JsRegex::new(&format!("\\b{w}\\b"), "i").is_ok_and(|r| r.test(text))).map_or(2.0, |(_, k)| *k),
+			None => NUMBER.iter().find(|(w, _)| js::re_of(&format!("\\b{w}\\b"), "i").is_some_and(|r| r.test(text))).map_or(2.0, |(_, k)| *k),
 		};
 		return Some(Request::Gather(1f64.max(4f64.min(count))));
 	}
 	if greeting().test(text) {
 		let rest = greeting().replace(text, "");
-		let rest = JsRegex::new(name, "i").map_or(rest.clone(), |r| r.replace(&rest, ""));
+		let rest = js::re_of(name, "i").map_or(rest.clone(), |r| r.replace(&rest, ""));
 		if js::re(r"[^\p{L}]", "gu").replace(&rest, "").encode_utf16().count() < 3 { return Some(Request::Greet); }
 	}
 	Some(Request::Unclear)

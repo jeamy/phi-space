@@ -61,7 +61,12 @@ pub async fn settings_of(space: &Space) -> Result<HashMap<&'static str, f64>> {
 }
 
 /// `setting(space, key)`.
-pub async fn setting(space: &Space, key: &str) -> Result<f64> { Ok(*settings_of(space).await?.get(key).unwrap_or_else(|| panic!("no setting {key}"))) }
+pub async fn setting(space: &Space, key: &str) -> Result<f64> {
+	// one value out of the snapshot while it is fresh, without a copy of all of them
+	let fresh = CACHE.with(|c| c.borrow().get(&space.key()).filter(|(at, _)| real_now() - at < ttl_ms()).map(|(_, v)| v.get(key).copied()));
+	if let Some(v) = fresh { return Ok(v.unwrap_or_else(|| panic!("no setting {key}"))); }
+	Ok(*settings_of(space).await?.get(key).unwrap_or_else(|| panic!("no setting {key}")))
+}
 
 /// `workRestMs`.
 pub async fn work_rest_ms(space: &Space) -> Result<f64> { Ok(setting(space, "work.rest").await? * 60_000.0) }

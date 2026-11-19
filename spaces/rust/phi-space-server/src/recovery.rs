@@ -181,7 +181,9 @@ pub fn recovery_only(config: &str, recovery: &str, store: &str) {
 		let store = StoreLine::Local(Rc::clone(&line));
 		let installed: Rc<dyn Register> = Rc::new(SqliteRegister::open(Path::new(text(&rc, "installedRegisterFile").unwrap_or(""))).map_err(|e| e.to_string())?);
 		let (operator, handle): (KeyPin, phi_host::recovery_rpc::RecoveryHandler) = if control {
-			let one = rc.get("registerTls").is_some() != rc.get("registerSshTarget").is_some();
+			// exactly one of the two, and a null is none
+			let set = |k: &str| rc.get(k).is_some_and(|v| !v.is_null());
+			let one = set("registerTls") != set("registerSshTarget");
 			if host_id.is_empty() || text(&rc, "path").is_none() || text(&rc, "snapshotDirectory").is_none() || rc.get("fenceTargets").and_then(Json::as_object).is_none() || !one {
 				return Err("incomplete recovery-only provisioning".to_owned());
 			}

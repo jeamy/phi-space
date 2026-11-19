@@ -41,7 +41,7 @@ fn valid_report(r: &Json) -> bool {
 	let host = text(r, "hostId").is_some_and(|h| !h.is_empty() && h.encode_utf16().count() <= 128);
 	let objects = ["resources", "metrics"].iter().all(|k| r.get(k).is_some_and(|v| v.as_object().is_some()));
 	let names = ["tools", "models"].iter().all(|k| r.get(k).and_then(Json::as_array).is_some_and(|a| a.iter().all(|n| n.as_str().is_some_and(|n| !n.is_empty() && n.encode_utf16().count() <= 128))));
-	host && objects && names && r.to_json_text().len() <= MAX_REPORT
+	host && objects && names && r.json_bytes() <= MAX_REPORT
 }
 
 impl ControlHost {

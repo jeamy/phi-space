@@ -184,7 +184,8 @@ impl StatsCache {
 		let cell = { let mut l = self.loading.borrow_mut(); l.get_or_insert_with(|| Rc::new(tokio::sync::OnceCell::new())).clone() };
 		let at = time_now();
 		let v = cell.get_or_init(|| collect_stats(&self.regions, &self.w)).await.clone();
-		*self.loading.borrow_mut() = None;
+		// only this read's own cell: a later read may have begun while this one waited, and must stay for those behind it
+		{ let mut l = self.loading.borrow_mut(); if l.as_ref().is_some_and(|c| Rc::ptr_eq(c, &cell)) { *l = None; } }
 		*self.last.borrow_mut() = Some((at, v.clone()));
 		v
 	}

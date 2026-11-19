@@ -5,7 +5,9 @@ use phi_json::{obj, Json};
 use phi_space_host::{env, fail, local, Instance, MIB};
 use std::path::PathBuf;
 
-fn positive(name: &str, fallback: f64) -> f64 { env(name).and_then(|v| v.parse().ok()).filter(|n: &f64| *n > 0.0).unwrap_or(fallback) }
+/// A positive number from the environment (`Number(v) > 0` of space-host.ts: blanks round it do not count, and "inf",
+/// which Rust would read as a number, is none).
+fn positive(name: &str, fallback: f64) -> f64 { env(name).and_then(|v| v.trim().parse().ok()).filter(|n: &f64| *n > 0.0 && n.is_finite()).unwrap_or(fallback) }
 
 /// The stores `SPACES_MMO_SPACES` names (world, accounts or both) and the ready line the starter waits for.
 fn instances() -> (Vec<Instance>, String) {

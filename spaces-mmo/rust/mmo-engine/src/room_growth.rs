@@ -89,8 +89,32 @@ pub async fn end_terrain(space: &Space, txn: &str) -> Result<()> { space.abort(t
 pub async fn spatial_world(space: &Space, w: &Json) -> Result<Json> {
 	let all = space.read_all(&phi_json::obj! { "type" => "RoomGrowth" }, None).await?;
 	if all.is_empty() { return Ok(w.clone()); }
+	grown(w, &all)
+}
+
+/// `spatialWorld` for one that asks again and again (a worker at every command, an NPC at every round): the same
+/// definition while the rooms' growth stands as it was, instead of a copy of the whole world each time; and the
+/// definition itself, not a copy of it, while no room has grown.
+#[derive(Default)]
+pub struct Spatial { last: std::cell::RefCell<Option<Grown>> }
+/// The definition, the growth entries it was grown by, and the grown world.
+type Grown = (std::rc::Rc<Json>, Vec<Json>, std::rc::Rc<Json>);
+
+impl Spatial {
+	pub async fn world(&self, space: &Space, w: &std::rc::Rc<Json>) -> Result<std::rc::Rc<Json>> {
+		let all = space.read_all(&phi_json::obj! { "type" => "RoomGrowth" }, None).await?;
+		if all.is_empty() { return Ok(w.clone()); }
+		if let Some((of, growth, live)) = &*self.last.borrow() { if std::rc::Rc::ptr_eq(of, w) && *growth == all { return Ok(live.clone()); } }
+		let live = std::rc::Rc::new(grown(w, &all)?);
+		*self.last.borrow_mut() = Some((w.clone(), all, live.clone()));
+		Ok(live)
+	}
+}
+
+/// The definition `w` with the growth entries `all` applied.
+fn grown(w: &Json, all: &[Json]) -> Result<Json> {
 	let mut growth: Vec<(String, Json)> = Vec::new();
-	for e in &all {
+	for e in all {
 		let g = fields(e).clone();
 		let id = j::s(&g, "roomId").to_owned();
 		if let Some(slot) = growth.iter_mut().find(|(k, _)| *k == id) { slot.1 = g; } else { growth.push((id, g)); }

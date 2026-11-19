@@ -281,7 +281,8 @@ pub async fn serve_replica(listener: tokio::net::TcpListener, peers: HashSet<IpA
 	let open = Rc::new(std::cell::Cell::new(0usize));
 	let peers = Rc::new(peers);
 	loop {
-		let Ok((mut s, from)) = listener.accept().await else { continue };
+		// a failed accept (no file descriptor left) is waited out, not spun on
+		let Ok((mut s, from)) = listener.accept().await else { tokio::time::sleep(Duration::from_millis(100)).await; continue };
 		let ip = match from.ip() { IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(IpAddr::V6(v6), IpAddr::V4), ip => ip };
 		if open.get() >= MAX_CONNECTIONS || !peers.contains(&ip) {
 			drop(s);
@@ -301,15 +302,12 @@ pub async fn serve_replica(listener: tokio::net::TcpListener, peers: HashSet<IpA
 					break; // a protocol violation
 				}
 				let mut body = vec![0u8; n];
-				if s.read_exact(&mut body).await.is_err() {
-					break;
-				}
+				// a peer that names a frame and never sends it does not hold one of the few connections for good
+				let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(IDLE_MS), s.read_exact(&mut body)).await else { break };
 				let answer = handle(String::from_utf8_lossy(&body).into_owned()).await.unwrap_or_else(|_| INTERNAL.to_owned());
 				let mut out = Vec::new();
 				phi_wire::put(&mut out, id, &answer);
-				if s.write_all(&out).await.is_err() {
-					break;
-				}
+				let Ok(Ok(())) = tokio::time::timeout(Duration::from_millis(IDLE_MS), s.write_all(&out)).await else { break };
 			}
 			open.set(open.get() - 1);
 		});

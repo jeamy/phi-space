@@ -165,6 +165,19 @@ test("plants are models: every sort of the world has a form, each stage is its o
 	assert.notEqual(flower, plantGeometry(t, "flower", 1, 0xff9ec4), "a colour is its own shape");
 	flower.computeBoundingBox();
 	assert.ok(flower.boundingBox!.max.y < 0.5 && !Number.isNaN(flower.boundingBox!.max.y));
+	// a wild flower's blossoms take the instance's colour: one shape, and so one draw call, for every colour
+	const { TINTED, solidMesh } = await import("../client/props3d.ts");
+	const wild = plantGeometry(t, "flower", 1, TINTED), tint = wild.getAttribute("tint"), colour = wild.getAttribute("color");
+	assert.equal(wild.getAttribute("position").count, flower.getAttribute("position").count, "the same shape as a coloured one");
+	assert.equal(flower.getAttribute("tint"), undefined, "a flower of a fixed colour carries no tint");
+	const marked = [...tint.array].map((v, i) => (v === 1 ? i : -1)).filter((i) => i >= 0);
+	assert.ok(marked.length > 0 && marked.length < tint.count, "the blossoms are tinted, the stems and leaves are not");
+	assert.ok(marked.every((i) => colour.getX(i) === 1 && colour.getY(i) === 1 && colour.getZ(i) === 1), "tinted parts are white in the geometry");
+	for (const sort of ["rose", "mist"] as const) assert.ok([...cropGeometry(t, sort, 2, TINTED).getAttribute("tint").array].includes(1), sort);
+	// the parts of a thing are one mesh (the instanced shadows need a canvas: not here)
+	const one = solidMesh(t, [{ g: new t.BoxGeometry(1, 1, 1), c: 0x8a6a44 }, { g: new t.BoxGeometry(1, 1, 1), c: 0x4a3522, p: [2, 0, 0] }], "test");
+	assert.equal(one.geometry.userData.shared, false, "the thing's own geometry goes with it");
+	assert.ok([...one.geometry.getAttribute("surface").array].every((v) => v === 0), "plain: no photographed surface by its colour");
 });
 
 test("day and night: full light from 7 to 19, dark from 21 to 5, a smooth dawn and dusk; lamplit faces are marked", async () => {
@@ -183,17 +196,28 @@ test("day and night: full light from 7 to 19, dark from 21 to 5, a smooth dawn a
 
 test("the room's block shows a seabed behind its sea sides and fish that stay inside it", async () => {
 	const t = await import("three");
-	const { BLOCK_DEPTH, fishFor, sides, swimFish } = await import("../client/block3d.ts");
+	const { BLOCK_DEPTH, fishFor, fishSchool, sides, swimFish } = await import("../client/block3d.ts");
 	const ground = ["~~~~", "~..~", "~..,", "~~~~"];
 	const { edges, bed } = sides(t, ground, (k) => k === "~", BLOCK_DEPTH);
 	assert.equal(bed.getAttribute("position").count, edges.length * 12, "a slope and a back wall per sea edge");
 	assert.equal(edges.length, 15, "every sea border cell but the grass one");
 	assert.ok(edges.every((e) => Math.abs(e.ix) + Math.abs(e.iz) === 1));
-	const fish = fishFor(t, edges, 4, 4, 7);
+	const fish = fishFor(edges, 4, 4, 7);
 	assert.ok(fish.length >= 3);
+	const school = fishSchool(t, fish), meshes = school.group.children as Array<import("three").InstancedMesh>;
+	assert.equal(meshes.length, new Set(fish.map((f) => f.kind)).size * 2, "one instanced mesh for the bodies of a kind and one for its tails");
+	assert.equal(meshes.reduce((n, m) => n + m.count, 0), fish.length * 2);
+	const m = new t.Matrix4(), p = new t.Vector3();
 	for (const time of [0, 3.3, 17, 99]) {
-		swimFish(fish, time);
-		for (const f of fish) assert.ok(Math.abs(f.group.position.x) <= 2 && Math.abs(f.group.position.z) <= 2 && f.group.position.y < 0, "inside the block, under the water");
+		swimFish(fish, time); school.draw();
+		for (const f of fish) assert.ok(Math.abs(f.pos.x) <= 2 && Math.abs(f.pos.z) <= 2 && f.pos.y < 0, "inside the block, under the water");
+		// a body stands where its fish is, its tail at the body's back end
+		const first = fish.filter((f) => f.kind === fish[0]!.kind)[0]!;
+		meshes[0]!.getMatrixAt(0, m); p.setFromMatrixPosition(m);
+		assert.ok(Math.hypot(p.x - first.pos.x, p.y - first.pos.y, p.z - first.pos.z) < 1e-6);
+		meshes[1]!.getMatrixAt(0, m); p.setFromMatrixPosition(m);
+		const far = Math.hypot(p.x - first.pos.x, p.y - first.pos.y, p.z - first.pos.z);
+		assert.ok(far > 0.1 && far < 0.4, `the tail is ${far} behind the body's middle`);
 	}
 });
 

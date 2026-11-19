@@ -5,7 +5,7 @@
 // The renderer, camera and render loop are made once; a room change swaps only the ground and its things. The camera looks
 // at the middle of the room and stays there (it moves only when the player drags, turns or zooms the view), so a step moves
 // the figure and nothing else: no sliding ground, no rebuilt scene.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasState, AtlasView, CharView, ObjView } from "../shared/frames.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import { onFpsStart, sayFps } from "./fps.ts";
@@ -13,7 +13,7 @@ import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
-import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, merge, propShadow, setNight, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
+import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, merge, cached, plainMaterial, solidMesh, propShadow, propShadows, setNight, TINTED, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
@@ -22,17 +22,16 @@ import { GROUND, groundLooks } from "./ground3d.ts";
 import { START_VIEW } from "./viewPreferences.ts";
 import { atModelLevel, updateModelDetails, type ModelLevel } from "./modelDetail3d.ts";
 import { stableHash, tile3d } from "./terrain3d.ts";
-import { edgeSides } from "./terrace.ts";
 import { terraceMeshes, type TerraceLook } from "./terraces3d.ts";
 import { cameraElevation, clampTilt, clampZoom, daylightAt, shadowLightAt, wheelView, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./camera3d.ts";
 import { calendar, shownWorldMs, WORLD_HOUR_MS } from "../shared/worldtime.ts";
 import { fishItem, fishModel, type FishKind } from "./fish3d.ts";
-import { blockUnder, fishFor, islandBlock, nameCard, swimFish, type Fish, type SeaEdge } from "./block3d.ts";
+import { blockUnder, fishFor, fishSchool, islandBlock, nameCard, swimFish, type Fish, type SeaEdge } from "./block3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
 type T = typeof import("three");
 type O3 = import("three").Object3D;
-type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; /** The own figure's lantern, lit in the dark. */ lantern?: { light: import("three").PointLight; glow: import("three").Mesh }; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string };
+type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; /** The own figure's lantern, lit in the dark. */ lantern?: { light: import("three").PointLight; glow: import("three").Mesh }; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string; /** An animal's body, looked up once. */ body?: O3 | null; /** The look a figure was made for (the object sync saw). */ look?: CharView["look"] };
 /** What a bed shows: rebuilt when its plants or weeds change. */
 const bedSig = (o: ObjView) => (o.kind === "road" ? `${o.roadState}:${o.paved}:${(o.runs?.[0] ?? []).map((c) => `${c.x},${c.y}`).join(" ")}` : o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "tree" ? `${o.treeStage}|${o.ripe ? 1 : 0}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
@@ -61,6 +60,7 @@ type Scene3D = {
 	lightAt: number;
 	/** the fish behind the room's sea sides (block3d.ts) */
 	fish: Fish[];
+	school: ReturnType<typeof fishSchool> | null;
 	/** dev only: a world hour that overrides the clock for the light (probeHour) */
 	hourProbe?: number | null;
 	host: HTMLDivElement;
@@ -82,8 +82,8 @@ type Scene3D = {
 	plants: import("three").Group | null;
 	plantLooks: Map<string, import("three").Texture>;
 	plantsFor: string;
-	paving: import("three").InstancedMesh | null;
-	pavingFor: string;
+	/** the objects sync last saw: what only they decide is worked out again when they change, not at every step of a figure */
+	objsFor: Map<string, ObjView> | null;
 	chars: Map<string, Entry>;
 	objs: Map<string, Entry>;
 	angle: number;
@@ -150,7 +150,6 @@ export function MapView3D(props: MapRendererProps) {
 				// the filmic tone curve (v3): the sun may be brighter than white without burning out (post3d.ts applies it)
 				renderer.toneMapping = t.ACESFilmicToneMapping; renderer.toneMappingExposure = LIGHT.exposure;
 				renderer.setClearColor(0x10171c, 1);
-				renderer.domElement.addEventListener("contextmenu", prevent);
 				host.current.querySelector(".map-canvas")?.replaceChildren(renderer.domElement);
 
 				const scene = new t.Scene();
@@ -164,7 +163,7 @@ export function MapView3D(props: MapRendererProps) {
 				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFShadowMap;
 				sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = 2.5;
 
-				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], school: null, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", objsFor: null, chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -183,7 +182,8 @@ export function MapView3D(props: MapRendererProps) {
 					s.renderer.info.reset();
 					const moved = step(s, dt, now / 1000, latest.current.me);
 					bubbleTick(s);
-					if (s.fish.length && s.zoom > 0.3) swimFish(s.fish, now / 1000);
+					// on the island level the fish are too small to see: neither moved nor drawn
+					if (s.school) { s.school.group.visible = s.zoom > 0.3; if (s.school.group.visible) { swimFish(s.fish, now / 1000); s.school.draw(); } }
 					if (now - s.lightAt > 500) { s.lightAt = now; daylight(s, latest.current.worldTime ?? null); }
 					if (now - s.detailAt >= 150) { updateModelDetails(t, s.scene, s.camera, s.zoom); s.detailAt = now; }
 					// the shadow map only when a caster moved, and four times a second for all that changes slowly (the sun,
@@ -225,13 +225,18 @@ export function MapView3D(props: MapRendererProps) {
 		if (s.room.roomId !== props.room.roomId) { s.panX = 0; s.panZ = 0; }
 		s.room = props.room; s.world = props.world;
 		for (const m of [s.chars, s.objs]) for (const id of [...m.keys()]) remove(s, m, id);
+		// the old ground and its plants go at once: until the new ground stands, sync puts nothing on the old one
+		if (s.ground) { s.scene.remove(s.ground); dispose(s.ground); s.ground = null; s.school = null; s.fish = []; }
+		if (s.plants) { s.scene.remove(s.plants); dispose(s.plants); s.plants = null; }
+		s.plantsFor = "-"; s.objsFor = null;
 		void (async () => {
 			let looks = new Map<string, TileLook>(), plants = new Map<string, import("three").Texture>();
-			try { looks = await loadTileLooks(s.t, props.world, s.renderer.capabilities.getMaxAnisotropy()); } catch { /* flat colours */ }
+			// the tile art only for a kind of land without a photographed ground (ground3d.ts); the water is water3d.ts's
+			const art = props.room.ground.some((row) => [...row].some((key) => !GROUND[key] && !tile3d(key, !!props.world.tiles[key]?.walk).water));
+			if (art) try { looks = await loadTileLooks(s.t, props.world, s.renderer.capabilities.getMaxAnisotropy()); } catch { /* flat colours */ }
 			try { plants = await loadDecorLooks(s.t, props.world); } catch { /* a bare room */ }
 			if (dead || state.current !== s) return;
 			if (s.ground) { s.scene.remove(s.ground); dispose(s.ground); }
-			s.paving = null; s.pavingFor = "";
 			s.ground = buildTerrain(s, looks);
 			shade(s.ground, true);
 			s.scene.add(s.ground);
@@ -249,8 +254,9 @@ export function MapView3D(props: MapRendererProps) {
 	useEffect(() => { if (state.current && ready) speak(state.current, props.said ?? []); }, [props.said, props.chars, ready]);
 	// the island round the room: rebuilt when the room, the map, the fog or the people on it change
 	// (the blocks only for the room, the map and the fog; the people only redraw the name cards, which is cheap)
-	const islandKey = props.atlas && props.atlasState ? `${props.room.roomId}|${props.atlas.rooms.length}|${JSON.stringify(props.atlasState.fog)}` : "";
-	const cardsKey = props.atlasState ? `${islandKey}|${JSON.stringify(props.atlasState.people)}` : "";
+	const fogOf = props.atlasState?.fog, peopleOf = props.atlasState?.people, roomsOf = props.atlas?.rooms.length, roomId = props.room.roomId;
+	const islandKey = useMemo(() => (roomsOf !== undefined && fogOf ? `${roomId}|${roomsOf}|${JSON.stringify(fogOf)}` : ""), [roomId, roomsOf, fogOf]);
+	const cardsKey = useMemo(() => (peopleOf ? `${islandKey}|${JSON.stringify(peopleOf)}` : ""), [islandKey, peopleOf]);
 	useEffect(() => {
 		const s = state.current;
 		if (!ready || !s || s.islandFor === islandKey) return;
@@ -264,10 +270,18 @@ export function MapView3D(props: MapRendererProps) {
 		const s = state.current;
 		if (ready && s?.island && props.atlas && props.atlasState) { islandCards(s, props.atlas, props.atlasState); positionCamera(s); }
 	}, [ready, cardsKey]);
+	// the view is written down when it has rested for a moment (three synchronous writes at every step of a zoom or a
+	// turn held the frame up), and when the map goes
+	const resting = useRef({ angle, zoom, tilt, due: false });
+	const keep = () => { const v = resting.current; if (!v.due) return; v.due = false; store("mmo.3d.angle", v.angle); store("mmo.3d.zoom", v.zoom); store("mmo.3d.tilt", v.tilt); };
 	useEffect(() => {
-		store("mmo.3d.angle", angle); store("mmo.3d.zoom", zoom); store("mmo.3d.tilt", tilt);
+		const v = resting.current;
+		if (v.angle !== angle || v.zoom !== zoom || v.tilt !== tilt) { v.angle = angle; v.zoom = zoom; v.tilt = tilt; v.due = true; }
 		if (state.current) { state.current.angle = angle; state.current.zoom = zoom; state.current.tilt = tilt; positionCamera(state.current); }
+		const timer = setTimeout(keep, 300);
+		return () => clearTimeout(timer);
 	}, [angle, zoom, tilt, ready]);
+	useEffect(() => keep, []);
 	// where the camera stands, for the arrows (they follow the view)
 	const onTurn = props.onTurn;
 	useEffect(() => { onTurn?.(angle); }, [angle, onTurn]);
@@ -298,7 +312,8 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 	const { t, room, world } = s, { w, h } = dims(room);
 	const group = new t.Group(); group.userData.owned = true;
 	const kind = (key: string) => tile3d(key, !!world.tiles[key]?.walk);
-	const earth = new t.MeshStandardMaterial({ color: 0x6b5236, roughness: 1 });
+	// made when first needed: what is made here and never put on a mesh would stay on the graphics card for good
+	let earth: import("three").MeshStandardMaterial | null = null;
 	// photographed surfaces where the kind has one (ground3d.ts), else the tile art as before
 	const pbr = groundLooks(t, room.ground, (key) => kind(key).water, s.renderer.capabilities.getMaxAnisotropy());
 	const lookOf = (key: string): TerraceLook => {
@@ -307,7 +322,7 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 		const top = new t.MeshStandardMaterial({ color: look ? 0xffffff : visual.color, map: look?.frames[0] ?? null, roughness: 0.95 });
 		// the rounded edge carries the tile art on, a little darker as it turns away from the sky
 		const flank = new t.MeshStandardMaterial({ color: look ? 0xd4d4d4 : new t.Color(visual.color).multiplyScalar(0.85), map: look?.frames[0] ?? null, roughness: 0.95 });
-		return { top, flank, wall: earth };
+		return { top, flank, wall: earth ??= new t.MeshStandardMaterial({ color: 0x6b5236, roughness: 1 }) };
 	};
 	for (const mesh of terraceMeshes(t, room.ground, kind, lookOf)) group.add(mesh);
 	// the water: the room's commonest water kind as one surface under everything, any other one in its cells as before
@@ -315,10 +330,11 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const k = room.ground[y]![x]!; if (kind(k).water) { const a = wet.get(k) ?? []; a.push({ x, y }); wet.set(k, a); } }
 	const main = [...wet].sort((a, b) => b[1].length - a[1].length)[0]?.[0];
 	// the surface (water3d.ts): one material for all the room's water, whatever its kind
-	const top = waterMaterial(t, room.ground, (key) => kind(key).water);
+	let top: import("three").MeshStandardMaterial | null = null;
 	const waterMaterials = (key: string) => {
 		const visual = kind(key);
 		const side = new t.MeshStandardMaterial({ color: new t.Color(visual.color).multiplyScalar(0.6), roughness: 1 });
+		top ??= waterMaterial(t, room.ground, (key) => kind(key).water);
 		return [side, side, top, side, side, side];
 	};
 	if (main) {
@@ -328,19 +344,19 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 		for (let i = 8; i < 12; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h);
 		const sea = new t.Mesh(box, waterMaterials(main)); sea.position.y = height / 2; sea.userData.pick = true; group.add(sea);
 	}
-	const geometry = new t.BoxGeometry(1, 1, 1);
+	let geometry: import("three").BoxGeometry | null = null;
 	for (const [key, cells] of wet) {
 		if (key === main) continue;
-		const mesh = new t.InstancedMesh(geometry, waterMaterials(key), cells.length), matrix = new t.Matrix4();
+		const mesh = new t.InstancedMesh(geometry ??= new t.BoxGeometry(1, 1, 1), waterMaterials(key), cells.length), matrix = new t.Matrix4();
 		cells.forEach((c, i) => { const height = surface(room, world, c.x, c.y); matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, height / 2, c.y - h / 2 + 0.5), new t.Quaternion(), new t.Vector3(1, Math.max(0.04, height), 1)); mesh.setMatrixAt(i, matrix); });
 		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); mesh.userData.pick = true; group.add(mesh);
 	}
 	// the room as a diorama block: strata and sea under the tiles, its shadow on the void (block3d.ts)
 	const block = blockUnder(t, room.ground, world.tiles);
 	block.userData.block = true;
-	s.fish = fishFor(t, block.userData.seaEdges as SeaEdge[], w, h, stableHash(room.roomId));
-	for (const f of s.fish) block.add(f.group);
-	swimFish(s.fish, 0);
+	s.fish = fishFor(block.userData.seaEdges as SeaEdge[], w, h, stableHash(room.roomId));
+	s.school = s.fish.length ? fishSchool(t, s.fish) : null;
+	if (s.school) { block.add(s.school.group); swimFish(s.fish, 0); s.school.draw(); }
 	group.add(block);
 	return group;
 }
@@ -349,6 +365,8 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
  *  herbs as pictures that face the camera (flat ones smaller). */
 /** The wild flowers the 3D map adds on free grass: their forms (props3d.ts) and colours. */
 const WILD_SORTS = ["flower", "flower", "rose", "mist"] as const;
+/** The small plants of the ground, and a flower's colour where the world names none (plantGeometry's own). */
+const SMALL_PLANTS = new Set<string>(["flower", "herb", "grass", "fern"]), FLOWER_COLOUR = 0xf4f0e6;
 const BLOOM = [0xe8443a, 0xf08a24, 0xf2d23a, 0xf4f0e6, 0xe86aa8, 0xb04ad0, 0x5a6ee8, 0x4ab0e8, 0xd8344a, 0xffb0c8, 0x9a3ad0, 0xffe680];
 
 function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): import("three").Group {
@@ -356,17 +374,25 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 	const group = new t.Group(); group.userData.owned = true;
 	const materials = new Map<string, import("three").SpriteMaterial>();
 	// trees and bushes as models (props3d.ts), one instanced mesh per shape; turn and size come from the cell
-	const models = new Map<string, Array<{ x: number; y: number; turn: number; size: number }>>();
+	// A mesh covers a patch of cells, not the room: the close level of detail is set per mesh by its distance and a
+	// budget of triangles (modelDetail3d.ts), so only the plants near the camera get their fine leaves. Trees and bushes
+	// in patches of 4×4 cells; the small plants (a few triangles each) in 8×8, and flowers of every colour in one mesh,
+	// the blossom's colour being the instance's (props3d.ts, TINTED).
+	const models = new Map<string, Array<{ x: number; y: number; turn: number; size: number; colour?: number }>>();
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 		const key = room.decor?.[y]?.[x] ?? " ", d = world.decor?.[key];
 		if (!d?.model || covered.has(`${x},${y}`)) continue;
-		const look = placeLook(`${room.roomId}:${x}:${y}`), at = `${d.model}:${look.variant}:${d.tint ?? ""}:${Math.floor(x / 4)},${Math.floor(y / 4)}`;
-		const list = models.get(at) ?? []; list.push({ x, y, turn: look.turn, size: look.size }); models.set(at, list);
+		const look = placeLook(`${room.roomId}:${x}:${y}`), flower = d.model === "flower", patch = SMALL_PLANTS.has(d.model) ? 8 : 4;
+		const at = `${d.model}:${look.variant}:${flower ? "" : d.tint ?? ""}:${Math.floor(x / patch)},${Math.floor(y / patch)}`;
+		const list = models.get(at) ?? []; list.push({ x, y, turn: look.turn, size: look.size, ...(flower ? { colour: d.tint ?? FLOWER_COLOUR } : {}) }); models.set(at, list);
 	}
 	// v3: on free grass flowers of every sort and colour, on the beach palms; only for the eye (the world's decor, which
 	// the game counts, stays as it is), placed by the cell so that everyone sees the same
-	const extra = new Map<string, Array<{ x: number; y: number; turn: number; size: number; dx: number; dz: number }>>();
-	const add = (key: string, c: { x: number; y: number; turn: number; size: number; dx: number; dz: number }) => { const l = extra.get(key) ?? []; l.push(c); extra.set(key, l); };
+	const extra = new Map<string, Array<{ x: number; y: number; turn: number; size: number; dx: number; dz: number; colour?: number }>>();
+	const add = (key: string, c: { x: number; y: number; turn: number; size: number; dx: number; dz: number; colour?: number }) => { const l = extra.get(key) ?? []; l.push(c); extra.set(key, l); };
+	// the soft shadows under trees, bushes and palms: one instanced mesh for the room
+	const shadows: Array<{ x: number; y: number; z: number; size: number }> = [];
+	const shadow = (c: { x: number; y: number }, size: number) => shadows.push({ x: c.x - w / 2 + 0.5, y: surface(room, world, c.x, c.y) + 0.012, z: c.y - h / 2 + 0.5, size });
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 		const ground = room.ground[y]?.[x], decor = room.decor?.[y]?.[x] ?? " ";
 		if ((decor !== " " && world.decor?.[decor]) || covered.has(`${x},${y}`)) continue;
@@ -374,30 +400,38 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 		if (ground === "," && roll % 100 < 28) {
 			for (let k = 0; k < 1 + ((roll >>> 8) % 2); k++) {
 				const r = stableHash(`${room.roomId}:${x}:${y}:${k}`), sort = WILD_SORTS[(r >>> 4) % WILD_SORTS.length]!, colour = BLOOM[(r >>> 9) % BLOOM.length]!;
-				add(`${sort}:${colour}:${(r >>> 14) % PLANT_VARIANTS}`, { x, y, turn: ((r >>> 17) % 628) / 100, size: 0.75 + ((r >>> 21) % 40) / 100, dx: (((r >>> 24) % 60) - 30) / 100, dz: (((r >>> 3) % 60) - 30) / 100 });
+				// one mesh per sort and shape: the blossom's colour is the instance's (props3d.ts, TINTED)
+				add(`${sort}:${(r >>> 14) % PLANT_VARIANTS}`, { x, y, turn: ((r >>> 17) % 628) / 100, size: 0.75 + ((r >>> 21) % 40) / 100, dx: (((r >>> 24) % 60) - 30) / 100, dz: (((r >>> 3) % 60) - 30) / 100, colour });
 			}
 		} else if (ground === "." && !free.has(`${x},${y}`) && roll % 100 < 7) {
-			add(`palm:0:${(roll >>> 8) % PLANT_VARIANTS}`, { x, y, turn: ((roll >>> 11) % 628) / 100, size: 0.85 + ((roll >>> 20) % 30) / 100, dx: 0, dz: 0 });
+			add(`palm:${(roll >>> 8) % PLANT_VARIANTS}`, { x, y, turn: ((roll >>> 11) % 628) / 100, size: 0.85 + ((roll >>> 20) % 30) / 100, dx: 0, dz: 0 });
 		}
 	}
 	for (const [key, cells] of extra) {
-		const [sort, colour, variant] = key.split(":") as [string, string, string];
-		const geo = sort === "palm" ? plantGeometry(t, "palm", Number(variant)) : sort === "flower" ? plantGeometry(t, "flower", Number(variant), Number(colour)) : cropGeometry(t, sort as "rose" | "mist", 2, Number(colour));
+		const [sort, variant] = key.split(":") as [string, string];
+		const geo = sort === "palm" ? plantGeometry(t, "palm", Number(variant)) : sort === "flower" ? plantGeometry(t, "flower", Number(variant), TINTED) : cropGeometry(t, sort as "rose" | "mist", 2, TINTED);
 		const mesh = new t.InstancedMesh(geo, propMaterial(t), cells.length);
-		const matrix = new t.Matrix4(), q = new t.Quaternion(), up = new t.Vector3(0, 1, 0);
-		cells.forEach((c, i) => { matrix.compose(new t.Vector3(c.x - w / 2 + 0.5 + c.dx, surface(room, world, c.x, c.y), c.y - h / 2 + 0.5 + c.dz), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix); });
-		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
-		if (sort === "palm") for (const c of cells) { const sh = propShadow(t, 1, 1); sh.position.set(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y) + 0.012, c.y - h / 2 + 0.5); group.add(sh); }
+		const matrix = new t.Matrix4(), q = new t.Quaternion(), up = new t.Vector3(0, 1, 0), colour = new t.Color();
+		cells.forEach((c, i) => {
+			matrix.compose(new t.Vector3(c.x - w / 2 + 0.5 + c.dx, surface(room, world, c.x, c.y), c.y - h / 2 + 0.5 + c.dz), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix);
+			if (c.colour !== undefined) mesh.setColorAt(i, colour.setHex(c.colour));
+		});
+		mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
+		if (sort === "palm") for (const c of cells) shadow(c, 1);
 	}
 	for (const [at, cells] of models) {
 		const [model, variant, tint] = at.split(":") as [PlantModel, string, string];
-		const mesh = new t.InstancedMesh(plantGeometry(t, model, Number(variant) % PLANT_VARIANTS, tint ? Number(tint) : undefined), propMaterial(t), cells.length);
-		const matrix = new t.Matrix4(), q = new t.Quaternion(), up = new t.Vector3(0, 1, 0);
-		cells.forEach((c, i) => { matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y), c.y - h / 2 + 0.5), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix); });
-		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
+		const mesh = new t.InstancedMesh(plantGeometry(t, model, Number(variant) % PLANT_VARIANTS, model === "flower" ? TINTED : tint ? Number(tint) : undefined), propMaterial(t), cells.length);
+		const matrix = new t.Matrix4(), q = new t.Quaternion(), up = new t.Vector3(0, 1, 0), colour = new t.Color();
+		cells.forEach((c, i) => {
+			matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y), c.y - h / 2 + 0.5), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix);
+			if (c.colour !== undefined) mesh.setColorAt(i, colour.setHex(c.colour));
+		});
+		mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
 		const tall = model === "tree" || model === "conifer";
-		if (model === "tree" || model === "conifer" || model === "bush" || model === "berrybush") for (const c of cells) { const sh = propShadow(t, tall ? 1.1 : 0.8, tall ? 1.1 : 0.8); sh.position.set(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y) + 0.012, c.y - h / 2 + 0.5); group.add(sh); }
+		if (model === "tree" || model === "conifer" || model === "bush" || model === "berrybush") for (const c of cells) shadow(c, tall ? 1.1 : 0.8);
 	}
+	if (shadows.length) group.add(propShadows(t, shadows));
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 		const key = room.decor?.[y]?.[x] ?? " ", d = world.decor?.[key], map = plants.get(key);
 		if (!d || !map || d.model || covered.has(`${x},${y}`)) continue;
@@ -417,7 +451,6 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
  *  anew only then, and a few times a second anyway). */
 function step(s: Scene3D, dt: number, time: number, me: string): boolean {
 	setWaterTime(time);
-	pavingDetail(s);
 	const k = 1 - Math.exp(-12 * dt);
 	let moved = false;
 	for (const [id, e] of s.chars) {
@@ -430,7 +463,7 @@ function step(s: Scene3D, dt: number, time: number, me: string): boolean {
 	for (const e of s.objs.values()) {
 		if (e.kind === "animal") {
 			// an animal from the fog hops towards its cell and turns to where it goes
-			const body = e.obj.getObjectByName("body"), dx = e.target.x - e.obj.position.x, dz = e.target.z - e.obj.position.z, far = Math.hypot(dx, dz);
+			const body = e.body ??= e.obj.getObjectByName("body") ?? null, dx = e.target.x - e.obj.position.x, dz = e.target.z - e.obj.position.z, far = Math.hypot(dx, dz);
 			if (body && far > 0.05) { body.rotation.y = Math.atan2(dx, dz); body.position.y = Math.abs(Math.sin(time * 14)) * 0.12; }
 			else if (body) body.position.y = 0;
 		}
@@ -464,47 +497,22 @@ function lantern(s: Scene3D, e: Entry, time: number): void {
 	e.lantern.glow.visible = on > 0.05;
 }
 
-function pavingDetail(s: Scene3D): void {
-	if (!s.ground) return;
-	// the photographed paving (ground3d.ts) has its stones in its own picture and normals: no stones of geometry on it
-	if (GROUND[":"]) { if (s.paving) s.paving.visible = false; return; }
-	if (s.zoom < 2) { if (s.paving) s.paving.visible = false; return; }
-	// every paved cell of the room (at most a few hundred: one instanced mesh), built once per room and ground; before,
-	// only the cells round the middle of the view had stones and the rest of the paving stayed smooth
-	const { w, h } = dims(s.room), key = `${s.room.roomId}:${stableHash(s.room.ground.join("\n"))}`;
-	if (s.paving && s.pavingFor === key) { s.paving.visible = true; return; }
-	if (s.paving) { s.ground.remove(s.paving); dispose(s.paving); }
-	const cells: Array<{ x: number; y: number }> = [], t = s.t;
-	s.room.ground.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === ":") cells.push({ x, y }); });
-	const stones = new t.InstancedMesh(new t.BoxGeometry(0.225, 0.018, 0.225), new t.MeshStandardMaterial({ roughness: 1 }), Math.max(1, cells.length * 16));
-	const matrix = new t.Matrix4(), colour = new t.Color();
-	let i = 0;
-	const height = (key: string) => tile3d(key, !!s.world.tiles[key]?.walk).height;
-	for (const cell of cells) for (let row = 0; row < 4; row++) for (let col = 0; col < 4; col++) {
-		// not on the terrace's rounded edge: the stones lie on its flat top only
-		const edge = edgeSides(s.room.ground, height, cell.x, cell.y);
-		if ((edge.n && row === 0) || (edge.s && row === 3) || (edge.w && col === 0) || (edge.e && col === 3)) continue;
-		matrix.makeTranslation(cell.x - w / 2 + 0.125 + col / 4, surface(s.room, s.world, cell.x, cell.y) + 0.01, cell.y - h / 2 + 0.125 + row / 4);
-		stones.setMatrixAt(i, matrix);
-		stones.setColorAt(i++, colour.setHex(0x9a9ea6).multiplyScalar(0.85 + (stableHash(`${s.room.roomId}:${cell.x}:${cell.y}:${row}:${col}`) % 25) / 100));
-	}
-	stones.count = i; stones.instanceMatrix.needsUpdate = true; if (stones.instanceColor) stones.instanceColor.needsUpdate = true;
-	stones.computeBoundingSphere(); stones.receiveShadow = true;
-	s.ground.add(stones); s.paving = stones; s.pavingFor = key;
-}
-
 function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjView>, me: string, snap: boolean): void {
 	if (!s.ground) return; // the room's ground is not built yet: the build calls this when it is
-	s.raised = new Map();
-	for (const o of objs.values()) if (o.location === s.room.roomId && AREA.has(o.kind)) {
-		const { top } = areaGround(s, o);
-		for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) s.raised.set(`${x},${y}`, top);
+	// a figure's step brings the same objects again: the raised cells, the things and the plants stay as they are
+	const things = snap || objs !== s.objsFor;
+	if (things) {
+		s.raised = new Map();
+		for (const o of objs.values()) if (o.location === s.room.roomId && AREA.has(o.kind)) {
+			const { top } = areaGround(s, o);
+			for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) s.raised.set(`${x},${y}`, top);
+		}
 	}
 	for (const id of [...s.chars.keys()]) if (!chars.has(id)) remove(s, s.chars, id);
 	for (const [id, c] of chars) {
 		let e = s.chars.get(id);
-		// an alias or a new look shows at once: the figure is made anew
-		const sig = c.look ? JSON.stringify(c.look) : "";
+		// an alias or a new look shows at once: the figure is made anew (the same look object is the same look)
+		const sig = e && e.look === c.look ? e.sig ?? "" : c.look ? JSON.stringify(c.look) : "";
 		let heading: number | undefined; // a figure made anew keeps facing where it faced
 		if (e && (e.shown !== c.name || (e.sig ?? "") !== sig)) { heading = e.fig?.heading; remove(s, s.chars, id); e = undefined; }
 		if (!e) {
@@ -513,9 +521,14 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 			fig.group.add(label(s.t, c.settler ? `${c.name} (Siedler)` : c.name, id === me ? "#dfff73" : c.ai ? "#9fd3ff" : "#ffffff"));
 			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig, shown: c.name, sig }; e.obj.position.copy(e.target); shade(e.obj, false); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.chars.set(id, e);
 		}
+		e.look = c.look;
 		e.target.copy(at(s, c.x, c.y, 0));
 		if (snap) e.obj.position.copy(e.target);
 	}
+	// a fire burns down by the clock, not by a change of the objects
+	for (const [id, e] of s.objs) if (e.flame) e.flame.light.userData.lit = (objs.get(id)?.until ?? 0) > Date.now();
+	if (!things) return;
+	s.objsFor = objs;
 	for (const id of [...s.objs.keys()]) if (!objs.has(id) || objs.get(id)?.location !== s.room.roomId) {
 		const e = s.objs.get(id)!;
 		// cleared scenery sinks away instead of vanishing
@@ -571,24 +584,22 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
  *  ground of each cell. */
 function track(s: Scene3D, obj: ObjView): Entry {
 	const t = s.t, group = new t.Group(); group.userData.owned = true;
-	const rail = new t.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.6, roughness: 0.4 }), wood = new t.MeshStandardMaterial({ color: 0x4a3522, roughness: 1 });
-	const sleeper = new t.BoxGeometry(0.1, 0.03, 0.42), bars = new Map<string, import("three").BufferGeometry>();
+	// all sleepers are one mesh and all rails another: a mesh a piece was over a hundred draw calls for a line of 20 cells
+	const sleepers: Part[] = [], rails: Part[] = [];
 	for (const run of obj.runs ?? []) run.forEach((c, i) => {
 		const here = at(s, c.x, c.y, 0), { d1, d2 } = stepsAt(run, i);
 		// the piece's points are in cell units (x right, y down = world x, z)
-		if (i > 0 || !obj.fromStation) for (const k of sleeperSpots(d1, d2)) {
-			const m = new t.Mesh(sleeper, wood); m.position.set(here.x + k.x, here.y + 0.02, here.z + k.y); m.rotation.y = Math.atan2(k.ax, k.ay); group.add(m);
-		}
+		if (i > 0 || !obj.fromStation) for (const k of sleeperSpots(d1, d2)) sleepers.push({ g: new t.BoxGeometry(0.1, 0.03, 0.42), c: 0x4a3522, p: [here.x + k.x, here.y + 0.02, here.z + k.y], r: [0, Math.atan2(k.ax, k.ay), 0] });
 		for (const side of [0.12, -0.12]) {
 			const pts = railPoints(d1, d2, side);
 			for (let n = 0; n + 1 < pts.length; n++) {
-				const a = pts[n]!, b = pts[n + 1]!, len = Math.hypot(b.x - a.x, b.y - a.y), key = len.toFixed(3);
-				if (!bars.has(key)) bars.set(key, new t.BoxGeometry(len + 0.02, 0.04, 0.04));
-				const m = new t.Mesh(bars.get(key)!, rail);
-				m.position.set(here.x + (a.x + b.x) / 2, here.y + 0.05, here.z + (a.y + b.y) / 2); m.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x); group.add(m);
+				const a = pts[n]!, b = pts[n + 1]!, len = Math.hypot(b.x - a.x, b.y - a.y);
+				rails.push({ g: new t.BoxGeometry(len + 0.02, 0.04, 0.04), c: 0x9aa0a8, p: [here.x + (a.x + b.x) / 2, here.y + 0.05, here.z + (a.y + b.y) / 2], r: [0, -Math.atan2(b.y - a.y, b.x - a.x), 0] });
 			}
 		}
 	});
+	if (sleepers.length) group.add(solidMesh(t, sleepers, "track"));
+	if (rails.length) group.add(solidMesh(t, rails, "rail", 0.4, 0.6));
 	return { obj: group, target: new t.Vector3(), kind: "track", sig: bedSig(obj) };
 }
 
@@ -597,8 +608,7 @@ function track(s: Scene3D, obj: ObjView): Entry {
 function road(s: Scene3D, obj: ObjView): Entry {
 	const t = s.t, group = new t.Group(); group.userData.owned = true;
 	// every bed, slab and peg of the road is one mesh: a paved cell alone would be ten draw calls
-	const parts: Part[] = [], paved = obj.paved ?? 0;
-	const mark = new t.MeshStandardMaterial({ color: 0xf0d060, emissive: 0x403010, roughness: 0.8 }), markGeo = new t.CylinderGeometry(0.07, 0.07, 0.02, 8);
+	const parts: Part[] = [], marks: Part[] = [], paved = obj.paved ?? 0;
 	(obj.runs?.[0] ?? []).forEach((c, i) => {
 		const here = at(s, c.x, c.y, 0);
 		if (i < paved) {
@@ -606,8 +616,9 @@ function road(s: Scene3D, obj: ObjView): Entry {
 			for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) parts.push({ g: new t.BoxGeometry(0.28, 0.025, 0.28), c: (i + j + k) % 2 ? 0x9c9383 : 0x8f8676, p: [here.x - 0.32 + j * 0.32, here.y + 0.04, here.z - 0.32 + k * 0.32], m: "none" });
 		} else if (obj.roadState === "build") {
 			for (const [dx, dz] of [[-0.35, -0.35], [0.35, 0.35]] as const) parts.push({ g: new t.BoxGeometry(0.05, 0.22, 0.05), c: 0x6b4a2e, p: [here.x + dx, here.y + 0.11, here.z + dz] });
-		} else { const m = new t.Mesh(markGeo, mark); m.position.set(here.x, here.y + 0.02, here.z); group.add(m); }
+		} else marks.push({ g: new t.CylinderGeometry(0.07, 0.07, 0.02, 8), c: 0xf0d060, p: [here.x, here.y + 0.02, here.z] });
 	});
+	if (marks.length) group.add(solidMesh(t, marks, "road-mark", 0.8, 0, 0x403010));
 	if (parts.length) { const g = merge(t, parts, "road"); g.userData.shared = false; group.add(propMesh(t, g)); }
 	return { obj: group, target: new t.Vector3(), kind: "road", sig: bedSig(obj) };
 }
@@ -617,35 +628,36 @@ function object(t: T, obj: ObjView, me: string): Entry {
 	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" || obj.kind === "building" || obj.kind === "tree" ? { sig: bedSig(obj) } : {}) };
 	if (obj.kind === "cart") {
 		// a two-wheeled cart: a box of planks on an axle, its shafts on the ground
-		const wood = new t.MeshStandardMaterial({ color: 0x8a6a44, roughness: 1 }), dark = new t.MeshStandardMaterial({ color: 0x4a3522, roughness: 1 });
-		const box = new t.Mesh(new t.BoxGeometry(0.7, 0.22, 0.46), wood); box.position.y = 0.34; group.add(box);
-		for (const z of [-0.26, 0.26]) {
-			const wheel = new t.Mesh(new t.CylinderGeometry(0.2, 0.2, 0.05, 12), dark); wheel.rotation.x = Math.PI / 2; wheel.position.set(0, 0.2, z); group.add(wheel);
-			const shaft = new t.Mesh(new t.BoxGeometry(0.42, 0.04, 0.04), dark); shaft.position.set(0.52, 0.16, z * 0.8); shaft.rotation.z = -0.35; group.add(shaft);
-		}
+		// one mesh, made once and shared with its levels of detail
+		group.add(new t.Mesh(cached("cart", () => {
+			const wood = 0x8a6a44, dark = 0x4a3522, parts: Part[] = [{ g: new t.BoxGeometry(0.7, 0.22, 0.46), c: wood, p: [0, 0.34, 0], m: "none" }];
+			for (const z of [-0.26, 0.26]) parts.push({ g: new t.CylinderGeometry(0.2, 0.2, 0.05, 12), c: dark, p: [0, 0.2, z], r: [Math.PI / 2, 0, 0], m: "none" }, { g: new t.BoxGeometry(0.42, 0.04, 0.04), c: dark, p: [0.52, 0.16, z * 0.8], r: [0, 0, -0.35], m: "none" });
+			return merge(t, parts, "cart");
+		}), plainMaterial(t)));
 		group.add(propShadow(t, 0.7, 0.5));
 		return e;
 	}
 	if (obj.kind === "train") {
 		// the island railway's train at the platform (App, engine/rail.ts): a little engine and a carriage on the station's
 		// own track, which runs along its front (buildings3d.ts station)
-		const mat = (c: number) => new t.MeshStandardMaterial({ color: c, roughness: 0.7 });
-		const green = mat(0x2f5a3a), black = mat(0x222428), red = mat(0x8a2a22), cream = mat(0xe8e0c8);
+		// one mesh per size, made once and shared with its levels of detail
 		const z = (obj.h ?? 1) * 0.34, len = Math.min(2.6, (obj.w ?? 1) * 0.9), x0 = -len / 2;
-		const box = (w: number, h: number, d: number, m: import("three").Material, x: number, y: number) => { const b = new t.Mesh(new t.BoxGeometry(w, h, d), m); b.position.set(x, y, z); group.add(b); };
-		// the engine: a boiler, a cab, a chimney
-		const engine = len * 0.45;
-		const boiler = new t.Mesh(new t.CylinderGeometry(0.13, 0.13, engine * 0.62, 12), green); boiler.rotation.z = Math.PI / 2; boiler.position.set(x0 + engine * 0.31, 0.38, z); group.add(boiler);
-		box(engine * 0.36, 0.34, 0.3, green, x0 + engine * 0.8, 0.42);
-		box(engine * 0.42, 0.04, 0.34, black, x0 + engine * 0.8, 0.61);
-		const chimney = new t.Mesh(new t.CylinderGeometry(0.05, 0.04, 0.16, 8), black); chimney.position.set(x0 + engine * 0.12, 0.56, z); group.add(chimney);
-		box(engine, 0.08, 0.28, black, x0 + engine / 2, 0.24);
-		// the carriage, cream with a red band and a dark roof
-		const car = len - engine - 0.06, cx = x0 + engine + 0.06 + car / 2;
-		box(car, 0.3, 0.3, cream, cx, 0.42); box(car + 0.01, 0.06, 0.31, red, cx, 0.36); box(car + 0.06, 0.04, 0.34, black, cx, 0.59); box(car, 0.08, 0.28, black, cx, 0.24);
-		for (const wx of [x0 + engine * 0.2, x0 + engine * 0.75, cx - car * 0.3, cx + car * 0.3]) for (const side of [-0.15, 0.15]) {
-			const wheel = new t.Mesh(new t.CylinderGeometry(0.07, 0.07, 0.03, 10), black); wheel.rotation.x = Math.PI / 2; wheel.position.set(wx, 0.2, z + side); group.add(wheel);
-		}
+		group.add(new t.Mesh(cached(`train:${len}:${z}`, () => {
+			const green = 0x2f5a3a, black = 0x222428, red = 0x8a2a22, cream = 0xe8e0c8, parts: Part[] = [];
+			const box = (w: number, h: number, d: number, c: number, x: number, y: number) => parts.push({ g: new t.BoxGeometry(w, h, d), c, p: [x, y, z], m: "none" });
+			// the engine: a boiler, a cab, a chimney
+			const engine = len * 0.45;
+			parts.push({ g: new t.CylinderGeometry(0.13, 0.13, engine * 0.62, 12), c: green, p: [x0 + engine * 0.31, 0.38, z], r: [0, 0, Math.PI / 2], m: "none" });
+			box(engine * 0.36, 0.34, 0.3, green, x0 + engine * 0.8, 0.42);
+			box(engine * 0.42, 0.04, 0.34, black, x0 + engine * 0.8, 0.61);
+			parts.push({ g: new t.CylinderGeometry(0.05, 0.04, 0.16, 8), c: black, p: [x0 + engine * 0.12, 0.56, z], m: "none" });
+			box(engine, 0.08, 0.28, black, x0 + engine / 2, 0.24);
+			// the carriage, cream with a red band and a dark roof
+			const car = len - engine - 0.06, cx = x0 + engine + 0.06 + car / 2;
+			box(car, 0.3, 0.3, cream, cx, 0.42); box(car + 0.01, 0.06, 0.31, red, cx, 0.36); box(car + 0.06, 0.04, 0.34, black, cx, 0.59); box(car, 0.08, 0.28, black, cx, 0.24);
+			for (const wx of [x0 + engine * 0.2, x0 + engine * 0.75, cx - car * 0.3, cx + car * 0.3]) for (const side of [-0.15, 0.15]) parts.push({ g: new t.CylinderGeometry(0.07, 0.07, 0.03, 10), c: black, p: [wx, 0.2, z + side], r: [Math.PI / 2, 0, 0], m: "none" });
+			return merge(t, parts, "train");
+		}), plainMaterial(t, 0.7)));
 		return e;
 	}
 	if (obj.kind === "liner") {
@@ -664,18 +676,20 @@ function object(t: T, obj: ObjView, me: string): Entry {
 	if (obj.kind === "bed") {
 		// dug soil a little above the grass; each plant at its cell by its stage
 		const w = obj.w ?? 1, d = obj.h ?? 1;
-		const soil = new t.Mesh(new t.BoxGeometry(w * 0.92, 0.08, d * 0.92), new t.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 })); soil.position.y = 0.04; group.add(soil);
+		// the soil, the seeds, the stalks and the weeds are one mesh, the flower heads (a little smoother) another
+		const parts: Part[] = [{ g: new t.BoxGeometry(w * 0.92, 0.08, d * 0.92), c: 0x6b4a2e, p: [0, 0.04, 0] }], heads: Part[] = [], stem = 0x4f8a3a;
 		if (obj.fenced) group.add(propMesh(t, fenceGeometry(t, w, d))); // hares keep out (wild.ts)
-		const stem = new t.MeshStandardMaterial({ color: 0x4f8a3a, roughness: 1 });
 		for (const p of obj.plants ?? []) {
 			const px = p.x - (w - 1) / 2, pz = p.y - (d - 1) / 2;
 			if (p.model) { const crop = propMesh(t, cropGeometry(t, p.model, p.stage, Number.parseInt(p.color.slice(1), 16))); crop.position.set(px, 0.08, pz); crop.rotation.y = placeLook(`${obj.id}:${p.x}:${p.y}`).turn; group.add(crop); continue; }
-			if (p.stage === 0) { const s0 = new t.Mesh(new t.SphereGeometry(0.04, 6, 4), new t.MeshStandardMaterial({ color: 0x2e1e10 })); s0.position.set(px, 0.1, pz); group.add(s0); continue; }
+			if (p.stage === 0) { parts.push({ g: new t.SphereGeometry(0.04, 6, 4), c: 0x2e1e10, p: [px, 0.1, pz] }); continue; }
 			const tall = p.stage === 1 ? 0.2 : p.stage === 2 ? 0.38 : 0.15;
-			const st = new t.Mesh(new t.CylinderGeometry(0.03, 0.03, tall, 5), p.stage === 3 ? new t.MeshStandardMaterial({ color: 0x7a6a4a }) : stem); st.position.set(px, 0.08 + tall / 2, pz); group.add(st);
-			if (p.stage === 2) { const head = new t.Mesh(new t.SphereGeometry(0.17, 10, 8), new t.MeshStandardMaterial({ color: Number.parseInt(p.color.slice(1), 16), roughness: 0.7 })); head.position.set(px, 0.08 + tall + 0.08, pz); group.add(head); }
+			parts.push({ g: new t.CylinderGeometry(0.03, 0.03, tall, 5), c: p.stage === 3 ? 0x7a6a4a : stem, p: [px, 0.08 + tall / 2, pz] });
+			if (p.stage === 2) heads.push({ g: new t.SphereGeometry(0.17, 10, 8), c: Number.parseInt(p.color.slice(1), 16), p: [px, 0.08 + tall + 0.08, pz] });
 		}
-		if (obj.weedy) for (const [wx, wz] of [[-0.3, 0.25], [0.3, -0.3], [0.1, 0.35]] as const) { const weed = new t.Mesh(new t.ConeGeometry(0.04, 0.14, 4), stem); weed.position.set(wx * w, 0.15, wz * d); group.add(weed); }
+		if (obj.weedy) for (const [wx, wz] of [[-0.3, 0.25], [0.3, -0.3], [0.1, 0.35]] as const) parts.push({ g: new t.ConeGeometry(0.04, 0.14, 4), c: stem, p: [wx * w, 0.15, wz * d] });
+		group.add(solidMesh(t, parts, "bed"));
+		if (heads.length) group.add(solidMesh(t, heads, "bed-heads", 0.7));
 		return e;
 	}
 	if (obj.kind === "tree") {
@@ -686,33 +700,36 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		tree.scale.setScalar(k); tree.rotation.y = look.turn; group.add(tree);
 		group.add(propShadow(t, 1.1 * k, 1.1 * k));
 		if (obj.ripe && !obj.cut) {
-			const fruit = new t.MeshStandardMaterial({ color: Number.parseInt((obj.color ?? "#d8402a").slice(1), 16), roughness: 0.6 }), ball = new t.SphereGeometry(0.06, 8, 6);
-			for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2, m = new t.Mesh(ball, fruit); m.position.set(Math.cos(a) * 0.42 * k, (0.75 + (i % 3) * 0.18) * k, Math.sin(a) * 0.42 * k); group.add(m); }
+			// the seven fruits are one mesh, made once per colour and size
+			const colour = Number.parseInt((obj.color ?? "#d8402a").slice(1), 16);
+			group.add(new t.Mesh(cached(`fruit:${colour}:${k}`, () => merge(t, [0, 1, 2, 3, 4, 5, 6].map((i): Part => { const a = (i / 7) * Math.PI * 2; return { g: new t.SphereGeometry(0.06, 8, 6), c: colour, p: [Math.cos(a) * 0.42 * k, (0.75 + (i % 3) * 0.18) * k, Math.sin(a) * 0.42 * k], m: "none" }; }), "fruit")), plainMaterial(t, 0.6)));
 		}
 		return e;
 	}
 	if (obj.kind === "field") {
 		// ploughed soil in rows along x; on it by the stage short green shoots, or tall stalks in the crop's colour
 		const w = obj.w ?? 1, d = obj.h ?? 1, stage = obj.fieldStage ?? "brach";
-		const soil = new t.Mesh(new t.BoxGeometry(w * 0.96, 0.06, d * 0.96), new t.MeshStandardMaterial({ color: stage === "brach" ? 0x7a6040 : 0x5e4028, roughness: 1 })); soil.position.y = 0.03; group.add(soil);
+		// the soil and its ridges are one mesh, the rows of the crop another
+		const parts: Part[] = [{ g: new t.BoxGeometry(w * 0.96, 0.06, d * 0.96), c: stage === "brach" ? 0x7a6040 : 0x5e4028, p: [0, 0.03, 0] }], crops: Part[] = [];
 		if (obj.fenced) group.add(propMesh(t, fenceGeometry(t, w, d))); // deer keep out (wild.ts)
-		if (stage === "brach") return e;
+		if (stage === "brach") { group.add(solidMesh(t, parts, "field")); return e; }
 		if (obj.cropModel && stage !== "saat") {
 			const ripe = stage === "reif" || stage === "spaet", color = Number.parseInt((obj.color ?? "#d9b44a").slice(1), 16);
-			const crop = propMesh(t, fieldCropGeometry(t, obj.cropModel, w, d, ripe ? 1 : 0.4, color, stage === "spaet")); crop.position.y = 0.06; group.add(crop);
+			const crop = propMesh(t, fieldCropGeometry(t, obj.cropModel, w, d, ripe ? 1 : 0.4, color, stage === "spaet")); crop.position.y = 0.06; group.add(solidMesh(t, parts, "field"), crop);
 			return e;
 		}
-		const ridge = new t.MeshStandardMaterial({ color: 0x4e3420, roughness: 1 });
-		const crop = new t.MeshStandardMaterial({ color: stage === "reif" || stage === "spaet" ? Number.parseInt((obj.color ?? "#d9b44a").slice(1), 16) : 0x5f9a3a, roughness: 0.9 });
-		if (stage === "spaet") crop.color.multiplyScalar(0.7);
+		const colour = new t.Color(stage === "reif" || stage === "spaet" ? Number.parseInt((obj.color ?? "#d9b44a").slice(1), 16) : 0x5f9a3a);
+		if (stage === "spaet") colour.multiplyScalar(0.7);
 		const rows = Math.max(2, d * 2), tall = stage === "saat" ? 0 : stage === "waechst" ? 0.18 : 0.42;
 		for (let r = 0; r < rows; r++) {
 			const z = -d / 2 + (r + 0.5) * (d / rows);
-			const bank = new t.Mesh(new t.BoxGeometry(w * 0.9, 0.05, 0.12), ridge); bank.position.set(0, 0.08, z); group.add(bank);
 			// a sowing in progress: the furrows so far, no plants yet
-			if (!tall) { if (r / rows >= (obj.progress ?? 0)) bank.visible = false; continue; }
-			const row = new t.Mesh(new t.BoxGeometry(w * 0.88, tall, 0.14), crop); row.position.set(0, 0.1 + tall / 2, z); group.add(row);
+			if (!tall && r / rows >= (obj.progress ?? 0)) continue;
+			parts.push({ g: new t.BoxGeometry(w * 0.9, 0.05, 0.12), c: 0x4e3420, p: [0, 0.08, z] });
+			if (tall) crops.push({ g: new t.BoxGeometry(w * 0.88, tall, 0.14), c: colour.getHex(), p: [0, 0.1 + tall / 2, z] });
 		}
+		group.add(solidMesh(t, parts, "field"));
+		if (crops.length) group.add(solidMesh(t, crops, "field-rows", 0.9));
 		return e;
 	}
 	// houses, sites, ruins, the fire and exits are models (props3d.ts), a variant per thing (its id)
@@ -945,20 +962,22 @@ const LIGHT = { exposure: 0.55, sun: 5, moon: 2.4, sky: 0.45, nightLift: 0.6 };
  *  horizon, and the lamplit faces of the models glow in the dark (props3d.ts, setNight). Visual only; without a clock it
  *  stays early afternoon. */
 const NOON = 0xfff4e0, MOON = 0x8fa6d8, DUSK = 0xff9a4e;
+let daylightTone: import("three").Color | null = null;
 function daylight(s: Scene3D, clock: { v: import("../shared/worldtime.ts").WorldTimeView; at: number } | null): void {
 	const hour = s.hourProbe != null ? s.hourProbe : clock ? calendar(shownWorldMs(clock.v, clock.at, Date.now())).millisOfDay / WORLD_HOUR_MS : 13;
 	const key = `${hour.toFixed(2)}|${s.level}`;
 	if (key === s.lightFor) return;
 	s.lightFor = key;
+	const tone = (daylightTone ??= new s.t.Color());
 	const from = shadowLightAt(hour), d = daylightAt(hour), r = Math.hypot(dims(s.room).w, dims(s.room).h) / 2 + 2;
 	s.sun.position.set(from.dir[0] * r * 1.6, from.dir[1] * r * 1.6, from.dir[2] * r * 1.6); s.sun.target.position.set(0, 0, 0);
 	// under fog the sun is a pale disc: less of its light comes straight, more from all round (the sky's own haze)
 	const clear = 1 - s.level * 0.22;
-	if (from.body === "sun") { s.sun.intensity = LIGHT.sun * from.strength * clear; s.sun.color.setHex(NOON).lerp(new s.t.Color(DUSK), from.warm); }
+	if (from.body === "sun") { s.sun.intensity = LIGHT.sun * from.strength * clear; s.sun.color.setHex(NOON).lerp(tone.setHex(DUSK), from.warm); }
 	else { s.sun.intensity = LIGHT.moon * from.strength * clear; s.sun.color.setHex(MOON); }
 	s.light = d;
 	s.hemi.intensity = 0.12 + 0.9 * (1 - d);
-	s.hemi.color.setHex(0x6a7cae).lerp(new s.t.Color(0xd9edff), d);
+	s.hemi.color.setHex(0x6a7cae).lerp(tone.setHex(0xd9edff), d);
 	s.scene.environmentIntensity = LIGHT.sky; s.renderer.toneMappingExposure = LIGHT.exposure * (1 + LIGHT.nightLift * (1 - d));
 	s.air.update(hour, s.level); s.post.daylight(d);
 	s.shadowAt = -Infinity;
@@ -1100,7 +1119,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		probeDetail: () => {
 			const barrels: Array<{ near: boolean; distance: number }> = [];
 			s.scene.traverse((o) => { const mesh = o as import("three").Mesh; if (String(mesh.geometry?.userData.model ?? "").startsWith("barrel")) barrels.push({ near: mesh.userData.modelLevel === "near", distance: s.camera.position.distanceTo(mesh.getWorldPosition(new t.Vector3())) }); });
-			return { barrels, cobblestones: s.paving?.visible ? s.paving.count : 0, blur: closeBlur(s.zoom) };
+			return { barrels, blur: closeBlur(s.zoom) };
 		},
 		/** the whole state of the view, for measurements */
 		probeState: () => s,
@@ -1190,7 +1209,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 	const onWheel = (e: WheelEvent) => { e.preventDefault(); const action = wheelView(e.deltaY, e.altKey); if (e.altKey) { mapAlt = true; view.current.tiltBy(action.tiltDelta); } else view.current.zoomBy(action.zoomFactor); };
 	const onContext = (e: MouseEvent) => { e.preventDefault(); const at = cell(e as PointerEvent); if (at) latest.current.onMenu(at.x, at.y, e.clientX, e.clientY); };
 	Object.assign(s.canvas.dataset, { map3d: "1" }); s.canvas.addEventListener("pointerdown", onDown); s.canvas.addEventListener("pointermove", onMove); s.canvas.addEventListener("pointerup", onUp); s.canvas.addEventListener("pointercancel", onUp); s.canvas.addEventListener("contextmenu", onContext); s.canvas.addEventListener("wheel", onWheel, { passive: false }); s.canvas.addEventListener("mousedown", onMouseDown);
-	(s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup = () => { window.removeEventListener("keydown", onMapAlt, true); window.removeEventListener("keyup", onMapAlt, true); window.removeEventListener("blur", onBlur); s.canvas.removeEventListener("pointerdown", onDown); s.canvas.removeEventListener("pointermove", onMove); s.canvas.removeEventListener("pointerup", onUp); s.canvas.removeEventListener("pointercancel", onUp); s.canvas.removeEventListener("contextmenu", onContext); s.canvas.removeEventListener("wheel", onWheel); s.canvas.removeEventListener("mousedown", onMouseDown); };
+	(s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup = () => { if (down) clearTimeout(down.timer); window.removeEventListener("keydown", onMapAlt, true); window.removeEventListener("keyup", onMapAlt, true); window.removeEventListener("blur", onBlur); s.canvas.removeEventListener("pointerdown", onDown); s.canvas.removeEventListener("pointermove", onMove); s.canvas.removeEventListener("pointerup", onUp); s.canvas.removeEventListener("pointercancel", onUp); s.canvas.removeEventListener("contextmenu", onContext); s.canvas.removeEventListener("wheel", onWheel); s.canvas.removeEventListener("mousedown", onMouseDown); };
 }
 function fadeOut(s: Scene3D, obj: O3): void {
 	const from = performance.now();
@@ -1204,10 +1223,15 @@ function fadeOut(s: Scene3D, obj: O3): void {
 }
 const state3dGone = (s: Scene3D) => !s.canvas.isConnected;
 function unpointer(s: Scene3D): void { (s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup?.(); }
-function prevent(e: Event): void { e.preventDefault(); }
 function stored(key: string, fallback: number): number { try { const raw = localStorage.getItem(key); if (raw === null) return fallback; const n = Number(raw); return Number.isFinite(n) ? n : fallback; } catch { return fallback; } }
 function store(key: string, value: number): void { try { localStorage.setItem(key, String(value)); } catch { /* private window */ } }
-function remove(s: Scene3D, map: Map<string, Entry>, id: string): void { const e = map.get(id); if (e) { s.scene.remove(e.obj); dispose(e.obj); } map.delete(id); }
+function remove(s: Scene3D, map: Map<string, Entry>, id: string): void {
+	const e = map.get(id);
+	if (e) { s.scene.remove(e.obj); dispose(e.obj); }
+	map.delete(id);
+	// a figure's bubble went with it: a figure made anew under the same id gets the line again (speak)
+	if (map === s.chars) s.bubbles.delete(id);
+}
 /** Frees what the 3D object made; the textures shared between rooms (tile art, the shadow) live on. */
 function dispose(root: O3): void {
 	root.traverse((o) => {

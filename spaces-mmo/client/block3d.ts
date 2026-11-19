@@ -2,7 +2,7 @@
 // whose sea sides show the water as a volume, with a soft shadow below it on the void. The island level draws every room
 // of the atlas as such a block, with a plain lid of tile colours instead of the tile art. Visual only.
 import { tile3d } from "./terrain3d.ts";
-import { fishModel, type FishKind } from "./fish3d.ts";
+import { fishBody, fishTail, tailRoot, type FishKind } from "./fish3d.ts";
 import { propMaterial } from "./props3d.ts";
 import { groundMaps } from "./ground3d.ts";
 
@@ -171,14 +171,15 @@ export function nameCard(t: T, name: string, people: number, here: boolean): imp
 }
 
 /** A fish behind the sea side, and where it swims: along its edge, to and fro, at its own depth. A herring swims in a
- *  school (the members share one path, each a little offset); the plaice glides over the sand slope. */
-export type Fish = { group: import("three").Group; tail: import("three").Mesh; kind: FishKind; x: number; z: number; dx: number; dz: number; span: number; y: number; ix: number; iz: number; phase: number; speed: number; hx: number; hz: number; along: number; inward: number };
-/** Fish for the sea sides of the room's block (fish3d.ts models, the shared model material); `swimFish` moves them. */
-export function fishFor(t: T, edges: SeaEdge[], w: number, h0: number, seed: number, depth = BLOCK_DEPTH): Fish[] {
+ *  school (the members share one path, each a little offset); the plaice glides over the sand slope. `pos`, `turn` and
+ *  `beat` are where it is now, which way it looks and how its tail stands (swimFish). */
+export type Fish = { kind: FishKind; x: number; z: number; dx: number; dz: number; span: number; y: number; ix: number; iz: number; phase: number; speed: number; hx: number; hz: number; along: number; inward: number; scale: number; pos: { x: number; y: number; z: number }; turn: number; beat: number };
+/** Fish for the sea sides of the room's block: where each swims; `fishSchool` draws them, `swimFish` moves them. */
+export function fishFor(edges: SeaEdge[], w: number, h0: number, seed: number, depth = BLOCK_DEPTH): Fish[] {
 	if (!edges.length) return [];
 	let h = seed || 1;
 	const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 10_000) / 10_000; };
-	const units = Math.min(8, Math.max(2, Math.round(edges.length / 6))), out: Fish[] = [], material = propMaterial(t);
+	const units = Math.min(8, Math.max(2, Math.round(edges.length / 6))), out: Fish[] = [];
 	const bed = (inward: number) => -depth + 0.15 + (-0.3 + depth - 0.15) * (inward / 1.6);
 	for (let u = 0; u < units; u++) {
 		const e = edges[Math.floor(rnd() * edges.length)]!, k = rnd(), r = rnd();
@@ -187,14 +188,41 @@ export function fishFor(t: T, edges: SeaEdge[], w: number, h0: number, seed: num
 		const base = { kind, x: e.ax + (e.bx - e.ax) * k, z: e.az + (e.bz - e.az) * k, dx: e.bx - e.ax, dz: e.bz - e.az, span: 1 + rnd() * 2.5, ix: e.ix, iz: e.iz, phase: rnd() * Math.PI * 2, speed: (kind === "scholle" ? 0.12 : 0.25) + rnd() * 0.3, hx: w / 2 - 0.25, hz: h0 / 2 - 0.25 };
 		const y = kind === "scholle" ? bed(0.32) + 0.03 : -0.4 - rnd() * (depth - 1.3);
 		for (let m = 0; m < members; m++) {
-			const { group, tail } = fishModel(t, kind, material);
-			group.scale.setScalar(kind === "hering" ? 1.3 + rnd() * 0.3 : 1.4 + rnd() * 0.5);
-			group.traverse((o) => { o.userData.unshaded = true; });
-			group.renderOrder = 2;
-			out.push({ ...base, group, tail, y: y + (m ? (rnd() - 0.5) * 0.25 : 0), along: m ? (rnd() - 0.5) * 0.7 : 0, inward: kind === "scholle" ? 0.32 : 0.3 + (m ? rnd() * 0.25 : 0.05) });
+			const scale = kind === "hering" ? 1.3 + rnd() * 0.3 : 1.4 + rnd() * 0.5;
+			out.push({ ...base, scale, y: y + (m ? (rnd() - 0.5) * 0.25 : 0), along: m ? (rnd() - 0.5) * 0.7 : 0, inward: kind === "scholle" ? 0.32 : 0.3 + (m ? rnd() * 0.25 : 0.05), pos: { x: 0, y: 0, z: 0 }, turn: 0, beat: 0 });
 		}
 	}
 	return out;
+}
+/** The fish as meshes (fish3d.ts models, the shared model material): all bodies of a kind are one instanced mesh and all
+ *  its tails another, so a room's fish are at most six draw calls. `draw` puts them where `swimFish` moved them. */
+export function fishSchool(t: T, fish: Fish[]): { group: import("three").Group; draw(): void } {
+	const group = new t.Group(); group.renderOrder = 2;
+	const kinds = [...new Set(fish.map((f) => f.kind))].map((kind) => {
+		const members = fish.filter((f) => f.kind === kind);
+		const body = new t.InstancedMesh(fishBody(t, kind), propMaterial(t), members.length), tail = new t.InstancedMesh(fishTail(t, kind), propMaterial(t), members.length);
+		// under water nothing casts or takes the sun's shadow (MapView3D shade)
+		body.userData.unshaded = tail.userData.unshaded = true;
+		group.add(body, tail);
+		return { kind, members, body, tail };
+	});
+	const whole = new t.Matrix4(), part = new t.Matrix4(), q = new t.Quaternion(), e = new t.Euler(), p = new t.Vector3(), size = new t.Vector3();
+	return {
+		group,
+		draw() {
+			for (const k of kinds) {
+				const root = tailRoot(k.kind);
+				k.members.forEach((f, i) => {
+					whole.compose(p.set(f.pos.x, f.pos.y, f.pos.z), q.setFromEuler(e.set(0, f.turn, 0)), size.setScalar(f.scale));
+					k.body.setMatrixAt(i, whole);
+					// the tail turns about its root at the body's back end (sideways; the flat plaice's up and down)
+					part.makeRotationFromEuler(k.kind === "scholle" ? e.set(0, 0, f.beat) : e.set(0, f.beat, 0)).setPosition(root, 0, 0);
+					k.tail.setMatrixAt(i, part.premultiply(whole));
+				});
+				for (const mesh of [k.body, k.tail]) { mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); }
+			}
+		},
+	};
 }
 /** Moves the fish to time `time` (seconds): each swims to and fro along its edge, turns at the ends and beats its tail. */
 export function swimFish(fish: Fish[], time: number): void {
@@ -202,11 +230,10 @@ export function swimFish(fish: Fish[], time: number): void {
 		const a = time * f.speed + f.phase, along = Math.sin(a) * f.span + f.along, dir = Math.cos(a) >= 0 ? 1 : -1;
 		const inward = f.inward + (f.kind === "scholle" ? 0 : 0.08 * Math.sin(a * 1.7 + f.along * 5));
 		// never past the block's corners: there it would hang in the air
-		const x = Math.max(-f.hx, Math.min(f.hx, f.x + f.dx * along + f.ix * inward)), z = Math.max(-f.hz, Math.min(f.hz, f.z + f.dz * along + f.iz * inward));
-		f.group.position.set(x, f.y + (f.kind === "scholle" ? 0 : Math.sin(a * 2.3 + f.along * 3) * 0.05), z);
-		f.group.rotation.y = Math.atan2(-f.dz * dir, f.dx * dir);
-		// the tail beats faster the faster the fish goes (sideways; the flat plaice's up and down)
-		const beat = Math.sin(time * (9 + f.speed * 14) + f.phase * 3 + f.along * 7) * 0.45;
-		if (f.kind === "scholle") f.tail.rotation.z = beat * 0.6; else f.tail.rotation.y = beat;
+		f.pos.x = Math.max(-f.hx, Math.min(f.hx, f.x + f.dx * along + f.ix * inward)); f.pos.z = Math.max(-f.hz, Math.min(f.hz, f.z + f.dz * along + f.iz * inward));
+		f.pos.y = f.y + (f.kind === "scholle" ? 0 : Math.sin(a * 2.3 + f.along * 3) * 0.05);
+		f.turn = Math.atan2(-f.dz * dir, f.dx * dir);
+		// the tail beats faster the faster the fish goes
+		f.beat = Math.sin(time * (9 + f.speed * 14) + f.phase * 3 + f.along * 7) * 0.45 * (f.kind === "scholle" ? 0.6 : 1);
 	}
 }

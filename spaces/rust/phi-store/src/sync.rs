@@ -284,7 +284,8 @@ impl SyncJournal {
 		self.codec()?;
 		let space_id = text(current, "spaceId");
 		let Some((value, _)) = deltas.last().and_then(|w| own::marker_of(w, space_id)) else { return blocked("commit marker does not bind the batch") };
-		if canonical(&value) != canonical(&marker_of(i)) { return blocked("commit marker does not bind the batch"); }
+		// an entry whose revision is no number has no marker text (and is not a reason to stop the process)
+		if marker_of(i).canonical().ok() != Some(canonical(&value)) { return blocked("commit marker does not bind the batch"); }
 		if deltas[..deltas.len() - 1].iter().any(own::touches) { return blocked("business batch touches replication marker"); }
 		Ok(())
 	}

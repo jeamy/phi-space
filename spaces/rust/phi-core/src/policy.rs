@@ -199,7 +199,7 @@ pub fn validate_federation_policy(p: &Json, table: &Json, old: Option<&Json>, al
 	name(p.get("authorityId"))?;
 	let (rules, profiles) = (p.get("rules").and_then(Json::as_array), p.get("completionProfiles").and_then(Json::as_array));
 	let (Some(rules), Some(profiles)) = (rules, profiles) else { return Err(routing("policy exceeds schema/budget")) };
-	if !safe_of(p.get("policyVersion")).is_some_and(|v| v >= 1.0) || rules.len() > 128 || profiles.len() > 32 || p.to_json_text().len() > 65536 {
+	if !safe_of(p.get("policyVersion")).is_some_and(|v| v >= 1.0) || rules.len() > 128 || profiles.len() > 32 || p.json_bytes() > 65536 {
 		return Err(routing("policy exceeds schema/budget"));
 	}
 	let default = p.get("default").filter(|d| text(d, "mode") == Some("local")).ok_or_else(|| routing("default must name local member"))?;

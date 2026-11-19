@@ -64,7 +64,7 @@ pub fn publish(service: &mut Service, control_space: &str, t: &Json, p: Publishe
 	let n = t.get("notice").filter(|n| n.as_object().is_some());
 	let issuer = t.get("issuer").and_then(Json::as_str);
 	let space = n.and_then(|n| n.get("spaceId")).and_then(Json::as_str).filter(|s| !s.is_empty() && s.encode_utf16().count() <= 128);
-	if n.is_none() || issuer.is_none() || issuer != n.and_then(|n| text(n, "primaryReplica")) || space.is_none() || t.get("signature").and_then(Json::as_str).is_none() || t.to_json_text().len() > 4096 {
+	if n.is_none() || issuer.is_none() || issuer != n.and_then(|n| text(n, "primaryReplica")) || space.is_none() || t.get("signature").and_then(Json::as_str).is_none() || t.json_bytes() > 4096 {
 		return Err(conflict("invalid replica configuration notice"));
 	}
 	let (n, issuer, space) = (n.expect("checked"), issuer.expect("checked"), space.expect("checked"));

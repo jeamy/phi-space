@@ -30,9 +30,9 @@ pub(crate) const HEADER: usize = 8;
 const MAX_TIMER_MS: f64 = 2_147_483_647.0;
 pub(crate) const ACCEPT_PAUSE_MS: u64 = 100;
 /// Answers of one connection waiting for the disk; a client that outruns a stalled disk by more is refused.
-const MAX_HELD_REPLIES: usize = 1024;
+pub(crate) const MAX_HELD_REPLIES: usize = 1024;
 /// Includes replies already handed to a blocked socket writer.
-const MAX_HELD_REPLY_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const MAX_HELD_REPLY_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Listen {

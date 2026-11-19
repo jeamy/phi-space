@@ -63,11 +63,13 @@ const COLOUR = (wet: boolean) => /* glsl */ `
 export function groundLooks(t: T, ground: readonly string[], water: (key: string) => boolean, anisotropy: number): (key: string, plain: number) => TerraceLook | null {
 	const h = ground.length, w = ground[0]?.length ?? 0;
 	// for every land cell how far the water is: the water's own shore texture with land and water swapped
-	const near = shoreTexture(t, ground, (key) => !water(key));
-	const uniforms = { uWet: { value: near }, uRoom: { value: new t.Vector2(Math.max(1, w), Math.max(1, h)) } };
+	// (made with the first material: a room without any of these kinds makes none, and nothing would free it)
+	let near: import("three").DataTexture | null = null;
+	const uniforms = { uWet: { value: null as import("three").DataTexture | null }, uRoom: { value: new t.Vector2(Math.max(1, w), Math.max(1, h)) } };
 	const make = (spec: Spec, plain: number, shade: number) => {
 		const material = new t.MeshStandardMaterial({ color: new t.Color(plain).multiplyScalar(shade), roughness: 0.95, metalness: 0 });
-		const wet = !!spec.wet;
+		const wet = !!spec.wet, shore = near ??= shoreTexture(t, ground, (key) => !water(key));
+		uniforms.uWet.value = shore;
 		material.onBeforeCompile = (shader) => {
 			Object.assign(shader.uniforms, uniforms);
 			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vGroundPos;")
@@ -77,7 +79,7 @@ export function groundLooks(t: T, ground: readonly string[], water: (key: string
 				.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n\troughnessFactor = mix( roughnessFactor, 0.28, groundWet );");
 		};
 		material.customProgramCacheKey = () => `ground3d:${wet}`;
-		material.userData.dispose = () => near.dispose();
+		material.userData.dispose = () => shore.dispose();
 		void groundMaps(t, spec.name, spec.cells, anisotropy).then((m) => {
 			if (!m) return;
 			material.map = m.color; material.normalMap = m.normal; material.roughnessMap = m.arm; material.aoMap = m.arm;
@@ -85,12 +87,13 @@ export function groundLooks(t: T, ground: readonly string[], water: (key: string
 		});
 		return material;
 	};
-	const made = new Map<string, TerraceLook>(), wall = make(EARTH, 0x6b5236, 1);
+	const made = new Map<string, TerraceLook>();
+	let wall: import("three").MeshStandardMaterial | null = null;
 	return (key, plain) => {
 		const spec = GROUND[key];
 		if (!spec) return null;
 		let look = made.get(key);
-		if (!look) { look = { top: make(spec, plain, 1), flank: make(spec, plain, 0.88), wall }; made.set(key, look); }
+		if (!look) { look = { top: make(spec, plain, 1), flank: make(spec, plain, 0.88), wall: wall ??= make(EARTH, 0x6b5236, 1) }; made.set(key, look); }
 		return look;
 	};
 }

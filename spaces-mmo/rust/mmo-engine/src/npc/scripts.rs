@@ -11,7 +11,7 @@ use super::settlers::{Bauhelfer, Dorfbewohner, Siedler};
 use super::{pick, Npc};
 use crate::fire::{burn_text, fog_of};
 use crate::j;
-use crate::js::{self, JsRegex};
+use crate::js;
 use crate::settings::setting;
 use crate::source::{random_int, time_now};
 use crate::space::{fields, tmpl, Result, FOREVER, NO_WAIT};
@@ -65,7 +65,7 @@ async fn room_name(n: &Npc, room: &str) -> Result<String> {
 /// `dozeLine`: "Ines flickt ein Netz." → "flickt ein Netz.".
 fn doze_line(name: &str, lines: &[Json], i: usize) -> String {
 	let l = lines.get(i).and_then(Json::as_str).map_or_else(|| format!("{name} döst."), str::to_owned);
-	JsRegex::new(&format!("^{name}\\s+"), "").map_or(l.clone(), |r| r.replace(&l, ""))
+	js::re_of(&format!("^{name}\\s+"), "").map_or(l.clone(), |r| r.replace(&l, ""))
 }
 async fn npc_max(n: &Npc) -> Result<f64> { setting(&n.space, "npc.max").await }
 fn the_text(m: &Json) -> String {

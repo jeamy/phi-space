@@ -9,7 +9,7 @@ use crate::context::{msg, Ctx, MsgOpts};
 use crate::j;
 use crate::js::{self, JsRegex};
 use crate::model::actor_token;
-use crate::room_growth::{pin_terrain, spatial_world};
+use crate::room_growth::pin_terrain;
 use crate::space::{fields, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 
 thread_local! {
@@ -35,7 +35,7 @@ fn split(line: &str) -> (String, String) {
 /// `named`: whether `line` names `name` as a word of its own (any case).
 fn named(line: &str, name: &str) -> bool {
 	let escaped = js::re(r"[.*+?^${}()|[\]\\]", "g").replace(name, "\\$&");
-	JsRegex::new(&format!(r"(^|[^\p{{L}}\p{{N}}]){escaped}([^\p{{L}}\p{{N}}]|$)"), "iu").is_ok_and(|r| r.test(line))
+	js::re_of(&format!(r"(^|[^\p{{L}}\p{{N}}]){escaped}([^\p{{L}}\p{{N}}]|$)"), "iu").is_some_and(|r| r.test(line))
 }
 
 /// `viewFor`: what the translation rules may look at.
@@ -125,7 +125,7 @@ pub async fn execute(c: &mut Ctx, line: &str) -> Result<()> {
 /// How a world worker serves characters: its space, the world's definition, how long messages and transactions last.
 /// The world worker's serving (`server/world-host.ts`). With `mirror` its commands read their snapshot from the copy, as
 /// in production (the oracle's default); without it every read goes to the space (`R8_SERVE=plain`).
-pub struct Worker { pub space: Space, pub w: Rc<Json>, pub msg_lease_ms: f64, pub txn_ms: f64, pub mirror: Option<Rc<crate::mirror::Mirror>>, pub elsewhere: Vec<(String, Space)>, pub batch: bool }
+pub struct Worker { pub space: Space, pub w: Rc<Json>, pub msg_lease_ms: f64, pub txn_ms: f64, pub mirror: Option<Rc<crate::mirror::Mirror>>, pub elsewhere: Vec<(String, Space)>, pub batch: bool, /** the grown world, kept between commands */ pub spatial: crate::room_growth::Spatial }
 
 impl Worker {
 	/// `begin`: a new transaction holding the character's token and its oldest intent; the intent is None when either is
@@ -203,7 +203,7 @@ impl Worker {
 				let line = j::s(&intent, "line").to_owned();
 				let stepping = STEP.with(|r| r.test(&line));
 				let account = if stepping { None } else { self.one(&view, &tmpl("Account", phi_json::obj! { "accountId" => j::at(&a, "accountId").clone() }), 2_000.0).await?.map(|e| fields(&e).clone()) };
-				let world = Rc::new(spatial_world(&end, &self.w).await?);
+				let world = self.spatial.world(&end, &self.w).await?;
 				let mut c = Ctx { space: end.clone(), txn: txn.clone(), world, actor: a, load_account: account.is_none(), account, msg_lease_ms: self.msg_lease_ms, asked: j::so(&intent, "asked").map(str::to_owned), lang: j::so(&intent, "lang").map(str::to_owned), step: j::opt(&intent, "step").cloned(), inventory: None, elsewhere: self.elsewhere.clone(), at: None };
 				execute(&mut c, &line).await?;
 			}

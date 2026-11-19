@@ -121,7 +121,8 @@ pub fn purge(service: &mut Service, cfg: Retention) -> R<Option<String>> {
 	let oldest: Vec<_> = newest_first.into_iter().rev().collect();
 	let target = visible - cfg.low;
 	let mut strays: Vec<_> = entries.iter().filter(|e| e.type_ == "Like" && e.written_under.is_none() && e.taken_by.is_none() && !posts.contains_key(&text(&e.fields, "postId"))).collect();
-	strays.sort_by(|a, b| number(&a.fields, "at").partial_cmp(&number(&b.fields, "at")).unwrap_or(std::cmp::Ordering::Equal));
+	// a total order (a time that is no number sorts last; "equal to everything" is none, and the sort may panic on it)
+	strays.sort_by(|a, b| (number(&a.fields, "at") + 0.0).total_cmp(&(number(&b.fields, "at") + 0.0)));
 	strays.truncate(target.max(0.0) as usize);
 	let strays: Vec<String> = strays.into_iter().map(|e| e.id.clone()).collect();
 	// what stays: posts of people (the operator's own) and every reply under them, however deep the thread
@@ -211,11 +212,14 @@ pub fn purge(service: &mut Service, cfg: Retention) -> R<Option<String>> {
 				}
 			}
 			let going: HashSet<&str> = part.iter().map(|v| v.node.as_str()).collect();
+			// where the nodes to relink lie, found in one pass over the entries (not one pass a node)
+			let wanted: HashSet<&str> = links.iter().map(|(_, newer, _)| newer.as_str()).filter(|n| !n.is_empty() && !going.contains(n)).collect();
+			let place: HashMap<&str, usize> = s.state.entries.iter().enumerate().filter_map(|(i, e)| wanted.get(e.id.as_str()).map(|id| (*id, i))).collect();
 			for (_, newer, older) in &links {
 				if newer.is_empty() || going.contains(newer.as_str()) {
 					continue; // the newest node never goes (MIN_KEEP_POSTS); a neighbour that goes too is not relinked
 				}
-				let Some(at) = s.state.entries.iter().position(|e| e.id == *newer) else { return Err(error("Error", "history chain changed")) };
+				let Some(&at) = place.get(newer.as_str()) else { return Err(error("Error", "history chain changed")) };
 				let e = s.state.entries.get_mut(at);
 				e.fields.insert("next", older.as_str().into());
 				// the byte tally of the record follows its fields (retention.ts)

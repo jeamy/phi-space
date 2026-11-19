@@ -15,6 +15,9 @@ export type V3 = [number, number, number];
 export type Part = { g: Geo; c: number; p?: V3; r?: V3; s?: V3; m?: Surface | "none" | "leaf" };
 /** The colours of lamplight and embers: such faces glow when it gets dark (merge marks them, propMaterial lights them). */
 export const LAMPLIGHT = new Set([0xf2c46a, 0xff8a2a]);
+/** A part of this "colour" is white in the geometry and takes its colour from the instance (InstancedMesh.setColorAt):
+ *  one geometry and one draw call for the blossoms of every colour. The rest of the model keeps its own colours. */
+export const TINTED = -1;
 
 export type PlantModel = "tree" | "conifer" | "bush" | "berrybush" | "flower" | "herb" | "grass" | "fern" | "palm";
 /** How many shapes of each plant there are; a place picks one. */
@@ -41,20 +44,22 @@ const CREASE = Math.cos(50 * Math.PI / 180);
 /** The parts merged into one geometry: positions, a colour per part, and normals that are smooth across faces meeting
  *  at a shallow angle (a trunk, a crown, a bevel are round) and sharp where they meet steeply (a box keeps its edges). */
 export function merge(t: T, parts: Part[], seed: string): Geo {
-	const pos: number[] = [], col: number[] = [], glow: number[] = [], faces: number[] = [], surface: number[] = [];
+	const pos: number[] = [], col: number[] = [], glow: number[] = [], faces: number[] = [], surface: number[] = [], tint: number[] = [];
+	const tinted = parts.some((part) => part.c === TINTED);
 	const m = new t.Matrix4(), q = new t.Quaternion(), e = new t.Euler(), c = new t.Color(), edgeA = new t.Vector3(), edgeB = new t.Vector3(), origin = new t.Vector3(), normal = new t.Vector3();
 	for (const part of parts) {
 		const primitive = modelPrimitive(t, part.g), g = primitive.index ? primitive.toNonIndexed() : primitive;
 		m.compose(new t.Vector3(...(part.p ?? [0, 0, 0])), q.setFromEuler(e.set(...(part.r ?? [0, 0, 0]))), new t.Vector3(...(part.s ?? [1, 1, 1])));
 		g.applyMatrix4(m);
 		const a = g.getAttribute("position");
-		c.setHex(part.c);
+		const own = part.c === TINTED ? 0 : 1;
+		c.setHex(own ? part.c : 0xffffff);
 		const lit = LAMPLIGHT.has(part.c) ? 1 : 0, layer = surfaceLayer(part.c, part.m);
 		for (let i = 0; i < a.count; i += 3) {
 			origin.fromBufferAttribute(a, i); edgeA.fromBufferAttribute(a, i + 1).sub(origin); edgeB.fromBufferAttribute(a, i + 2).sub(origin); normal.crossVectors(edgeA, edgeB);
 			// the face's normal, its length the face's size (so a large face weighs more at a shared corner)
 			faces.push(normal.x, normal.y, normal.z);
-			for (let k = 0; k < 3; k++) { pos.push(a.getX(i + k), a.getY(i + k), a.getZ(i + k)); col.push(c.r, c.g, c.b); glow.push(lit); surface.push(layer); }
+			for (let k = 0; k < 3; k++) { pos.push(a.getX(i + k), a.getY(i + k), a.getZ(i + k)); col.push(c.r, c.g, c.b); glow.push(lit); surface.push(layer); if (tinted) tint.push(1 - own); }
 		}
 		g.dispose(); if (g !== primitive) primitive.dispose();
 	}
@@ -63,6 +68,7 @@ export function merge(t: T, parts: Part[], seed: string): Geo {
 	out.setAttribute("color", new t.Float32BufferAttribute(col, 3));
 	out.setAttribute("glow", new t.Float32BufferAttribute(glow, 1));
 	out.setAttribute("surface", new t.Float32BufferAttribute(surface, 1));
+	if (tinted) out.setAttribute("tint", new t.Float32BufferAttribute(tint, 1));
 	out.setAttribute("normal", new t.Float32BufferAttribute(creaseNormals(pos, faces), 3));
 	out.computeBoundingSphere();
 	out.userData.shared = true; out.userData.model = seed;
@@ -72,11 +78,21 @@ export function merge(t: T, parts: Part[], seed: string): Geo {
 /** A normal per corner of a triangle list: the sum of the normals of the faces around that point which lie within
  *  CREASE of the corner's own face. `faces` holds each face's normal, unnormalised. */
 export function creaseNormals(pos: readonly number[], faces: readonly number[]): number[] {
-	const count = pos.length / 3, around = new Map<string, number[]>(), unit: number[] = new Array(faces.length);
+	const count = pos.length / 3, around = new Map<number | string, number[]>(), unit: number[] = new Array(faces.length);
 	for (let f = 0; f < faces.length; f += 3) { const l = Math.hypot(faces[f]!, faces[f + 1]!, faces[f + 2]!) || 1; unit[f] = faces[f]! / l; unit[f + 1] = faces[f + 1]! / l; unit[f + 2] = faces[f + 2]! / l; }
-	const key = (i: number) => `${Math.round(pos[i * 3]! * 2000)},${Math.round(pos[i * 3 + 1]! * 2000)},${Math.round(pos[i * 3 + 2]! * 2000)}`;
-	const keys: string[] = new Array(count);
-	for (let i = 0; i < count; i++) { const k = keys[i] = key(i), f = Math.floor(i / 3); let list = around.get(k); if (!list) around.set(k, list = []); if (!list.includes(f)) list.push(f); }
+	// A point's key is its place in steps of 1/2000. As one whole number where the model is small enough for that to be
+	// exact (within 30 units of its origin: all but a long road or track), else as text: a crown of leaves is tens of
+	// thousands of corners, and a string for each of them held the frame up when a tree's close level was first built.
+	let reach = 0;
+	for (let i = 0; i < pos.length; i++) { const a = Math.abs(pos[i]!); if (a > reach) reach = a; }
+	const OFF = 60_000, SPAN = 2 * OFF + 1, whole = reach * 2000 < OFF;
+	const key = (i: number): number | string => {
+		const x = Math.round(pos[i * 3]! * 2000), y = Math.round(pos[i * 3 + 1]! * 2000), z = Math.round(pos[i * 3 + 2]! * 2000);
+		return whole ? ((x + OFF) * SPAN + (y + OFF)) * SPAN + (z + OFF) : `${x},${y},${z}`;
+	};
+	const keys: Array<number | string> = new Array(count);
+	// a face's three corners follow one another: it is in a point's list already only as the list's last entry
+	for (let i = 0; i < count; i++) { const k = keys[i] = key(i), f = Math.floor(i / 3); let list = around.get(k); if (!list) around.set(k, list = []); if (list[list.length - 1] !== f) list.push(f); }
 	const out: number[] = new Array(pos.length);
 	for (let i = 0; i < count; i++) {
 		const own = Math.floor(i / 3) * 3, ox = unit[own]!, oy = unit[own + 1]!, oz = unit[own + 2]!;
@@ -112,7 +128,9 @@ export function propMaterial(t: T): import("three").MeshStandardMaterial {
 		material = new t.MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0 });
 		material.onBeforeCompile = (shader) => {
 			shader.uniforms.uNight = night; Object.assign(shader.uniforms, surfaceUniforms(t));
-			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nattribute float glow;\nattribute float surface;\nvarying float vGlow;\nvarying float vSurface;\nvarying vec3 vModelPos;\nvarying vec3 vModelNormal;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow;\nvSurface = surface;\nvModelPos = position;\nvModelNormal = normal;");
+			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nattribute float glow;\nattribute float surface;\nattribute float tint;\nvarying float vGlow;\nvarying float vSurface;\nvarying vec3 vModelPos;\nvarying vec3 vModelNormal;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow;\nvSurface = surface;\nvModelPos = position;\nvModelNormal = normal;")
+				// an instance's colour (setColorAt) tints only the parts marked for it (TINTED), not the whole model
+				.replace("#include <color_vertex>", "#include <color_vertex>\n#ifdef USE_INSTANCING_COLOR\n\tvColor.rgb = color * mix( vec3( 1.0 ), instanceColor.rgb, tint );\n#endif");
 			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\n${GRAIN}\n${SURFACE_HEAD}`)
 				.replace("#include <color_fragment>", `#include <color_fragment>\n\tfloat grain = modelGrain( vModelPos );\n\tdiffuseColor.rgb *= 0.9 + 0.2 * grain;\n${SURFACE_COLOUR}`)
 				.replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
@@ -120,8 +138,9 @@ export function propMaterial(t: T): import("three").MeshStandardMaterial {
 		// the grain as a bump: the surface leans by the slope of the grain, less with distance (it would flicker there)
 		vec3 gx = dFdx( vViewPosition ), gy = dFdy( vViewPosition );
 		vec3 r1 = cross( gy, normal ), r2 = cross( normal, gx );
-		float det = dot( gx, r1 ), fine = modelGrain( vModelPos * 3.1 + 11.0 );
-		float bump = ( ( grain + 0.5 * fine ) * 0.012 + surfaceHigh * 0.03 ) * smoothstep( 34.0, 5.0, length( vViewPosition ) );
+		// far away the bump is nothing: its fine grain (16 noise values) is worked out only where it shows
+		float det = dot( gx, r1 ), bumpNear = smoothstep( 34.0, 5.0, length( vViewPosition ) ), bump = 0.0;
+		if ( bumpNear > 0.0 ) bump = ( ( grain + 0.5 * modelGrain( vModelPos * 3.1 + 11.0 ) ) * 0.012 + surfaceHigh * 0.03 ) * bumpNear;
 		vec3 slope = sign( det ) * ( dFdx( bump ) * r1 + dFdy( bump ) * r2 );
 		normal = normalize( abs( det ) * normal - slope );
 	}`)
@@ -976,6 +995,28 @@ export function propShadow(t: T, w: number, d: number): import("three").Mesh {
 	}
 	const m = new t.Mesh(shadowGeo!, shadowMaterial); m.scale.set(w, 1, d); m.position.y = 0.012; m.renderOrder = 1;
 	return m;
+}
+/** The soft shadows of many things as one instanced mesh (one draw call): each at `x, y, z`, `size` across. */
+export function propShadows(t: T, spots: ReadonlyArray<{ x: number; y: number; z: number; size: number }>): import("three").InstancedMesh {
+	const one = propShadow(t, 1, 1), mesh = new t.InstancedMesh(one.geometry, one.material, spots.length), matrix = new t.Matrix4();
+	spots.forEach((s, i) => mesh.setMatrixAt(i, matrix.makeScale(s.size, 1, s.size).setPosition(s.x, s.y, s.z)));
+	mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); mesh.renderOrder = 1;
+	return mesh;
+}
+
+const plain = new Map<string, import("three").MeshStandardMaterial>();
+/** A plain material that shows a merged geometry's own colours, without the models' grain and surfaces; shared. */
+export function plainMaterial(t: T, roughness = 1, metalness = 0, emissive = 0): import("three").MeshStandardMaterial {
+	const key = `${roughness}:${metalness}:${emissive}`;
+	let m = plain.get(key);
+	if (!m) { m = new t.MeshStandardMaterial({ vertexColors: true, roughness, metalness, emissive }); m.userData.shared = true; plain.set(key, m); }
+	return m;
+}
+/** Parts built for one thing (a track, a bed, a field) as one mesh with a plain material: one draw call instead of one
+ *  per part. The geometry is the thing's own and goes with it. */
+export function solidMesh(t: T, parts: Part[], seed: string, roughness = 1, metalness = 0, emissive = 0): import("three").Mesh {
+	const g = merge(t, parts.map((p) => ({ m: "none" as const, ...p })), seed); g.userData.shared = false;
+	return new t.Mesh(g, plainMaterial(t, roughness, metalness, emissive));
 }
 
 /** A mesh of a shared geometry with the shared material. */

@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use mmo_engine::j;
-use mmo_engine::js::JsRegex;
 use mmo_engine::model::actor_token;
 use mmo_engine::occupancy::{cell_key, free_cell_near, occupied_in};
 use mmo_engine::room_growth::{pin_terrain, spatial_world};
@@ -37,7 +36,7 @@ pub fn sha256_hex(s: &str) -> String { hex(&Sha256::digest(s.as_bytes())) }
 fn equal_time(a: &[u8], b: &[u8]) -> bool { a.len() == b.len() && a.iter().zip(b).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0 }
 fn unhex(s: &str) -> Vec<u8> { (0..s.len() / 2).filter_map(|i| u8::from_str_radix(s.get(2 * i..2 * i + 2)?, 16).ok()).collect() }
 fn id(prefix: &str) -> String { format!("{prefix}-{}", hex(&random_bytes(8))) }
-fn name_ok(name: &str) -> bool { JsRegex::new(r"^[\p{L}\p{N}_-]{3,20}$", "u").is_ok_and(|r| r.test(name)) }
+fn name_ok(name: &str) -> bool { mmo_engine::js::re(r"^[\p{L}\p{N}_-]{3,20}$", "u").test(name) }
 fn sid_ok(sid: &str) -> bool { sid.len() == 48 && sid.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) }
 fn auth<T>(status: u16, text: impl Into<String>) -> WebResult<T> { Err(WebError::Auth(status, text.into())) }
 fn names_lock() -> Json { tmpl("Lock", obj! { "name" => "names" }) }

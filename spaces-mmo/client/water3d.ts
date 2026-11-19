@@ -80,7 +80,7 @@ export function shoreTexture(t: T, ground: readonly string[], water: (key: strin
 export function waterMaterial(t: T, ground: readonly string[], water: (key: string) => boolean): import("three").MeshStandardMaterial {
 	const h = ground.length, w = ground[0]?.length ?? 0, shore = shoreTexture(t, ground, water);
 	const material = new t.MeshStandardMaterial({ color: 0xffffff, roughness: 0.07, metalness: 0, envMapIntensity: 1.25 });
-	const uniforms = { uWaterTime: time, uShore: { value: shore }, uRoom: { value: new t.Vector2(w, h) }, uShallow: { value: new t.Color(0x4f9a94) }, uDeep: { value: new t.Color(0x0d3350) } };
+	const uniforms = { uWaterTime: time, uShore: { value: shore }, uRoom: { value: new t.Vector2(Math.max(1, w), Math.max(1, h)) }, uShallow: { value: new t.Color(0x4f9a94) }, uDeep: { value: new t.Color(0x0d3350) } };
 	material.onBeforeCompile = (shader) => {
 		Object.assign(shader.uniforms, uniforms);
 		shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vWaterPos;")

@@ -10,6 +10,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
 
 /// The longest head looked at; a longer one goes to hyper as it came (hyper refuses it).
 const MAX_HEAD: usize = 16 * 1024;
+/// How long a client may take to send its request head.
+const HEAD_WAIT: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// A stream with the bytes already read from it in front.
 pub struct Prefixed<S> {
@@ -23,8 +25,10 @@ impl<S: AsyncRead + Unpin> Prefixed<S> {
 	pub async fn read_head(mut inner: S) -> io::Result<Self> {
 		let mut pre = Vec::with_capacity(1024);
 		let mut buf = [0u8; 2048];
+		// a client that opens a connection and sends no head (or a byte now and then) does not hold it for good
+		let end = tokio::time::Instant::now() + HEAD_WAIT;
 		while pre.len() < MAX_HEAD && !pre.windows(4).any(|w| w == b"\r\n\r\n") {
-			let n = inner.read(&mut buf).await?;
+			let n = tokio::time::timeout_at(end, inner.read(&mut buf)).await.map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "no request head in time"))??;
 			if n == 0 { break; }
 			pre.extend_from_slice(&buf[..n]);
 		}

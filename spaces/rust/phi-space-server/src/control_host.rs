@@ -37,7 +37,7 @@ pub fn run(config: &str, store: &str) {
 	// recovers the store under the journal and serves it, every Space in it following the control Space's configuration
 	let runtime = stopping::runtime();
 	let main = main.map(|m| {
-		let cx = sync_context(&c, &now);
+		let cx = sync_context(&c, &now, field(&c, "authorityId"));
 		let primary = tokio::task::LocalSet::new().block_on(&runtime, async {
 			let probe = phi_store::sync::SyncJournal::open(&m.dir.join("journal.sqlite"), &m.genesis, Default::default()).map_err(|e| e.to_string())?;
 			let primary = probe.config().get("primaryReplica").and_then(Json::as_str).map(str::to_owned);
@@ -183,7 +183,7 @@ pub fn run(config: &str, store: &str) {
 	}
 	let mut held: Option<Rc<dyn AsyncCommands>> = None;
 	if let Some(r) = c.get("root").filter(|r| !r.is_null()) {
-		let root = root_of(&c, r, control_key, listen_host, &guard, &now, algorithm, (&routing, &o));
+		let root = root_of(&c, r, (authority_id, control_key), listen_host, &guard, &now, algorithm, (&routing, &o));
 		// every Member endpoint, its replica hosts' too, is the peer it was provisioned with, of this authority
 		let pinned = tokio::task::LocalSet::new().block_on(&runtime, async {
 			for m in root.members.values() {
@@ -216,7 +216,7 @@ pub fn run(config: &str, store: &str) {
 	// primary/sync Spaces of this host: a primary's notices go on this host's own board, as signed by its own key
 	let syncs: Vec<SyncSpaceConfig> = c.get("syncSpaces").and_then(Json::as_array).map_or(vec![], |a| a.iter().map(|s| SyncSpaceConfig::from_json(s).unwrap_or_else(|e| fail(e))).collect());
 	if !syncs.is_empty() {
-		let cx = sync_context(&c, &now);
+		let cx = sync_context(&c, &now, authority_id);
 		let (space, key) = (control_space.to_owned(), control_key.to_owned());
 		let publish: crate::member::PublishNotice = Rc::new(move |owner, notice| {
 			let roles = vec!["host".to_owned()];
@@ -234,7 +234,7 @@ pub fn run(config: &str, store: &str) {
 
 /// `root` of the config: what is not carried yet stops the start.
 #[allow(clippy::too_many_arguments)]
-fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<BootGuard>, now: &Now, algorithm: Algorithm, (routing, o): (&Rc<RefCell<Option<Json>>>, &GateOptions)) -> RootConfig {
+fn root_of(c: &Json, r: &Json, (authority, control_key): (&str, &str), listen_host: &str, guard: &Rc<BootGuard>, now: &Now, algorithm: Algorithm, (routing, o): (&Rc<RefCell<Option<Json>>>, &GateOptions)) -> RootConfig {
 	let interval = r.get("statusIntervalMs").filter(|v| !v.is_null()).map_or(Some(10_000.0), Json::as_f64).filter(|v| v.fract() == 0.0 && (1000.0..=15_000.0).contains(v)).unwrap_or_else(|| fail("Root status interval must be 1000..15000 ms"));
 	let takeover = (r.get("takeover") == Some(&Json::Bool(true))).then(|| r.get("takeoverWaitMs").and_then(Json::as_f64).unwrap_or(90_000.0));
 	let members = r.get("members").and_then(Json::as_object).filter(|m| m.len() <= 32).unwrap_or_else(|| fail("incomplete native Root configuration"));
@@ -257,7 +257,9 @@ fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<
 		e.replicas = m.get("replicas").and_then(Json::as_object).map_or_else(Default::default, |r| r.iter().map(|(h, x)| (h.to_owned(), end(x, Json::Null))).collect());
 		(id.to_owned(), e)
 	}).collect();
-	let (peer_id, control_space, host_id, authority) = (field(c, "peerId"), field(c, "controlSpaceId"), field(c, "hostId"), field(c, "authorityId"));
+	// the authority the host follows (an installed successor of a control restore), which the control key belongs to:
+	// the configured one would disagree with that key after a restore (configured-runtime hands the Root the same)
+	let (peer_id, control_space, host_id) = (field(c, "peerId"), field(c, "controlSpaceId"), field(c, "hostId"));
 	let grants = GrantVerifier { authority_id: authority.to_owned(), issuer_host_id: host_id.to_owned(), public_key: control_key.to_owned(), algorithm, uncertainty_ms: 2000.0 };
 	RootConfig {
 		id: field(r, "id").to_owned(), peer_id: peer_id.to_owned(), authority_id: authority.to_owned(), host_id: host_id.to_owned(), control_space: control_space.to_owned(), own_address: listen_host.to_owned(),

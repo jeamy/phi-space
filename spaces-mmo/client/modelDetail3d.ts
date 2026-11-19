@@ -50,18 +50,26 @@ export function detailLevelAt(zoom: number, distance: number, current: ModelLeve
 	return zoom >= 2 && distance <= (current === "near" ? 18 : 16) ? "near" : "room";
 }
 
+type Candidate = { mesh: import("three").Mesh; distance: number; next: ModelLevel };
+let eye: import("three").Vector3 | null = null, centre: import("three").Vector3 | null = null;
+/** Sets every model under `root` to the level of detail its distance and the zoom ask for (a few times a second). What
+ *  is hidden is left alone with all that is in it: the island's blocks at room zoom, a catalogue. */
 export function updateModelDetails(t: T, root: Object3D, camera: Camera, zoom: number, nearLimit = 48): void {
-	const position = new t.Vector3(), candidates: Array<{ mesh: import("three").Mesh; distance: number; next: ModelLevel }> = [];
+	const position = eye ??= new t.Vector3(), at = centre ??= new t.Vector3(), candidates: Candidate[] = [];
 	root.updateMatrixWorld(); camera.getWorldPosition(position);
-	root.traverse((object) => {
+	const visit = (object: Object3D): void => {
 		const mesh = object as import("three").Mesh, variants = mesh.geometry?.userData.modelVariant as ((level: ModelLevel) => BufferGeometry) | undefined;
-		if (!variants || (!mesh.visible && !mesh.userData.detailOnly)) return;
-		for (let parent = mesh.parent; parent; parent = parent.parent) if (!parent.visible || parent.userData.modelCatalogue) return;
-		const sphere = (mesh as import("three").InstancedMesh).isInstancedMesh ? (mesh as import("three").InstancedMesh).boundingSphere : mesh.geometry.boundingSphere;
-		const centre = sphere ? sphere.center.clone().applyMatrix4(mesh.matrixWorld) : mesh.getWorldPosition(new t.Vector3());
-		const distance = centre.distanceTo(position), current = (mesh.userData.modelLevel ?? "room") as ModelLevel;
-		candidates.push({ mesh, distance, next: detailLevelAt(zoom, distance, current) });
-	});
+		if (variants && (mesh.visible || mesh.userData.detailOnly)) {
+			const sphere = (mesh as import("three").InstancedMesh).isInstancedMesh ? (mesh as import("three").InstancedMesh).boundingSphere : mesh.geometry.boundingSphere;
+			if (sphere) at.copy(sphere.center).applyMatrix4(mesh.matrixWorld); else at.setFromMatrixPosition(mesh.matrixWorld);
+			const distance = at.distanceTo(position), current = (mesh.userData.modelLevel ?? "room") as ModelLevel;
+			candidates.push({ mesh, distance, next: detailLevelAt(zoom, distance, current) });
+		}
+		if (!object.visible || object.userData.modelCatalogue) return;
+		const children = object.children;
+		for (let i = 0; i < children.length; i++) visit(children[i]!);
+	};
+	visit(root);
 	candidates.sort((a, b) => a.distance - (a.mesh.userData.modelLevel === "near" ? 0.35 : 0) - b.distance + (b.mesh.userData.modelLevel === "near" ? 0.35 : 0));
 	let near = 0, triangles = 0;
 	for (const c of candidates) {

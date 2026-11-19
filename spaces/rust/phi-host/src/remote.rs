@@ -43,6 +43,9 @@ async fn exchange(s: &mut TcpStream, id: u32, call: &Json) -> Result<Json, Strin
 	parse(&String::from_utf8_lossy(&text)).map_err(|e| e.to_string())
 }
 
+/// The call id after `id`: ids are 32 bits on the wire and 0 is none.
+fn after(id: u32) -> u32 { if id == u32::MAX { 1 } else { id + 1 } }
+
 impl ControlClient {
 	pub fn new(address: (String, u16), source: &str, peer_id: &str, control_host_id: &str, signer: Signer, key_id: &str) -> ControlClient {
 		ControlClient { address, source: source.to_owned(), peer_id: peer_id.to_owned(), control_host_id: control_host_id.to_owned(), signer, key_id: key_id.to_owned(), line: Mutex::new(None) }
@@ -70,7 +73,7 @@ impl ControlClient {
 		let challenge = Json::Object(challenge);
 		let text = crate::auth::signed_text(&challenge).ok_or("a challenge that cannot be signed")?;
 		let signature = to_base64(&self.signer.sign(text.as_bytes()));
-		ok(exchange(s, first + 1, &obj! { "method" => "prove", "args" => obj! { "keyId" => self.key_id.as_str(), "signature" => signature, "challenge" => challenge } }).await?)?;
+		ok(exchange(s, after(first), &obj! { "method" => "prove", "args" => obj! { "keyId" => self.key_id.as_str(), "signature" => signature, "challenge" => challenge } }).await?)?;
 		Ok(())
 	}
 
@@ -78,10 +81,10 @@ impl ControlClient {
 	pub async fn prove(&self) -> Result<(), String> {
 		let mut line = self.line.lock().await;
 		if let Some((s, id)) = line.as_mut() {
-			let first = *id + 1;
+			let first = after(*id);
 			match timeout(Duration::from_millis(CALL_MS), self.prove_on(s, first)).await {
 				Ok(Ok(())) => {
-					*id += 2;
+					*id = after(first);
 					return Ok(());
 				}
 				Ok(Err(e)) => {
@@ -102,7 +105,7 @@ impl ControlClient {
 			*line = Some(timeout(Duration::from_millis(CALL_MS), self.open()).await.map_err(|_| "the host does not answer".to_owned())??);
 		}
 		let (s, id) = line.as_mut().expect("just opened");
-		*id += 1;
+		*id = after(*id);
 		let id = *id;
 		match timeout(Duration::from_millis(CALL_MS), exchange(s, id, call)).await {
 			Ok(Ok(reply)) => Ok(reply),
@@ -121,7 +124,7 @@ impl ControlClient {
 				*line = Some(timeout(Duration::from_millis(CALL_MS), self.open()).await.map_err(|_| "the control host does not answer".to_owned())??);
 			}
 			let (s, id) = line.as_mut().expect("just opened");
-			*id += 1;
+			*id = after(*id);
 			let id = *id;
 			match timeout(Duration::from_millis(CALL_MS), exchange(s, id, call)).await {
 				Ok(Ok(reply)) => return ok(reply),

@@ -34,12 +34,16 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 	// The occlusion and the blur draw the scene once more with one material for everything, to get its depth. A sprite
 	// (an item's picture, a plant) would lie there as a flat quad, and glass or a soft shadow as a wall: they sit out.
 	const hidden: Object3D[] = [];
-	const hide = () => scene.traverse((o) => {
+	// an invisible group is left alone with all that is in it (the island's blocks at room zoom, the cards), and a mesh of
+	// several materials sits out only when none of them writes depth
+	const flatMaterial = (m: Mesh["material"]) => (Array.isArray(m) ? m.length > 0 && m.every((x) => x.transparent && !x.depthWrite) : !!m && m.transparent && !m.depthWrite);
+	const hideIn = (o: Object3D) => {
 		if (!o.visible) return;
-		const material = (o as Mesh).material, first = Array.isArray(material) ? material[0] : material;
-		const flat = (o as Sprite).isSprite || (o as Points).isPoints || (o as Line).isLine;
-		if (flat || (first && first.transparent && !first.depthWrite)) { o.visible = false; hidden.push(o); }
-	});
+		if ((o as Sprite).isSprite || (o as Points).isPoints || (o as Line).isLine || flatMaterial((o as Mesh).material)) { o.visible = false; hidden.push(o); return; }
+		const children = o.children;
+		for (let i = 0; i < children.length; i++) hideIn(children[i]!);
+	};
+	const hide = () => hideIn(scene);
 	const show = () => { for (const o of hidden) o.visible = true; hidden.length = 0; };
 	const patched = ao as unknown as { _overrideVisibility(): void; _restoreVisibility(): void };
 	patched._overrideVisibility = hide; patched._restoreVisibility = show;

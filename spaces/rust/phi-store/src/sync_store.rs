@@ -95,7 +95,7 @@ impl SyncStoreFile {
 
 /// The store's marker against the configuration in force at `revision`.
 fn marker(store: &SyncStoreFile, journal: &SyncJournal, revision: u64) -> Result<Option<Json>> { store.marker(text(&journal.config_at(revision as usize)?, "spaceId")) }
-fn binds(m: &Option<Json>, i: &Json) -> bool { m.as_ref().is_some_and(|m| canonical(m) == canonical(&marker_of(i))) }
+fn binds(m: &Option<Json>, i: &Json) -> bool { m.as_ref().is_some_and(|m| marker_of(i).canonical().ok() == Some(canonical(m))) }
 fn store_for(journal: &mut SyncJournal) -> Result<()> { journal.bind_format(own::FORMAT) }
 
 /// Applies one accepted entry to the store (or recognises it applied), and records it in the journal.

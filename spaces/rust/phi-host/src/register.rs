@@ -367,7 +367,8 @@ pub async fn serve_register(register: SqliteRegister, identity: &TlsIdentity, li
 	let (register, open) = (Rc::new(RefCell::new(register)), Rc::new(Cell::new(0)));
 	let live = Rc::new(Cell::new(0usize));
 	loop {
-		let (socket, _) = listener.accept().await.map_err(failed)?;
+		// a failed accept (no file descriptor left, a connection gone before it was taken) does not end the register
+		let Ok((socket, _)) = listener.accept().await else { tokio::time::sleep(std::time::Duration::from_millis(100)).await; continue };
 		if live.get() >= 64 {
 			continue;
 		}

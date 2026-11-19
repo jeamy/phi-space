@@ -79,37 +79,88 @@ pub async fn serve_texts(o: TextServe, handle: TextHandle) -> io::Result<TextSer
 
 async fn connection(mut read: Box<dyn AsyncRead + Unpin>, mut write: Box<dyn AsyncWrite + Unpin>, handle: TextHandle, (max_frame, max_inflight, idle_ms): (usize, usize, u64)) {
 	let (tx, mut rx) = mpsc::unbounded_channel::<(u32, String)>();
-	let writer = spawn_local(async move {
-		while let Some((id, text)) = rx.recv().await {
-			let mut out = Vec::new();
-			put(&mut out, id, &text);
-			if write.write_all(&out).await.is_err() {
+	// The answers that wait to be written, counted and weighed as the space service's are (lib.rs): a client that sends
+	// and never reads would else pile them up without end. Over the limit the connection ends.
+	let held = Rc::new(Cell::new((0usize, 0usize)));
+	let over = Rc::new(tokio::sync::Notify::new());
+	let answer: Rc<dyn Fn(u32, String)> = {
+		let (held, over) = (Rc::clone(&held), Rc::clone(&over));
+		Rc::new(move |id, text: String| {
+			let (replies, bytes) = held.get();
+			let more = text.len().saturating_add(HEADER);
+			if replies >= crate::MAX_HELD_REPLIES || more > crate::MAX_HELD_REPLY_BYTES.saturating_sub(bytes) {
+				over.notify_one();
 				return;
 			}
-		}
-	});
-	let inflight = Rc::new(Cell::new(0usize));
-	loop {
-		let mut head = [0u8; HEADER];
-		let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(idle_ms), read.read_exact(&mut head)).await else { break };
-		let n = u32::from_be_bytes(head[..4].try_into().expect("four bytes")) as usize;
-		let id = u32::from_be_bytes(head[4..].try_into().expect("four bytes"));
-		if n + HEADER > max_frame {
-			break; // a frame over the limit: a protocol violation
-		}
-		let mut body = vec![0u8; n];
-		let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(idle_ms), read.read_exact(&mut body)).await else { break };
-		if inflight.get() >= max_inflight {
-			let _ = tx.send((id, format!(r#"{{"ok":false,"error":{{"code":"ResourceExhausted","message":"at most {max_inflight} calls at once per connection"}}}}"#)));
-			continue;
-		}
-		inflight.set(inflight.get() + 1);
-		let (tx, handle, inflight) = (tx.clone(), Rc::clone(&handle), Rc::clone(&inflight));
+			held.set((replies + 1, bytes + more));
+			let _ = tx.send((id, text));
+		})
+	};
+	let writer = {
+		let held = Rc::clone(&held);
 		spawn_local(async move {
-			let answer = handle(String::from_utf8_lossy(&body).into_owned()).await;
-			let _ = tx.send((id, answer));
-			inflight.set(inflight.get() - 1);
-		});
-	}
+			while let Some((id, text)) = rx.recv().await {
+				let mut out = Vec::new();
+				put(&mut out, id, &text);
+				if write.write_all(&out).await.is_err() {
+					return;
+				}
+				let (replies, bytes) = held.get();
+				held.set((replies.saturating_sub(1), bytes.saturating_sub(out.len())));
+			}
+		})
+	};
+	let inflight = Rc::new(Cell::new(0usize));
+	let frames = async {
+		loop {
+			let mut head = [0u8; HEADER];
+			let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(idle_ms), read.read_exact(&mut head)).await else { break };
+			let n = u32::from_be_bytes(head[..4].try_into().expect("four bytes")) as usize;
+			let id = u32::from_be_bytes(head[4..].try_into().expect("four bytes"));
+			if n + HEADER > max_frame {
+				break; // a frame over the limit: a protocol violation
+			}
+			let mut body = vec![0u8; n];
+			let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(idle_ms), read.read_exact(&mut body)).await else { break };
+			if inflight.get() >= max_inflight {
+				answer(id, format!(r#"{{"ok":false,"error":{{"code":"ResourceExhausted","message":"at most {max_inflight} calls at once per connection"}}}}"#));
+				continue;
+			}
+			inflight.set(inflight.get() + 1);
+			let (answer, handle, inflight) = (Rc::clone(&answer), Rc::clone(&handle), Rc::clone(&inflight));
+			spawn_local(async move {
+				let text = handle(String::from_utf8_lossy(&body).into_owned()).await;
+				answer(id, text);
+				inflight.set(inflight.get() - 1);
+			});
+		}
+	};
+	tokio::select! { () = frames => {}, () = over.notified() => {} }
 	writer.abort();
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// A client that sends and never reads: the answers that wait are bounded, and the connection ends at the bound.
+	#[tokio::test(flavor = "current_thread")]
+	async fn a_client_that_never_reads_is_cut_off() {
+		tokio::task::LocalSet::new()
+			.run_until(async {
+				let (mut to_server, server_read) = tokio::io::duplex(1 << 20);
+				// the server's side of the answers holds 64 bytes: the writer stands after the first answer
+				let (server_write, _never_read) = tokio::io::duplex(64);
+				let handle: TextHandle = Rc::new(|_| Box::pin(async { String::new() }));
+				// no call may run: every frame is answered at once as ResourceExhausted
+				let served = spawn_local(connection(Box::new(server_read), Box::new(server_write), handle, (1024, 0, 60_000)));
+				let mut frame = Vec::new();
+				put(&mut frame, 1, "{}");
+				for _ in 0..crate::MAX_HELD_REPLIES + 8 {
+					to_server.write_all(&frame).await.expect("the frames fit the pipe");
+				}
+				tokio::time::timeout(Duration::from_secs(5), served).await.expect("the connection ends at the bound").expect("served");
+			})
+			.await;
+	}
 }
