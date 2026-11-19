@@ -329,6 +329,12 @@ test("the resolution follows the frame rate: it drops on slow frames, comes back
 	assert.equal(r.scale, 1);
 });
 
+test("the shadow map gives way with the picture's resolution", async () => {
+	const { SHARP, shadowSizeAt } = await import("../client/closeup3d.ts");
+	assert.equal(shadowSizeAt(1), 4096); assert.equal(shadowSizeAt(SHARP.step), 4096, "one step down keeps the full map");
+	assert.equal(shadowSizeAt(SHARP.step ** 2), 2048); assert.equal(shadowSizeAt(SHARP.min), 1024);
+});
+
 test("the resolution does not go up and down between two steps", async () => {
 	const { sharpen, sharpness } = await import("../client/closeup3d.ts");
 	// fast below 0.6 of full resolution, slow above it

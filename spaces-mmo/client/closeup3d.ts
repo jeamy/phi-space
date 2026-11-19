@@ -31,6 +31,10 @@ export function frameSummary(times: number[], calls: number[], triangles: number
  *  faster frames (the browser holds the page to 30 frames, a phone saving power) is taken back, and the resolution stays
  *  for `rest` seconds; so does it when a rise makes frames slow again. */
 export const SHARP = { slow: 1000 / 42, fast: 1000 / 56, step: 0.85, min: 0.5, floor: 0.75, hold: 4, rest: 30 };
+/** The shadow map's side in texels by how far the picture's resolution gave way (`scale`, 1 to SHARP.min): it gives
+ *  way with the picture. A phone that draws the picture at half the screen's resolution drew a map of 4096² texels for
+ *  it at every frame something moved; a quarter of that is still finer than the picture's own pixels. */
+export const shadowSizeAt = (scale: number): number => (scale > 0.8 ? 4096 : scale > 0.55 ? 2048 : 1024);
 export type Sharpness = { scale: number; sum: number; frames: number; at: number; good: number; before: number | null; restUntil: number; rose: number };
 export const sharpness = (): Sharpness => ({ scale: 1, sum: 0, frames: 0, at: 0, good: 0, before: null, restUntil: 0, rose: -Infinity });
 /** Counts one frame (`elapsed` ms since the last); once a second decides. Returns whether the scale changed. */

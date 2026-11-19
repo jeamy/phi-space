@@ -31,7 +31,7 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 	const bloom = new UnrealBloomPass(new Vector2(1, 1), POST.bloomStrength, POST.bloomRadius, POST.bloomDay); composer.addPass(bloom);
 	const bokeh = new BokehPass(scene, camera, { focus: 10, aperture: 0.0015, maxblur: 0.006 }); bokeh.enabled = false; composer.addPass(bokeh);
 	composer.addPass(new OutputPass());
-	// The occlusion and the blur draw the scene once more with one material for everything, to get its depth. A sprite
+	// The occlusion and the blur draw the scene once more with one material for everything, to get its depth (the occlusion; the blur reads that depth). A sprite
 	// (an item's picture, a plant) would lie there as a flat quad, and glass or a soft shadow as a wall: they sit out.
 	const hidden: Object3D[] = [];
 	// an invisible group is left alone with all that is in it (the island's blocks at room zoom, the cards), and a mesh of
@@ -47,8 +47,19 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 	const show = () => { for (const o of hidden) o.visible = true; hidden.length = 0; };
 	const patched = ao as unknown as { _overrideVisibility(): void; _restoreVisibility(): void };
 	patched._overrideVisibility = hide; patched._restoreVisibility = show;
-	const blurDepth = bokeh.render.bind(bokeh);
-	bokeh.render = (...args: Parameters<typeof blurDepth>) => { hide(); try { blurDepth(...args); } finally { show(); } };
+	// The blur reads the depth the occlusion drew this frame (ao.depthTexture, the same things hidden) instead of drawing
+	// the whole scene once more for a depth of its own: close up that was a fourth pass over the scene in every frame.
+	// The occlusion's depth has half the picture's size, which a blur does not show.
+	const blur = bokeh as unknown as { materialBokeh: import("three").ShaderMaterial; uniforms: Record<string, { value: unknown }>; _fsQuad: { render(r: WebGLRenderer): void }; _renderTargetDepth: WebGLRenderTarget };
+	blur.materialBokeh.defines.DEPTH_PACKING = 0; blur.materialBokeh.needsUpdate = true;
+	blur._renderTargetDepth.dispose();
+	bokeh.setSize = (w: number, h: number) => { blur.uniforms.aspect!.value = w / h; };
+	bokeh.render = (r: WebGLRenderer, writeBuffer: WebGLRenderTarget, readBuffer: WebGLRenderTarget) => {
+		blur.uniforms.tDepth!.value = ao.depthTexture; blur.uniforms.tColor!.value = readBuffer.texture;
+		blur.uniforms.nearClip!.value = camera.near; blur.uniforms.farClip!.value = camera.far;
+		r.setRenderTarget(bokeh.renderToScreen ? null : writeBuffer);
+		blur._fsQuad.render(r);
+	};
 	const direction = camera.position.clone();
 	return {
 		/** The passes, for measurements. */

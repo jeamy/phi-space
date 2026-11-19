@@ -15,7 +15,7 @@ import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
 import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, merge, cached, plainMaterial, solidMesh, propShadow, propShadows, setNight, TINTED, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
-import { closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
+import { shadowSizeAt, closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
 import { setWaterTime, waterMaterial } from "./water3d.ts";
 import { GROUND, groundLooks } from "./ground3d.ts";
@@ -162,7 +162,7 @@ export function MapView3D(props: MapRendererProps) {
 				sun.position.set(-6, 12, 8); scene.add(sun); scene.add(sun.target);
 				// the sun casts shadows (v2): one map fitted to the room (lightRoom)
 				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFShadowMap;
-				sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = 2.5;
+				sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = SHADOW_SOFT;
 
 				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], school: null, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", objsFor: null, chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
@@ -963,7 +963,13 @@ const fullRatio = () => Math.min(2, window.devicePixelRatio || 1);
 function setRatio(s: Scene3D): void {
 	s.renderer.setPixelRatio(Math.max(Math.min(SHARP.floor, fullRatio()), fullRatio() * s.sharp.scale));
 	s.size = { w: 0, h: 0 }; resize(s);
+	// the shadow map gives way with the picture; its softness is in texels, so it follows the size and a shadow's edge
+	// stays as wide on the ground
+	const side = shadowSizeAt(s.sharp.scale), shadow = s.sun.shadow;
+	if (shadow.mapSize.x !== side) { shadow.mapSize.set(side, side); shadow.radius = SHADOW_SOFT * side / 4096; shadow.map?.dispose(); shadow.map = null; s.shadowAt = -Infinity; }
 }
+/** How soft a shadow's edge is, in texels of the full map (4096). */
+const SHADOW_SOFT = 2.5;
 
 /** How often the shadow map is drawn when nothing that casts a shadow moves. */
 const SHADOW_EVERY_MS = 250;
