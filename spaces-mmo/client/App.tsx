@@ -18,6 +18,7 @@ import type { HelpView } from "../shared/model.ts";
 import { appendLine, isComing, isForMe, newSince, todosByPlace } from "./log.ts";
 import { byArrival, loadArrivals, noteArrivals, saveArrivals, type Arrivals } from "./arrivals.ts";
 import { travelText, TRAVEL_GIVE_UP_MS, TRAVEL_NOTE_MS } from "./travel.ts";
+import { ROW_OUT_MS } from "./rowing3d.ts";
 import type { ChatState } from "../shared/frames.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
@@ -610,6 +611,9 @@ function SiteOrders({ objs, self, room, me, send, walk }: { objs: Map<string, Ob
 
 function Game({ account, onAccount, controls, startView }: { account: Account; onAccount: (a: Account | null, fresh?: boolean) => void; controls: ReactNode; startView: number }) {
 	const [hello, setHello] = useState<Hello | null>(null);
+	/** The own row (rowing3d.ts): sent from which place, and the place the page still shows while the boat rows out. */
+	const rowSent = useRef<{ at: number; from: string } | null>(null), roomNow = useRef("");
+	roomNow.current = hello?.room.roomId ?? "";
 	const [chars, setChars] = useState<Map<string, CharView>>(new Map());
 	const [objs, setObjs] = useState<Map<string, ObjView>>(new Map());
 	const [fog, setFog] = useState(0);
@@ -867,6 +871,8 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		if (!s || s.readyState !== WebSocket.OPEN) { append({ kind: "error", text: "Nicht verbunden; ein Moment …", from: "", at: Date.now() }); return; }
 		s.send(JSON.stringify({ t: "cmd", line: text, ...(language() === "en" ? { lang: "en" } : {}) } satisfies ClientFrame));
 		{ const t = travelText(text, travelExits.current); if (t) startTravel(t); }
+		// a row to another jetty: the 3D view shows the boat when the new place comes (rowing below)
+		if (/^\s*(?:rudere|rudern|row)\s+\S/i.test(text) && roomNow.current) rowSent.current = { at: Date.now(), from: roomNow.current };
 		if (echo) append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() });
 		awaited.current = opensLog ? Date.now() : 0;
 	}, [append, startTravel]);
@@ -1059,6 +1065,25 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		return shipLies && berthAt && hello ? new Map(all).set("liner", { id: "liner", kind: "liner", name: "Großes Schiff", location: hello.room.roomId, fare: liner!.fare, routes: liner!.routes.filter((r) => r.room !== hello.room.roomId), x: berthAt.x + (shipWay?.sx ?? 0) * (place?.away ?? 0) * (shipWay?.dist ?? 0), y: berthAt.y + (shipWay?.sy ?? 0) * (place?.away ?? 0) * (shipWay?.dist ?? 0), gliding: place?.phase !== "lies", w: berthAt.along === "x" ? SHIP_LENGTH : 1, h: berthAt.along === "y" ? SHIP_LENGTH : 1 } as ObjView) : all;
 	}, [objs, track, trainStands, stationHere, shipLies, berthAt, hello, place?.phase, place?.away, shipWay]);
 
+	// the row: when the new place comes after „rudere“, the 3D view keeps the old one for ROW_OUT_MS, the boat rowing out
+	// from its jetty, then shows the new one, the boat rowing in (MapView3D rowTick)
+	const lastMap = useRef<{ room: Hello["room"]; chars: typeof mapChars; objs: typeof shownObjs } | null>(null);
+	const [rowing, setRowing] = useState<{ at: number; from: string; until: number; held: NonNullable<typeof lastMap.current> } | null>(null);
+	const [, setRowTick] = useState(0);
+	useEffect(() => {
+		const sent = rowSent.current, prev = lastMap.current;
+		if (!hello || !sent || !prev || mapMode !== "3d" || prev.room.roomId !== sent.from || hello.room.roomId === sent.from || Date.now() - sent.at > 15_000) return;
+		rowSent.current = null;
+		const now = Date.now();
+		setRowing({ at: now, from: sent.from, until: now + ROW_OUT_MS, held: prev });
+		const id = setTimeout(() => setRowTick((n) => n + 1), ROW_OUT_MS + 20);
+		return () => clearTimeout(id);
+	}, [hello?.room.roomId]); // eslint-disable-line react-hooks/exhaustive-deps
+	const holding = !!rowing && Date.now() < rowing.until;
+	useEffect(() => { if (!holding) lastMap.current = hello ? { room: hello.room, chars: mapChars, objs: shownObjs } : null; });
+	const mapRoom = holding ? rowing!.held.room : hello?.room, mapCharsShown = holding ? rowing!.held.chars : mapChars, mapObjsShown = holding ? rowing!.held.objs : shownObjs;
+	const rowView = rowing ? { at: rowing.at, from: rowing.from, out: holding } : undefined;
+
 	/** A tap of a finger: on a thing lying there, go and pick it up; on what stands there, its actions (a phone); else walk. */
 	const onTap = useCallback((x: number, y: number) => {
 		if (!isTouch() || !hello) return onCell(x, y);
@@ -1203,7 +1228,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 			{(() => { const now = shownWorldMs(worldTime.v, worldTime.at, Date.now()), next = liner && aboard.to ? nextStop(liner, now, aboard.from, aboard.to) : null;
 				return next && <button className="aboard-leave" onClick={() => send("ausschiffen nächster")}>{next.inMs > 0 ? `${tr("Beim nächsten Halt aussteigen")}: ${tr(next.stop.island)} · ${tr(`in etwa ${Math.max(1, Math.ceil(next.inMs / 60_000))} Weltminuten`)}` : `${tr("Hier aussteigen")}: ${tr(next.stop.island)}`}</button>; })()}
 		</div>}
-		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} viewReset={startView} world={hello.world} room={hello.room} chars={mapChars} objs={shownObjs} me={me} fog={fog} atlas={atlas} atlasState={atlasState} said={said} worldTime={worldTime} onTurn={onTurn}
+		<MapRenderer key={`${(mapRoom ?? hello.room).ground[0]?.length}x${(mapRoom ?? hello.room).ground.length}`} mode={mapMode} viewReset={startView} world={hello.world} room={mapRoom ?? hello.room} chars={mapCharsShown} objs={mapObjsShown} rowing={rowView} me={me} fog={fog} atlas={atlas} atlasState={atlasState} said={said} worldTime={worldTime} onTurn={onTurn}
 			fill goal={walkGoal} insetBottom={isShort() ? 0 : detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
 			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}
 			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (hereOpen) setHereOpen(false); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}

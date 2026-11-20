@@ -31,6 +31,9 @@ export type MapRendererProps = {
 	atlasState?: AtlasState | null;
 	/** What was said lately (speaker name, text, time): the 3D view shows it as bubbles over the speakers up close. */
 	said?: Array<{ from: string; text: string; at: number }>;
+	/** The own row from jetty to jetty (App, rowing3d.ts): when it began, the place it left, and whether the page still
+	 *  shows that place (the boat rows out) or the new one (it rows in). */
+	rowing?: { at: number; from: string; out: boolean };
 	/** The world's clock as last received (App), for the 3D view's day and night; absent: always day. */
 	worldTime?: { v: WorldTimeView; at: number } | null;
 };

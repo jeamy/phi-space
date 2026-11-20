@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasState, AtlasView, CharView, ObjView } from "../shared/frames.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
+import { ease, ROW_IN_MS, ROW_OUT_MS, rowboat, rowOars, rowPath, seatRower } from "./rowing3d.ts";
 import { onFpsParts, onFpsStart, sayFps } from "./fps.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
@@ -37,6 +38,9 @@ type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: {
 /** What a bed shows: rebuilt when its plants or weeds change. */
 const bedSig = (o: ObjView) => (o.kind === "road" ? `${o.roadState}:${o.paved}:${(o.runs?.[0] ?? []).map((c) => `${c.x},${c.y}`).join(" ")}` : o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "tree" ? `${o.treeStage}|${o.ripe ? 1 : 0}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
+	/** The own figure's row from jetty to jetty (rowing3d.ts): what is asked for, and what is under way. */
+	rowWant?: { kind: "out" | "in"; from: string; since: number } | null; rowKey?: string;
+	row?: { group: O3; oars: import("three").Group[]; fig: Figure; from: import("three").Vector3; to: import("three").Vector3; start: number; dur: number; kind: "out" | "in" } | null; rowHideUntil?: number;
 	t: T;
 	renderer: import("three").WebGLRenderer;
 	post: ReturnType<typeof import("./post3d.ts").createPost>;
@@ -205,7 +209,7 @@ export function MapView3D(props: MapRendererProps) {
 					if (!s.parts && sharpen(s.sharp, elapsed, now)) setRatio(s);
 					s.renderer.info.reset();
 					const began = s.measurement || s.parts ? performance.now() : 0;
-					const moved = step(s, dt, now / 1000, latest.current.me);
+					const rowing = rowTick(s, now, latest.current), moved = step(s, dt, now / 1000, latest.current.me) || rowing;
 					bubbleTick(s);
 					// on the island level the fish are too small to see: neither moved nor drawn
 					if (s.school) { s.school.group.visible = s.zoom > 0.3; if (s.school.group.visible) { swimFish(s.fish, now / 1000); s.school.draw(); } }
@@ -290,6 +294,14 @@ export function MapView3D(props: MapRendererProps) {
 	}, [ready, props.room, props.world]);
 
 	useEffect(() => { if (state.current) sync(state.current, props.chars, props.objs, props.me, false); }, [props.chars, props.objs, props.me]);
+	// the own row (App: rowing): out of the place it starts from while the page holds that place, in at the new one
+	useEffect(() => {
+		const s = state.current, r = props.rowing;
+		if (!s || !ready || !r) return;
+		const kind = r.out ? "out" : "in", key = `${r.at}:${kind}`;
+		if (s.rowKey === key || (kind === "in" && Date.now() - r.at > 15_000)) return;
+		s.rowKey = key; s.rowWant = { kind, from: r.from, since: performance.now() };
+	}, [ready, props.rowing]);
 	useEffect(() => { if (state.current) applyFog(state.current, props.fog); }, [props.fog, ready]);
 	// what was said: a bubble over the speaker for a few seconds, shown up close (zoom ≥ 1.6)
 	useEffect(() => { if (state.current && ready) speak(state.current, props.said ?? []); }, [props.said, props.chars, ready]);
@@ -494,6 +506,50 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 /** Every frame: the water moves, figures and things glide to their cell and the figures walk; the camera does not follow. */
 /** Moves everything one frame on. Returns whether something that casts a shadow moved (the frame draws the shadow map
  *  anew only then, and a few times a second anyway). */
+/** The own row (rowing3d.ts): starts what was asked for once the place, its ground and the own figure are there, moves the
+ *  boat and keeps the own figure hidden while it sits in it. True while the boat moves (the shadows follow it). */
+function rowTick(s: Scene3D, now: number, props: MapRendererProps): boolean {
+	const me = props.me, own = s.chars.get(me), want = s.rowWant;
+	if (want && !s.row) {
+		const here = want.kind === "out" ? s.room.roomId === want.from : s.room.roomId !== want.from;
+		if (now - want.since > 8_000) s.rowWant = null;
+		else if (here && s.ground && own) {
+			s.rowWant = null;
+			const c = props.chars.get(me);
+			const jetty = c && [...props.objs.values()].filter((o) => o.location === s.room.roomId && o.kind === "building" && (o.plan === "steg" || /steg|jetty/i.test(o.name)))
+				.sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0];
+			const path = jetty && rowPath(s.room.ground, (key) => tile3d(key, !!s.world.tiles[key]?.walk).water, jetty);
+			if (c && path) {
+				const { w, h } = dims(s.room), key = s.room.ground[Math.floor(path.moor.y)]?.[Math.floor(path.moor.x)] ?? "";
+				const sea = tile3d(key, !!s.world.tiles[key]?.walk).height;
+				const v = (p: { x: number; y: number }) => new s.t.Vector3(p.x - w / 2, sea, p.y - h / 2);
+				const [from, to] = want.kind === "out" ? [v(path.moor), v(path.out)] : [v(path.out), v(path.moor)];
+				const { group, oars } = rowboat(s.t);
+				const fig = makeFigure(s.t, { id: me, skin: c.skin, own: true, ai: false, ...(c.look ? { style: c.look } : {}) });
+				seatRower(fig); group.add(fig.group);
+				const turn = new s.t.Group(); turn.add(group); turn.position.copy(from);
+				group.rotation.y = -Math.atan2(to.z - from.z, to.x - from.x);
+				shade(turn, false); s.scene.add(turn);
+				s.row = { group: turn, oars, fig, from, to, start: now, dur: want.kind === "out" ? ROW_OUT_MS - 200 : ROW_IN_MS, kind: want.kind };
+			}
+		}
+	}
+	const r = s.row;
+	if (own && (r || now < (s.rowHideUntil ?? 0))) own.obj.visible = false;
+	if (!r) return false;
+	const p = Math.min(1, (now - r.start) / r.dur);
+	r.group.position.lerpVectors(r.from, r.to, ease(p));
+	r.group.position.y = r.from.y + Math.sin(now / 420) * 0.025;
+	rowOars(r.oars, now / 1000, r.fig);
+	if (p >= 1) {
+		s.scene.remove(r.group); dispose(r.group); s.row = null;
+		// out: the old place stays a moment longer (App), with the figure gone from its jetty
+		if (r.kind === "out") s.rowHideUntil = now + 3_000;
+		else { s.rowHideUntil = 0; if (own) own.obj.visible = true; }
+	}
+	return true;
+}
+
 function step(s: Scene3D, dt: number, time: number, me: string): boolean {
 	setWaterTime(time);
 	const k = 1 - Math.exp(-12 * dt);
