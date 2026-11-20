@@ -63,4 +63,6 @@ test("what is done and cannot be done again leaves the bar until it can: mending
 	assert.deepEqual(votes("acc-a"), ["straße ja Mitte", "straße nein Mitte"]);
 	assert.deepEqual(votes("acc-b"), [], "not a voter");
 	assert.deepEqual(votes(), [], "no account known");
+	// a road put to the vote before its parts carried the voters: offered to nobody (one types „straße ja“), not to everyone
+	assert.deepEqual(hereEntries({ ...input([{ ...voted, voterIds: undefined }]), plans, account: "acc-a" }).map((e) => e.line).filter((l) => l.startsWith("straße ja")), []);
 });
