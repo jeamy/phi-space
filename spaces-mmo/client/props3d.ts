@@ -994,19 +994,37 @@ export function signGeometry(t: T): Geo {
 	], "sign"));
 }
 
+/** A flat disc on the ground, 1 across, dark at its middle and clear at its rim by the alpha of its vertices: `mid` at the
+ *  centre, `ring` at 45 % of the radius. No texture: a canvas gradient as map or alpha map did not show in the 3D view
+ *  (checked headless 2026-11-20: a plain colour showed, the gradient did not). */
+function shadowDisc(t: T, mid: number, ring: number): Geo {
+	const n = 24, pos: number[] = [0, 0, 0], col: number[] = [0, 0, 0, mid], idx: number[] = [];
+	for (const [r, a] of [[0.225, ring], [0.5, 0]] as const) for (let k = 0; k < n; k++) { const q = (k / n) * Math.PI * 2; pos.push(Math.cos(q) * r, 0, Math.sin(q) * r); col.push(0, 0, 0, a); }
+	for (let k = 0; k < n; k++) { const a = 1 + k, b = 1 + ((k + 1) % n), c = 1 + n + k, e = 1 + n + ((k + 1) % n); idx.push(0, b, a, a, b, e, a, e, c); }
+	const g = new t.BufferGeometry();
+	g.setAttribute("position", new t.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new t.Float32BufferAttribute(col, 4)); g.setIndex(idx);
+	g.userData.shared = true;
+	return g;
+}
 let shadowMaterial: import("three").MeshBasicMaterial | null = null, shadowGeo: Geo | null = null;
 /** A soft round shadow on the ground, `w`×`d` across. */
 export function propShadow(t: T, w: number, d: number): import("three").Mesh {
 	if (!shadowMaterial) {
-		const c = document.createElement("canvas"); c.width = c.height = 64;
-		const g = c.getContext("2d")!, grad = g.createRadialGradient(32, 32, 4, 32, 32, 31);
-		grad.addColorStop(0, "rgba(0,0,0,.42)"); grad.addColorStop(1, "rgba(0,0,0,0)");
-		g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
-		const tex = new t.CanvasTexture(c); tex.userData.shared = true;
-		shadowMaterial = new t.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }); shadowMaterial.userData.shared = true;
-		shadowGeo = new t.PlaneGeometry(1, 1).rotateX(-Math.PI / 2); shadowGeo.userData.shared = true;
+		shadowMaterial = new t.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: t.DoubleSide }); shadowMaterial.userData.shared = true;
+		shadowGeo = shadowDisc(t, 0.42, 0.26);
 	}
 	const m = new t.Mesh(shadowGeo!, shadowMaterial); m.scale.set(w, 1, d); m.position.y = 0.012; m.renderOrder = 1;
+	return m;
+}
+let contactMaterial: import("three").MeshBasicMaterial | null = null, contactGeo: Geo | null = null;
+/** A darker shadow for a thing lying on the ground, shown as an upright picture, `w`×`d` across. Not fogged, as the picture
+ *  above it is not. */
+export function contactShadow(t: T, w: number, d: number): import("three").Mesh {
+	if (!contactMaterial) {
+		contactMaterial = new t.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, fog: false, side: t.DoubleSide }); contactMaterial.userData.shared = true;
+		contactGeo = shadowDisc(t, 0.55, 0.38);
+	}
+	const m = new t.Mesh(contactGeo!, contactMaterial); m.scale.set(w, 1, d); m.position.y = 0.02; m.renderOrder = 1;
 	return m;
 }
 /** The soft shadows of many things as one instanced mesh (one draw call): each at `x, y, z`, `size` across. */

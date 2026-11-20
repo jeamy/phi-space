@@ -13,7 +13,7 @@ import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
-import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, merge, cached, plainMaterial, solidMesh, propShadow, propShadows, setNight, TINTED, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
+import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, contactShadow, propMesh, merge, cached, plainMaterial, solidMesh, propShadow, propShadows, setNight, TINTED, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { shadowSizeAt, closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
@@ -828,10 +828,12 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		// the thing's picture as a small sign that always faces the camera
 		const sprite = new t.Sprite(new t.SpriteMaterial({ map: iconTexture(t, obj.icon), transparent: true, alphaTest: 0.1 }));
 		sprite.position.y = 0.28; sprite.scale.set(0.5, 0.5, 1);
-		// a soft shadow on the ground under it, so it lies there instead of floating (as a fish has)
-		group.add(propShadow(t, 0.42, 0.24), sprite);
+		// a shadow on the ground at its foot, so it lies there instead of floating: wider than the picture and a little
+		// towards the camera (it looks from the south), where the upright picture does not hide it
+		const shade = contactShadow(t, 0.62, 0.36); shade.position.z = 0.08;
+		group.add(shade, sprite);
 	} else {
-		const rock = new t.Mesh(new t.DodecahedronGeometry(0.15), new t.MeshStandardMaterial({ color: Number.parseInt(obj.glyph?.color.slice(1) ?? "b9c26d", 16), roughness: 0.85 })); rock.position.y = 0.16; group.add(propShadow(t, 0.34, 0.3), rock);
+		const rock = new t.Mesh(new t.DodecahedronGeometry(0.15), new t.MeshStandardMaterial({ color: Number.parseInt(obj.glyph?.color.slice(1) ?? "b9c26d", 16), roughness: 0.85 })); rock.position.y = 0.16; group.add(contactShadow(t, 0.42, 0.36), rock);
 	}
 	return e;
 }
