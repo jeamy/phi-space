@@ -5,7 +5,7 @@
 import { merge, plainMaterial, type T } from "./props3d.ts";
 
 /** How long the boat rows out of the old place, and in to the new one. */
-export const ROW_OUT_MS = 2_200, ROW_IN_MS = 2_800;
+export const ROW_OUT_MS = 5_000, ROW_IN_MS = 5_000;
 /** How far the boat rows out from the jetty, in cells. */
 const REACH = 5;
 
