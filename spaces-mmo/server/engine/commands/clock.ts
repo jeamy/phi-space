@@ -26,7 +26,7 @@ const describe = (clock: WorldClockFields, now: number) => {
 
 const time: Command = {
 	key: "time", aliases: ["zeit", "uhrzeit"],
-	help: "time – die Zeit in der Welt: Tag und Uhrzeit",
+	help: "time – die Zeit in der Welt: Tag, Uhrzeit und Jahreszeit",
 	async func(c) {
 		const { clock } = await readClock(c);
 		const season = await seasonNow(c.space, worldNow(clock, timeNow()));

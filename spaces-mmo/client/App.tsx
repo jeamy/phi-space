@@ -31,7 +31,7 @@ import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
 import { ask, AskHost } from "./Ask.tsx";
 import { Rich, setNames } from "./RichText.tsx";
 import { language, setLanguage, watchPage } from "./i18n/index.ts";
-import { formatWorldTime, seasonIndex, SEASONS, shownWorldMs, type WorldTimeView } from "../shared/worldtime.ts";
+import { formatWorldTime, seasonIndex, SEASONS, shownDecayMs, shownWorldMs, type WorldTimeView } from "../shared/worldtime.ts";
 import { berth, lane, nextStop, SHIP_LENGTH, shipPlace } from "../shared/liner.ts";
 import { railLinks, trackCells, trainIn } from "../shared/rail.ts";
 import { chestOrder, fmtLoad } from "../shared/load-format.ts";
@@ -208,7 +208,7 @@ function useDismiss(close: () => void): () => void {
 
 /** The menu of a long press or a right click on a cell: what stands, lies or burns there, and what one can do with it.
  *  Every entry is a text command. */
-function CellMenu({ at, beachAt, admin, todos, feed, fed, chars, objs, self, room, me, plans, guest, wild, beds, recipes, grinds, sail, travel, send, close, offer, offersIn, chat, sheet = false, onHelp, onWalk, onOrders }: { beachAt?: CellInput["beachAt"]; admin?: boolean; todos?: CellInput["todos"]; feed?: CellInput["feed"]; fed?: CellInput["fed"]; offersIn?: CellInput["offersIn"]; recipes?: CellInput["recipes"]; grinds?: string[]; wild?: boolean; beds?: CellInput["beds"]; sail?: string[]; travel?: CellInput["travel"]; at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void; sheet?: boolean; onHelp?: (article: string) => void; /** A phone walks there step by step, to the free cell nearest it. */ onWalk?: (at: { x: number; y: number }) => void; onOrders?: () => void;
+function CellMenu({ at, beachAt, admin, todos, feed, fed, decay, tired, chars, objs, self, room, me, plans, guest, wild, beds, recipes, grinds, sail, travel, send, close, offer, offersIn, chat, sheet = false, onHelp, onWalk, onOrders }: { beachAt?: CellInput["beachAt"]; admin?: boolean; todos?: CellInput["todos"]; feed?: CellInput["feed"]; fed?: CellInput["fed"]; decay?: number; tired?: boolean; offersIn?: CellInput["offersIn"]; recipes?: CellInput["recipes"]; grinds?: string[]; wild?: boolean; beds?: CellInput["beds"]; sail?: string[]; travel?: CellInput["travel"]; at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void; sheet?: boolean; onHelp?: (article: string) => void; /** A phone walks there step by step, to the free cell nearest it. */ onWalk?: (at: { x: number; y: number }) => void; onOrders?: () => void;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] } }) {
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
@@ -221,7 +221,7 @@ function CellMenu({ at, beachAt, admin, todos, feed, fed, chars, objs, self, roo
 	const [takeN, setTakeN] = useState("");
 	useEffect(() => setStep(null), [at]);
 	const fuel = fuelIn(objs, me);
-	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, recipes, grinds, beachAt, admin, todos, feed, fed, onPlans: () => setStep("plans"), onOrders, onTake: (take, count) => { setTakeN(""); setStep({ take, count }); } });
+	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, recipes, grinds, beachAt, admin, todos, feed, fed, decay, tired, onPlans: () => setStep("plans"), onOrders, onTake: (take, count) => { setTakeN(""); setStep({ take, count }); } });
 	const taking = step && typeof step === "object" && "take" in step ? step : null;
 	if (taking) {
 		entries.length = 0;
@@ -424,7 +424,7 @@ function Glyph({ o, size = 16 }: { o: ObjView; size?: number }) {
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
 /** What the pack weighs against the most a figure carries, and one's chests (numbered as `verstaue … in <nr>` takes them). */
 type PackInfo = { max: number | null; chests: Array<{ nr: number; label: string }> };
-function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild, uses, hints = [], market, offer, send: sendLine, pick, pack, arrived }: { pack?: PackInfo; /** when each kind came into the pack: newest first (client/arrivals.ts) */ arrived?: ReadonlyMap<string, number>; /** "mine": what lies beside the figure and what it carries; "here": the fire within reach and what can be done here */ part?: "mine" | "here"; uses: ItemUses | undefined; /** the hints of the pack (client/hints.ts): a chosen thing shows its own */ hints?: Hint[]; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string, echo?: boolean, opensLog?: boolean) => void; pick: (o: ObjView) => void }) {
+function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild, bar, uses, hints = [], market, offer, send: sendLine, pick, pack, arrived }: { /** what the bar leaves out while it would do nothing (App barState) */ bar?: Pick<CellInput, "todos" | "feed" | "fed" | "decay" | "tired">; pack?: PackInfo; /** when each kind came into the pack: newest first (client/arrivals.ts) */ arrived?: ReadonlyMap<string, number>; /** "mine": what lies beside the figure and what it carries; "here": the fire within reach and what can be done here */ part?: "mine" | "here"; uses: ItemUses | undefined; /** the hints of the pack (client/hints.ts): a chosen thing shows its own */ hints?: Hint[]; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string, echo?: boolean, opensLog?: boolean) => void; pick: (o: ObjView) => void }) {
 	// in the pack one stays where one is: what a thing does (make, store, name, lay down) answers as the notice and in the
 	// log without leaving the pack; only looking at a thing opens the log, where its description stands
 	const send = (line: string) => (part === "mine" && !line.startsWith("look ") ? sendLine(line, true, false) : sendLine(line));
@@ -462,7 +462,7 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	const [takeN, setTakeN] = useState("");
 	const taking = inChest.find(([n]) => n === takePicked);
 	useEffect(() => { if (picked) chosenBox.current?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }, [picked]);
-	const here = hereEntries({ chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses?.beds });
+	const here = hereEntries({ chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses?.beds, ...bar });
 	if (part === "here") {
 		if (!fire && !here.length) return <p className="muted bag-note">Hier gibt es gerade nichts zu tun. Geh zu einem Feuer, einem Bau, einem Beet oder zu jemandem, dann steht hier, was geht.</p>;
 		return (
@@ -541,7 +541,7 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 						// what it can do here and now; the rest of the world's uses stay in the help
 						// a recipe its hint below offers (the line that says what it takes, with „Herstellen“) is not a button here too
 						const hinted = new Set(shownHints.flatMap((h) => (h.line ? [h.line] : [])));
-						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses.beds, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) }).filter((e) => !hinted.has(e.line));
+						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses.beds, ...bar, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) }).filter((e) => !hinted.has(e.line));
 						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => { const go = () => { if (e.run) e.run(); else send(e.line); }; if (e.confirm) void ask(e.confirm).then((ok) => { if (ok) go(); }); else go(); }}>{e.label}</button>)}</div>;
 					})()}
 					{shownHints.map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>)}
@@ -1214,12 +1214,20 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	// the search for seeds rests a while in the room it was made (server: garden.ts): the page does not offer it then
 	const searching = trade?.seedRestUntilWorldMs ?? 0, resting = !!worldTime && searching > shownWorldMs(worldTime.v, worldTime.at, Date.now());
 	const wildNow = (decor: Parameters<typeof wildHere>[0], roomDecor: Parameters<typeof wildHere>[1]) => (resting ? false : wildHere(decor, roomDecor));
+	// what the bar and the menus leave out while it would do nothing (the page renders every second, so it comes back on
+	// time): what is not ready (the tasks), an animal that does not eat yet, mending before a term's last days (the second
+	// clock), work while the figure rests from the last
+	const shownNow = Date.now(), decayShown = worldTime ? shownDecayMs(worldTime.v, worldTime.at, shownNow) : null;
+	const barState: Pick<CellInput, "todos" | "feed" | "fed" | "decay" | "tired"> = {
+		...(atlasState?.todos ? { todos: atlasState.todos } : {}), ...(hello ? { feed: hello.world.uses.feed } : {}),
+		...(hello?.world.uses.feeding && worldTime && worldTime.v.patience ? { fed: { ...hello.world.uses.feeding, now: shownWorldMs(worldTime.v, worldTime.at, shownNow), patience: worldTime.v.patience } } : {}),
+		...(decayShown !== null ? { decay: decayShown } : {}), tired: !!worldTime && (trade?.workRestUntilWorldMs ?? 0) > shownWorldMs(worldTime.v, worldTime.at, shownNow) };
 	// the epoch of the island the player stands on (the world map's state names each island's), for the header
 	const islandHere = atlas?.rooms.find((r) => r.roomId === hello?.room.roomId)?.island;
 	const epochHere = islandHere && atlasState?.epochs ? atlasState.epochs[islandHere] ?? 1 : null;
 	const seasonWind = (() => { const i = worldTime ? seasonIndex(shownWorldMs(worldTime.v, worldTime.at, Date.now()), worldTime.v.yearDays ?? 0) : null; return [i === null ? "" : tr(SEASONS[i]!), wind ? tr(wind) : ""].filter(Boolean).join(" · "); })();
 	const menus = <>
-		{menu && hello && <CellMenu at={menu} admin={!!account.admin} todos={atlasState?.todos} feed={hello.world.uses.feed} fed={hello.world.uses.feeding && worldTime && worldTime.v.patience ? { ...hello.world.uses.feeding, now: shownWorldMs(worldTime.v, worldTime.at, Date.now()), patience: worldTime.v.patience } : undefined} beachAt={hello.world.uses.sandTile ? (x: number, y: number) => hello.room.ground[y]?.[x] === hello.world.uses.sandTile : undefined} recipes={hello.world.uses.recipes} grinds={hello.world.uses.grinds} beds={hello.world.uses.beds} wild={wildNow(hello.world.decor, hello.room.decor)} travel={atlas && atlasState ? { rooms: atlas.rooms, stops: atlasState.stops, epochs: atlasState.epochs, ...(hello.world.uses.roadEpoch ? { roadEpoch: hello.world.uses.roadEpoch } : {}) } : undefined} sail={[...new Set((hello.world.liner?.routes ?? []).map((r) => r.island))].filter((i) => i !== hello.world.liner?.island)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={shownObjs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offersIn={trade?.offersIn} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
+		{menu && hello && <CellMenu at={menu} admin={!!account.admin} {...barState} beachAt={hello.world.uses.sandTile ? (x: number, y: number) => hello.room.ground[y]?.[x] === hello.world.uses.sandTile : undefined} recipes={hello.world.uses.recipes} grinds={hello.world.uses.grinds} beds={hello.world.uses.beds} wild={wildNow(hello.world.decor, hello.room.decor)} travel={atlas && atlasState ? { rooms: atlas.rooms, stops: atlasState.stops, epochs: atlasState.epochs, ...(hello.world.uses.roadEpoch ? { roadEpoch: hello.world.uses.roadEpoch } : {}) } : undefined} sail={[...new Set((hello.world.liner?.routes ?? []).map((r) => r.island))].filter((i) => i !== hello.world.liner?.island)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={shownObjs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offersIn={trade?.offersIn} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
 			chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
 		{nameMenu && <NameMenu at={nameMenu} sheet name={nameMenu.name} groups={account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? [])} close={() => setNameMenu(null)}
 			talk={() => send(`chat ${nameMenu.name}`, false)} invite={(g) => send(`gruppe lade ${nameMenu.name} in ${g}`)} ignore={() => send(`ignoriere ${nameMenu.name}`)} />}
@@ -1240,10 +1248,10 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 			</div>
 		)}
 	</>;
-	const hereBar = hereEntries({ chars, objs, self: chars.get(me), room: hello?.room.roomId ?? "", me, plans: hello?.world.plans ?? [], guest: account.guest, fuel: fuelIn(objs, me), wild: hello ? wildNow(hello.world.decor, hello.room.decor) : false, beds: hello?.world.uses.beds });
+	const hereBar = hereEntries({ chars, objs, self: chars.get(me), room: hello?.room.roomId ?? "", me, plans: hello?.world.plans ?? [], guest: account.guest, fuel: fuelIn(objs, me), wild: hello ? wildNow(hello.world.decor, hello.room.decor) : false, beds: hello?.world.uses.beds, ...barState });
 	// one's chests, in every region, numbered as the server numbers them (ownChests in engine/commands/build.ts)
 	const packInfo: PackInfo = { max: atlasState?.packMax ?? null, chests: (atlasState?.mine ?? []).filter((o) => o.kind === "building" && !!o.plan && !!hello?.world.uses.chests.includes(o.plan)).map((o) => ({ o, roomName: atlas?.rooms.find((r) => r.roomId === o.room)?.name ?? o.room })).sort((a, b) => chestOrder({ roomName: a.roomName, buildId: a.o.id }, { roomName: b.roomName, buildId: b.o.id })).map((x, i) => ({ nr: i + 1, label: `${x.o.name} (${x.roomName})` })) };
-	const mineView = <Things arrived={arrived} pack={packInfo} objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildNow(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} hints={hints} send={send} pick={pickUp}
+	const mineView = <Things arrived={arrived} pack={packInfo} objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildNow(hello?.world.decor, hello?.room.decor)} bar={barState} uses={hello?.world.uses} hints={hints} send={send} pick={pickUp}
 		{...(trade?.listings && !account.guest ? { market: (name: string) => { setTradeItem({ name }); setBagPart("market"); } } : {})}
 		{...(account.guest ? {} : { offer: (to: string, name: string) => { setTradeItem({ name }); setOfferTo(to); setBagPart("market"); } })} />;
 	const marketView = <>

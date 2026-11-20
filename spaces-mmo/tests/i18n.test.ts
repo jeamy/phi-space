@@ -40,3 +40,18 @@ test("the world's sentences come out whole: values, things, plural endings", () 
 		["Ausgänge: ost (Klippenpfad), west (Fischerdorf).", /^Exits: east \(Cliff Path\), west \(Fishing Village\)\.$/],
 	] as const) assert.match(toEnglish(de), en, de);
 });
+
+test("every command's help comes out in English, as the text help writes it and as the card of the commands shows it", async () => {
+	const { helpLine, helpParts } = await import("../server/engine/commands/default.ts");
+	await import("../server/engine/commands.ts");
+	// every list of commands the engine offers (commands.ts commandsOf), each module's *_COMMANDS
+	const lists = await Promise.all(["default", "trade", "scenery", "build", "interior", "sleep", "siteorder", "chapel", "townhall", "festival", "wind", "cart", "food", "shop", "signal", "fishing", "passage", "garden", "trees", "field", "beam", "mill", "quarry", "animals", "wild", "epoch", "settlement", "clock", "builder"].map(async (f) => Object.entries(await import(`../server/engine/commands/${f}.ts`)).filter(([k]) => k.endsWith("_COMMANDS")).flatMap(([, v]) => v as Array<{ key: string; help: string; hidden?: boolean }>)));
+	const cmds = lists.flat().filter((c) => c.help && !c.hidden) as Parameters<typeof helpLine>[0][];
+	assert.ok(cmds.length > 100, `${cmds.length} commands`);
+	for (const c of cmds) {
+		const { names, usage, text } = helpParts(c);
+		assert.ok(EN[`${c.key}${usage ? ` ${usage}` : ""} – ${text}`] !== undefined, `no English for: ${c.help}`);
+		assert.notEqual(toEnglish(text), text, `the card of ${c.key}`);
+		assert.ok(toEnglish(helpLine(c)).startsWith(`${names.join("/")} `) && toEnglish(helpLine(c)) !== helpLine(c), `the line of ${c.key}: ${toEnglish(helpLine(c))}`);
+	}
+});

@@ -59,7 +59,7 @@ const rudere: Command = {
 };
 
 const schaufle: Command = {
-	key: "schaufle", aliases: ["schaufeln", "dig sand"],
+	key: "schaufle", aliases: ["schaufeln", "shovel"],
 	help: "schaufle – am Strand mit dem Spaten Sand graben (danach ruhst du eine Weile)",
 	async func(c) {
 		const d = c.world.sand;

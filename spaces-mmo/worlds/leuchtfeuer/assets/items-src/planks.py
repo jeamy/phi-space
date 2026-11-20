@@ -1,5 +1,5 @@
 # What the workshop makes of planks (docs/siedeln.en.md "Trees"), in the style of trees.py (32x32, dark outline, a light
-# edge on top, shade below): a barrel, a fruit crate, a table and a pair of shutters.
+# edge on top, shade below): a barrel, a fruit crate, a table, a pair of shutters and a food cupboard.
 # Usage: python3 planks.py <items dir>
 import sys
 from PIL import Image, ImageDraw
@@ -88,6 +88,23 @@ def shutters():
     return outline(img)
 
 
+def cupboard():
+    img = new()
+    rect(img, (6, 3, 26, 28), rgb("#a87a4a"))                          # the cupboard
+    rect(img, (6, 3, 26, 5), rgb("#d0a070"))                           # its top board
+    rect(img, (6, 3, 7, 28), rgb("#c09060"))
+    rect(img, (25, 3, 26, 28), rgb("#7a5228"))
+    line(img, [(16, 6), (16, 26)], rgb("#6a4220"))                     # between its two doors
+    for x0 in (8, 18):
+        rect(img, (x0, 8, x0 + 6, 15), rgb("#e8dcc0"))                  # the gauze that lets air to the food
+        for x in range(x0 + 2, x0 + 6, 2): line(img, [(x, 8), (x, 15)], rgb("#b8a888"))
+        line(img, [(x0, 11), (x0 + 6, 11)], rgb("#b8a888"))
+        rect(img, (x0, 18, x0 + 6, 25), rgb("#8a5a2e"))                 # the panel below
+    for x in (14, 18): rect(img, (x, 16, x, 17), rgb("#3a3a40"))        # the knobs
+    for x in (7, 24): rect(img, (x, 28, x + 1, 30), rgb("#6a4220"))     # the feet
+    return outline(img)
+
+
 out = sys.argv[1]
-for key, img in {"fass": barrel(), "obstkiste": crate(), "tisch": table(), "fensterlaeden": shutters()}.items():
+for key, img in {"fass": barrel(), "obstkiste": crate(), "tisch": table(), "fensterlaeden": shutters(), "speiseschrank": cupboard()}.items():
     img.save(f"{out}/{key}.png")

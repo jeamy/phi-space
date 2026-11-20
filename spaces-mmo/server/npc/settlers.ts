@@ -1,7 +1,7 @@
 // The settlers (docs/siedeln.en.md "Wenige Spieler: die Welt packt mit an"): script figures that play like people where too
 // few people play. Each lives on one fire's island (its rooms are its `home`, it takes no ferry) and plays through the
 // commands a player types: it gathers driftwood, kelp and shells, twists rope, stakes out a hut and a rain barrel,
-// builds them and a coop, helps at the sites of others, digs a bed or two, looks for seeds, plants, waters, weeds and
+// builds them and a scarecrow, helps at the sites of others, digs a bed or two, looks for seeds, plants, waters, weeds and
 // harvests, sells what it does not need at its island's market and buys what its site lacks, repairs what it built, joins
 // the rooms of its island by road once it is a village, and feeds its fire when it burns low. No model calls: its account is an NPC's.
 //
@@ -32,8 +32,17 @@ const count = (l: Look, proto: string) => l.pack.filter((i) => i.proto === proto
 const nameOf = (w: WorldDef, proto: string) => w.prototypes.find((p) => p.key === proto)?.name ?? proto;
 /** What lies on the beaches and what a hut, a barrel and a spade are made of. */
 const RAW = ["treibholz", "tang", "muschel"];
-/** What a settler builds, one after the other: with two beds five points towards its island's epoch each. */
-const PLANS = ["huette", "regentonne", "huehnerstall"];
+/** What a settler builds, one after the other: with two beds five points towards its island's epoch each. A scarecrow,
+ *  not a coop: it guards the settler's own beds, and a coop would stand empty (hens come from one trader far away). */
+const PLANS = ["huette", "regentonne", "vogelscheuche"];
+/** What a settler asks for a thing on the market board: a coin more than the best trader of its island pays for it (two
+ *  where none buys it), so nothing dear for what it is holds one of its three places on the board. */
+export function askingPrice(w: WorldDef, room: string, proto: string): number {
+	const rooms = w.allRooms ?? w.rooms, island = rooms.find((r) => r.roomId === room)?.island;
+	const here = (r?: string) => !!r && rooms.find((x) => x.roomId === r)?.island === island;
+	const best = Math.max(0, ...w.npcs.filter((n) => n.prices && (here(n.room) || here(n.market) || (n.home ?? []).some(here))).map((n) => n.prices![proto]?.[0] ?? 0));
+	return best > 0 ? best + 1 : 2;
+}
 /** Things to sell from which it sends them to the market by cart, when a road goes there. */
 const CART_FROM = 6;
 /** How much of each raw thing it carries at most: enough for a site, and one kind never crowds out the others. */
@@ -274,7 +283,7 @@ export function siedler(): Script {
 		const board = (await n.space.readAll({ type: "Listing", fields: { room: market } })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at || a.listingId.localeCompare(b.listingId));
 		const i = board.findIndex((x) => x.seller !== l.me.charId && x.price <= coins && lacks.includes(x.itemName));
 		if (i >= 0) { await n.act(`market kaufe ${i + 1}`); return true; }
-		if (heap.length >= 2 && board.filter((x) => x.seller === l.me.charId).length < 3) { await n.act(`market biete ${heap[0]!.name} für ${2 + (round % 3)}`); return true; }
+		if (heap.length >= 2 && board.filter((x) => x.seller === l.me.charId).length < 3) { await n.act(`market biete ${heap[0]!.name} für ${askingPrice(w, market, heap[0]!.proto)}`); return true; }
 		return false;
 	}
 

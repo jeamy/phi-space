@@ -83,10 +83,12 @@ export const paused = (clock: WorldClockFields, realNow: number): WorldClockFiel
 export const resumed = (clock: WorldClockFields, realNow: number): WorldClockFields => ({ ...materialize(clock, realNow), paused: false });
 
 /** What the gateway tells a browser; the browser interpolates between two of these, and decides nothing by it. */
-export type WorldTimeView = { epoch: number; worldMs: number; rate: number; paused: boolean; serverNowMs: number; /** World days of a year; 0 or absent: no seasons. */ yearDays?: number; /** The clock's patience (`patience`): what an animal is fed ahead is stretched by it. */ patience?: number };
+export type WorldTimeView = { epoch: number; worldMs: number; rate: number; paused: boolean; serverNowMs: number; /** World days of a year; 0 or absent: no seasons. */ yearDays?: number; /** The clock's patience (`patience`): what an animal is fed ahead is stretched by it. */ patience?: number; /** The second clock at `serverNowMs` (decayNow): a building's and a road's term run on it. */ decayMs?: number };
 export const viewOf = (clock: WorldClockFields, serverNowMs: number): WorldTimeView => ({ epoch: clock.epoch, worldMs: worldNow(clock, serverNowMs), rate: clock.rate, paused: clock.paused, serverNowMs });
 /** The world time a browser shows `now`, from the view it received at `receivedAtMs` (its own clock). */
 export const shownWorldMs = (v: WorldTimeView, receivedAtMs: number, now: number): number => (v.paused ? v.worldMs : v.worldMs + Math.max(0, now - receivedAtMs) * v.rate);
+/** The second clock a browser shows `now` (it runs at the rate over the patience); null without it. */
+export const shownDecayMs = (v: WorldTimeView, receivedAtMs: number, now: number): number | null => (v.decayMs === undefined ? null : v.paused ? v.decayMs : v.decayMs + Math.max(0, now - receivedAtMs) * v.rate / (v.patience || 1));
 
 /** A plan in world hours: present from `presentFromHour` (inclusive) to `presentUntilHour` (exclusive). A plan may run
  *  over midnight (20 to 2); from = until means all day. */

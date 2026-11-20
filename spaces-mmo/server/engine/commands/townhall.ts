@@ -33,7 +33,7 @@ export async function zoneRefusal(c: CommandCtx, room: string, cells: Array<{ x:
 	for (const e of await c.space.readAll({ type: "Zone", fields: { room } })) {
 		const z = fieldsOf<ZoneFields>(e);
 		if (z.kind === "gruen" && green) continue;
-		if (cells.some((p) => isIn(p, z))) return z.kind === "weg" ? "Dort liegt ein Wegerecht; das bleibt frei." : "Das ist Grünzone; dort gehen nur Beete und Parks.";
+		if (cells.some((p) => isIn(p, z))) return z.kind === "weg" ? "Dort liegt ein Wegerecht; das bleibt frei." : "Das ist Grünzone; dort gehen nur Beete, Bäume, Parks und Gewächshäuser.";
 	}
 	return null;
 }

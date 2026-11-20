@@ -23,7 +23,7 @@ import { resolvePrototype, spawn } from "../prototypes.ts";
 import type { WorldDef } from "../world.ts";
 import { ARTICLE, distTo, planOf, putBack, takeNear } from "./build.ts";
 import { settlementIn } from "./settlement.ts";
-import { consume, move } from "./trade.ts";
+import { consume, move, refuseLoaded } from "./trade.ts";
 import { randomBytes, timeNow } from "../source.ts";
 
 const coinsWord = (n: number) => `${n} Münze${n === 1 ? "" : "n"}`;
@@ -77,6 +77,7 @@ const laden: Command = {
 			const it = itemsNamed(c.world, await inventory(c), tail)[0];
 			if (!it) throw new NotUnderstood(`Du trägst nichts, was „${tail.slice(0, 30)}“ heißt.`);
 			if (!d.prices[it.f.proto]) throw new CommandError(`${it.f.name} führt das Kaufhaus nicht.`);
+			await refuseLoaded(c, it.f);
 			const price = bid(it.f.proto);
 			if (free < price) throw new CommandError("Die Kasse des Kaufhauses ist zu leer dafür.");
 			await move(c, it.f, c.actor.charId, b.buildId);

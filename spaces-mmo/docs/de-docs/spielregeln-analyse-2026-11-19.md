@@ -258,8 +258,15 @@ So ist es geschehen: TypeScript in `6cfb0cf`, `FROZEN` zeigt darauf, Rust im Com
    `krabbenholz` 7, `segel` 17, `kuchen` 33, `tuch` 17, `proviant` 17, `kaese` 15.
 4. **N1 / N2:** Die Münzen eines NPCs, der ankauft, wachsen wie sein Warenbestand nach: eine je Welttag, bis zu dem, womit
    er anfing (`trade.ts` `restock`).
-5. **Offen:** W4 (Behälter für gekochte Speisen), W5 (kleine Arbitrage), N3 (leere Hühnerställe der Siedler, ihre
-   Pauschalpreise) und N4.
+5. **W4** (Welt Version 56): Ein **Speiseschrank** aus der Werkstatt (5 Bohlen, 1 Leinen, mit Muschelmesser) hält in
+   der Truhe die 15 gekochten Gerichte doppelt so lange. Nur Weltdatei: `keeps` ist generisch.
+6. **W5:** Jorin verkauft das Holzbündel für 5 statt 4; damit zahlt auf keiner Insel ein Händler mehr, als ein anderer
+   dort verlangt (ein Test hält das fest). Der Handel zwischen den Inseln (Tran, Bündel) bleibt: Die Überfahrt kostet 3.
+7. **N3:** Siedler bauen eine Vogelscheuche statt eines Hühnerstalls, der leer stand (`PLANS`), und verlangen am
+   Marktbrett eine Münze mehr, als der beste Händler ihrer Insel zahlt, statt pauschal 2 bis 4 (`askingPrice` in
+   `server/npc/settlers.ts`, `asking_price` in Rust). Leere Ställe verfallen von selbst.
+8. **N4:** Kein Verhalten geändert. Ein Test schlägt fehl, sobald ein NPC in `crafts` ein Rezept bekommt, das einen Bau
+   braucht; dass Sammler keine Gesuche beantworten, bleibt.
 
 ### Priorität 3 – Dokumentation und Spielerführung (umgesetzt am 2026-11-20)
 

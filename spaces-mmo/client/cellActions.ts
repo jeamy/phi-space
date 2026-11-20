@@ -14,6 +14,8 @@ export type CellInput = {
 	/** What each herd and keeper eats, by name (ItemUses.feed): feeding is offered only with some of it carried (unknown: offered). */ feed?: ItemUses["feed"];
 	/** How far ahead an animal is fed (ItemUses.feeding), the world time now and the clock's patience: feeding is offered only while it eats (unknown: offered). */ fed?: NonNullable<ItemUses["feeding"]> & { now: number; patience: number };
 	/** The player's tasks (AtlasState.todos): a mill offers "Mehl abholen" only with flour of one's own ready there (unknown: offered). */ todos?: Todo[];
+	/** The second clock now (WorldTimeView.decayMs): mending a building or a road is offered only in its last days (MEND_WITHIN; unknown: offered). */ decay?: number;
+	/** The figure rests from its last work (TradeView.workRestUntilWorldMs): the work that waits for it is not offered then (TIRING). */ tired?: boolean;
 	/** The trade offers made to the player (TradeView.offersIn): a figure with one gets "accept" and "decline" first. */ offersIn?: Array<{ fromName: string; giveNames: string[]; want: Array<{ name: string; count: number }> }>;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
 	/** Whether wild plants grow in the room (wildHere); without it seeds are offered anyway and the command answers. */ wild?: boolean;
@@ -32,6 +34,14 @@ export function wildHere(decor: Record<string, { model?: string }> | undefined, 
 }
 
 const INFO = /^(?:look|inventory|who|time|reputation|bau)\b/;
+/** The work after which a figure rests (server: build.ts rested and tire, field.ts tire): arbeite, breche, steche, harke,
+ *  schaufle, wirf, räume, fälle, the harvest of a field. While it rests the command only says how long still. */
+const TIRING = /^(?:arbeite|breche|steche|harke|schaufle|wirf|räume|fälle|ernte flur)(?:\s|$)/;
+/** How near its end a building or a road is offered for mending (server/todos.ts warns as early): before, `repariere`
+ *  takes the material and gives a term it nearly had. */
+export const MEND_WITHIN = 5 * 24 * 3_600_000;
+/** Whether a term on the second clock is near its end, or unknown. */
+const worn = (term: number | undefined, decay: number | undefined) => term === undefined || decay === undefined || term - decay < MEND_WITHIN;
 /** The order of the bar, what spoils or waits first: the harvest, then the care of what grows, the work on what is begun,
  *  the rest, and the seeds that can be looked for anytime. A sort keeps the order of equals, nearest cells first. */
 const URGENT = [/^(?:ernte|abholen|einsammeln)\b/, /^(?:gieße|jäte|füttere|repariere|wache)\b/, /^(?:arbeite|liefere|breche|steche|harke|räume)\b/];
@@ -144,7 +154,7 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 		if (offer) add({ label: `${c.name} anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
 	}
 	if (o.market) add({ label: "Am Markt verkaufen …", line: "#sell", run: o.market });
-	return [...out.values()];
+	return [...out.values()].filter((e) => !(input.tired && TIRING.test(e.line)));
 }
 
 
@@ -170,7 +180,12 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 	return `${counted(o.giveNames.map((name) => ({ name, count: 1 })))}${o.want.length ? ` für ${counted(o.want)}` : " als Geschenk"}`;
 }
 
-export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos, feed, fed }: CellInput): CellEntry[] {
+export function cellEntries(input: CellInput): CellEntry[] {
+	const entries = cellEntriesAll(input);
+	return input.tired ? entries.filter((e) => !TIRING.test(e.line)) : entries;
+}
+
+function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos, feed, fed, decay }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: CellEntry[] = [];
 	/** The recipes made at a building of `plan`: what one carries enough for, and the whole list (server: trade.ts "craft hier"). */
@@ -236,7 +251,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				for (const n of (o.missing ?? "").split(",").map((p) => p.trim().replace(/^\d+\s+/, "")).filter((n) => n && carried.has(n))) entries.push({ label: `${n} an die Straße liefern`, line: `liefere ${n} an die straße` });
 				if (/Arbeit/.test(o.missing ?? "")) entries.push({ label: "An der Straße mitarbeiten", line: "arbeite an der straße" });
 			}
-			if (o.roadState === "built" && near && !guest) entries.push({ label: "Straße ausbessern", line: "straße repariere" });
+			if (o.roadState === "built" && near && !guest && worn(o.term, decay)) entries.push({ label: "Straße ausbessern", line: "straße repariere" });
 			continue;
 		}
 		// a door to another room of this island without a road: plan one (server: road.ts; it says when the island is too young)
@@ -390,7 +405,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			// mending takes its plan's material (server: build.ts repariere): offered only when carried, with what it costs
 			const repair = plans.find((p) => p.key === o.plan)?.repair ?? [];
 			const count = (n: string) => [...objs.values()].filter((i) => i.kind === "item" && i.location === me && i.name === n).length;
-			if (repair.every((r) => count(r.name) >= r.count)) entries.push({ label: repair.length ? `Ausbessern (${repair.map((r) => `${r.count} ${r.name}`).join(", ")})` : "Ausbessern", line: here("repariere") });
+			if (worn(o.term, decay) && repair.every((r) => count(r.name) >= r.count)) entries.push({ label: repair.length ? `Ausbessern (${repair.map((r) => `${r.count} ${r.name}`).join(", ")})` : "Ausbessern", line: here("repariere") });
 			if (o.plan === "bahnhof" && beside) {
 			const island = travel?.rooms.find((r) => r.roomId === room)?.island, to = travel ? travel.rooms.filter((r) => r.island === island && r.roomId !== room && travel.stops.stations.includes(r.roomId)) : [];
 			if (to.length) for (const r of to) entries.push({ label: `Mit dem Zug nach ${r.name} · ${travel!.stops.trainFare} ${travel!.stops.trainFare === 1 ? "Münze" : "Münzen"}`, line: `zug ${r.name}` });

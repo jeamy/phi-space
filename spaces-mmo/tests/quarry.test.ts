@@ -47,6 +47,11 @@ test("stone: a pickaxe of rubble; a quarry gives three for its wear and a rest; 
 		assert.equal((await pack(s, me, "spitzhacke"))[0]!.wear, 5);
 		assert.match(await does(p, "breche", "müde"), /noch müde von der letzten Arbeit/);
 		assert.equal((await pack(s, me, "stein")).length, 3, "a tired figure breaks nothing");
+		// the page hides the work while the figure rests: its trade view says until when, and nothing once the rest is gone
+		await p.until((f) => f.t === "trade" && !!f.trade.workRestUntilWorldMs, 10_000);
+		const rested = p.frames.length;
+		for (const e of await s.readAll({ type: "WorkRest", fields: { charId: me } })) await s.takeIfExists({ id: e.id }, 0);
+		await p.until((f) => f.t === "trade" && f.trade.workRestUntilWorldMs === null, 10_000, rested);
 
 		// the workshop: a recipe of its own; a knife wears by a half beside it
 		assert.match(await does(p, "craft 2 bohlen", "nur direkt"), /Bohle macht man nur direkt neben einer Werkstatt/);

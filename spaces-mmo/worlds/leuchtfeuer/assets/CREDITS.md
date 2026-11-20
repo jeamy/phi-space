@@ -107,8 +107,8 @@ and compote: `items/scheit.png`, `items/axt.png`, `items/samen-birke.png`, `item
 `items/apfelsaft.png`, `items/birnensaft.png`, `items/apfelkompott.png`, `items/birnenkompott.png`) were drawn the same
 way, by the script `items-src/trees.py` (same license as this project).
 
-What the workshop makes of planks (a barrel, a fruit crate, a table and shutters: `items/fass.png`,
-`items/obstkiste.png`, `items/tisch.png`, `items/fensterlaeden.png`) were drawn the same way, by the script
+What the workshop makes of planks (a barrel, a fruit crate, a table, shutters and a food cupboard: `items/fass.png`,
+`items/obstkiste.png`, `items/tisch.png`, `items/fensterlaeden.png`, `items/speiseschrank.png`) were drawn the same way, by the script
 `items-src/planks.py` (same license as this project).
 
 ## Surfaces of the 3D view (`public/materials/`)

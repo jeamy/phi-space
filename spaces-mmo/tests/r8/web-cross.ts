@@ -24,7 +24,7 @@ const differ = (what: string, ts: unknown, rust: unknown) => {
 	console.log(`DIFF ${what}\n  ts:   ${JSON.stringify(ts).slice(0, 1500)}\n  rust: ${JSON.stringify(rust).slice(0, 1500)}`);
 };
 /** The values that move with the clock or are drawn anew. */
-const VOLATILE = new Set(["now", "serverNowMs", "worldMs", "at", "until", "startedAt", "pid", "procId", "id"]);
+const VOLATILE = new Set(["now", "serverNowMs", "worldMs", "decayMs", "at", "until", "startedAt", "pid", "procId", "id"]);
 const mask = (v: unknown, key = ""): unknown => {
 	if (Array.isArray(v)) return v.map((x) => mask(x));
 	if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, VOLATILE.has(k) && typeof x === "number" ? "#" : k === "id" && key === "m" ? "#" : mask(x, k)]));

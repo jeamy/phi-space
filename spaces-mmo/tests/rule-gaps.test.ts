@@ -2,7 +2,9 @@
 // a tree counts towards its island's stock and the limit of trees holds per island; a road that is over counts no more;
 // a fire carries one lighthouse; a board asks only for what its island's epoch can make; a trader's coins come back like
 // its stock; what a settlement laid into a warehouse lies in the open when the warehouse falls; the orders of a
-// department store that stands no more are swept away.
+// department store that stands no more are swept away. And what followed on 2026-11-20 (W4, W5, N3, N4): a food cupboard
+// keeps the cooked dishes, no trader of an island sells below what another there pays, a settler asks a coin more than
+// the island's best trader pays, and no NPC is given a recipe it would have to walk to a building for.
 import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -12,6 +14,8 @@ import { buildSweep } from "../server/engine/commands/build.ts";
 import { islandPoints } from "../server/engine/commands/epoch.ts";
 import { routePoints } from "../server/engine/commands/road.ts";
 import { marketTick, ordersTick } from "../server/engine/commands/trade.ts";
+import "../server/npc/scripts.ts"; // the entry of the NPC modules (they import each other in a ring)
+import { askingPrice } from "../server/npc/settlers.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { BuildingFields, CharacterFields, RouteFields, TreeFields } from "../server/model.ts";
@@ -119,4 +123,27 @@ test("a board asks for what its island's epoch can make; a trader's coins come b
 		assert.equal((await s.readAll({ type: "Item", fields: { location: "est-schuppen" } })).length, 1, "a hut's chest is still its owner's");
 		assert.deepEqual((await s.readAll({ type: "ShopOrder" })).map((e) => e.fields.orderId), ["so-1"]);
 	} finally { await srv.close(); }
+});
+
+test("the world: every cooked dish has a container, no island has a trader selling below another's buying price, no NPC crafts at a building; a settler's asking price", () => {
+	const kept = new Set((w.keeps ?? []).flatMap((k) => k.keeps)), young = new Set((w.animals?.kinds ?? []).flatMap((k) => (k.young ? [k.young] : [])));
+	const open = w.prototypes.filter((p) => p.turns && !kept.has(p.key) && !young.has(p.key)).map((p) => p.key);
+	assert.deepEqual(open, [], "what spoils and has no container (but for young animals, which grow up)");
+	assert.ok(w.keeps!.find((k) => k.proto === "speiseschrank")!.keeps.includes("festessen"));
+
+	const island = (r?: string) => (r ? w.rooms.find((x) => x.roomId === r)?.island : undefined);
+	const at = (n: (typeof w.npcs)[number]) => new Set([n.room, n.market, ...(n.home ?? [])].map(island).filter(Boolean));
+	const traders = w.npcs.filter((n) => n.prices), cheap: string[] = [];
+	for (const a of traders) for (const b of traders) {
+		if (a === b || ![...at(a)].some((i) => at(b).has(i))) continue;
+		for (const [proto, [, sells]] of Object.entries(a.prices!)) { const buys = b.prices![proto]?.[0] ?? 0; if (sells > 0 && buys > sells) cheap.push(`${a.name} sells ${proto} for ${sells}, ${b.name} buys it for ${buys}`); }
+	}
+	assert.deepEqual(cheap, [], "coins for carrying a thing across one island");
+
+	// a craftsman's script crafts where it stands (npc/economy.ts handwerker): a recipe of its list must need no building
+	for (const n of w.npcs) for (const key of n.crafts ?? []) assert.equal(w.recipes.find((r) => r.key === key)?.at, undefined, `${n.name} crafts ${key}, which needs a building`);
+
+	const hinnerk = w.npcs.find((n) => n.npcId === "hinnerk")!;
+	assert.equal(askingPrice(w, "graue-bucht", "treibholz"), Math.max(...w.npcs.filter((n) => n.prices && island(n.room) === island(hinnerk.room)).map((n) => n.prices!.treibholz?.[0] ?? 0)) + 1);
+	assert.equal(askingPrice(w, "graue-bucht", "gibtsnicht"), 2, "what no trader buys");
 });

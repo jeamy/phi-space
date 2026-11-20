@@ -41,10 +41,32 @@ function phrases(text: string): string {
 	return text.replace(known, (m) => EN[m] ?? m);
 }
 
+let helpTexts: Map<string, string> | null = null;
+/** A command's help (en.ts keys the command's own line, "look [ding] – sich umsehen, …"): the text-mode help joins every
+ *  name it answers to ("look/schau/sieh [ding] – …", default.ts helpLine), the card of the commands shows the text after
+ *  the dash alone (CommandHelp.tsx). Both find the English of that line. */
+function helpOf(text: string): string | undefined {
+	const line = /^(\p{L}+)((?:\/\p{L}+)+)((?: [^–]*?)?) – (.+)$/su.exec(text);
+	if (line) {
+		const en = EN[`${line[1]!}${line[3]!} – ${line[4]!}`];
+		if (en !== undefined) return en.replace(/^\S+/, `${line[1]!}${line[2]!}`);
+	}
+	if (!helpTexts) {
+		helpTexts = new Map();
+		for (const [de, en] of Object.entries(EN)) {
+			const d = de.indexOf(" – "), e = en.indexOf(" – ");
+			if (d > 0 && e > 0 && /^\p{L}+(?: |$)/u.test(de.slice(0, d)) && !helpTexts.has(de.slice(d + 3))) helpTexts.set(de.slice(d + 3), en.slice(e + 3));
+		}
+	}
+	return helpTexts.get(text);
+}
+
 const cache = new Map<string, string>();
 function translate(text: string, depth: number): string {
 	const exact = EN[text];
 	if (exact !== undefined) return exact;
+	const help = depth === 0 ? helpOf(text) : undefined;
+	if (help !== undefined) return help;
 	// a value set in bold (client/RichText.tsx) is translated inside its marks
 	const bold = /^\*\*((?:(?!\*\*).)+)\*\*$/su.exec(text);
 	if (bold) return `**${translate(bold[1]!, depth)}**`;
@@ -94,7 +116,7 @@ export function tr(text: string): string {
 	// the room's text comes as lines, some answers as sentences put together
 	const lines = body.split("\n");
 	let out = lines.length > 1 ? lines.map((l) => tr(l)).join("\n") : translate(body, 0);
-	if (lines.length === 1 && EN[body] === undefined && !/\{/.test(body)) {
+	if (lines.length === 1 && EN[body] === undefined && helpOf(body) === undefined && !/\{/.test(body)) {
 		const parts = body.split(/(?<=[.!?:])\s+(?=[\p{Lu}„])/u);
 		if (parts.length > 1) out = parts.map((s) => translate(s, 0)).join(" ");
 	}

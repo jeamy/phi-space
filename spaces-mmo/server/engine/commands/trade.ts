@@ -54,6 +54,11 @@ export async function move(c: CommandCtx, item: ItemFields, from: string, to: st
 	const { listing: _l, seller: _s, ...rest } = fieldsOf<ItemFields>(e);
 	await c.space.write({ type: e.type, types: e.types.slice(1), fields: { ...rest, location: to, x: -1, y: -1, ...extra } as never }, c.txn, FOREVER);
 }
+/** A boat with cargo in its hatch is not sold (to a trader, a store or over the board): a trader ships what it buys off,
+ *  and the cargo would be left without a place. Given or swapped it goes along with the boat. */
+export async function refuseLoaded(c: CommandCtx, item: ItemFields): Promise<void> {
+	if (c.world.boat?.hatch?.[item.proto] && (await c.space.count({ type: "Item", fields: { location: item.itemId } }, c.txn))) throw new CommandError(`In der Luke von ${item.name} liegt noch etwas; entlade sie erst („luke entlade alle“).`);
+}
 /** Takes an item for good (used up). */
 export async function consume(c: CommandCtx, item: ItemFields, from: string): Promise<void> {
 	// a boat with cargo in its hatch (fishing.ts) or a bill with its coins (shop.ts) is not used up: what it holds would be left without a place
@@ -324,6 +329,7 @@ const market: Command = {
 			if ("missing" in got) throw new (got.unknown ? NotUnderstood : CommandError)(chest ? `In der Truhe ist nicht: ${got.missing}.` : `Du hast nicht: ${got.missing}.`);
 			const item = got.items[0]!.f, listingId = `l-${randomBytes(5).toString("hex")}`;
 			if (item.proto === "muenze") throw new CommandError("Münzen gegen Münzen zu tauschen ergibt nichts; stelle etwas anderes ans Marktbrett.");
+			await refuseLoaded(c, item);
 			for (const i of got.items) await move(c, i.f, chest ? chest.b.buildId : c.actor.charId, "market", { listing: listingId, seller: c.actor.charId });
 			const lot: ListingFields = { listingId, seller: c.actor.charId, sellerName: c.actor.name, itemId: item.itemId, itemName: item.name, ...(got.items.length > 1 ? { count: got.items.length } : {}), price, room: c.actor.room, at: timeNow(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs };
 			await c.space.write({ type: "Listing", fields: lot as never }, c.txn, FOREVER);

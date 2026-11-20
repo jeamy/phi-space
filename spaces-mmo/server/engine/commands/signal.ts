@@ -19,7 +19,7 @@ export function spanText(ms: number): string {
 const list = (xs: string[]) => xs.join(", ");
 
 const signalfeuer: Command = {
-	key: "signalfeuer", aliases: ["signale", "signalkette", "feuerkette", "signal fires"],
+	key: "signalfeuer", aliases: ["signale", "signalkette", "feuerkette", "signals"],
 	help: "signalfeuer – die Ketten der Signalfeuer dieser Insel: welche Feuer sie verbinden, ob sie brennen, und welche Insel dieser Gegend ihre Kette am längsten brennen ließ",
 	async func(c) {
 		const w = c.world, roomOf = (id: string) => w.rooms.find((r) => r.roomId === id);

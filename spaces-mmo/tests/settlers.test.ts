@@ -63,7 +63,7 @@ test("a settler of a village joins the rooms of its home by road, through the sa
 		assert.ok(w.exits.some((e) => homes.includes(e.room) && homes.includes(e.destination)), "two rooms of its home touch");
 		await lightFire(s, 3_600_000, first.beacon);
 		// what it builds first stands already
-		for (const plan of ["huette", "regentonne", "huehnerstall"]) {
+		for (const plan of ["huette", "regentonne", "vogelscheuche"]) {
 			const b: BuildingFields = { buildId: `own-${plan}`, plan, name: plan, room: first.room, x: 0, y: 0, w: 1, h: 1, owner: me, ownerName: first.name, accountId: me, beaconId: first.beacon!, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 };
 			await s.write({ type: "Building", fields: b as never }, null, FOREVER);
 		}
@@ -129,7 +129,7 @@ test("a settler with things to sell and a road to its market sends them by cart,
 		const market = homes.find((r) => w.market.rooms.includes(r))!, exit = w.exits.find((e) => homes.includes(e.room) && e.room !== market && e.destination === market)!;
 		assert.ok(market && exit, "a room of its home beside its market");
 		await lightFire(s, 3_600_000, first.beacon);
-		for (const plan of ["huette", "regentonne", "huehnerstall"]) {
+		for (const plan of ["huette", "regentonne", "vogelscheuche"]) {
 			const b: BuildingFields = { buildId: `own-${plan}`, plan, name: plan, room: first.room, x: 0, y: 0, w: 1, h: 1, owner: me, ownerName: first.name, accountId: me, beaconId: first.beacon!, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 };
 			await s.write({ type: "Building", fields: b as never }, null, FOREVER);
 		}

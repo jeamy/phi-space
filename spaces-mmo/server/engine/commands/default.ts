@@ -446,7 +446,7 @@ function countOf(words: string): { count: number | null; what: string } {
 
 const channel: Command = {
 	key: "channel", aliases: ["kanal", "chan"],
-	help: "channel <name> <text> – auf einem Kanal sprechen, den alle hören (kanal ohne Text listet sie)",
+	help: "channel <name> <text> – auf einem Kanal sprechen, den alle hören (kanal allein listet sie)",
 	async func(c, arg) {
 		const [name = "", ...words] = arg.split(/\s+/);
 		const text = words.join(" ").trim();

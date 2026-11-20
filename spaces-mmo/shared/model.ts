@@ -80,7 +80,7 @@ export type RouteFields = { routeId: string; pair: string; island: string; rooms
 	work: number; workNeed: number; by: Record<string, number>; untilWorldMs: number; at: number; points: number };
 /** A road's part in one room, what a page draws (written with its Route): its cells in order from the door or to it,
  *  how many are paved, its state and what it lacks. */
-export type RoadFields = { roadId: string; routeId: string; room: string; to: string; name: string; cells: Array<{ x: number; y: number }>; paved: number; state: RouteFields["state"]; missing: string; votes: string; votedBy?: string[] };
+export type RoadFields = { roadId: string; routeId: string; room: string; to: string; name: string; cells: Array<{ x: number; y: number }>; paved: number; state: RouteFields["state"]; missing: string; votes: string; votedBy?: string[]; /** a finished road's term on the second clock (the page offers mending near its end) */ untilWorldMs?: number };
 /** A festival of a settlement, one per room (`unique`), ending at `endsWorldMs`. */
 /** The wind of an island: an index into `WorldDef.wind.names`. */
 /** What a room grew by (engine/commands/growth.ts), so that a new version of the world file keeps it. */
