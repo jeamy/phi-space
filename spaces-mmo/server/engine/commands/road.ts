@@ -102,7 +102,7 @@ async function roadSave(space: SpaceLike, txn: string, r: RouteFields, fresh = f
 	let before = 0;
 	for (const room of r.rooms) {
 		const cells = r.cells.filter((c) => c.room === room).map((c) => ({ x: c.x, y: c.y }));
-		const part: RoadFields = { roadId: `${r.routeId}:${room}`, routeId: r.routeId, room, to: r.rooms[0] === room ? r.rooms[1] : r.rooms[0], name: nameOfRoute(r, room), cells, paved: Math.max(0, Math.min(cells.length, paved - before)), state: r.state, missing, votes, ...(r.state === "vote" && r.votedBy?.length ? { votedBy: r.votedBy } : {}), ...(r.state === "built" ? { untilWorldMs: r.untilWorldMs } : {}) };
+		const part: RoadFields = { roadId: `${r.routeId}:${room}`, routeId: r.routeId, room, to: r.rooms[0] === room ? r.rooms[1] : r.rooms[0], name: nameOfRoute(r, room), cells, paved: Math.max(0, Math.min(cells.length, paved - before)), state: r.state, missing, votes, ...(r.state === "vote" && r.votedBy?.length ? { votedBy: r.votedBy } : {}), ...(r.state === "vote" ? { voters: r.voters } : {}), ...(r.state === "built" ? { untilWorldMs: r.untilWorldMs } : {}) };
 		await space.write({ type: "Road", fields: part as never }, txn, FOREVER);
 		before += cells.length;
 	}

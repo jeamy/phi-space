@@ -5,6 +5,7 @@ import type { CharView, ItemUses, ObjView, PlanView, Todo } from "../shared/fram
 export type CellEntry = { label: string; line: string; run?: () => void; /** asked before the line is sent (what cannot be undone) */ confirm?: string };
 export type CellInput = {
 	at: { x: number; y: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean;
+	/** The player's account: a road's vote is offered only to its voters. */ account?: string;
 	/** What burns, cheapest carried first (a fire's "nachlegen"). */ fuel: ObjView | undefined;
 	offer?: (name: string) => void;
 	/** The world's recipes (ItemUses.recipes): a building beside one offers those made at its plan. */ recipes?: ItemUses["recipes"];
@@ -39,6 +40,8 @@ const INFO = /^(?:look|inventory|who|time|reputation|bau)\b/;
 const TIRING = /^(?:arbeite|breche|steche|harke|schaufle|wirf|räume|fälle|ernte flur)(?:\s|$)/;
 /** How near its end a building or a road is offered for mending (server/todos.ts warns as early): before, `repariere`
  *  takes the material and gives a term it nearly had. */
+/** Who eats at a coop, pen or hive, by its kind (world.animals.kinds[].key), named on its feeding entries as a dog is. */
+const HERD_NAME: Record<string, string> = { huhn: "Hühner", ente: "Enten", gans: "Gänse", schaf: "Schafe", ziege: "Ziegen", schwein: "Schweine", rind: "Rinder", biene: "Bienen" };
 export const MEND_WITHIN = 5 * 24 * 3_600_000;
 /** Whether a term on the second clock is near its end, or unknown. */
 const worn = (term: number | undefined, decay: number | undefined) => term === undefined || decay === undefined || term - decay < MEND_WITHIN;
@@ -118,7 +121,7 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	if ((o.fuels.includes(name) || o.fuels.includes(as)) && beside.some((b) => b.kind === "beacon")) { const fire = beside.find((b) => b.kind === "beacon")!; add({ label: `${name} nachlegen`, line: `put ${name} in ${fire.name}` }); }
 	for (const b of built) {
 		// for a day, at this building (the same line as its own menu's entry, which then stands for both)
-		if (b.herd && uses.feed[b.herd]?.includes(name)) add({ label: `${name} verfüttern`, line: `füttere ${name} @${b.x},${b.y}` });
+		if (b.herd && uses.feed[b.herd]?.includes(name)) add({ label: `${name} verfüttern (${HERD_NAME[b.herd] ?? "Tiere"})`, line: `füttere ${name} @${b.x},${b.y}` });
 		if (b.keeper && uses.feed[b.keeper]?.includes(name)) add({ label: `${name} verfüttern (${b.keeper === "hund" ? "Hund" : "Katze"})`, line: `füttere ${b.keeper} ${name} @${b.x},${b.y}` });
 		if (b.plan === "kapelle" && uses.offerings.includes(name)) add({ label: `${name} opfern`, line: `opfere ${name}` });
 		if (!KEEPERS.includes(name) && (uses.stores.includes(b.plan ?? "") || (uses.chests.includes(b.plan ?? "") && b.ownerId === me))) add({ label: uses.stores.includes(b.plan ?? "") ? "Ins Lager legen" : "In die Truhe legen", line: `verstaue ${name}` });
@@ -185,7 +188,7 @@ export function cellEntries(input: CellInput): CellEntry[] {
 	return input.tired ? entries.filter((e) => !TIRING.test(e.line)) : entries;
 }
 
-function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos, feed, fed, decay }: CellInput): CellEntry[] {
+function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos, feed, fed, decay, account }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: CellEntry[] = [];
 	/** The recipes made at a building of `plan`: what one carries enough for, and the whole list (server: trade.ts "craft hier"). */
@@ -245,7 +248,7 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 			if (o.location !== room || !(o.runs?.[0] ?? []).some((c) => c.x === at.x && c.y === at.y)) continue;
 			const to = o.name.replace(/^Straße nach /, ""), near = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 2;
 			entries.push({ label: "Straßen ansehen", line: "straße" });
-			if (o.roadState === "vote" && !guest && !(o.votedIds ?? []).includes(me)) entries.push({ label: `Für die Straße nach ${to} stimmen`, line: `straße ja ${to}` }, { label: `Gegen die Straße nach ${to} stimmen`, line: `straße nein ${to}` });
+			if (o.roadState === "vote" && !guest && !(o.votedIds ?? []).includes(me) && (!o.voterIds || (!!account && o.voterIds.includes(account)))) entries.push({ label: `Für die Straße nach ${to} stimmen`, line: `straße ja ${to}` }, { label: `Gegen die Straße nach ${to} stimmen`, line: `straße nein ${to}` });
 			if (o.roadState === "build" && near) {
 				const carried = new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name));
 				for (const n of (o.missing ?? "").split(",").map((p) => p.trim().replace(/^\d+\s+/, "")).filter((n) => n && carried.has(n))) entries.push({ label: `${n} an die Straße liefern`, line: `liefere ${n} an die straße` });
@@ -378,7 +381,7 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 			// a coop, pen or hive: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
 			if (HOUSES[o.plan ?? ""]) {
 				// the house carries its herd while an animal is in it: nothing to feed in an empty one
-				if (o.herd && canFeed(o.herd, o.fedUntil, fed ? fed.feedWorldMs / (fed.houses[o.plan ?? ""] ?? 1) : 0)) entries.push(...feedWith(o.herd, (n) => `Einen Tag mit ${n} füttern`, (n) => here(`füttere ${n}`), { label: "Füttern", line: here("füttere") }));
+				if (o.herd && canFeed(o.herd, o.fedUntil, fed ? fed.feedWorldMs / (fed.houses[o.plan ?? ""] ?? 1) : 0)) { const who = HERD_NAME[o.herd] ?? "Tiere"; entries.push(...feedWith(o.herd, (n) => `${who} einen Tag mit ${n} füttern`, (n) => here(`füttere ${n}`), { label: `${who} füttern`, line: here("füttere") })); }
 				if (o.ownerId === me) {
 					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", schwein: "Trüffel", gans: "Daunen", biene: "Honig" };
 					// this house, not the neighbour beside it; only with something ready (todos.ts "<house>:ertrag")
