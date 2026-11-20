@@ -80,7 +80,7 @@ Ein einzelner Spieler kann Epoche 4 über das Kontolimit (`build.max3 = 18` gez�
 
 ### 3.1 Sackgassen-Prototypen (W1)
 Vier Prototypen haben **keine spielerische Senke** (weder Rezept, Bau, Reparatur, Nahrung, Tierfutter, Opfergabe, Auftrag noch Werkzeug — sie lassen sich nur an NPCs oder im Kaufhaus verkaufen):
-1. `borsten` (`world.ts:437`): nur von Gesa angekauft (`world.ts:242`), fehlt sogar in `shop.prices` (`world.ts:818`).
+1. `borsten` (`world.ts:437`): nur von Gesa angekauft (`world.ts:242`). Dass sie in `shop.prices` fehlen, ist kein Befund: Das Kaufhaus führt nur Erzeugnisse, rund 50 Rohwaren (Fleisch, Felle, Talg, Federn, Saat, Tiere) fehlen dort ebenso.
 2. `kerze` (`world.ts:481`): nur von Marta (`L225`) und im Kaufhaus angekauft. **Text-Widerspruch:** Die Beschreibung lautet *„Die Kapelle und die Schenken zahlen gut dafür“*, aber `kerze` fehlt sowohl in `chapel.offerings` (`world.ts:830`) als auch in `orders.kinds` (`world.ts:929-974`).
 3. `kissen` (`world.ts:485`): nur von Marta (`L225`) und im Kaufhaus angekauft; kein Auftrag, kein Nutzen (z. B. kein Schlaf-Bonus).
 4. `gehaeuse` (`world.ts:496`): bewusster Platzhalter für die noch ungebauten Automaten (Phase 6), aktuell reine Handelsware.
@@ -188,7 +188,7 @@ Weltuhr. Damit gilt dort:
   - Nicht abgedeckt in `epochs.ts`: `bienenstock`, `metzgerei`/`schlachte`, `salzgarten`/`harke`, `gerberei`, `gewaechshaus`, `trees` (`baum`/`fälle`), `interior` (`betrete`/`einladen`/`ausladen`), `sleep` (`schlafe`), `scenery` (`räume`), `siteorder` (`aushang`), `fest`/`zeige`, `segle`, `order`, echtes `beam <ziel>`.
 - **Spielerhilfe und Hinweise (`client/help/articles.ts`, `client/hints.ts`):**
   - Alle 31 Baupläne und 68 Rezepte sind dokumentiert; `tests/help-prices.test.ts` sichert Preise und Abnehmer ab.
-  - In `help.game.commands` (`articles.ts:405+`) fehlen **6 aktive Befehle**: `räume`, `betrete`, `ausladen`, `schlafe`, `baum`, `fälle`; `einladen` kommt einmal vor.
+  - In `help.game.commands` (`articles.ts:405+`) fehlen **7 aktive Befehle**: `räume`, `betrete`, `einladen`, `ausladen`, `schlafe`, `baum`, `fälle` (das eine `einladen` dort gehört zu `gruppe …`).
   - In `help.game.village` (`#epochs`-Tabelle) fehlt **Bienenstock** in der Epoche-1-Zeile (`Fischerdorf`).
   - `client/hints.ts:15, 31` schlägt `bau <plan>` vor, ohne die aktuelle Insel-Epoche zu prüfen, und löst `stands`/`of`-Ersetzungen (`scheit` → `treibholz`) nicht selbst auf.
 - **Abgleich mit `docs/de-docs/siedeln.md`:**
@@ -221,23 +221,53 @@ So ist es geschehen: TypeScript in `6cfb0cf`, `FROZEN` zeigt darauf, Rust im Com
    späteren Schreibvorgänge ersetzen den Eintrag in derselben Transaktion und bleiben ohne `unique`, wie bei `Epoch`.
    Test: `tests/cart.test.ts` (zwei planen zugleich, eine Straße steht).
 
-### Priorität 1 – Spielregeln und Balance schärfen
-1. **E1 / E2 / E4:** Entscheiden, ob Bäume Epochenpunkte geben (oder kein Licht kosten), ob Straßen Lichtpunkte verbrauchen (plus `untilWorldMs > now` in `routePoints`), und ob `noteBuilder` auch bei Beeten/Äckern/Bäumen gilt.
-2. **E3:** `leuchtturm` pro Feuer oder Raum begrenzen (z. B. `onePerRoom: true` oder max. 1 je Feuer).
-3. **R1:** Klären, ob stehende Gebäude bei erloschenem Feuer tatsächlich pausieren sollen (wie in `siedeln.md` beschrieben), oder die Doku an den Ist-Stand anpassen.
-4. **R2 / R3:** Verfall eines Siedlungs-Lagerhauses gegen private Aneignung absichern; Mindestquorum für `antrag abriss` und `antrag steuer` im Rathaus einführen.
-5. **R4 / R5 / R6:** Teilentladen bei `karren entlade`/`zug abholen`, `ShopOrder`-Bereinigung bei Abriss/Verfall, `coversOf` für Feuer-Broadcasts.
+### Priorität 1 – Spielregeln und Balance (umgesetzt am 2026-11-20, in TypeScript und Rust)
 
-### Priorität 2 – Wirtschaft und Welt polieren
-1. **W2:** `kueken` und `ferkel` in Gesas `carry` sowie `salz` in Wilmas `carry` ergänzen (oder Hilfetext anpassen).
-2. **W1:** `kerze` in `chapel.offerings` (und ggf. Aufträge) aufnehmen; `borsten` in `shop.prices` ergänzen.
-3. **W3:** Aufträge nach Insel-Epoche filtern und die 14 unterbezahlten Aufträge über den jeweiligen NPC-Ankaufspreis anheben.
-4. **N1 / N2:** Münzkreislauf für NPCs schließen (z. B. `shipOff()` vergütet Ankauf-Waren in die Händlerkasse zurück; Hüter verkaufen oder erhalten ein kleines Betriebsbudget; Siedler-Hühnerställe ggf. bestücken oder aus `PLANS` entfernen).
+1. **E1:** Ein Baum zählt mit seinem Lichtpunkt zum Bestand seiner Insel (`epoch.ts` `islandPoints`; `epoche` nennt die
+   Bäume), und die Grenze von 8 Bäumen gilt je Konto auf jeder Insel statt in der ganzen Welt (`trees.ts`).
+2. **E2:** Straßen bleiben ein gemeinsames Werk ohne Licht und zählen 2 Punkte; behoben ist nur, dass eine abgelaufene
+   Straße bis zum nächsten Tick weiterzählte (`road.ts` `routePoints`).
+3. **E4:** Wer ein Beet umgräbt, einen Acker anlegt oder einen Baum pflanzt, zählt wie ein Bauender zu den Aktiven
+   seines Feuers (`noteBuilder` in `garden.ts`, `field.ts`, `trees.ts`).
+4. **E3:** Ein Feuer trägt einen Leuchtturm; ein zweiter wird abgelehnt, gebaut oder abgesteckt (`build.ts`). Türme, die
+   schon stehen, bleiben.
+5. **E5:** nicht angefasst (ohne Wirkung, oben).
+6. **R1:** Der Entwurf folgt dem Code: Bauten arbeiten bei erloschenem Feuer weiter, und `siedeln` nennt, was ein
+   erloschenes Feuer tatsächlich kostet.
+7. **R2:** Fällt ein Lagerhaus in einer Siedlung, liegt sein Inhalt offen an seinem Platz (im Raum, auf seiner Ecke) statt
+   im Nachlass des Besitzers (`build.ts` `buildSweep`). Die Truhe jedes anderen Baus bleibt Nachlass.
+8. **R3:** `antrag abriss` und `antrag steuer` brauchen zwei Ja-Stimmen, wo zwei oder mehr Siedler wohnen
+   (`townhall.ts`, die Siedler wie bei der Straßenwahl gezählt: Menschen mit Hütte oder Siedlerrang); abgelehnt wird mit
+   „Dafür braucht es 2 Stimmen“.
+9. **R4:** `karren entlade` und `zug abholen` nehmen, was die Tasche noch trägt; der Rest bleibt auf dem Karren oder am
+   Bahnhof (`cart.ts`).
+10. **R5:** Der Sweep räumt die Aufträge eines Kaufhauses ab, das nicht mehr steht (`build.ts`).
+11. **R6:** „flammt auf“, „brennt“ und „ist erloschen“ hören alle Räume, die das Licht gerade deckt (`fire.ts`).
+12. **R7:** Das Füttern eines fremden Wächters gibt den Dienst „tiere“; `settlementRanks` zählt nur stehende Bauten; die
+    Fehlermeldungen nennen Dinge beim Namen („Dir fehlt: 3× Tang“); die drei unbenutzten Variablen sind weg (nur
+    TypeScript).
 
-### Priorität 3 – Dokumentation und Spielerführung
-1. Die 6 fehlenden Befehle in `help.game.commands` und `Bienenstock` in `help.game.village` ergänzen.
-2. `hints.ts` um Epochen-Prüfung erweitern.
-3. Kopfteil von `docs/de-docs/siedeln.md` und `docs/de-docs/README.md` aktualisieren.
+### Priorität 2 – Wirtschaft und Welt (umgesetzt am 2026-11-20, Welt Version 55)
+
+1. **W2:** Gesa führt 2 Küken und 1 Ferkel, Wilma 4 Salz.
+2. **W1:** `kerze` ist eine Opfergabe der Kapelle. `borsten`, `kissen` und `gehaeuse` bleiben reine Handelsware.
+3. **W3:** Auftragsarten tragen die Epoche ihrer Waren (`orders.kinds[].epoch`, 16 ab dem Dorf, 4 ab der Stadt), und
+   eine Tafel hängt nur aus, was die Epoche ihrer Insel hergibt (`trade.ts` `ordersTick`). 15 Aufträge zahlen jetzt eine
+   Münze mehr als der beste Händler ihrer Insel (für `proviant` und `kaese`: der Welt): `holz` 5, `muscheln` 3,
+   `buendel` 6, `seile` 7, `kaiholz` 7, `riffholz` 7, `schaerenholz` 5, `schaerenmuscheln` 4, `rauchbuendel` 9,
+   `krabbenholz` 7, `segel` 17, `kuchen` 33, `tuch` 17, `proviant` 17, `kaese` 15.
+4. **N1 / N2:** Die Münzen eines NPCs, der ankauft, wachsen wie sein Warenbestand nach: eine je Welttag, bis zu dem, womit
+   er anfing (`trade.ts` `restock`).
+5. **Offen:** W4 (Behälter für gekochte Speisen), W5 (kleine Arbitrage), N3 (leere Hühnerställe der Siedler, ihre
+   Pauschalpreise) und N4.
+
+### Priorität 3 – Dokumentation und Spielerführung (umgesetzt am 2026-11-20)
+
+1. Die 7 Befehle stehen in `help.game.commands`, Bienenstock und Bäume in der Epochentabelle, dazu die neuen Regeln
+   (Bäume je Insel, ein Leuchtturm je Feuer, Aufträge nach Epoche, zwei Stimmen für Abriss und Steuer), deutsch und
+   englisch.
+2. Der Hinweis „Fehlt so ein Bau, kann man ihn bauen“ nennt die Epoche des Bauplans („ab Dorf“).
+3. Kopfteil von `siedeln` (deutsch und englisch) und die beiden Verzeichnisse der Dokumente sind nachgezogen.
 
 ---
 

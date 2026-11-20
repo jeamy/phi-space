@@ -142,7 +142,7 @@ async function lightOf(c: CommandCtx, beaconId: string): Promise<number> {
 	return Math.min(Math.max(more.max, base), base + active * more.perPlayer) + bonus;
 }
 /** The actor counts as building at this fire. Figures fill the light, they do not widen it. */
-async function noteBuilder(c: CommandCtx, beaconId: string): Promise<void> {
+export async function noteBuilder(c: CommandCtx, beaconId: string): Promise<void> {
 	if (!c.world.building?.lightGrowth || !c.account || c.account.guest || c.account.settler) return;
 	const key = { beaconId, accountId: c.account.accountId };
 	await c.space.takeIfExists({ type: "FireBuilder", fields: key }, NO_WAIT, { txn: c.txn });
@@ -374,6 +374,8 @@ export const bau: Command = {
 		if (plan.onePerRoom && ((await c.space.count({ type: "Building", fields: { room: c.actor.room, plan: plan.key } })) || (await c.space.count({ type: "Site", fields: { room: c.actor.room, plan: plan.key } })))) throw new CommandError(`Ein Raum hat höchstens einen Bau „${plan.name}“, und hier steht er schon (oder seine Baustelle).`);
 		const light = await lightFor(c, plan.points);
 		if (typeof light === "string") throw new CommandError(light);
+		// a fire carries one lighthouse: a second would add its light again for a few points
+		if (plan.lightBonus && ((await c.space.count({ type: "Building", fields: { beaconId: light.beaconId, plan: plan.key } })) || (await c.space.count({ type: "Site", fields: { beaconId: light.beaconId, plan: plan.key } })))) throw new CommandError(`Ein Feuer trägt höchstens einen Bau „${plan.name}“, und dieses hat ihn schon (oder seine Baustelle).`);
 		await noteBuilder(c, light.beaconId);
 		const room = await roomOf(c);
 		const at = m[2] !== undefined ? { x: Number(m[2]), y: Number(m[3]) } : undefined;
@@ -932,7 +934,14 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 			await releaseLight(space, txn, b.beaconId, b.points ?? 1);
 			await stopLoads(space, txn, b.buildId, life);
 			const inside = await space.readAll({ type: "Item", fields: { location: b.buildId } });
-			if (inside.length) {
+			// what a settlement laid into its warehouse is not its owner's (as with `abriss` and a vote): when the warehouse
+			// falls it lies in the open at its place, for whoever of the settlement comes by
+			if (inside.length && w && planOf(w, b.plan)?.store && (await settlementIn(space, b.room, txn))) {
+				for (const it of inside) {
+					const t = await space.takeIfExists({ id: it.id }, NO_WAIT, { txn });
+					if (t) await space.write({ type: t.type, types: t.types.slice(1), fields: { ...t.fields, location: b.room, x: b.x, y: b.y } as never }, txn, FOREVER);
+				}
+			} else if (inside.length) {
 				const est: EstateFields = { estateId: `est-${b.buildId}`, accountId: b.accountId, ownerName: b.ownerName, room: b.room, name: b.name, untilWorldMs: now + (w?.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
 				await space.write({ type: "Estate", fields: est as never }, txn, FOREVER);
 				for (const it of inside) await moveItem(space, txn, String(it.fields.itemId), b.buildId, est.estateId);
@@ -974,6 +983,9 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 	}
 	// a rest, a blessing, a beam's pause and a meal end on the life clock (their commands write them by it)
 	for (const type of ["WorkRest", "Blessing", "BeamRest", "Sated"]) for (const e of await space.readAll({ type })) if (Number(e.fields.untilWorldMs) <= life) await space.takeIfExists({ id: e.id }, NO_WAIT);
+	// the orders of a department store that stands no more (torn down, voted away, fallen)
+	const shops = w?.shop ? new Set((await space.readAll({ type: "Building", fields: { plan: w.shop.plan } })).map((e) => String(e.fields.buildId))) : null;
+	if (shops) for (const e of await space.readAll({ type: "ShopOrder" })) if (!shops.has(String(e.fields.buildId))) await space.takeIfExists({ id: e.id }, NO_WAIT);
 	// flour (or grain back) nobody fetched
 	for (const e of await space.readAll({ type: "MillLoad" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
 }

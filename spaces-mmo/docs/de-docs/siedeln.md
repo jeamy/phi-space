@@ -1,6 +1,8 @@
 # Siedeln, Bauen und Gärtnern (Entwurf)
 
-Stand 2026-10-28, überarbeitet 2026-10-29 (Logikfehler und Lücken der ersten Fassung), Stand der Umsetzung 2026-10-31.
+Stand 2026-10-28, überarbeitet 2026-10-29 (Logikfehler und Lücken der ersten Fassung), Stand der Umsetzung 2026-10-31;
+die Schritte 5 bis 8 kamen danach (siehe „Reihenfolge“ am Ende, dort steht zu jedem Teil, was gebaut ist), und die Regeln
+wurden am 2026-11-19 gegen den Code geprüft ([die Analyse](spielregeln-analyse-2026-11-19.md)).
 Gebaut sind der Chat zwischen Spielern, Schritt 1 (Hütte und Baustelle), Schritt 2 (Beete, Samen, Gießen, Ernte,
 Patenschaft; Zier- und Gemeinschaftsbeete, Kreuzen und Benennen, die Gärtnerin; Hasen, Zaun und Vogelscheuche), Schritt 3
 (Fluren, Windmühle und Backhaus, Tiere, Rehe, Füchse und Mäuse mit ihren Wächtern), Schritt 4 (Epochen, Siedlung) und
@@ -100,8 +102,11 @@ Gebaut wird nur, wo ein Feuer den Nebel fernhält. Ein Bau braucht Licht, und je
 
 - Ein **Feuer** deckt Räume ([welt.md](../welt.en.md)); ein **Leuchtturm** (Ausbau eines Feuers) deckt mehr Räume oder
   brennt länger je Brennstoff.
-- Erlischt das Feuer, verfallen die Bauten in seinem Licht nicht sofort, aber sie **arbeiten nicht** (keine Ware, kein
-  Markt), und der Nebel nagt an ihnen (Verfall, unten).
+- Erlischt das Feuer, verfallen die Bauten in seinem Licht nicht sofort und **arbeiten weiter** (entschieden am
+  2026-11-20: Die erste Fassung dieses Entwurfs ließ sie stillstehen, gebaut wurde das nie). Ein erloschenes Feuer kostet,
+  was der Nebel bringt: Der Nebel steigt, die Ausgänge in ihn schließen sich bis auf den kürzesten Weg zu einem Licht,
+  Pflanzen und Bäume wachsen bis zu zweieinhalbmal langsamer, das Wild kommt, nichts Neues wird abgesteckt (kein Bau,
+  Beet, Acker oder Baum), Signalketten reißen, und niemand beamt in die Region.
 - **Licht reicht für eine bestimmte Menge Bauten.** Jedes Feuer trägt **Lichtpunkte** (Beispiel: 20, ein Leuchtturm 50),
   verteilt über alle Räume, die es deckt. Jeder Bau und jeder Garten belegt davon so viele, wie er zum Bestand der Epoche
   zählt (unten, „Epochen“); deckt ein Raum zwei Feuer, zählen beide zusammen. Ist das Licht voll, nimmt `bau` dort
@@ -341,7 +346,8 @@ Bäume stehen auf je einer Zelle und bleiben stehen (`server/engine/commands/tre
 Sorten: Birke, Kopfweide, Apfelbaum, Birnbaum und Eiche.
 
 - **Pflanzen**: `pflanze <Samen> [x y]` mit einem Spaten, im Licht eines Feuers, auf einer freien Zelle; höchstens
-  `maxTrees` (8) je Figur. Die Samen sind Birkensamen, Weidenstecklinge, Apfel- und Birnenkerne und Eicheln.
+  `maxTrees` (8) je Konto auf jeder Insel (seit 2026-11-20; ein Baum zählt mit seinem Lichtpunkt zum Bestand seiner
+  Insel, wie ein Beet). Die Samen sind Birkensamen, Weidenstecklinge, Apfel- und Birnenkerne und Eicheln.
   `sammle samen` findet sie, wo die Deko Bäume zeigt (T, A), jede Sorte auf ihren eigenen Inseln. Ein Gartensamen
   gleichen Namens geht vor: Der Baumsamen wird nur genommen, wenn er unter dem Mitgetragenen am besten passt.
 - **Wachsen**: Ein Setzling wird zum jungen Baum und dann zum ausgewachsenen. Jede Stufe dauert Welttage (Birke 1+2,

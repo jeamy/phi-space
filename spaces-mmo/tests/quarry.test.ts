@@ -39,7 +39,7 @@ test("stone: a pickaxe of rubble; a quarry gives three for its wear and a rest; 
 
 		assert.match(await does(p, "breche", "direkt neben"), /Stein bricht man direkt neben einem Steinbruch/);
 		await s.write({ type: "Building", fields: building("quarry", "steinbruch", "Steinbruch", c.x + 1, c.y) as never }, null, FOREVER);
-		assert.match(await does(p, "breche", "Werkzeug"), /Werkzeug: spitzhacke/);
+		assert.match(await does(p, "breche", "Werkzeug"), /Werkzeug: Spitzhacke/);
 		await does(p, "craft spitzhacke", "Spitzhacke her");
 		assert.equal((await pack(s, me, "spitzhacke"))[0]!.wear, 6);
 		assert.match(await does(p, "breche", "aus dem Fels"), /Du brichst 3 Stein aus dem Fels/);
@@ -77,7 +77,7 @@ test("clay and bricks: a spade cuts clay and stays whole; a brickworks burns it"
 		await give(s, me, "treibholz", 2);
 		assert.match(await does(p, "steche", "direkt neben"), /Lehm sticht man direkt neben einer Lehmgrube/);
 		await s.write({ type: "Building", fields: building("pit", "lehmgrube", "Lehmgrube", c.x + 1, c.y) as never }, null, FOREVER);
-		assert.match(await does(p, "steche", "Werkzeug"), /Werkzeug: spaten/);
+		assert.match(await does(p, "steche", "Werkzeug"), /Werkzeug: Spaten/);
 		await give(s, me, "spaten", 1);
 		assert.match(await does(p, "steche", "aus der Grube"), /Du stichst 3 Lehm aus der Grube/);
 		assert.equal((await pack(s, me, "spaten")).length, 1, "the spade stays");

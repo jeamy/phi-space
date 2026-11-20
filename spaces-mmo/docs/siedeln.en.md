@@ -1,6 +1,8 @@
 # Settling, building and gardening (draft)
 
-Status 2026-10-28, revised 2026-10-29 (logic errors and gaps of the first version), implementation status 2026-10-31.
+Status 2026-10-28, revised 2026-10-29 (logic errors and gaps of the first version), implementation status 2026-10-31;
+steps 5 to 8 were built after that (see "Order" at the end, which says for each part what is built), and the rules were
+checked against the code on 2026-11-19 ([the analysis](de-docs/spielregeln-analyse-2026-11-19.md), German).
 Built are the chat between players, step 1 (hut and building site), step 2 (beds, seeds, watering, harvest, sponsorship;
 ornamental and communal beds, crossing and naming, the gardener; hares, fence and scarecrow), step 3 (fields, windmill
 and bakery, animals, deer, foxes and mice with their guardians), step 4 (epochs, settlement) and, from step 5, the
@@ -114,8 +116,11 @@ Building happens only where a fire keeps the fog away. A building needs light, a
 
 - A **fire** covers rooms ([welt.en.md](welt.en.md)); a **lighthouse** (extension of a fire) covers more rooms or burns longer
   per fuel.
-- If the fire goes out, the buildings in its light do not decay immediately, but they **do not work** (no goods, no
-  market), and the fog gnaws at them (decay, below).
+- If the fire goes out, the buildings in its light do not decay immediately and **keep working** (decided 2026-11-20:
+  the first version of this draft had them stand still, which was never built). What a dead fire costs is what the fog
+  brings: the fog rises, the exits into it close but for the shortest way to a light, plants and trees grow up to two and
+  a half times slower, the wild comes, nothing new is staked out (no building, bed, field or tree), signal chains break
+  and nobody beams into the region.
 - **Light suffices for a certain number of buildings.** Every fire carries **light points** (example: 20, a lighthouse
   50), distributed over all rooms it covers. Every building and every garden occupies as many of them as it counts
   towards the holdings of the epoch (below, "Epochs"); if a room is covered by two fires, both count together. If the
@@ -386,7 +391,7 @@ Trees stand on one cell each and for good (`server/engine/commands/trees.ts`, th
 birch, pollard willow, apple tree, pear tree and oak.
 
 - **Planting**: `pflanze <seed> [x y]` with a spade, in a fire's light, on a free cell, at most `maxTrees` (8) per
-  character. The seeds are birch seeds, willow cuttings, apple and pear pips and acorns. `sammle samen` finds them where
+  account on each island (since 2026-11-20; a tree counts towards its island's stock by its light point, like a bed). The seeds are birch seeds, willow cuttings, apple and pear pips and acorns. `sammle samen` finds them where
   the decor shows trees (T, A), each sort on its own islands. A garden seed of the same name wins: the tree seed is taken
   only when it is the best match among what one carries.
 - **Growing**: a seedling, then a young tree, then grown. Each stage takes world days (birch 1+2, willow 1+1, apple and

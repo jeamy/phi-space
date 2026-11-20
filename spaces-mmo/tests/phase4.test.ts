@@ -343,9 +343,9 @@ test("craft with a count: forms of the name and of the number, as many as the pa
 		assert.equal((await pack(s, a.me, "tangseil")).length, 4);
 		const from = a.p.frames.length;
 		await does(a.p, "craft 3x tangseil", "Du stellst Tangseil her.");
-		await a.p.until((f) => f.t === "msg" && f.m.text === "Für 3 reicht es nicht, es wurden 1. Dir fehlt: 3× tang.", 10_000, from);
+		await a.p.until((f) => f.t === "msg" && f.m.text === "Für 3 reicht es nicht, es wurden 1. Dir fehlt: 3× Tang.", 10_000, from);
 		assert.equal((await pack(s, a.me, "tang")).length, 0);
-		assert.match(await does(a.p, "craft 2 tangseile", "Dir fehlt"), /3× tang/);
+		assert.match(await does(a.p, "craft 2 tangseile", "Dir fehlt"), /3× Tang/);
 		assert.match(await does(a.p, "craft 21 tangseile", "Höchstens"), /Höchstens 20/);
 		assert.match(await does(a.p, "craft 3 kiesel", "Ein Rezept"), /„3 kiesel“/);
 		// two knives of 5 uses: seven bundles, the first breaks in between, the second keeps its wear
@@ -366,7 +366,7 @@ test("craft: inputs are used up, the output appears, a tool wears with every use
 		const a = await player(srv.url, "Schnitzer");
 		await give(s, a.me, "muschel", 2);
 		await give(s, a.me, "treibholz", 16);
-		assert.match(await does(a.p, "craft holzbuendel", "Werkzeug"), /muschelmesser/);
+		assert.match(await does(a.p, "craft holzbuendel", "Werkzeug"), /Muschelmesser/);
 		await does(a.p, "craft muschelmesser", "Du stellst Muschelmesser her.");
 		assert.equal((await pack(s, a.me, "muschel")).length, 0);
 		assert.equal((await pack(s, a.me, "muschelmesser"))[0]!.wear, 5);

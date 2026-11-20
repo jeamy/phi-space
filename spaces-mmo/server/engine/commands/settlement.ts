@@ -98,7 +98,7 @@ export async function settlementRanks(space: SpaceLike, w: WorldDef): Promise<Ar
 	const buildings = (await space.readAll({ type: "Building" })).map((e) => fieldsOf<BuildingFields>(e));
 	const now = await decayNowOf(space);
 	return (await Promise.all((await space.readAll({ type: "Settlement" })).map(async (e) => {
-		const s = fieldsOf<SettlementFields>(e), here = buildings.filter((b) => b.room === s.room), tenders = await tendersIn(space, w, s.room, now);
+		const s = fieldsOf<SettlementFields>(e), here = buildings.filter((b) => b.room === s.room && b.untilWorldMs > now), tenders = await tendersIn(space, w, s.room, now);
 		return { name: s.name, points: here.reduce((n, b) => n + (b.points ?? 1) + Math.floor((b.turnover ?? 0) / (w.shop?.turnoverPerPoint ?? 1)), 0) + tenders, parks: here.filter((b) => b.plan === "park").length, tenders };
 	}))).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
 }

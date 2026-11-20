@@ -27,6 +27,10 @@ import { ANIMAL_COMMANDS } from "../server/engine/commands/animals.ts";
 import { BEAM_COMMANDS } from "../server/engine/commands/beam.ts";
 import { EPOCH_COMMANDS } from "../server/engine/commands/epoch.ts";
 import { SETTLEMENT_COMMANDS } from "../server/engine/commands/settlement.ts";
+import { SCENERY_COMMANDS } from "../server/engine/commands/scenery.ts";
+import { INTERIOR_COMMANDS } from "../server/engine/commands/interior.ts";
+import { SLEEP_COMMANDS } from "../server/engine/commands/sleep.ts";
+import { TREE_COMMANDS } from "../server/engine/commands/trees.ts";
 import { HELP_OF_KIND, HELP_OF_PLAN } from "../client/cellActions.ts";
 import { LINE as CHAT_LINE } from "../server/chat.ts";
 
@@ -60,7 +64,7 @@ test("help links point at existing articles and anchors", () => {
 });
 
 test("every command in the command tables exists in the engine, under its English and German names", () => {
-	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...CART_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...SIGNAL_COMMANDS, ...FISHING_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...BEAM_COMMANDS, ...SETTLEMENT_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
+	const known = new Set([...SCENERY_COMMANDS, ...INTERIOR_COMMANDS, ...SLEEP_COMMANDS, ...TREE_COMMANDS, ...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...CART_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...SIGNAL_COMMANDS, ...FISHING_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...BEAM_COMMANDS, ...SETTLEMENT_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 	known.add("help"); known.add("hilfe"); known.add("?"); // helpCommand is built per room
 	// the chat's words never reach the engine: the gateway catches them (server/chat.ts)
 	for (const w of /\^\(([^)]+)\)/.exec(CHAT_LINE.source)![1]!.split("|")) known.add(w);

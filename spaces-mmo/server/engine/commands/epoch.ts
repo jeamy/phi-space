@@ -8,7 +8,7 @@
 //   on; only new plans of that epoch are refused (`bau`, `flur anlegen`) until the stock is enough again.
 import { routePoints } from "./road.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BedFields, type BuildingFields, type EpochFields, type FieldFields } from "../../model.ts";
+import { fieldsOf, type BedFields, type BuildingFields, type EpochFields, type FieldFields, type TreeFields } from "../../model.ts";
 import { decayNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, msgOptions, type CommandCtx } from "../context.ts";
@@ -27,19 +27,22 @@ export const epochName = (w: WorldDef, epoch: number) => w.epochs?.names[epoch -
 /** The epoch's name with its article ("ein Dorf", "eine Stadt"). */
 const a = (w: WorldDef, epoch: number) => w.epochs?.a[epoch - 1] ?? `Epoche ${epoch}`;
 
-/** The held stock of every island of this region: buildings, beds and fields that still stand, by their light points. */
-export async function islandPoints(space: SpaceLike, w: WorldDef, now: number): Promise<Map<string, { points: number; buildings: number; beds: number; fields: number }>> {
-	const out = new Map<string, { points: number; buildings: number; beds: number; fields: number }>();
-	for (const r of w.rooms) if (r.island && !out.has(r.island)) out.set(r.island, { points: 0, buildings: 0, beds: 0, fields: 0 });
-	const add = (room: string, points: number | undefined, what: "buildings" | "beds" | "fields") => {
+export type IslandStock = { points: number; buildings: number; beds: number; fields: number; trees: number };
+/** The held stock of every island of this region: buildings, beds, fields and trees that still stand, by their light points. */
+export async function islandPoints(space: SpaceLike, w: WorldDef, now: number): Promise<Map<string, IslandStock>> {
+	const out = new Map<string, IslandStock>();
+	for (const r of w.rooms) if (r.island && !out.has(r.island)) out.set(r.island, { points: 0, buildings: 0, beds: 0, fields: 0, trees: 0 });
+	const add = (room: string, points: number | undefined, what: "buildings" | "beds" | "fields" | "trees") => {
 		const i = islandOf(w, room), t = i ? out.get(i) : undefined;
 		if (t) { t.points += points ?? 1; t[what] += points ?? 1; }
 	};
 	for (const e of await space.readAll({ type: "Building" })) { const b = fieldsOf<BuildingFields>(e); if (b.untilWorldMs > now) add(b.room, b.points, "buildings"); }
 	for (const e of await space.readAll({ type: "Bed" })) { const b = fieldsOf<BedFields>(e); if (b.untilWorldMs > now) add(b.room, b.points, "beds"); }
 	for (const e of await space.readAll({ type: "Field" })) { const f = fieldsOf<FieldFields>(e); if (f.untilWorldMs > now) add(f.room, f.points, "fields"); }
-	// a finished road counts as a building of its island (road.ts)
-	for (const [island, points] of await routePoints(space)) { const t = out.get(island); if (t) { t.points += points; t.buildings += points; } }
+	// a planted tree takes light like a bed and counts like one (trees.ts)
+	for (const e of await space.readAll({ type: "Tree" })) { const t = fieldsOf<TreeFields>(e); add(t.room, t.points, "trees"); }
+	// a finished road counts as a building of its island while it stands (road.ts)
+	for (const [island, points] of await routePoints(space, now)) { const t = out.get(island); if (t) { t.points += points; t.buildings += points; } }
 	return out;
 }
 
@@ -114,9 +117,9 @@ const epoche: Command = {
 		const island = islandOf(c.world, c.actor.room);
 		if (!island) throw new CommandError("Dieser Ort gehört zu keiner Insel.");
 		const now = await decayNowOf(c.space, c.txn), limits = await thresholds(c.space);
-		const t = (await islandPoints(c.space, c.world, now)).get(island) ?? { points: 0, buildings: 0, beds: 0, fields: 0 };
+		const t = (await islandPoints(c.space, c.world, now)).get(island) ?? { points: 0, buildings: 0, beds: 0, fields: 0, trees: 0 };
 		const epoch = await epochOf(c.space, island, c.txn), last = c.world.epochs.names.length;
-		const parts = `Bauten ${t.buildings}, Beete ${t.beds}, Äcker ${t.fields}`;
+		const parts = `Bauten ${t.buildings}, Beete ${t.beds}, Äcker ${t.fields}, Bäume ${t.trees}`;
 		const next = epoch < last ? ` ${cap(a(c.world, epoch + 1))} braucht ${limits[epoch - 1]} Punkte${unlocks(c.world, epoch + 1) ? `; dann gibt es ${unlocks(c.world, epoch + 1)}` : ""}.` : "";
 		const forced = (await setting(c.space, "epoch.force")) > 0;
 		const due = forced ? " (Zum Testen festgesetzt: Einstellung „Epoche erzwingen“.)" : epochFor(t.points, limits, last) !== epoch ? " (Die Zählung holt das bald nach.)" : "";

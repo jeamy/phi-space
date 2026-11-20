@@ -85,7 +85,18 @@ test("a town hall: a motion, one vote each with the last counting, and after a d
 		await end();
 		assert.equal(await motionTick(s, w, 60_000), 1);
 		assert.equal((await s.readAll({ type: "Building", fields: { buildId: "shed" } })).length, 1, "a tie keeps it");
+		// one voice alone tears nothing down where several settlers live: it takes two
 		await does(b, "antrag abriss", "den Abriss");
+		from = a.frames.length;
+		await end();
+		assert.equal(await motionTick(s, w, 60_000), 1);
+		await a.until((f) => f.t === "msg" && /ist abgelehnt, 1 dafür, 0 dagegen\. Dafür braucht es 2 Stimmen\./.test(f.m.text), 10_000, from);
+		assert.equal((await s.readAll({ type: "Building", fields: { buildId: "shed" } })).length, 1, "one yes is not enough");
+		await does(b, "antrag abriss", "den Abriss");
+		// a third settler (a hut of her own) gives the second voice
+		const cc = chars[2]!.fields as unknown as CharacterFields & { accountId: string };
+		await s.write({ type: "Building", fields: building("hut-c", "huette", "Hütte", 4, 1, cc) as never }, null, FOREVER);
+		await does(c, "stimme ja", "Deine Stimme");
 		from = a.frames.length;
 		await end();
 		assert.equal(await motionTick(s, w, 60_000), 1);

@@ -89,7 +89,7 @@ test("as a player: a village plan is refused in the fishing village, allowed in 
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
 		await lightFire(s, 600_000, "feuer-bucht");
-		assert.match(await does(p, "epoche", "Punkte"), /Graue Insel ist ein Fischerdorf \(Epoche 1\): 0 Punkte gehaltener Bestand \(Bauten 0, Beete 0, Äcker 0\)\. Ein Dorf braucht 15 Punkte; dann gibt es Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Kapelle, Metzgerei, Salzgarten, Werkstatt, Straßen, Äcker\./);
+		assert.match(await does(p, "epoche", "Punkte"), /Graue Insel ist ein Fischerdorf \(Epoche 1\): 0 Punkte gehaltener Bestand \(Bauten 0, Beete 0, Äcker 0, Bäume 0\)\. Ein Dorf braucht 15 Punkte; dann gibt es Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Kapelle, Metzgerei, Salzgarten, Werkstatt, Straßen, Äcker\./);
 		assert.match(await does(p, "bau", "Baupläne"), /Windmühle \(erst ab Dorf\)/);
 		assert.match(await does(p, "bau windmühle", "braucht"), /Der Bauplan „Windmühle“ braucht ein Dorf \(Epoche 2\); Graue Insel hat noch nicht genug Bestand \(ab 15 Punkten/);
 		await give(s, me, "spaten", 1);

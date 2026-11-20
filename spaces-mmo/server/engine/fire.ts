@@ -48,7 +48,8 @@ export async function feed(c: CommandCtx, item: { e: Taken; f: ItemFields }, bea
 	const had = mine ? fieldsOf<ContributionFields>(mine) : { beaconId: beacon.beaconId, charId: c.actor.charId, name: c.actor.name, pieces: 0, ms: 0 };
 	await c.space.write({ type: "Contribution", fields: { ...had, name: c.actor.name, pieces: had.pieces + 1, ms: had.ms + fuel } satisfies ContributionFields as never }, c.txn, FOREVER);
 	if (!o.quiet) await msg(c, "*", "info", `$you() $conj(legst|legt) ${item.f.name} ins ${beacon.name}. Es ${burnText({ beaconId: beacon.beaconId, until, litAt: now }, now)}.`, { templ: true });
-	if (!left) await say(c.space, c.msgLeaseMs, beacon.covers, "world", `Das ${beacon.name} flammt auf.`, c.txn);
+	// everyone its light reaches hears it: the rooms of the world file, a lighthouse's and a signal chain's (coversOf)
+	if (!left) await say(c.space, c.msgLeaseMs, (await coversOf(c.space, c.world, c.txn)).get(beacon.beaconId) ?? beacon.covers, "world", `Das ${beacon.name} flammt auf.`, c.txn);
 	return { until, now };
 }
 
@@ -72,7 +73,7 @@ export async function fireTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 			const beacon = fieldsOf<BeaconFields>(b);
 			const lit = isLit(await flameOf(space, def.beaconId, txn), await worldNowOf(space, txn));
 			await space.write({ type: "Beacon", fields: { ...beacon, lit } as never }, txn, FOREVER);
-			if (lit !== beacon.lit) await say(space, leaseMs, beacon.covers, "world", lit ? `Das ${beacon.name} brennt.` : `Das ${beacon.name} ist erloschen. Der Nebel kriecht heran.`, txn);
+			if (lit !== beacon.lit) await say(space, leaseMs, (await coversOf(space, w, txn)).get(def.beaconId) ?? beacon.covers, "world", lit ? `Das ${beacon.name} brennt.` : `Das ${beacon.name} ist erloschen. Der Nebel kriecht heran.`, txn);
 			await space.commit(txn);
 		} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
 	}

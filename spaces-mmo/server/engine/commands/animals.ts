@@ -269,6 +269,7 @@ async function feedKeeper(c: CommandCtx, kp: KeeperDef | null, arg: string): Pro
 	if (!count) throw new CommandError("Das Futter ist gerade nicht greifbar; bitte noch einmal.");
 	const until = from + count * feedMs;
 	await putBack(c, { ...b, keeper: { ...b.keeper, fedUntilWorldMs: until } });
+	if (!mine(c, b)) await creditDeed(c, "tiere"); // feeding another's guard is the same good turn as feeding its herd
 	await msg(c, "*", "emote", `${c.actor.name} füttert ${k.acc} von ${b.ownerName} mit ${count} ${offer[0]!.f.name}; satt für etwa ${hours((until - now) / patient)}.`);
 }
 

@@ -59,7 +59,7 @@ test("planks: a log makes a whole plank, driftwood goes first; a barrel and a cr
 		assert.match(await does(p, "craft 2 scheitbohle", "Bohle"), /Bohle/);
 		assert.equal((await items(s, me)).filter((i) => i.proto === "bohle").length, 3, "one plank of two driftwood, two of two logs");
 		assert.equal((await items(s, me)).filter((i) => i.proto === "treibholz").length, 0);
-		assert.match(await does(p, "craft scheitbohle", "fehlt"), /Dir fehlt: 1× scheit/);
+		assert.match(await does(p, "craft scheitbohle", "fehlt"), /Dir fehlt: 1× Scheit/);
 
 		// a barrel keeps juice once; without one it spoils
 		await s.write(building("h-tisch", "huette", "Hütte", c.room, c.x - 3, c.y - 1, 2, 2, me, c.accountId, kept + 30 * D));

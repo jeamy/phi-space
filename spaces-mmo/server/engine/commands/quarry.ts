@@ -18,7 +18,7 @@ async function dig(c: CommandCtx, q: { plan: string; tool?: string; makes: strin
 	const { now, rest } = await rested(c);
 	// the salt garden needs no tool: the sun does the work
 	const tool = q.tool ? (await inventory(c)).find((i) => i.f.proto === q.tool) : undefined;
-	if (q.tool && !tool) throw new CommandError(`Dafür brauchst du ein Werkzeug: ${q.tool}.`);
+	if (q.tool && !tool) throw new CommandError(`Dafür brauchst du ein Werkzeug: ${c.world.prototypes.find((x) => x.key === q.tool)?.name ?? q.tool}.`);
 	const p = await resolvePrototype(c.space, q.makes);
 	if (!p) throw new CommandError("Der Steinbruch ist kaputt.");
 	const left = !tool || tool.f.wear === undefined ? 1 : tool.f.wear - 1;

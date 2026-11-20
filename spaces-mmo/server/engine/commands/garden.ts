@@ -31,7 +31,7 @@ import { harvestField, sowOnField } from "./field.ts";
 import { harvestTree, meansTree, plantTree } from "./trees.ts";
 import { furnishingFor } from "./interior.ts";
 import { collect, meansYield } from "./animals.ts";
-import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
+import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, noteBuilder, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 import { random, randomBytes, randomInt } from "../source.ts";
 import { creditDeed } from "../deeds.ts";
 
@@ -137,6 +137,7 @@ async function dig(c: CommandCtx, arg: string): Promise<void> {
 	if (kind !== "gemein" && (await c.space.readAll({ type: "Bed", fields: { accountId: c.account.accountId } })).map((e) => fieldsOf<BedFields>(e)).filter((b) => b.kind !== "gemein" && !b.of).length >= g.maxBeds) throw new CommandError(`Mehr als ${g.maxBeds} Beete pflegt niemand (ein Gemeinschaftsbeet und die Beete im Gewächshaus zählen nicht dazu).`);
 	const light = await lightFor(c, size.points);
 	if (typeof light === "string") throw new CommandError(light.replace("gebaut wird", "gegärtnert wird").replace("Bau", "Beet"));
+	await noteBuilder(c, light.beaconId); // who gardens widens the fire's light like who builds
 	if (kind === "gemein" && (await peek(c.space, { type: "BedCommons", fields: { beaconId: light.beaconId } }))) throw new CommandError("Im Licht dieses Feuers liegt schon ein Gemeinschaftsbeet; pflanze dort mit („beet“ zeigt es).");
 	const room = await roomOf(c);
 	const m = /^(\d+)\s+(\d+)$/.exec(at.trim());
@@ -277,7 +278,6 @@ const jaete: Command = {
 		if (!mayTend(c, b)) throw new CommandError(`Das ist das ${bedName(b)}; jäten dürfen der Besitzer und seine Paten.`);
 		const wilted = b.plants.filter((p) => p.stage === 3).length;
 		if (!b.weedy && !wilted) throw new CommandError("Das Beet ist sauber; hier gibt es nichts zu jäten.");
-		const now = await worldNowOf(c.space, c.txn);
 		b.weedy = false;
 		b.plants = b.plants.filter((p) => p.stage !== 3);
 		b.dueWorldMs = nextDue(b.plants);
@@ -359,7 +359,6 @@ const ernte: Command = {
 		// anyone else at most half and at most two plants; a single ripe plant may be taken)
 		const share = b.kind !== "gemein" ? allRipe.length : mine(c, b) ? Math.max(1, Math.floor((allRipe.length * 2) / 3)) : Math.min(COMMONS_TAKE, Math.max(1, Math.floor(allRipe.length / 2)));
 		const ripe = allRipe.slice(0, share), left = allRipe.length - ripe.length;
-		const now = await worldNowOf(c.space, c.txn);
 		await namesOf(c, ripe);
 		const crossed = b.kind === "zier" ? crossings(g, b, ripe) : new Map<BedPlant, BedPlant>();
 		const got: Array<{ proto: string; count: number; variety?: Variety }> = [], news: string[] = [];

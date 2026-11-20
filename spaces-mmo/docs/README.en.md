@@ -57,7 +57,8 @@ not kept here but in `client/help/articles.ts` (in the game under "?") and as to
 | [3D-V2/README.md](3D-V2/README.md) | The 3D view, version 2: zoom ladder, diorama, model detail levels, controls and performance measuring |
 | [betrieb.en.md](betrieb.en.md) | Docker: image, profiles nano/big/dev, local test setup, production, load and latency |
 | [phasen.en.md](phasen.en.md) | Implementation in phases with acceptance criteria |
-| [siedeln.en.md](siedeln.en.md) | Settling, building and gardening: design and order; steps 0 to 4 are built, the rest is a plan |
+| [siedeln.en.md](siedeln.en.md) | Settling, building and gardening: design and order; steps 0 to 8 are built, what is open is in its "Order" |
+| [de-docs/spielregeln-analyse-2026-11-19.md](de-docs/spielregeln-analyse-2026-11-19.md) | The rules, epochs, chains of goods and the NPC economy checked against code and world file, and what was fixed from it (German) |
 | [innenraeume.en.md](innenraeume.en.md) | Interiors: going into a house, its furnishings (hearth, bed, chest, oven …), invitations, and sleep replacing the rest after work; a plan |
 | [schlachten.en.md](schlachten.en.md) | Slaughtering, cooking and the butcher's trade: every option, step 1 built (`schlachte`, dishes, smoking, Wilma), the rest a plan |
 | [paket.en.md](paket.en.md) | Preparatory work in the root: phi-spaces as a package for all projects built on it |

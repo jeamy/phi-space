@@ -14,6 +14,7 @@ import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
 import type { WorldDef } from "../world.ts";
 import { randomBytes, randomInt, timeNow } from "../source.ts";
 import { furnishingFor, nearBuildings } from "./interior.ts";
+import { epochOf, islandOf } from "./epoch.ts";
 
 /** How long a trade offer waits for an answer (real time: the other one is at the keyboard now). */
 const OFFER_MS = 120_000;
@@ -424,11 +425,11 @@ export const craft: Command = {
 			for (const n of r.needs) {
 				// a log is driftwood and a log (ItemFields.of): asked for driftwood, real driftwood goes first
 				const hits = inv.filter((i) => isOf(i.f, n.proto) && !used.has(i.f.itemId) && !round.includes(i)).sort((x, y) => (x.f.of === n.proto ? 0 : x.f.of ? 1 : 0) - (y.f.of === n.proto ? 0 : y.f.of ? 1 : 0)).slice(0, n.count);
-				if (hits.length < n.count) { lack = `Dir fehlt: ${n.count}× ${n.proto}.`; break rounds; }
+				if (hits.length < n.count) { lack = `Dir fehlt: ${n.count}× ${nameOfProto(c.world, n.proto)}.`; break rounds; }
 				round.push(...hits);
 			}
 			const tool = tools.find((i) => !round.includes(i) && !used.has(i.f.itemId) && (wear.get(i.f.itemId) ?? i.f.wear ?? 1) > 0);
-			if (r.tool && !tool) { lack = `Dafür brauchst du ein Werkzeug: ${r.tool}.`; break; }
+			if (r.tool && !tool) { lack = `Dafür brauchst du ein Werkzeug: ${nameOfProto(c.world, r.tool)}.`; break; }
 			if (tool) wear.set(tool.f.itemId, (wear.get(tool.f.itemId) ?? tool.f.wear ?? 1) - wearing);
 			round.forEach((i) => { used.add(i.f.itemId); inputs.push(i); });
 			made++;
@@ -493,7 +494,7 @@ const order: Command = {
 			const inv = await inventory(c), give: Inv = [];
 			for (const need of mine.f.needs) {
 				const hits = byProto(inv.filter((i) => !give.includes(i)), need.proto, need.count);
-				if (!hits) throw new CommandError(`Dir fehlt noch: ${need.count}× ${need.proto}.`);
+				if (!hits) throw new CommandError(`Dir fehlt noch: ${need.count}× ${nameOfProto(c.world, need.proto)}.`);
 				give.push(...hits);
 			}
 			if (!(await c.space.take({ type: "Order", id: mine.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Der Auftrag ist gerade nicht greifbar.");
@@ -509,12 +510,16 @@ const order: Command = {
 
 export const TRADE_COMMANDS: Command[] = [offer, accept, decline, market, craft, order];
 
+/** A thing's name as the world says it (its key when the world does not know it). */
+const nameOfProto = (w: WorldDef, proto: string) => w.prototypes.find((p) => p.key === proto)?.name ?? proto;
 const roomNames = (w: WorldDef, rooms: string[]) => rooms.map((r) => w.rooms.find((x) => x.roomId === r)?.name ?? r).join(", ");
 
 /** Order ticker: each board gets a new job while fewer than `max` are posted there. */
 export async function ordersTick(space: SpaceLike, w: WorldDef): Promise<void> {
 	for (const room of w.orders.rooms) {
-		const kinds = w.orders.kinds.filter((k) => !k.rooms || k.rooms.includes(room));
+		// a board asks for what its island can make: the goods of a later epoch come with that epoch
+		const epoch = await epochOf(space, islandOf(w, room));
+		const kinds = w.orders.kinds.filter((k) => (!k.rooms || k.rooms.includes(room)) && (k.epoch ?? 1) <= epoch);
 		if (!kinds.length || (await space.count({ type: "Order", fields: { room } })) >= w.orders.max) continue;
 		const k = kinds[randomInt(0, kinds.length)]!;
 		const o: OrderFields = { orderId: `j-${timeNow().toString(36)}-${randomBytes(3).toString("hex")}`, kind: k.key, text: k.text, needs: k.needs, reward: k.reward, takenBy: "", room, expiresWorldMs: (await worldNowOf(space)) + w.orders.leaseMs * (await patienceOf(space)) };
@@ -531,7 +536,9 @@ type RestockFields = { charId: string; proto: string; nextWorldMs: number };
 async function restock(space: SpaceLike, w: WorldDef): Promise<void> {
 	const now = await worldNowOf(space);
 	for (const n of w.npcs) {
-		const sells = (n.carry ?? []).filter((c) => c.proto !== w.currency && (n.prices?.[c.proto]?.[1] ?? 0) > 0);
+		// its coins too, when it buys: a keeper that only buys, or a trader whose buyers stay away, would be broke for good
+		const buys = Object.values(n.prices ?? {}).some(([b]) => b > 0);
+		const sells = (n.carry ?? []).filter((c) => (c.proto === w.currency ? buys : (n.prices?.[c.proto]?.[1] ?? 0) > 0));
 		if (!sells.length) continue;
 		const charId = `npc-${n.npcId}`;
 		if (!(await space.readAll({ type: "Character", fields: { charId } }, { limit: 1 })).length) continue; // in another region

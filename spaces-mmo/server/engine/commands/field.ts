@@ -23,7 +23,7 @@ import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, ro
 import { fogOf } from "../fire.ts";
 import type { CropDef, FieldDef, WorldDef } from "../world.ts";
 import { blessed } from "./chapel.ts";
-import { ARTICLE, besides, cells, freeCells, giveBack, human, lightFor, plural, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
+import { ARTICLE, besides, cells, freeCells, giveBack, human, lightFor, noteBuilder, plural, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 import { growFactor } from "./garden.ts";
 import { spendRested } from "./sleep.ts";
 import { randomBytes, timeNow } from "../source.ts";
@@ -120,6 +120,7 @@ async function stake(c: CommandCtx, at: string): Promise<void> {
 	if ((await c.space.count({ type: "Field", fields: { accountId: c.account.accountId } })) >= d.maxFields) throw new CommandError(`Mehr als ${plural(d.maxFields, "Acker", "Äcker")} bestellt niemand allein.`);
 	const light = await lightFor(c, d.points);
 	if (typeof light === "string") throw new CommandError(light.replace("gebaut wird", "gepflügt wird").replace("Bau", "Acker"));
+	await noteBuilder(c, light.beaconId);
 	const room = await roomOf(c);
 	const m = /^(\d+)\s+(\d+)$/.exec(at.trim());
 	// "flur anlegen x y": a field that covers that cell (its corner there first); on the cell one stands on, which may be a way,

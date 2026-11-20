@@ -57,7 +57,8 @@ nicht hier, sondern in `client/help/articles.ts` (im Spiel unter „?“) und al
 | [3D-V2/README.md](../3D-V2/README.md) | Die 3D-Ansicht, Version 2: Zoomleiter, Diorama, Detailstufen der Modelle, Steuerung und Leistungsmessung |
 | [betrieb.md](../betrieb.en.md) | Docker: Image, Profile nano/big/dev, lokaler Testaufbau, Produktion, Last und Latenz |
 | [phasen.md](../phasen.en.md) | Umsetzung in Phasen mit Abnahmekriterien |
-| [siedeln.md](../siedeln.en.md) | Siedeln, Bauen und Gärtnern: Entwurf und Reihenfolge; die Schritte 0 bis 4 sind gebaut, der Rest ist Plan |
+| [siedeln.md](../siedeln.en.md) | Siedeln, Bauen und Gärtnern: Entwurf und Reihenfolge; die Schritte 0 bis 8 sind gebaut, was offen ist, steht in seiner „Reihenfolge“ |
+| [spielregeln-analyse-2026-11-19.md](spielregeln-analyse-2026-11-19.md) | Die Regeln, Epochen, Warenketten und die NPC-Wirtschaft gegen Code und Weltdatei geprüft; was daraus behoben wurde |
 | [paket.md](../paket.en.md) | Vorarbeit am Root: phi-spaces als Paket für alle Projekte, die darauf aufbauen |
 | [evennia-abbildung.md](../evennia-abbildung.en.md) | Evennia-Komponenten → Entries, Templates, Leases, Worker |
 | [weltzeit.md](../weltzeit.en.md) | Persistierte Weltuhr, Kalender, Scheduler, Neustart- und Mehrhost-Vertrag |

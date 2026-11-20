@@ -16,6 +16,7 @@ import { peek } from "../../space.ts";
 import type { WorldDef } from "../world.ts";
 import { demolishByVote, distTo, logGone, planOf } from "./build.ts";
 import { hutsIn, rankOf, settlementIn } from "./settlement.ts";
+import { votersOf } from "./road.ts";
 import { randomBytes, timeNow } from "../source.ts";
 
 /** Whether a town hall stands in the room. */
@@ -43,6 +44,8 @@ async function applyZone(space: SpaceLike, m: MotionFields, txn: string): Promis
 	if (m.kind === "gruen" || m.kind === "weg") await space.write({ type: "Zone", fields: { zoneId: m.motionId, room: m.room, settlementId: m.settlementId, kind: m.kind, ...m.zone! } satisfies ZoneFields as never }, txn, FOREVER);
 	else for (const e of await space.readAll({ type: "Zone", fields: { room: m.room } })) if (isIn(m.zone!, fieldsOf<ZoneFields>(e))) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 }
+/** The yes votes a motion to tear down or to tax needs at least (fewer where fewer settlers live). */
+const QUORUM = 2;
 const yes = (votes: VoteFields[]) => votes.filter((v) => v.yes).length;
 const no = (votes: VoteFields[]) => votes.length - yes(votes);
 const votesOn = async (space: SpaceLike, motionId: string) => (await space.readAll({ type: "Vote", fields: { motionId } })).map((e) => fieldsOf<VoteFields>(e));
@@ -140,7 +143,10 @@ export async function motionTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 		try {
 			const taken = await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 			if (!taken) { await space.abort(txn); continue; } // a vote or another worker came first; the next count sees it
-			const m = fieldsOf<MotionFields>(taken), votes = await votesOn(space, m.motionId), carried = yes(votes) > no(votes);
+			const m = fieldsOf<MotionFields>(taken), votes = await votesOn(space, m.motionId);
+			// tearing down another's building and the tax need two voices where two settlers live: one alone decides neither
+			const quorum = m.kind === "abriss" || m.kind === "steuer" ? Math.min(QUORUM, Math.max(1, (await votersOf(space, w, [m.room], txn)).length)) : 1;
+			const carried = yes(votes) > no(votes) && yes(votes) >= quorum;
 			const held = await space.takeIfExists({ type: "Settlement", fields: { settlementId: m.settlementId } }, NO_WAIT, { txn });
 			if (held) {
 				const s = fieldsOf<SettlementFields>(held);
@@ -154,7 +160,8 @@ export async function motionTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 					else if (await holdsGoods(space, w, b)) { await space.write({ type: "Building", fields: b as never }, txn, FOREVER); after = " Im Lager liegt inzwischen wieder etwas; es bleibt stehen."; }
 					else { await demolishByVote(space, txn, w, b, now); logGone(b, "voted down at the town hall"); after = ` Die Fläche ist frei; was blieb, holt ${b.ownerName} hier mit „nachlass“ ab.`; }
 				}
-				const text = `Abstimmung in ${s.name}: ${said(m)} ist ${carried ? "angenommen" : "abgelehnt"}, ${yes(votes)} dafür, ${no(votes)} dagegen.${after}`;
+				const few = !carried && yes(votes) > no(votes) ? ` Dafür braucht es ${quorum} Stimmen.` : "";
+				const text = `Abstimmung in ${s.name}: ${said(m)} ist ${carried ? "angenommen" : "abgelehnt"}, ${yes(votes)} dafür, ${no(votes)} dagegen.${few}${after}`;
 				await space.write({ type: "Msg", fields: { room: m.room, to: "*", kind: "world", text, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 			}
 			await space.commit(txn);

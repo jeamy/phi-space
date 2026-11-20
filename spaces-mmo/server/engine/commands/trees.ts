@@ -15,7 +15,8 @@ import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, levelOf, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { fogOf } from "../fire.ts";
 import type { TreeSortDef, TreesDef, WorldDef } from "../world.ts";
-import { ARTICLE, besides, distTo, freeCells, giveBack, human, lightFor, refusal, releaseLight, rested, SITE_REACH, takeNear, tire, useLight, type Rect } from "./build.ts";
+import { ARTICLE, besides, distTo, freeCells, giveBack, human, lightFor, noteBuilder, refusal, releaseLight, rested, SITE_REACH, takeNear, tire, useLight, type Rect } from "./build.ts";
+import { islandOf } from "./epoch.ts";
 import { growFactor, protoName } from "./garden.ts";
 import { needRank } from "./settlement.ts";
 import { consume, move } from "./trade.ts";
@@ -72,9 +73,12 @@ export async function plantTree(c: CommandCtx, arg: string): Promise<boolean> {
 	if (!human(c)) throw new CommandError("Bäume pflanzen nur Menschen.");
 	await needRank(c, "siedler", "Bäume pflanzen");
 	if (!(await inventory(c)).some((i) => i.f.proto === d.spade)) throw new CommandError(`Zum Pflanzen brauchst du einen ${protoName(c, d.spade)} („craft ${protoName(c, d.spade).toLowerCase()}“).`);
-	if ((await c.space.count({ type: "Tree", fields: { accountId: c.account.accountId } })) >= d.maxTrees) throw new CommandError(`Mehr als ${d.maxTrees} Bäume pflanzt niemand; fälle erst einen.`);
+	// the limit holds for each island: a planter keeps a grove on every island it settles
+	const island = islandOf(c.world, c.actor.room), mine = (await c.space.readAll({ type: "Tree", fields: { accountId: c.account.accountId } }, { txn: c.txn })).filter((e) => islandOf(c.world, String(e.fields.room)) === island);
+	if (mine.length >= d.maxTrees) throw new CommandError(`Mehr als ${d.maxTrees} Bäume pflanzt niemand auf einer Insel; fälle hier erst einen.`);
 	const light = await lightFor(c, d.points);
 	if (typeof light === "string") throw new CommandError(light.replace("gebaut wird", "gepflanzt wird").replace("Bau", "Baum"));
+	await noteBuilder(c, light.beaconId);
 	const room = await roomOf(c);
 	const tries: Rect[] = m[2] !== undefined ? [{ x: Number(m[2]), y: Number(m[3]), w: 1, h: 1 }] : besides(c, { w: 1, h: 1 });
 	let rect: Rect | null = null, why = "";

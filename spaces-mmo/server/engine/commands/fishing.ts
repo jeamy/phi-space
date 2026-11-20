@@ -137,7 +137,6 @@ const luke: Command = {
 };
 const restOf = async (c: CommandCtx) => { const { now, rest } = await rested(c); return [now, rest] as const; };
 
-const bays = (c: CommandCtx) => baysOf(c.world.allRooms ?? c.world.rooms);
 
 /** Whole world minutes, at least one, for what the ship's times say. */
 const mins = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));

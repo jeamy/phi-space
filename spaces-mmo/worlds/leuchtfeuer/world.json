@@ -1,7 +1,7 @@
 {
 	"id": "leuchtfeuer",
 	"title": "Leuchtfeuer",
-	"version": 54,
+	"version": 55,
 	"startHour": 8,
 	"evening": {
 		"hour": 20
@@ -10372,6 +10372,10 @@
 				{
 					"proto": "schinken",
 					"count": 1
+				},
+				{
+					"proto": "salz",
+					"count": 4
 				}
 			],
 			"lines": [
@@ -10764,6 +10768,14 @@
 				{
 					"proto": "bienenvolk",
 					"count": 2
+				},
+				{
+					"proto": "kueken",
+					"count": 2
+				},
+				{
+					"proto": "ferkel",
+					"count": 1
 				}
 			],
 			"lines": [
@@ -15551,6 +15563,7 @@
 		"offerings": [
 			"perle",
 			"bernstein",
+			"kerze",
 			"brot",
 			"strandnelke",
 			"duenenrose",
@@ -17067,7 +17080,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 1
+					"count": 5
 				},
 				"rooms": [
 					"graue-bucht"
@@ -17084,7 +17097,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 1
+					"count": 3
 				},
 				"rooms": [
 					"graue-bucht"
@@ -17101,7 +17114,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 2
+					"count": 6
 				},
 				"rooms": [
 					"graue-bucht"
@@ -17118,7 +17131,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 4
+					"count": 7
 				},
 				"rooms": [
 					"kupferhafen-markt"
@@ -17152,7 +17165,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 3
+					"count": 7
 				},
 				"rooms": [
 					"kupferhafen-markt"
@@ -17203,7 +17216,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 3
+					"count": 7
 				},
 				"rooms": [
 					"riffdorf"
@@ -17254,7 +17267,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 2
+					"count": 5
 				},
 				"rooms": [
 					"schaerenhafen"
@@ -17271,7 +17284,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 2
+					"count": 4
 				},
 				"rooms": [
 					"schaerenhafen"
@@ -17288,7 +17301,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 5
+					"count": 9
 				},
 				"rooms": [
 					"rauchhafen"
@@ -17322,7 +17335,7 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 3
+					"count": 7
 				},
 				"rooms": [
 					"krabbenbucht"
@@ -17415,7 +17428,8 @@
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "mehl",
@@ -17432,7 +17446,8 @@
 				},
 				"rooms": [
 					"graue-bucht"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "segel",
@@ -17445,11 +17460,12 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 12
+					"count": 17
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "riffbrot",
@@ -17466,7 +17482,8 @@
 				},
 				"rooms": [
 					"riffdorf"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "sauerkraut",
@@ -17483,7 +17500,8 @@
 				},
 				"rooms": [
 					"riffdorf"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "eier",
@@ -17513,11 +17531,12 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 18
+					"count": 33
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "met",
@@ -17534,7 +17553,8 @@
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 3
 			},
 			{
 				"key": "wolle",
@@ -17552,7 +17572,8 @@
 				"rooms": [
 					"graue-bucht",
 					"riffdorf"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "milch",
@@ -17569,7 +17590,8 @@
 				},
 				"rooms": [
 					"krabbenbucht"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "tuch",
@@ -17582,11 +17604,12 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 16
+					"count": 17
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "decke",
@@ -17603,7 +17626,8 @@
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "honig",
@@ -17654,7 +17678,8 @@
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "gaensebraten",
@@ -17671,7 +17696,8 @@
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "proviant",
@@ -17688,11 +17714,12 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 14
+					"count": 17
 				},
 				"rooms": [
 					"riffdorf"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "festessen",
@@ -17709,7 +17736,8 @@
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 3
 			},
 			{
 				"key": "poekel",
@@ -17726,7 +17754,8 @@
 				},
 				"rooms": [
 					"riffdorf"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "faehrproviant",
@@ -17744,7 +17773,8 @@
 				"rooms": [
 					"schaerenhafen",
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 3
 			},
 			{
 				"key": "stiefel",
@@ -17762,7 +17792,8 @@
 				"rooms": [
 					"kupferhafen-markt",
 					"rauchhafen"
-				]
+				],
+				"epoch": 3
 			},
 			{
 				"key": "trueffel",
@@ -17779,7 +17810,8 @@
 				},
 				"rooms": [
 					"kupferhafen-markt"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "kaese",
@@ -17792,11 +17824,12 @@
 				],
 				"reward": {
 					"proto": "muenze",
-					"count": 9
+					"count": 15
 				},
 				"rooms": [
 					"riffdorf"
-				]
+				],
+				"epoch": 2
 			},
 			{
 				"key": "krabbenseil",

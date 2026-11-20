@@ -148,7 +148,7 @@ test("a mill: ten bring grain at once, each gets exactly their own flour; a stor
 
 		// linen: flax with a spindle
 		await give(s, baker.me, "flachs", 3);
-		assert.match(await does(baker.p, "craft leinen", "Werkzeug"), /Werkzeug: spindel/);
+		assert.match(await does(baker.p, "craft leinen", "Werkzeug"), /Werkzeug: Spindel/);
 		await give(s, baker.me, "muschel", 1);
 		await give(s, baker.me, "treibholz", 1);
 		await does(baker.p, "craft spindel", "Spindel her");

@@ -474,11 +474,16 @@ Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Am Rathaus einen Antrag stellen; allein: den laufenden zeigen |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Über die Fläche um dich abstimmen lassen |
 | \`antrag steuer <n>\` | | Münzen je Stück für Entnahmen aus dem Lager und Käufe im Kaufhaus |
-| \`antrag abriss\` | | Über den Abriss des Baus neben dir abstimmen lassen; was bleibt, gehört dem Besitzer als Nachlass |
+| \`antrag abriss\` | | Über den Abriss des Baus neben dir abstimmen lassen; was bleibt, gehört dem Besitzer als Nachlass. Abriss und Steuer brauchen zwei Ja-Stimmen, wo zwei Siedler wohnen |
 | \`stimme ja\|nein\` | \`vote\` | Als Siedler über den Antrag abstimmen |
 | \`repariere\` | \`repair\` | Einen Bau ausbessern |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
 | \`nachlass\` | \`estate\` | Den Nachlass an der Ruine deines Baus abholen |
+| \`räume [x y]\` | \`clear\`, \`räumen\` | Was neben dir im Weg steht abräumen, eine alte Hütte, ein Boot: Arbeit für Arbeit, dann ist das Land frei |
+| \`betrete [x y]\` | \`hinein\`, \`eintreten\` | In den Bau neben dir gehen, den eigenen oder einen, in den du eingeladen bist; \`hinaus\` führt vor die Tür |
+| \`einladen [name]\` | \`invite\`, \`lade\` | Jemanden in den eigenen Bau einladen; ohne Namen: wer eingeladen ist |
+| \`ausladen <name>\` | \`uninvite\` | Eine Einladung zurücknehmen; wer drinnen ist, steht dann draußen |
+| \`schlafe\` | \`sleep\`, \`schlafen\` | Im Bett der Hütte schlafen: je länger, desto mehr Arbeiten danach ohne Pause |
 
 ## Gärten {#gardencmds}
 
@@ -496,6 +501,8 @@ Gärten brauchen einen Spaten, Wasser und Licht. Ausführlich unter [Gärten](he
 | \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen; an einem reifen Acker ein Arbeitspunkt und dein Anteil |
 | \`pate <name>\` | \`sponsor\` | Jemanden dein Beet pflegen lassen; \`pate weg <name>\` beendet es |
 | \`benenne <name>\` | \`taufe\` | Deiner Kreuzung einen Namen geben (\`benenne 2 <name>\`, wenn du mehrere trägst) |
+| \`baum\` | \`tree\`, \`bäume\` | Die gepflanzten Bäume hier und wie weit sie sind; gepflanzt wird mit \`pflanze <samen>\` ([Bäume](help.game.garden)) |
+| \`fälle [x y]\` | \`fell\`, \`chop\` | Deinen ausgewachsenen Baum neben dir mit einer Axt fällen: er gibt Scheite |
 
 ## Äcker {#fieldcmds}
 
@@ -661,11 +668,16 @@ Building works only in a fire's light. In detail under [Building](help.game.buil
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Put a motion at a town hall; alone: show the open one |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Put the ground around you to a vote |
 | \`antrag steuer <n>\` | | Coins per thing taken from the warehouse or bought at the department store |
-| \`antrag abriss\` | | Put the building beside you to a vote; what is left is the owner's estate |
+| \`antrag abriss\` | | Put the building beside you to a vote; what is left is the owner's estate. Tearing down and the tax need two yes votes where two settlers live |
 | \`stimme ja\|nein\` | \`vote\` | Vote on the motion as a settler |
 | \`repariere\` | \`repair\` | Repair a building |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
 | \`nachlass\` | \`estate\` | Collect the estate at your building's ruin |
+| \`räume [x y]\` | \`clear\`, \`räumen\` | Clear away what stands in the way beside you, an old hut, a boat: work by work, then the land is free |
+| \`betrete [x y]\` | \`enter\`, \`hinein\` | Go into the building beside you, your own or one you are invited into; \`hinaus\` leads back outside |
+| \`einladen [name]\` | \`invite\`, \`lade\` | Invite someone into your own building; without a name: who is invited |
+| \`ausladen <name>\` | \`uninvite\` | Take an invitation back; whoever is inside then stands outside |
+| \`schlafe\` | \`sleep\`, \`schlafen\` | Sleep in the hut's bed: the longer, the more work afterwards without a rest |
 
 ## Gardens {#gardencmds}
 
@@ -683,6 +695,8 @@ Gardens need a spade, water and light. In detail under [Gardens](help.game.garde
 | \`ernte\` | \`harvest\`, \`pflücke\` | Harvest what is ripe, with seeds; at a ripe field a work point and your share |
 | \`pate <name>\` | \`sponsor\` | Let someone tend your bed; \`pate weg <name>\` ends it |
 | \`benenne <name>\` | \`taufe\` | Give your crossing a name (\`benenne 2 <name>\` when you carry several) |
+| \`baum\` | \`tree\`, \`bäume\` | The planted trees here and how far they are; planting is \`pflanze <samen>\` ([trees](help.game.garden)) |
+| \`fälle [x y]\` | \`fell\`, \`chop\` | Fell your grown tree beside you with an axe: it gives logs |
 
 ## Fields {#fieldcmds}
 
@@ -1041,7 +1055,7 @@ Aus wenigen Dingen machst du Nützliches. Manches braucht ein Werkzeug, manches 
 
 ## Auftragstafel {#orders}
 
-An den Auftragstafeln suchen Leute Dinge gegen Lohn. Du nimmst einen Auftrag, besorgst, was fehlt, und lieferst ab. Der Lohn wird in Münzen gezahlt.
+An den Auftragstafeln suchen Leute Dinge gegen Lohn. Du nimmst einen Auftrag, besorgst, was fehlt, und lieferst ab. Der Lohn wird in Münzen gezahlt. Eine Tafel fragt nach dem, was ihre Insel herstellen kann: Brot, Tuch und Braten kommen mit dem Dorf, Met, Stiefel und Festessen mit der Stadt.
 
 Tafeln hängen an denselben sechs Orten wie die Marktbretter. \`auftrag\` zeigt die Tafel, \`auftrag nimm <nr>\` übernimmt einen Auftrag, \`auftrag liefere\` gibt die geforderten Dinge ab, an jeder Tafel. \`auftrag aufgeben\` gibt deinen Auftrag an die Tafel zurück. Du hast immer nur einen, und er gilt 30 Minuten. Beispiele: Ines braucht 2 Treibholz für die Nacht, Bo sammelt 2 Muscheln für Netzgewichte; beides bringt eine Münze.`,
 			en: `On the islands you swap directly or buy at the market board. You pay in coins. You make tools and goods from flotsam, and jobs wait on the boards. To swap, trade and hand things on you need an account ([Guest and account](help.game.account)).
@@ -1181,7 +1195,7 @@ You turn a few things into useful ones. Some recipes need a tool, some a worksho
 
 ## Job board {#orders}
 
-On the job boards people look for things in return for pay. You take a job, get what is missing and deliver. The reward is paid in coins.
+On the job boards people look for things in return for pay. You take a job, get what is missing and deliver. The reward is paid in coins. A board asks for what its island can make: bread, cloth and roasts come with the village, mead, boots and feasts with the town.
 
 Boards hang in the same six places as the market boards. \`order\` shows the board, \`order take <nr>\` takes a job, \`order deliver\` hands in the demanded things, at any board. \`order abandon\` gives your job back to the board. You hold one at a time, and it lasts 30 minutes. Examples: Ines needs 2 driftwood for the night, Bo collects 2 shells for net weights; each pays one coin.`,
 		},
@@ -1743,7 +1757,7 @@ Wer sie gezogen hat, gibt ihr mit \`benenne <name>\` einen Namen, einmal und fü
 
 Bäume wachsen langsam, über Tage, aber dann stehen sie, bis jemand sie fällt. Sie geben Holz, Obst und Eicheln.
 
-Ihre Samen findet \`sammle samen\` dort, wo wilde Bäume stehen: **Birkensamen**, **Weidenstecklinge**, **Apfelkerne**, **Birnenkerne** und **Eicheln**. Mit einem Spaten setzt \`pflanze birkensamen\` (oder \`pflanze eichel <x> <y>\`) einen Baum neben dich, im Licht eines Feuers; er belegt ein Feld und einen Lichtpunkt, und jeder hat höchstens acht. \`baum\` zeigt die Bäume hier und wie weit sie sind: **Setzling**, **junger Baum**, **ausgewachsen**. Die Tage zählen auf der zweiten Uhr, wie das Satt der Tiere: Eine Birke steht in drei Tagen, eine Eiche in sieben, wie schnell die Welt auch läuft. Nebel bremst sie, im Winter warten sie.
+Ihre Samen findet \`sammle samen\` dort, wo wilde Bäume stehen: **Birkensamen**, **Weidenstecklinge**, **Apfelkerne**, **Birnenkerne** und **Eicheln**. Mit einem Spaten setzt \`pflanze birkensamen\` (oder \`pflanze eichel <x> <y>\`) einen Baum neben dich, im Licht eines Feuers; er belegt ein Feld und einen Lichtpunkt, zählt damit zum Bestand der Insel wie ein Beet, und jeder hat höchstens acht auf einer Insel. \`baum\` zeigt die Bäume hier und wie weit sie sind: **Setzling**, **junger Baum**, **ausgewachsen**. Die Tage zählen auf der zweiten Uhr, wie das Satt der Tiere: Eine Birke steht in drei Tagen, eine Eiche in sieben, wie schnell die Welt auch läuft. Nebel bremst sie, im Winter warten sie.
 
 | Baum | Ausgewachsen nach | Gefällt | Trägt |
 | --- | --- | --- | --- |
@@ -1865,7 +1879,7 @@ Whoever bred it names it with \`benenne <name>\`, once and for good. Its seeds a
 
 Trees grow slowly, over days, but then they stand until someone fells them. They give wood, fruit and acorns.
 
-\`sammle samen\` finds their seeds where wild trees stand: **birch seeds**, **willow cuttings**, **apple seeds**, **pear seeds** and **acorns**. With a spade, \`pflanze birkensamen\` (or \`pflanze eichel <x> <y>\`) sets a tree beside you, in a fire's light; it takes one cell and one light point, and everyone has at most eight. \`baum\` shows the trees here and how far they are: **seedling**, **young tree**, **grown**. The days count on the second clock, like the animals' feeding: a birch stands in three days, an oak in seven, however fast the world runs. Fog slows them, in winter they wait.
+\`sammle samen\` finds their seeds where wild trees stand: **birch seeds**, **willow cuttings**, **apple seeds**, **pear seeds** and **acorns**. With a spade, \`pflanze birkensamen\` (or \`pflanze eichel <x> <y>\`) sets a tree beside you, in a fire's light; it takes one cell and one light point, counts towards the island's stock like a bed, and everyone has at most eight on an island. \`baum\` shows the trees here and how far they are: **seedling**, **young tree**, **grown**. The days count on the second clock, like the animals' feeding: a birch stands in three days, an oak in seven, however fast the world runs. Fog slows them, in winter they wait.
 
 | Tree | Grown after | Felled | Bears |
 | --- | --- | --- | --- |
@@ -2599,7 +2613,7 @@ Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**
 
 | Stufe | ab Punkten | neu |
 | --- | --- | --- |
-| Fischerdorf | 0 | Hütte, Hühnerstall, Regentonne, Vogelscheuche, Steg, Räucherei, Beete |
+| Fischerdorf | 0 | Hütte, Hühnerstall, Bienenstock, Regentonne, Vogelscheuche, Steg, Räucherei, Beete, Bäume |
 | Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt, Kapelle, Straße, Äcker, Metzgerei, Salzgarten |
 | Stadt | 40 | Rathaus, Park, Kaufhaus, Kontor, Leuchtturm, Brauerei, Glashütte, Werft, Gewächshaus, Gerberei, Rinder |
 | Netz | 80 | Bahnhof, Signalfeuer, Beamen |
@@ -2657,7 +2671,7 @@ Im Kontor leiht \`kredit <n> gegen <ding>\` Münzen gegen ein Pfand, bis zum dop
 - **Straße und Karren** (ab Dorf): Eine Straße verbindet zwei Orte einer Insel, von Platz zu Platz. Niemand legt sie allein: \`straße plane <ort>\` zieht die Trasse von der Mitte hier durch den Ausgang zur Mitte des Nachbarorts (oder „Straße planen“ am Ausgang). Die Siedler beider Orte (wer dort eine Hütte hat oder als Siedler aufgenommen ist; Gäste und Figuren des Spiels nicht) stimmen zwei Tage lang mit \`straße ja\` oder \`straße nein\` ab; mehr Ja als Nein, und sie wird gebaut, stimmt sonst niemand ab, sofort. Gebaut wird gemeinsam neben der Trasse: \`liefere stein\` (ein Stein je zwei Felder, dazu 2 Treibholz) und \`arbeite\`; jede Arbeit pflastert ein Stück weiter. Fertig hält sie 45 Tage, \`straße repariere\` (2 Stein) bessert sie aus. Man geht auf ihr, gebaut wird auf ihr nichts; \`straße\` zeigt die Straßen hier. Einen **Karren** stellst du direkt neben einer Werkstatt her (\`craft karren\`): aus 4 Bohlen und 1 Tauwerk, also 8 Treibholz und 9 Tang mit einem Muschelmesser; kaufen kann man ihn nicht. Mit \`karren stelle\` steht er auf der Straße. Ein Karren fährt auf Straßen allein mit bis zu 20 Stück, einen Raum je Weltstunde: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`. \`karren pendel <ort> [mit <ding>]\` lässt ihn von selbst zwischen zwei Orten fahren, an denen dir ein Bau mit Truhe gehört: Hier lädt er aus deiner Truhe, dort legt er alles in deine Truhe und kommt zurück, leer fährt er nicht; \`karren halt\` beendet es. Über das Wasser kommt ein Karren nur als Ding (\`karren nimm\`).
 - **Beamen** (ab Netz): \`beam <ort>\` springt von jedem Ort zu einem brennenden Feuer, ohne die Wege zu laufen. Nur das Ziel braucht ein brennendes Feuer, dein Standort nicht. Es kostet Münzen nach der Entfernung auf der [Weltkarte](help.game.controls#atlas), standardmäßig eine je Feld (mindestens eine); danach ruhst du 10 Weltminuten, bevor du wieder beamst. \`beam\` allein zeigt die Ziele und die Pause. Auf der Weltkarte tippst du das Feuer an, die Linie und der Preis erscheinen, **Hierher beamen** springt. Betreiber ändern Preis, Pause und Stufe.
 
-Ein **Leuchtturm** (ab Stadt) gibt seinem Feuer 20 Lichtpunkte mehr, über die Grenze von 40 hinaus, und trägt dessen Licht in die Räume gleich neben seinem, auf derselben Insel: Dort baut man dann im Licht beider Feuer, und der Nebel weicht, solange eines brennt.`,
+Ein **Leuchtturm** (ab Stadt) gibt seinem Feuer 20 Lichtpunkte mehr, über die Grenze von 40 hinaus, und trägt dessen Licht in die Räume gleich neben seinem, auf derselben Insel: Dort baut man dann im Licht beider Feuer, und der Nebel weicht, solange eines brennt. Ein Feuer trägt einen Leuchtturm, nicht mehr.`,
 			en: `An island grows by what stands on it. With enough huts, beds and fields the fishing village becomes a village, and new building plans open up. Neighbours can also found a settlement. Together they then decide who may build in their place.
 
 ## Epochs {#epochs}
@@ -2668,7 +2682,7 @@ Every island stands at a stage: **fishing village**, **village**, **town**, **ne
 
 | Stage | from points | new |
 | --- | --- | --- |
-| Fishing village | 0 | hut, coop, rain barrel, scarecrow, jetty, smokehouse, beds |
+| Fishing village | 0 | hut, coop, hive, rain barrel, scarecrow, jetty, smokehouse, beds, trees |
 | Village | 15 | windmill, bakery, pen, loom, warehouse, quarry, clay pit, brickworks, workshop, chapel, road, fields, butcher's shop, salt garden |
 | Town | 40 | town hall, park, department store, counting house, lighthouse, brewery, glassworks, shipyard, greenhouse, tannery, cattle |
 | Net | 80 | station, signal fire, beaming |
@@ -2726,7 +2740,7 @@ In a counting house \`kredit <n> gegen <ding>\` lends coins against a pledge, up
 - **Road and cart** (from the village on): a road links two places of an island, plaza to plaza. Nobody lays one alone: \`straße plane <ort>\` (\`road plane\`) draws the trace from the middle here through the exit to the middle of the next place (or „Plan a road“ at the exit). The settlers of both places (whoever has a hut there or was taken in as a settler; not guests, not the game's figures) vote for two days with \`straße ja\` or \`straße nein\`; more yes than no and it is built, at once if nobody else votes. It is built together beside the trace: \`liefere stein\` (\`deliver\`; one stone per two cells, plus 2 driftwood) and \`arbeite\` (\`work\`); each work paves a stretch further. Finished it lasts 45 days, \`straße repariere\` (2 stone) mends it. One walks on it, nothing is built on it; \`straße\` (\`road\`) shows the roads here. You make a **cart** right beside a workshop (\`craft karren\`): from 4 planks and 1 rope, so 8 driftwood and 9 kelp with a shell knife; nobody sells one. \`karren stelle\` puts it on the road. A cart goes alone on roads with up to 20 pieces, a room per world hour: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`. \`karren pendel <ort> [mit <ding>]\` sends it back and forth by itself between two places where you own a building with a chest: here it loads from your chest, there it puts everything into your chest and comes back, never empty; \`karren halt\` ends it. A cart crosses the water only as a thing (\`karren nimm\`).
 - **Beaming** (from the network on): \`beam <place>\` jumps from anywhere to a burning fire without walking the paths. Only the destination needs a burning fire, not where you stand. It costs coins by the distance on the [world map](help.game.controls#atlas), by default one per cell (at least one); afterwards you rest 10 world minutes before you beam again. \`beam\` alone lists the destinations and the rest. On the world map you tap the fire, the line and the price appear, **Hierher beamen** jumps. Operators change price, rest and stage.
 
-A **lighthouse** (from the town on) gives its fire 20 more light points, above the limit of 40, and carries its light into the rooms right beside its own on the same island: there one builds in the light of both fires, and the fog gives way while either burns.`,
+A **lighthouse** (from the town on) gives its fire 20 more light points, above the limit of 40, and carries its light into the rooms right beside its own on the same island: there one builds in the light of both fires, and the fog gives way while either burns. A fire carries one lighthouse, no more.`,
 		},
 	},
 	{

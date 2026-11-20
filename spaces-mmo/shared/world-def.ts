@@ -78,7 +78,7 @@ export type WorldDef = {
 	 *  `at`: only beside a building of that plan (the bakery's oven). */
 	recipes: Array<{ key: string; name: string; needs: Array<{ proto: string; count: number }>; tool?: string; makes: string; count?: number; at?: string }>;
 	/** The order board: jobs the world posts (up to `max` open), each lasting `leaseMs` once posted. */
-	orders: { rooms: string[]; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; rooms?: string[] }> };
+	orders: { rooms: string[]; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; rooms?: string[]; /** The island of the board must have reached this epoch (its goods are made no earlier). */ epoch?: number }> };
 	/** What can be built (docs/siedeln.en.md): plans and the rules of building. Without it nothing can be built. */
 	building?: BuildingDef;
 	/** Gardens (docs/siedeln.en.md "Gärten"): beds, what grows in them and how. Without it nothing is planted. */

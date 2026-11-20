@@ -9,6 +9,7 @@ import { fieldsOf, type BuildingFields, type CartFields, type FreightFields, typ
 import { worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, roomOf, toPlayer, type CommandCtx } from "../context.ts";
+import { loadAt, loadOf, packMax } from "../pack.ts";
 import type { WorldDef } from "../world.ts";
 import { trainIn } from "../rail.ts";
 import { amount, ARTICLE, distTo, giveBack, planOf } from "./build.ts";
@@ -95,9 +96,16 @@ const karren: Command = {
 			return msg(c, c.actor.charId, "info", `${it.f.name} liegt auf dem Karren (${cargo.length + 1} von ${d.capacity}).`);
 		}
 		if (/^(?:entlade|unload)$/i.test(word)) {
-			for (const it of cargo) await move(c, it, f.cartId, c.actor.charId);
+			// as much as the pack still takes (pack.ts), like an estate: the rest stays on the cart
+			let free = c.world.pack ? (await packMax(c.space, c.world, c.actor.charId, c.txn)) - (await loadAt(c.space, c.world, c.actor.charId, c.txn)) : Infinity, got = 0;
+			for (const it of cargo) {
+				const each = c.world.pack ? loadOf(c.world, it.proto) : 0;
+				if (each > free + 1e-9) continue;
+				await move(c, it, f.cartId, c.actor.charId); got++; free -= each;
+			}
 			await put(c, f);
-			return msg(c, c.actor.charId, "info", cargo.length ? `Du nimmst ${cargo.length} Stück vom Karren.` : "Der Karren ist leer.");
+			const left = cargo.length - got;
+			return msg(c, c.actor.charId, "info", !cargo.length ? "Der Karren ist leer." : got ? `Du nimmst ${got} Stück vom Karren.${left ? ` ${left} Stück bleiben darauf, mehr trägst du nicht.` : ""}` : `Das trägst du nicht mehr: ${left} Stück bleiben auf dem Karren.`);
 		}
 		if (/^(?:nimm|take)$/i.test(word)) {
 			if (cargo.length) throw new CommandError("Erst entladen.");
@@ -231,13 +239,22 @@ const zug: Command = {
 		// what the railway carried for the actor to this station: all of it into the pack
 		if (/^(?:abholen|hole|holen|fetch)$/.test(word)) {
 			if (!mine.length) throw new CommandError("Hier wartet keine Fracht für dich.");
-			let n = 0;
+			// as much as the pack still takes (pack.ts): the rest waits on at the station
+			let n = 0, left = 0, free = c.world.pack ? (await packMax(c.space, c.world, c.actor.charId, c.txn)) - (await loadAt(c.space, c.world, c.actor.charId, c.txn)) : Infinity;
 			for (const f of mine) {
-				if (!(await c.space.takeIfExists({ type: "Freight", fields: { freightId: f.freightId } }, NO_WAIT, { txn: c.txn }))) continue;
-				for (const e of await c.space.readAll({ type: "Item", fields: { location: f.freightId } }, { txn: c.txn })) { await move(c, fieldsOf<ItemFields>(e), f.freightId, c.actor.charId); n++; }
+				const held = await c.space.takeIfExists({ type: "Freight", fields: { freightId: f.freightId } }, NO_WAIT, { txn: c.txn });
+				if (!held) continue;
+				let rest = 0;
+				for (const e of await c.space.readAll({ type: "Item", fields: { location: f.freightId } }, { txn: c.txn })) {
+					const it = fieldsOf<ItemFields>(e), each = c.world.pack ? loadOf(c.world, it.proto) : 0;
+					if (each > free + 1e-9) { rest++; continue; }
+					await move(c, it, f.freightId, c.actor.charId); n++; free -= each;
+				}
+				if (rest) { left += rest; await c.space.write({ type: "Freight", fields: held.fields as never }, c.txn, FOREVER); }
 			}
-			if (!n) throw new CommandError("Die Fracht ist gerade nicht greifbar; bitte noch einmal.");
-			return msg(c, "*", "info", `$you() $conj(holst|holt) ${n} Stück Fracht vom Bahnsteig.`, { templ: true });
+			if (!n && !left) throw new CommandError("Die Fracht ist gerade nicht greifbar; bitte noch einmal.");
+			if (!n) throw new CommandError(`Das trägst du nicht mehr: ${left} Stück Fracht warten hier weiter.`);
+			return msg(c, "*", "info", `$you() $conj(holst|holt) ${n} Stück Fracht vom Bahnsteig.${left ? ` ${left} Stück warten dort weiter, mehr trägt niemand.` : ""}`, { templ: true });
 		}
 		if (send) {
 			if (!d.freight) throw new CommandError("Diese Bahn fährt keine Fracht.");

@@ -72,7 +72,7 @@ function trace(w: WorldDef, ground: string[], from: Cell, to: Cell[], blocked: R
 
 /** The accounts that vote on a road between these rooms: hut owners there and the settlers a settlement took in, who are
  *  registered people (no guests, no figures the game plays). */
-async function votersOf(space: SpaceLike, w: WorldDef, rooms: string[], txn: string | null): Promise<string[]> {
+export async function votersOf(space: SpaceLike, w: WorldDef, rooms: string[], txn: string | null): Promise<string[]> {
 	const out = new Set<string>();
 	for (const room of rooms) {
 		for (const h of await hutsIn(space, w, room, txn)) out.add(h.accountId);
@@ -125,9 +125,9 @@ export async function routeLinks(space: SpaceLike, txn: string | null = null): P
 	return (await routesOf(space, txn)).filter((r) => r.state === "built").map((r) => r.rooms);
 }
 /** The points the finished roads add to each island's held stock (epoch.ts islandPoints). */
-export async function routePoints(space: SpaceLike): Promise<Map<string, number>> {
+export async function routePoints(space: SpaceLike, now: number): Promise<Map<string, number>> {
 	const out = new Map<string, number>();
-	for (const r of await routesOf(space)) if (r.state === "built") out.set(r.island, (out.get(r.island) ?? 0) + r.points);
+	for (const r of await routesOf(space)) if (r.state === "built" && r.untilWorldMs > now) out.set(r.island, (out.get(r.island) ?? 0) + r.points);
 	return out;
 }
 
