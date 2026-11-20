@@ -14784,7 +14784,7 @@
 		"sorts": [
 			{
 				"key": "birke",
-				"model": "tree",
+				"model": "birch",
 				"name": "Birke",
 				"a": "eine Birke",
 				"the": "die Birke",
@@ -14815,7 +14815,7 @@
 			},
 			{
 				"key": "kopfweide",
-				"model": "tree",
+				"model": "willow",
 				"name": "Kopfweide",
 				"a": "eine Kopfweide",
 				"the": "die Kopfweide",
@@ -14862,7 +14862,7 @@
 			},
 			{
 				"key": "apfelbaum",
-				"model": "tree",
+				"model": "apple",
 				"name": "Apfelbaum",
 				"a": "ein Apfelbaum",
 				"the": "den Apfelbaum",
@@ -14904,7 +14904,7 @@
 			},
 			{
 				"key": "birnbaum",
-				"model": "tree",
+				"model": "pear",
 				"name": "Birnbaum",
 				"a": "ein Birnbaum",
 				"the": "den Birnbaum",
@@ -14946,7 +14946,7 @@
 			},
 			{
 				"key": "eiche",
-				"model": "tree",
+				"model": "oak",
 				"name": "Eiche",
 				"a": "eine Eiche",
 				"the": "die Eiche",

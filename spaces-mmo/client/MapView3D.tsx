@@ -14,7 +14,7 @@ import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
-import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, contactShadow, propMesh, merge, cached, plainMaterial, solidMesh, propShadow, propShadows, setNight, TINTED, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
+import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, FRUIT_AT, TREE_SORT_MODELS, willowRods, placeLook, plantGeometry, prepareModelDetails, propMaterial, contactShadow, propMesh, merge, cached, plainMaterial, solidMesh, propShadow, propShadows, setNight, TINTED, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { shadowSizeAt, closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
@@ -799,13 +799,16 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		// a planted tree (engine/commands/trees.ts): the scenery's tree or conifer, smaller while it grows; its ripe crop as
 		// little balls in the fruit's colour round the crown
 		const k = [0.35, 0.65, 1][obj.treeStage ?? 2]!, look = placeLook(obj.id);
-		const tree = propMesh(t, plantGeometry(t, obj.model === "conifer" ? "conifer" : "tree", look.variant % PLANT_VARIANTS));
+		const form = obj.model === "conifer" || TREE_SORT_MODELS.has(obj.model ?? "") ? (obj.model as PlantModel) : "tree";
+		const tree = propMesh(t, plantGeometry(t, form, look.variant % PLANT_VARIANTS));
 		tree.scale.setScalar(k); tree.rotation.y = look.turn; group.add(tree);
 		group.add(propShadow(t, 1.1 * k, 1.1 * k));
+		// a pollard willow with its rods grown, ready to be cut
+		if (obj.ripe && obj.cut && form === "willow") { const rods = propMesh(t, willowRods(t, look.variant % PLANT_VARIANTS)); rods.scale.setScalar(k); rods.rotation.y = look.turn; group.add(rods); }
 		if (obj.ripe && !obj.cut) {
 			// the seven fruits are one mesh, made once per colour and size
 			const colour = Number.parseInt((obj.color ?? "#d8402a").slice(1), 16);
-			group.add(new t.Mesh(cached(`fruit:${colour}:${k}`, () => merge(t, [0, 1, 2, 3, 4, 5, 6].map((i): Part => { const a = (i / 7) * Math.PI * 2; return { g: new t.SphereGeometry(0.06, 8, 6), c: colour, p: [Math.cos(a) * 0.42 * k, (0.75 + (i % 3) * 0.18) * k, Math.sin(a) * 0.42 * k], m: "none" }; }), "fruit")), plainMaterial(t, 0.6)));
+			group.add(new t.Mesh(cached(`fruit:${form}:${colour}:${k}`, () => { const at = FRUIT_AT[form] ?? FRUIT_AT.tree!; return merge(t, [0, 1, 2, 3, 4, 5, 6].map((i): Part => { const a = (i / 7) * Math.PI * 2; return { g: form === "pear" ? new t.SphereGeometry(0.06, 8, 6).scale(0.85, 1.3, 0.85) : new t.SphereGeometry(0.06, 8, 6), c: colour, p: [Math.cos(a) * at.out * k, (at.low + (i % 3) * at.step) * k, Math.sin(a) * at.out * k], m: "none" }; }), "fruit"); }), plainMaterial(t, 0.6)));
 		}
 		return e;
 	}

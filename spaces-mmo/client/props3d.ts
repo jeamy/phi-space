@@ -20,7 +20,14 @@ export const LAMPLIGHT = new Set([0xf2c46a, 0xff8a2a]);
  *  one geometry and one draw call for the blossoms of every colour. The rest of the model keeps its own colours. */
 export const TINTED = -1;
 
-export type PlantModel = "tree" | "conifer" | "bush" | "berrybush" | "flower" | "herb" | "grass" | "fern" | "palm";
+export type PlantModel = "tree" | "conifer" | "bush" | "berrybush" | "flower" | "herb" | "grass" | "fern" | "palm" | TreeSortModel;
+/** The forms of the planted tree sorts (world trees.sorts[].model): each its own trunk and crown. */
+export type TreeSortModel = "birch" | "willow" | "apple" | "pear" | "oak";
+export const TREE_SORT_MODELS: ReadonlySet<string> = new Set<TreeSortModel>(["birch", "willow", "apple", "pear", "oak"]);
+/** Where a ripe crop hangs on a grown tree of each form (MapView3D): how far out, from which height, and how much higher. */
+export const FRUIT_AT: Record<string, { out: number; low: number; step: number }> = {
+	tree: { out: 0.42, low: 0.75, step: 0.18 }, apple: { out: 0.55, low: 0.62, step: 0.16 }, pear: { out: 0.3, low: 0.85, step: 0.26 },
+};
 /** How many shapes of each plant there are; a place picks one. */
 export const PLANT_VARIANTS = 3;
 
@@ -262,6 +269,97 @@ function frond(t: T, parts: Part[], top: V3, a: number, len: number, c: number, 
 
 // ---- plants ----
 
+/** A trunk piece from `a` to `b` (a cylinder turned along it). */
+function limb(t: T, parts: Part[], a: V3, b: V3, r0: number, r1: number, c: number, m?: Part["m"]): void {
+	const d = new t.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length();
+	const q = new t.Quaternion().setFromUnitVectors(new t.Vector3(0, 1, 0), d.clone().normalize()), e = new t.Euler().setFromQuaternion(q);
+	parts.push({ g: fixed(t, new t.CylinderGeometry(r1, r0, len, 6)), c, p: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], r: [e.x, e.y, e.z], ...(m ? { m } : {}) });
+}
+
+/** The planted sorts, each told apart from afar by its trunk and the shape of its crown:
+ *  birch — slender, white with dark bands, a light, airy, narrow crown that hangs a little;
+ *  willow (a pollard) — a short thick trunk with a knobby head and a shock of thin upright rods, grey-green;
+ *  apple — a short crooked trunk, a low, wide, flat crown; pear — straight and tall, a narrow upright crown;
+ *  oak — a thick trunk forking into big limbs, a broad, heavy crown of dark lumps. */
+function treeSort(t: T, parts: Part[], model: TreeSortModel, variant: number, r: () => number): void {
+	if (model === "birch") {
+		const high = 1.05 + r() * 0.15, lean = (r() - 0.5) * 0.08;
+		limb(t, parts, [0, 0, 0], [lean, high, 0], 0.06, 0.04, 0xe8e4d8, "none");
+		// the dark bands of the bark
+		for (let i = 0; i < 6; i++) { const y = 0.12 + i * (high - 0.2) / 6 + r() * 0.05; parts.push({ g: new t.CylinderGeometry(0.058 - y * 0.015, 0.06 - y * 0.015, 0.03 + r() * 0.03, 6), c: 0x2e2a26, p: [lean * y / high, y, 0], m: "none" }); }
+		const light = [0x8cc060, 0x7ab04e, 0x9ccc6c], balls = [{ radius: 0.3, c: light[variant % 3]!, p: [lean, high + 0.12, 0] as V3 }];
+		for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + r(); balls.push({ radius: 0.17 + r() * 0.06, c: light[(variant + i) % 3]!, p: [lean + Math.cos(a) * 0.17, high - 0.25 + r() * 0.4, Math.sin(a) * 0.17] }); }
+		crown(t, parts, balls, r, 0.1, [0x9ccc6c, 0x8cc060, 0xa8d478]);
+		return;
+	}
+	if (model === "willow") {
+		const head = 0.55 + r() * 0.08;
+		parts.push({ g: new t.CylinderGeometry(0.13, 0.16, head, 7), c: 0x5e4a36, m: "bark", p: [0, head / 2, 0] });
+		parts.push({ g: new t.IcosahedronGeometry(0.19, 0), c: 0x4e3c2a, p: [0, head + 0.04, 0], s: [1, 0.7, 1] });
+		const rods = 14 + (variant % 3) * 2, grey = [0x8aa070, 0x9ab07c, 0x7c9464];
+		for (let i = 0; i < rods; i++) {
+			const a = i * 2.39996 + r() * 0.4, out = 0.06 + r() * 0.08, tip = 0.45 + r() * 0.25, spread = 0.18 + r() * 0.16;
+			const from: V3 = [Math.cos(a) * out, head + 0.08, Math.sin(a) * out], to: V3 = [Math.cos(a) * (out + spread), head + 0.08 + tip, Math.sin(a) * (out + spread)];
+			limb(t, parts, from, to, 0.012, 0.007, 0x6e5a3e, "none");
+		}
+		// the narrow leaves along the rods, grey-green
+		leaves(t, parts, grey, r, (push) => {
+			for (let i = 0; i < rods * 9; i++) {
+				const a = Math.floor(i / 9) * 2.39996, k = 0.3 + (i % 9) / 11, out = 0.1 + k * 0.26, up = head + 0.1 + k * 0.6;
+				push([Math.cos(a) * out, up, Math.sin(a) * out], unit(Math.cos(a + (r() - 0.5) * 2), 0.2 + (r() - 0.5) * 0.6, Math.sin(a + (r() - 0.5) * 2)), 0.1, 0.022);
+			}
+		});
+		return;
+	}
+	if (model === "apple") {
+		// a short trunk that forks low; the crown wide and flat, lower than a tall tree's
+		const fork = 0.42 + r() * 0.06;
+		limb(t, parts, [0, 0, 0], [0.04, fork, 0], 0.09, 0.07, 0x5a4030, "bark");
+		for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + r(); limb(t, parts, [0.04, fork - 0.03, 0], [Math.cos(a) * 0.32, fork + 0.32, Math.sin(a) * 0.32], 0.05, 0.03, 0x5a4030, "bark"); }
+		const balls = [{ radius: 0.42, c: LEAF[variant % 3]!, p: [0, fork + 0.5, 0] as V3 }];
+		for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + r(); balls.push({ radius: 0.27 + r() * 0.07, c: LEAF[(variant + i) % 3]!, p: [Math.cos(a) * 0.45, fork + 0.36 + r() * 0.18, Math.sin(a) * 0.45] }); }
+		for (const b of balls) b.p[1] = fork + (b.p[1] - fork) * 0.85;
+		crown(t, parts, balls, r, 0.12, LEAF_LIGHT);
+		return;
+	}
+	if (model === "pear") {
+		// straight and tall, the crown narrow and upright like a flame
+		const trunk = 0.6 + r() * 0.1;
+		limb(t, parts, [0, 0, 0], [0, trunk, 0], 0.075, 0.055, 0x4a3a2c, "bark");
+		const green = [0x4a8a3c, 0x3f7d34, 0x55944a], balls: Array<{ radius: number; c: number; p: V3 }> = [];
+		for (let i = 0; i < 4; i++) { const k = i / 3; balls.push({ radius: 0.34 - k * 0.15, c: green[(variant + i) % 3]!, p: [(r() - 0.5) * 0.06, trunk + 0.22 + k * 0.62, (r() - 0.5) * 0.06] }); }
+		for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + r(); balls.push({ radius: 0.22, c: green[(variant + i) % 3]!, p: [Math.cos(a) * 0.17, trunk + 0.3 + r() * 0.4, Math.sin(a) * 0.17] }); }
+		crown(t, parts, balls, r, 0.11, [0x5a9a48, 0x4a8a3c, 0x62a250]);
+		return;
+	}
+	// oak: thick and broad, big limbs, a heavy dark crown of many lumps
+	const fork = 0.55 + r() * 0.08;
+	limb(t, parts, [0, 0, 0], [0, fork, 0], 0.17, 0.13, 0x4e3e30, "bark");
+	for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + r(); parts.push({ g: new t.BoxGeometry(0.3, 0.08, 0.1), c: 0x4e3e30, p: [Math.cos(a) * 0.15, 0.04, Math.sin(a) * 0.15], r: [0, -a, 0.3] }); }
+	for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + r(); limb(t, parts, [0, fork - 0.05, 0], [Math.cos(a) * 0.42, fork + 0.4 + r() * 0.15, Math.sin(a) * 0.42], 0.08, 0.045, 0x4e3e30, "bark"); }
+	const dark = [0x2f6a2c, 0x3a7632, 0x285e26], balls = [{ radius: 0.5, c: dark[variant % 3]!, p: [0, fork + 0.7, 0] as V3 }];
+	for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2 + r(); balls.push({ radius: 0.3 + r() * 0.1, c: dark[(variant + i) % 3]!, p: [Math.cos(a) * 0.55, fork + 0.45 + r() * 0.45, Math.sin(a) * 0.55] }); }
+	crown(t, parts, balls, r, 0.13, [0x3f7a36, 0x2f6a2c, 0x4a8640]);
+}
+
+/** A pollard willow's grown rods (MapView3D: while its crop is ripe): long thin wands from its head, to be cut. */
+export function willowRods(t: T, variant: number): Geo {
+	return cached(`willow-rods:${variant}`, () => {
+		const r = rand(`willow-rods:${variant}`), parts: Part[] = [];
+		for (let i = 0; i < 22; i++) {
+			const a = i * 2.39996 + r() * 0.4, out = 0.06 + r() * 0.08, spread = 0.3 + r() * 0.2, tip = 0.85 + r() * 0.35;
+			limb(t, parts, [Math.cos(a) * out, 0.66, Math.sin(a) * out], [Math.cos(a) * (out + spread), 0.66 + tip, Math.sin(a) * (out + spread)], 0.012, 0.006, 0x7a5a3a, "none");
+		}
+		leaves(t, parts, [0x8aa070, 0x9ab07c], r, (push) => {
+			for (let i = 0; i < 22 * 8; i++) {
+				const a = Math.floor(i / 8) * 2.39996, k = 0.35 + (i % 8) / 11, out = 0.12 + k * 0.4, up = 0.7 + k * 1.05;
+				push([Math.cos(a) * out, up, Math.sin(a) * out], unit(Math.cos(a + (r() - 0.5) * 2), 0.1 + (r() - 0.5) * 0.6, Math.sin(a + (r() - 0.5) * 2)), 0.11, 0.022);
+			}
+		});
+		return merge(t, parts, `willow-rods:${variant}`);
+	});
+}
+
 /** A plant's geometry (about 1.7 units for a tree, 0.6 for a bush), standing on y = 0. */
 export function plantGeometry(t: T, model: PlantModel, variant: number, color = 0xf4f0e6): Geo {
 	return cached(`${model}:${variant}:${color}`, () => {
@@ -291,7 +389,8 @@ export function plantGeometry(t: T, model: PlantModel, variant: number, color = 
 			for (let i = 0; i < 3; i++) { const a = i * 2.1 + r(); parts.push({ g: new t.IcosahedronGeometry(0.05, 0), c: 0x5b3f22, p: [top[0] + Math.cos(a) * 0.07, top[1] - 0.06, top[2] + Math.sin(a) * 0.07] }); }
 			return merge(t, parts, `${model}:${variant}`);
 		}
-		if (model === "tree") {
+		if (TREE_SORT_MODELS.has(model)) treeSort(t, parts, model as TreeSortModel, variant, r);
+		else if (model === "tree") {
 			const trunk = 0.62 + r() * 0.18;
 			parts.push({ g: new t.CylinderGeometry(0.07, 0.11, trunk, 6), c: BARK, p: [0, trunk / 2, 0] });
 			for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + r(); parts.push({ g: new t.BoxGeometry(0.22, 0.06, 0.07), c: BARK, p: [Math.cos(a) * 0.1, 0.03, Math.sin(a) * 0.1], r: [0, -a, 0.25] }); }
@@ -326,7 +425,7 @@ export function plantGeometry(t: T, model: PlantModel, variant: number, color = 
 				parts.push({ g: new t.IcosahedronGeometry(0.045, 0), c: 0xc8323a, p: [Math.cos(a) * 0.3, up, Math.sin(a) * 0.3] });
 			}
 		}
-		if (modelLevel() === "near" && (model === "tree" || model === "conifer")) for (let i = 0; i < 5; i++) parts.push({ g: new t.BoxGeometry(0.1, 0.009, 0.012), c: WOOD_DARK, p: [0, 0.1 + i * 0.085, 0.078], r: [0, i * 0.2, -0.1] });
+		if (modelLevel() === "near" && (model === "tree" || model === "conifer" || model === "apple" || model === "pear" || model === "oak")) for (let i = 0; i < 5; i++) parts.push({ g: new t.BoxGeometry(0.1, 0.009, 0.012), c: WOOD_DARK, p: [0, 0.1 + i * 0.085, 0.078], r: [0, i * 0.2, -0.1] });
 		return merge(t, parts, `${model}:${variant}`);
 	});
 }
