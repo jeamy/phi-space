@@ -84,6 +84,14 @@ pub async fn move_item(c: &Ctx, item: &Json, from: &str, to: &str, extra: &[(&st
 	c.space.write(&obj! { "type" => j::at(&e, "type").clone(), "types" => Json::Array(types), "fields" => Json::Object(o) }, c.txn(), FOREVER).await?;
 	Ok(())
 }
+/// `refuseLoaded`: a boat with cargo in its hatch is not sold (to a trader, a store or over the board); given or swapped
+/// it goes along with the boat.
+pub async fn refuse_loaded(c: &Ctx, item: &Json) -> Result<()> {
+	if j::opt(j::at(j::at(c.w(), "boat"), "hatch"), j::s(item, "proto")).is_some_and(j::truthy) && c.space.count(&tmpl("Item", obj! { "location" => j::at(item, "itemId").clone() }), c.txn()).await? > 0.0 {
+		return refuse(format!("In der Luke von {} liegt noch etwas; entlade sie erst („luke entlade alle“).", txt(j::at(item, "name"))));
+	}
+	Ok(())
+}
 /// `consume`: takes an item for good (a boat with cargo or a bill with coins are not used up).
 pub async fn consume(c: &Ctx, item: &Json, from: &str) -> Result<()> {
 	let proto = j::s(item, "proto");
@@ -388,6 +396,7 @@ async fn market(c: &mut Ctx, arg: &str) -> Result<()> {
 		let Some(item) = items.first().map(|i| f(i).clone()) else { return Err(Error::Other("Cannot read properties of undefined (reading 'f')".into())) };
 		let listing_id = format!("l-{}", hex(&random_bytes(5)));
 		if j::s(&item, "proto") == "muenze" { return refuse("Münzen gegen Münzen zu tauschen ergibt nichts; stelle etwas anderes ans Marktbrett."); }
+		refuse_loaded(c, &item).await?;
 		let from = chest.as_ref().map_or_else(|| me.clone(), |(b, _)| txt(j::at(b, "buildId")));
 		for i in &items { move_item(c, f(i), &from, "market", &[("listing", Json::from(listing_id.as_str())), ("seller", Json::from(me.as_str()))]).await?; }
 		let mut lot = Object::new();

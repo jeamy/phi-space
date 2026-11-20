@@ -126,7 +126,7 @@
 				"kanal",
 				"chan"
 			],
-			"help": "channel <name> <text> – auf einem Kanal sprechen, den alle hören (kanal ohne Text listet sie)"
+			"help": "channel <name> <text> – auf einem Kanal sprechen, den alle hören (kanal allein listet sie)"
 		},
 		{
 			"module": "default",
@@ -501,7 +501,7 @@
 				"signale",
 				"signalkette",
 				"feuerkette",
-				"signal fires"
+				"signals"
 			],
 			"help": "signalfeuer – die Ketten der Signalfeuer dieser Insel: welche Feuer sie verbinden, ob sie brennen, und welche Insel dieser Gegend ihre Kette am längsten brennen ließ"
 		},
@@ -563,7 +563,7 @@
 			"key": "schaufle",
 			"aliases": [
 				"schaufeln",
-				"dig sand"
+				"shovel"
 			],
 			"help": "schaufle – am Strand mit dem Spaten Sand graben (danach ruhst du eine Weile)"
 		},
@@ -957,7 +957,7 @@
 				"zeit",
 				"uhrzeit"
 			],
-			"help": "time – die Zeit in der Welt: Tag und Uhrzeit"
+			"help": "time – die Zeit in der Welt: Tag, Uhrzeit und Jahreszeit"
 		},
 		{
 			"module": "clock",

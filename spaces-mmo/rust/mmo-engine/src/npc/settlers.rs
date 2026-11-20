@@ -28,7 +28,22 @@ fn all_of(f: &[Json]) -> Vec<Json> { f.iter().map(|e| fields(e).clone()).collect
 fn at_rect(f: &Json) -> (Rect, String) { (Rect::of(f), j::s(f, "room").to_owned()) }
 
 const RAW: [&str; 3] = ["treibholz", "tang", "muschel"];
-const PLANS: [&str; 3] = ["huette", "regentonne", "huehnerstall"];
+/// A scarecrow, not a coop: it guards the settler's own beds, and a coop would stand empty.
+const PLANS: [&str; 3] = ["huette", "regentonne", "vogelscheuche"];
+/// `askingPrice`: a coin more than the best trader of the room's island pays for the thing (two where none buys it).
+pub fn asking_price(w: &Json, room: &str, proto: &str) -> f64 {
+	let rooms = j::ao(w, "allRooms").unwrap_or_else(|| j::a(w, "rooms"));
+	let island_of = |r: &str| rooms.iter().find(|x| j::s(x, "roomId") == r).and_then(|x| j::so(x, "island")).map(str::to_owned);
+	let island = island_of(room);
+	let here = |r: Option<&str>| r.is_some_and(|r| !r.is_empty() && rooms.iter().any(|x| j::s(x, "roomId") == r) && island_of(r) == island);
+	let mut best = 0.0_f64;
+	for n in j::a(w, "npcs") {
+		if j::at(n, "prices").as_object().is_none() { continue; }
+		if !(here(j::so(n, "room")) || here(j::so(n, "market")) || j::a(n, "home").iter().any(|h| here(h.as_str()))) { continue; }
+		best = best.max(j::at(j::at(n, "prices"), proto).as_array().and_then(|a| a.first()).and_then(Json::as_f64).unwrap_or(0.0));
+	}
+	if best > 0.0 { best + 1.0 } else { 2.0 }
+}
 const CART_FROM: usize = 6;
 const RAW_MAX: usize = 8;
 
@@ -324,7 +339,7 @@ impl Siedler {
 		board.sort_by(|a, b| j::n(a, "at").total_cmp(&j::n(b, "at")).then_with(|| crate::js::locale_compare(j::s(a, "listingId"), j::s(b, "listingId"))));
 		let me = j::at(&l.me, "charId");
 		if let Some(i) = board.iter().position(|x| j::at(x, "seller") != me && j::n(x, "price") <= coins && has(&lacks, j::s(x, "itemName"))) { n.act(&format!("market kaufe {}", i + 1)).await?; return Ok(true); }
-		if heap.len() >= 2 && board.iter().filter(|x| j::at(x, "seller") == me).count() < 3 { n.act(&format!("market biete {} für {}", j::s(&heap[0], "name"), 2 + self.round % 3)).await?; return Ok(true); }
+		if heap.len() >= 2 && board.iter().filter(|x| j::at(x, "seller") == me).count() < 3 { n.act(&format!("market biete {} für {}", j::s(&heap[0], "name"), phi_json::number_text(asking_price(w, &market, j::s(&heap[0], "proto"))))).await?; return Ok(true); }
 		Ok(false)
 	}
 

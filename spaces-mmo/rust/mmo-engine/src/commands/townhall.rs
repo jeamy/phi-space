@@ -27,7 +27,7 @@ pub async fn zone_refusal(c: &Ctx, room: &str, cells: &[(f64, f64)], green: bool
 	for e in c.space.read_all(&tmpl("Zone", obj! { "room" => room }), None).await? {
 		let z = fields(&e);
 		if j::s(z, "kind") == "gruen" && green { continue; }
-		if cells.iter().any(|p| is_in(*p, z)) { return Ok(Some(if j::s(z, "kind") == "weg" { "Dort liegt ein Wegerecht; das bleibt frei." } else { "Das ist Grünzone; dort gehen nur Beete und Parks." }.into())); }
+		if cells.iter().any(|p| is_in(*p, z)) { return Ok(Some(if j::s(z, "kind") == "weg" { "Dort liegt ein Wegerecht; das bleibt frei." } else { "Das ist Grünzone; dort gehen nur Beete, Bäume, Parks und Gewächshäuser." }.into())); }
 	}
 	Ok(None)
 }

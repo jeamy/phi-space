@@ -7,7 +7,7 @@ use phi_json::{obj, Json};
 
 use super::build::{dist_to, no_article, plan_of, put_back, take_near, Rect};
 use super::settlement::settlement_in;
-use super::trade::{consume, move_item};
+use super::trade::{consume, move_item, refuse_loaded};
 use crate::clock::decay_now_of;
 use crate::context::{inventory, items_named, msg, to_player, Ctx, MsgOpts};
 use crate::fire::key_text;
@@ -111,6 +111,7 @@ async fn laden(c: &mut Ctx, arg: &str) -> Result<()> {
 		let inv = inventory(c).await?;
 		let Some(it) = items_named(&w, &inv, &tail, None).into_iter().next().map(|e| fields(&e).clone()) else { return not_understood(format!("Du trägst nichts, was „{}“ heißt.", js::slice16(&tail, 0, Some(30)))) };
 		if !priced(j::s(&it, "proto")) { return refuse(format!("{} führt das Kaufhaus nicht.", txt(j::at(&it, "name")))); }
+		refuse_loaded(c, &it).await?;
 		let price = bid(j::s(&it, "proto"));
 		if free < price { return refuse("Die Kasse des Kaufhauses ist zu leer dafür."); }
 		let bid_s = txt(&build_id);

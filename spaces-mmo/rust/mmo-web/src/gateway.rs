@@ -76,7 +76,7 @@ struct State {
 	objs_by_loc: HashMap<String, OMap<()>>, atlas_objs: OMap<()>,
 	recent: HashMap<String, Vec<Json>>, flames: HashMap<String, f64>, flame_of: OMap<String>, fog: OMap<f64>,
 	clock: Option<Json>,
-	offers: OMap<Json>, orders: OMap<Json>, listings: OMap<Json>, wanted: OMap<Json>, notices: OMap<Json>, notices_by_char: HashMap<String, OMap<()>>, seed_rests: OMap<Json>, epochs: OMap<Json>, site_orders: OMap<Json>, mill_loads: OMap<Json>, herds: HashMap<String, Json>,
+	offers: OMap<Json>, orders: OMap<Json>, listings: OMap<Json>, wanted: OMap<Json>, notices: OMap<Json>, notices_by_char: HashMap<String, OMap<()>>, seed_rests: OMap<Json>, work_rests: OMap<Json>, epochs: OMap<Json>, site_orders: OMap<Json>, mill_loads: OMap<Json>, herds: HashMap<String, Json>,
 	applied: HashMap<String, f64>, char_region: HashMap<String, String>,
 }
 
@@ -355,7 +355,7 @@ impl Gateway {
 		let st = self.st.borrow();
 		let Some(c) = &st.clock else { return Json::Null };
 		let n = now();
-		obj! { "epoch" => j::at(c, "epoch").clone(), "worldMs" => world_at(c, n), "rate" => j::at(c, "rate").clone(), "paused" => j::at(c, "paused").clone(), "serverNowMs" => n, "yearDays" => self.year_days.get(), "patience" => { let rate = j::n(c, "rate"); rate / j::no(c, "decayRate").unwrap_or(rate) } }
+		obj! { "epoch" => j::at(c, "epoch").clone(), "worldMs" => world_at(c, n), "rate" => j::at(c, "rate").clone(), "paused" => j::at(c, "paused").clone(), "serverNowMs" => n, "yearDays" => self.year_days.get(), "patience" => { let rate = j::n(c, "rate"); rate / j::no(c, "decayRate").unwrap_or(rate) }, "decayMs" => decay_at(c, n) }
 	}
 	fn broadcast_time(&self) {
 		{ let (g, s) = (Rc::downgrade(&self.rc()), self.space.clone()); tokio::task::spawn_local(async move { if let (Ok(d), Some(g)) = (setting(&s, "year.days").await, g.upgrade()) { g.year_days.set(d); } }); }
@@ -556,7 +556,7 @@ impl Gateway {
 				if rev < 0.0 {
 					rev = j::n(&space.remote().read_page(&obj! { "type" => "-" }, None, None, None, None, None).await?, "rev");
 					let mut msgs: Vec<Json> = Vec::new();
-					for ty in ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "Notice", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Tree", "Animal", "Zone", "Road", "Wind", "Cart", "MillLoad"] { self.read_paged(&region, &space, &obj! { "type" => ty }, &mut msgs).await?; }
+					for ty in ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "Notice", "SeedRest", "WorkRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Tree", "Animal", "Zone", "Road", "Wind", "Cart", "MillLoad"] { self.read_paged(&region, &space, &obj! { "type" => ty }, &mut msgs).await?; }
 					self.read_paged(&region, &space, &tmpl("Msg", obj! { "to" => "*" }), &mut msgs).await?;
 					self.advance(&region, rev);
 					if !signalled { signalled = true; left.set(left.get() - 1); if left.get() == 0 { self.ready.send_replace(true); } }
@@ -613,11 +613,11 @@ impl Gateway {
 				let renewed = ty == "Session" && self.st.borrow().sessions.contains_key(&id);
 				if !renewed { touch(&id, Some(j::at(op, "fields")), j::a(op, "types"), &mut chars, &mut objs, &mut fogs); }
 				trade |= ["Offer", "Order", "Listing", "Wanted"].contains(&ty);
-				if ty == "SeedRest" { seeking.insert(txt(j::at(j::at(op, "fields"), "charId"))); }
+				if ty == "SeedRest" || ty == "WorkRest" { seeking.insert(txt(j::at(j::at(op, "fields"), "charId"))); }
 				self.put(&id, ty, j::a(op, "types"), j::at(op, "fields"), &mut msgs);
 			} else {
 				touch(&id, None, &[], &mut chars, &mut objs, &mut fogs);
-				{ let st = self.st.borrow(); trade |= st.offers.has(&id) || st.orders.has(&id) || st.listings.has(&id) || st.wanted.has(&id); if let Some(s) = st.seed_rests.get(&id) { seeking.insert(j::s(s, "charId").to_owned()); } }
+				{ let st = self.st.borrow(); trade |= st.offers.has(&id) || st.orders.has(&id) || st.listings.has(&id) || st.wanted.has(&id); if let Some(s) = st.seed_rests.get(&id).or_else(|| st.work_rests.get(&id)) { seeking.insert(j::s(s, "charId").to_owned()); } }
 				self.del(&id);
 			}
 		}
@@ -652,7 +652,7 @@ impl Gateway {
 			let mut st = self.st.borrow_mut();
 			st.clock = None;
 			st.chars.clear(); st.char_of.clear(); st.char_entry.clear(); st.sessions.clear(); st.online.clear(); st.rooms.clear(); st.objs.clear(); st.obj_of.clear(); st.obj_entry.clear(); st.objs_by_loc.clear(); st.atlas_objs.clear(); st.recent.clear(); st.flames.clear(); st.flame_of.clear(); st.fog.clear();
-			st.offers.clear(); st.orders.clear(); st.listings.clear(); st.wanted.clear(); st.notices.clear(); st.notices_by_char.clear(); st.seed_rests.clear(); st.epochs.clear(); st.mill_loads.clear(); st.herds.clear();
+			st.offers.clear(); st.orders.clear(); st.listings.clear(); st.wanted.clear(); st.notices.clear(); st.notices_by_char.clear(); st.seed_rests.clear(); st.work_rests.clear(); st.epochs.clear(); st.mill_loads.clear(); st.herds.clear();
 			// also what the stream's site orders and winds showed: an order or a wind that went while the stream was
 			// away would stay for good
 			st.site_orders.clear(); st.winds.clear();
@@ -662,7 +662,7 @@ impl Gateway {
 		let ids: Vec<String> = {
 			let st = self.st.borrow();
 			let mut v: Vec<String> = st.char_of.keys().chain(st.obj_of.keys()).chain(st.sessions.keys()).cloned().collect();
-			v.extend(st.flame_of.keys().chain(st.offers.keys()).chain(st.orders.keys()).chain(st.listings.keys()).chain(st.wanted.keys()).chain(st.notices.keys()).chain(st.seed_rests.keys()).chain(st.epochs.keys()).chain(st.site_orders.keys()).chain(st.mill_loads.keys()).map(str::to_owned));
+			v.extend(st.flame_of.keys().chain(st.offers.keys()).chain(st.orders.keys()).chain(st.listings.keys()).chain(st.wanted.keys()).chain(st.notices.keys()).chain(st.seed_rests.keys()).chain(st.work_rests.keys()).chain(st.epochs.keys()).chain(st.site_orders.keys()).chain(st.mill_loads.keys()).map(str::to_owned));
 			v.into_iter().filter(|id| id.starts_with(&pre)).collect()
 		};
 		for id in ids { self.del(&id); }
@@ -768,6 +768,7 @@ impl Gateway {
 				if state == "build" && j::truthy(j::at(f, "missing")) { o.insert("missing", j::at(f, "missing").clone()); }
 				if state == "vote" && !j::a(f, "votedBy").is_empty() { o.insert("votedIds", j::at(f, "votedBy").clone()); }
 				if state == "vote" { put_some(&mut o, "votes", f.get("votes")); }
+				if state == "built" { put_some(&mut o, "term", f.get("untilWorldMs")); }
 				self.set_obj(id, Json::Object(o));
 				self.atlas_changed(false);
 			}
@@ -882,6 +883,7 @@ impl Gateway {
 				self.tell(j::s(f, "charId"));
 			}
 			"SeedRest" => self.st.borrow_mut().seed_rests.set(id, f.clone()),
+			"WorkRest" => self.st.borrow_mut().work_rests.set(id, f.clone()),
 			"Epoch" => { self.st.borrow_mut().epochs.set(id, f.clone()); self.atlas_changed(false); }
 			"Scenery" => {
 				let mut o = obj_of(obj! { "id" => j::at(f, "sceneryId").clone(), "kind" => "scenery", "name" => j::at(f, "name").clone(), "desc" => scenery_text(&w, f), "location" => j::at(f, "room").clone(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone(), "w" => j::at(f, "w").clone(), "h" => j::at(f, "h").clone() });
@@ -942,7 +944,7 @@ impl Gateway {
 		let order = self.st.borrow_mut().site_orders.delete(id);
 		if let Some(o) = order { self.show_orders(j::s(&o, "buildId")); return; }
 		let mut st = self.st.borrow_mut();
-		if st.offers.delete(id).is_some() || st.orders.delete(id).is_some() || st.listings.delete(id).is_some() || st.wanted.delete(id).is_some() || st.seed_rests.delete(id).is_some() { return; }
+		if st.offers.delete(id).is_some() || st.orders.delete(id).is_some() || st.listings.delete(id).is_some() || st.wanted.delete(id).is_some() || st.seed_rests.delete(id).is_some() || st.work_rests.delete(id).is_some() { return; }
 		if let Some(n) = st.notices.delete(id) {
 			let cid = j::s(&n, "charId");
 			if let Some(m) = st.notices_by_char.get_mut(cid) { m.delete(id); if m.is_empty() { st.notices_by_char.remove(cid); } }
@@ -1023,6 +1025,7 @@ impl Gateway {
 			None => Json::Null,
 		};
 		let seed = match &room { Some(r) => { let m = st.seed_rests.values().filter(|x| j::s(x, "charId") == me && j::s(x, "room") == r).map(|x| j::n(x, "untilWorldMs")).fold(0f64, f64::max); if m != 0.0 && !m.is_nan() { Json::Number(m) } else { Json::Null } } None => Json::Null };
+		let work = { let m = st.work_rests.values().filter(|x| j::s(x, "charId") == me).map(|x| j::n(x, "untilWorldMs")).fold(0f64, f64::max); if m != 0.0 && !m.is_nan() { Json::Number(m) } else { Json::Null } };
 		let in_market = in_list(market, &room);
 		let listings_v = if in_market { Json::Array(listings.iter().filter(|l| Some(j::s(l, "room")) == room.as_deref()).enumerate().map(|(i, l)| obj! { "nr" => (i + 1) as f64, "itemName" => j::at(l, "itemName").clone(), "count" => j::no(l, "count").unwrap_or(1.0), "price" => j::at(l, "price").clone(), "sellerName" => j::at(l, "sellerName").clone(), "mine" => j::s(l, "seller") == me }).collect()) } else { Json::Null };
 		let wanted_v = if in_market {
@@ -1036,7 +1039,7 @@ impl Gateway {
 					"replies" => Json::Array(j::a(x, "replies").iter().map(|r| obj! { "name" => j::at(r, "name").clone(), "ask" => j::at(r, "ask").clone() }).collect()), "traded" => traded, "until" => until }
 			}).collect())
 		} else { Json::Null };
-		obj! { "offersIn" => Json::Array(offers_in), "offersOut" => Json::Array(offers_out), "orders" => orders_v, "myOrder" => my_order, "seedRestUntilWorldMs" => seed, "listings" => listings_v, "wanted" => wanted_v }
+		obj! { "offersIn" => Json::Array(offers_in), "offersOut" => Json::Array(offers_out), "orders" => orders_v, "myOrder" => my_order, "seedRestUntilWorldMs" => seed, "workRestUntilWorldMs" => work, "listings" => listings_v, "wanted" => wanted_v }
 	}
 	fn lapse_in(&self, st: &State, at: Option<f64>) -> Json {
 		let (Some(clock), Some(at)) = (&st.clock, at) else { return Json::Null };
