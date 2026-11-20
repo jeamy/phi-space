@@ -566,11 +566,11 @@ pub async fn craft(c: &mut Ctx, arg: &str) -> Result<()> {
 			let mut hits: Vec<&Json> = inv.iter().filter(|i| is_of(f(i), want_p) && !used.contains(&item_id(i)) && !round.contains(&item_id(i))).collect();
 			hits.sort_by_key(|i| rank(i));
 			let hits: Vec<String> = hits.into_iter().take(count.max(0.0) as usize).map(item_id).collect();
-			if (hits.len() as f64) < count { lack = format!("Dir fehlt: {}× {}.", nt(count), txt(j::at(n, "proto"))); break 'rounds; }
+			if (hits.len() as f64) < count { lack = format!("Dir fehlt: {}× {}.", nt(count), super::mill::proto_name(c.w(), j::s(n, "proto"))); break 'rounds; }
 			round.extend(hits);
 		}
 		let tool = tools.iter().find(|i| !round.contains(&item_id(i)) && !used.contains(&item_id(i)) && wear_of(&wear, i) > 0.0);
-		if let (Some(t), None) = (&tool_proto, tool) { lack = format!("Dafür brauchst du ein Werkzeug: {t}."); break; }
+		if let (Some(t), None) = (&tool_proto, tool) { lack = format!("Dafür brauchst du ein Werkzeug: {}.", super::mill::proto_name(c.w(), t)); break; }
 		if let Some(t) = tool {
 			let left = wear_of(&wear, t) - wearing;
 			match wear.iter_mut().find(|(k, _)| *k == item_id(t)) { Some(s) => s.1 = left, None => wear.push((item_id(t), left)) }
@@ -652,7 +652,7 @@ async fn order(c: &mut Ctx, arg: &str) -> Result<()> {
 		let mut give: Vec<Json> = Vec::new();
 		for need in j::a(f(&mine), "needs") {
 			let free: Vec<Json> = inv.iter().filter(|i| !give.iter().any(|g| item_id(g) == item_id(i))).cloned().collect();
-			let Some(hits) = by_proto(&free, j::at(need, "proto"), j::n(need, "count")) else { return refuse(format!("Dir fehlt noch: {}× {}.", txt(j::at(need, "count")), txt(j::at(need, "proto")))) };
+			let Some(hits) = by_proto(&free, j::at(need, "proto"), j::n(need, "count")) else { return refuse(format!("Dir fehlt noch: {}× {}.", txt(j::at(need, "count")), super::mill::proto_name(c.w(), j::s(need, "proto")))) };
 			give.extend(hits);
 		}
 		if c.space.take(&obj! { "type" => "Order", "id" => j::at(&mine, "id").clone() }, NO_WAIT, c.txn()).await?.is_none() { return refuse("Der Auftrag ist gerade nicht greifbar."); }
@@ -680,7 +680,9 @@ fn base36(n: f64) -> String {
 pub async fn orders_tick(space: &Space, w: &Json) -> Result<()> {
 	let od = j::at(w, "orders");
 	for room in j::strs(j::a(od, "rooms")) {
-		let kinds: Vec<&Json> = j::a(od, "kinds").iter().filter(|k| j::ao(k, "rooms").is_none_or(|r| r.iter().any(|x| x.as_str() == Some(room)))).collect();
+		// a board asks for what its island can make: the goods of a later epoch come with that epoch
+		let epoch = super::epoch::epoch_of(space, super::epoch::island_of(w, room).as_deref(), None).await?;
+		let kinds: Vec<&Json> = j::a(od, "kinds").iter().filter(|k| j::ao(k, "rooms").is_none_or(|r| r.iter().any(|x| x.as_str() == Some(room))) && j::no(k, "epoch").unwrap_or(1.0) <= epoch).collect();
 		if kinds.is_empty() || space.count(&tmpl("Order", obj! { "room" => room }), None).await? >= j::n(od, "max") { continue; }
 		let k = kinds[random_int(0.0, kinds.len() as f64) as usize];
 		let order_id = format!("j-{}-{}", base36(time_now()), hex(&random_bytes(3)));
@@ -697,7 +699,9 @@ async fn restock(space: &Space, w: &Json) -> Result<()> {
 	let now = world_now_of(space, None).await?;
 	let currency = j::at(w, "currency");
 	for n in j::a(w, "npcs") {
-		let sells: Vec<&Json> = j::a(n, "carry").iter().filter(|c| j::at(c, "proto") != currency && sell_price(n, j::s(c, "proto")) > 0.0).collect();
+		// its coins too, when it buys: a keeper that only buys, or a trader whose buyers stay away, would be broke for good
+		let buys = j::at(n, "prices").as_object().is_some_and(|p| p.iter().any(|(_, v)| v.as_array().and_then(|a| a.first()).and_then(Json::as_f64).unwrap_or(0.0) > 0.0));
+		let sells: Vec<&Json> = j::a(n, "carry").iter().filter(|c| if j::at(c, "proto") == currency { buys } else { sell_price(n, j::s(c, "proto")) > 0.0 }).collect();
 		if sells.is_empty() { continue; }
 		let char_id = format!("npc-{}", txt(j::at(n, "npcId")));
 		if space.peek(&tmpl("Character", obj! { "charId" => char_id.as_str() }), None).await?.is_none() { continue; }

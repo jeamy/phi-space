@@ -303,7 +303,7 @@ async fn light_of(c: &Ctx, beacon_id: &str) -> Result<f64> {
 }
 
 /// `noteBuilder`: the actor counts as building at this fire.
-async fn note_builder(c: &Ctx, beacon_id: &str) -> Result<()> {
+pub async fn note_builder(c: &Ctx, beacon_id: &str) -> Result<()> {
 	let Some(a) = &c.account else { return Ok(()) };
 	if j::opt(j::at(c.w(), "building"), "lightGrowth").is_none() || j::b(a, "guest") || j::b(a, "settler") { return Ok(()); }
 	let id = j::at(a, "accountId").clone();
@@ -552,6 +552,11 @@ pub async fn bau(c: &mut Ctx, arg: &str) -> Result<()> {
 	}
 	let points = j::n(plan, "points");
 	let light = match light_for(c, points).await? { Ok(l) => l, Err(why) => return refuse(why) };
+	// a fire carries one lighthouse: a second would add its light again for a few points
+	if j::no(plan, "lightBonus").unwrap_or(0.0) != 0.0 {
+		let t = obj! { "beaconId" => light.beacon_id.as_str(), "plan" => key };
+		if c.space.count(&tmpl("Building", t.clone()), None).await? > 0.0 || c.space.count(&tmpl("Site", t), None).await? > 0.0 { return refuse(format!("Ein Feuer trägt höchstens einen Bau „{pname}“, und dieses hat ihn schon (oder seine Baustelle).")); }
+	}
 	note_builder(c, &light.beacon_id).await?;
 	let room = room_of(c, None).await?;
 	let ground = rows(j::at(&room, "ground"));
@@ -1271,7 +1276,16 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 			stop_loads(space, &txn, j::at(b, "buildId"), life).await?;
 			let id = key_text(j::at(b, "buildId"));
 			let inside = space.read_all(&tmpl("Item", obj! { "location" => id.as_str() }), None).await?;
-			if !inside.is_empty() {
+			// what a settlement laid into its warehouse is not its owner's (as with `abriss` and a vote): when the warehouse
+			// falls it lies in the open at its place, for whoever of the settlement comes by
+			if !inside.is_empty() && plan_of(w, j::s(b, "plan")).is_some_and(|p| j::truthy(j::at(p, "store"))) && settlement_in(space, j::s(b, "room"), Some(&txn)).await?.is_some() {
+				for it in &inside {
+					let Some(t) = space.take_if_exists(&obj! { "id" => j::at(it, "id").clone() }, NO_WAIT, Some(&txn)).await? else { continue };
+					let mut f = fields(&t).clone();
+					for (k, v) in [("location", j::at(b, "room").clone()), ("x", j::at(b, "x").clone()), ("y", j::at(b, "y").clone())] { j::set(&mut f, k, v); }
+					space.write(&anew(&t, f), Some(&txn), FOREVER).await?;
+				}
+			} else if !inside.is_empty() {
 				let estate_id = format!("est-{id}");
 				space.write(&tmpl("Estate", obj! { "estateId" => estate_id.as_str(), "accountId" => j::at(b, "accountId").clone(), "ownerName" => j::at(b, "ownerName").clone(), "room" => j::at(b, "room").clone(), "name" => j::at(b, "name").clone(), "untilWorldMs" => estate }), Some(&txn), FOREVER).await?;
 				for it in &inside { move_item(space, Some(&txn), &Json::from(key_text(j::at(fields(it), "itemId"))), &id, &estate_id).await?; }
@@ -1312,6 +1326,11 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 	// a rest, a blessing, a beam's pause and a meal end on the life clock (their commands write them by it)
 	for ty in ["WorkRest", "Blessing", "BeamRest", "Sated"] {
 		for e in space.read_all(&obj! { "type" => ty }, None).await? { if until_of(&e) <= life { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; } }
+	}
+	// the orders of a department store that stands no more (torn down, voted away, fallen)
+	if let Some(shop_plan) = j::so(j::at(w, "shop"), "plan") {
+		let shops: Vec<String> = space.read_all(&tmpl("Building", obj! { "plan" => shop_plan }), None).await?.iter().map(|e| key_text(j::at(fields(e), "buildId"))).collect();
+		for e in space.read_all(&obj! { "type" => "ShopOrder" }, None).await? { if !shops.contains(&key_text(j::at(fields(&e), "buildId"))) { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; } }
 	}
 	// flour (or grain back) nobody fetched
 	for e in space.read_all(&obj! { "type" => "MillLoad" }, None).await? { if until_of(&e) <= now { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; } }

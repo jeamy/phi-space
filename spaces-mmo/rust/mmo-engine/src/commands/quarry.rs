@@ -21,7 +21,7 @@ async fn dig(c: &mut Ctx, q: &Json, what: &str, done: &str, tired: &str) -> Resu
 	// the salt garden needs no tool: the sun does the work
 	let needs_tool = j::b(q, "tool");
 	let tool = if needs_tool { inventory(c).await?.into_iter().find(|i| j::at(fields(i), "proto") == j::at(q, "tool")).map(|t| fields(&t).clone()) } else { None };
-	if needs_tool && tool.is_none() { return refuse(format!("Dafür brauchst du ein Werkzeug: {}.", key_text(j::at(q, "tool")))); }
+	if needs_tool && tool.is_none() { return refuse(format!("Dafür brauchst du ein Werkzeug: {}.", super::mill::proto_name(c.w(), j::s(q, "tool")))); }
 	let Some(p) = resolve_prototype(&c.space, j::s(q, "makes")).await? else { return refuse("Der Steinbruch ist kaputt.") };
 	let wear = tool.as_ref().and_then(|t| t.get("wear")).map(j::number);
 	let left = wear.map_or(1.0, |w| w - 1.0);

@@ -48,6 +48,8 @@ fn said(m: &Json) -> String {
 	format!("„{}“", n(m, "text"))
 }
 fn zone_word(word: &str) -> Option<&'static str> { match word { "grünzone" | "gruenzone" | "greenzone" => Some("gruen"), "wegerecht" | "right of way" => Some("weg"), "zone frei" => Some("frei"), _ => None } }
+/// The yes votes a motion to tear down or to tax needs at least (fewer where fewer settlers live).
+const QUORUM: usize = 2;
 fn yes(votes: &[Json]) -> usize { votes.iter().filter(|v| j::truthy(j::at(v, "yes"))).count() }
 fn no(votes: &[Json]) -> usize { votes.len() - yes(votes) }
 async fn votes_on(space: &Space, motion_id: &Json) -> Result<Vec<Json>> { Ok(space.read_all(&tmpl("Vote", obj! { "motionId" => motion_id.clone() }), None).await?.iter().map(|e| fields(e).clone()).collect()) }
@@ -190,7 +192,9 @@ pub async fn motion_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 			let Some(taken) = space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, Some(&txn)).await? else { return Ok(false) };
 			let m = fields(&taken).clone();
 			let votes = votes_on(space, j::at(&m, "motionId")).await?;
-			let carried = yes(&votes) > no(&votes);
+			// tearing down another's building and the tax need two voices where two settlers live: one alone decides neither
+			let quorum = if matches!(j::s(&m, "kind"), "abriss" | "steuer") { QUORUM.min(super::road::voters_of(space, w, &[j::s(&m, "room")], Some(&txn)).await?.len().max(1)) } else { 1 };
+			let carried = yes(&votes) > no(&votes) && yes(&votes) >= quorum;
 			if let Some(held) = space.take_if_exists(&tmpl("Settlement", obj! { "settlementId" => j::at(&m, "settlementId").clone() }), NO_WAIT, Some(&txn)).await? {
 				let s = fields(&held).clone();
 				let kind = j::s(&m, "kind");
@@ -208,7 +212,8 @@ pub async fn motion_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 						Some(b) => { demolish_by_vote(space, &txn, w, &b, now).await?; log_gone(&b, "voted down at the town hall"); after = format!(" Die Fläche ist frei; was blieb, holt {} hier mit „nachlass“ ab.", key_text(j::at(&b, "ownerName"))); }
 					}
 				}
-				let text = format!("Abstimmung in {}: {} ist {}, {} dafür, {} dagegen.{after}", key_text(j::at(&s, "name")), said(&m), if carried { "angenommen" } else { "abgelehnt" }, yes(&votes), no(&votes));
+				let few = if !carried && yes(&votes) > no(&votes) { format!(" Dafür braucht es {quorum} Stimmen.") } else { String::new() };
+				let text = format!("Abstimmung in {}: {} ist {}, {} dafür, {} dagegen.{few}{after}", key_text(j::at(&s, "name")), said(&m), if carried { "angenommen" } else { "abgelehnt" }, yes(&votes), no(&votes));
 				let msg = obj! { "room" => j::at(&m, "room").clone(), "to" => "*", "kind" => "world", "text" => text, "from" => "", "at" => time_now() };
 				space.write_with(&obj! { "type" => "Msg", "fields" => msg }, Some(&txn), lease_ms, msg_transient(space, "*", "world").await).await?;
 			}

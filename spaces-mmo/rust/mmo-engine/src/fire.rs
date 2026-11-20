@@ -58,11 +58,19 @@ pub async fn feed(c: &Ctx, item: &Json, beacon: &Json, quiet: bool) -> Result<(f
 		let text = format!("$you() $conj(legst|legt) {} ins {}. Es {}.", j::s(f, "name"), j::s(beacon, "name"), burn_text(Some(&obj! { "beaconId" => bid, "until" => until, "litAt" => now }), now));
 		msg(c, "*", "info", &text, MsgOpts { templ: true, ..MsgOpts::default() }).await?;
 	}
-	if left == 0.0 { say(&c.space, c.msg_lease_ms, &j::strs(j::a(beacon, "covers")), "world", &format!("Das {} flammt auf.", j::s(beacon, "name")), c.txn()).await?; }
+	// everyone its light reaches hears it: the rooms of the world file, a lighthouse's and a signal chain's (covers_of)
+	if left == 0.0 {
+		let rooms = heard_in(&c.space, c.w(), bid, beacon, c.txn()).await?;
+		say(&c.space, c.msg_lease_ms, &rooms.iter().map(String::as_str).collect::<Vec<_>>(), "world", &format!("Das {} flammt auf.", j::s(beacon, "name")), c.txn()).await?;
+	}
 	Ok((until, now))
 }
 
 /// A message from the world itself to everyone in `rooms`.
+/// The rooms a fire's word reaches: those its light covers now (covers_of), else the beacon's own.
+async fn heard_in(space: &Space, w: &Json, beacon_id: &str, beacon: &Json, txn: Option<&str>) -> Result<Vec<String>> {
+	Ok(covers_of(space, w, txn).await?.into_iter().find(|(k, _)| k == beacon_id).map_or_else(|| j::strs(j::a(beacon, "covers")).into_iter().map(str::to_owned).collect(), |(_, v)| v))
+}
 pub async fn say(space: &Space, lease_ms: f64, rooms: &[&str], kind: &str, text: &str, txn: Option<&str>) -> Result<()> {
 	let transient = msg_transient(space, "*", kind).await;
 	for room in rooms {
@@ -87,7 +95,8 @@ pub async fn fire_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<()> {
 			space.write(&obj! { "type" => "Beacon", "fields" => Json::Object(f) }, Some(&txn), FOREVER).await?;
 			if lit != j::b(&beacon, "lit") {
 				let text = if lit { format!("Das {} brennt.", j::s(&beacon, "name")) } else { format!("Das {} ist erloschen. Der Nebel kriecht heran.", j::s(&beacon, "name")) };
-				say(space, lease_ms, &j::strs(j::a(&beacon, "covers")), "world", &text, Some(&txn)).await?;
+				let rooms = heard_in(space, w, bid, &beacon, Some(&txn)).await?;
+				say(space, lease_ms, &rooms.iter().map(String::as_str).collect::<Vec<_>>(), "world", &text, Some(&txn)).await?;
 			}
 			space.commit(&txn).await
 		}.await;

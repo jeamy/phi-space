@@ -121,7 +121,7 @@ pub async fn settlement_ranks(space: &Space, w: &Json) -> Result<Vec<Ranked>> {
 	let mut out = Vec::new();
 	for e in space.read_all(&obj! { "type" => "Settlement" }, None).await? {
 		let s = fields(&e);
-		let here: Vec<&Json> = buildings.iter().filter(|b| j::at(b, "room") == j::at(s, "room")).collect();
+		let here: Vec<&Json> = buildings.iter().filter(|b| j::at(b, "room") == j::at(s, "room") && j::n(b, "untilWorldMs").partial_cmp(&now) == Some(std::cmp::Ordering::Greater)).collect();
 		let tenders = tenders_in(space, w, j::s(s, "room"), now).await?;
 		let points = here.iter().fold(0.0, |n, b| n + j::no(b, "points").unwrap_or(1.0) + (j::no(b, "turnover").unwrap_or(0.0) / per).floor()) + tenders;
 		out.push(Ranked { name: key_text(j::at(s, "name")), points, parks: here.iter().filter(|b| j::s(b, "plan") == "park").count() as f64, tenders });

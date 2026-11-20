@@ -12,6 +12,7 @@ use crate::context::{inventory, items_named, msg, room_of, to_player, Ctx, MsgOp
 use crate::fire::key_text;
 use crate::j;
 use crate::js;
+use crate::pack::{load_at, load_of, pack_max};
 use crate::source::{hex, random_bytes, time_now};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::travel::count_trip;
@@ -152,9 +153,21 @@ async fn karren(c: &mut Ctx, arg: &str) -> Result<()> {
 		return msg(c, &me, "info", &format!("{} liegt auf dem Karren ({} von {}).", txt(j::at(&it, "name")), cargo.len() + 1, nt(cap)), MsgOpts::default()).await;
 	}
 	if js::re(r"^(?:entlade|unload)$", "i").test(&word) {
-		for it in &cargo { move_item(c, it, &cart_id, &me, &[]).await?; }
+		// as much as the pack still takes (pack.rs), like an estate: the rest stays on the cart
+		let pack = j::opt(c.w(), "pack").is_some();
+		let mut free = if pack { pack_max(&c.space, c.w(), Some(&me), c.txn()).await? - load_at(&c.space, c.w(), &me, c.txn()).await? } else { f64::INFINITY };
+		let mut got = 0;
+		for it in &cargo {
+			let each = if pack { load_of(c.w(), j::so(it, "proto")) } else { 0.0 };
+			if each > free + 1e-9 { continue; }
+			move_item(c, it, &cart_id, &me, &[]).await?;
+			got += 1;
+			free -= each;
+		}
 		put(c, &f).await?;
-		return msg(c, &me, "info", &if cargo.is_empty() { "Der Karren ist leer.".to_owned() } else { format!("Du nimmst {} Stück vom Karren.", cargo.len()) }, MsgOpts::default()).await;
+		let left = cargo.len() - got;
+		let text = if cargo.is_empty() { "Der Karren ist leer.".to_owned() } else if got > 0 { format!("Du nimmst {got} Stück vom Karren.{}", if left > 0 { format!(" {left} Stück bleiben darauf, mehr trägst du nicht.") } else { String::new() }) } else { format!("Das trägst du nicht mehr: {left} Stück bleiben auf dem Karren.") };
+		return msg(c, &me, "info", &text, MsgOpts::default()).await;
 	}
 	if js::re(r"^(?:nimm|take)$", "i").test(&word) {
 		if !cargo.is_empty() { return refuse("Erst entladen."); }
@@ -325,14 +338,26 @@ async fn zug(c: &mut Ctx, arg: &str) -> Result<()> {
 	// what the railway carried for the actor to this station: all of it into the pack
 	if js::re(r"^(?:abholen|hole|holen|fetch)$", "").test(&word) {
 		if mine.is_empty() { return refuse("Hier wartet keine Fracht für dich."); }
-		let mut n = 0;
+		// as much as the pack still takes (pack.rs): the rest waits on at the station
+		let pack = j::opt(c.w(), "pack").is_some();
+		let mut free = if pack { pack_max(&c.space, c.w(), Some(&me), c.txn()).await? - load_at(&c.space, c.w(), &me, c.txn()).await? } else { f64::INFINITY };
+		let (mut n, mut left) = (0, 0);
 		for f in &mine {
 			let fid = j::s(f, "freightId").to_owned();
-			if c.space.take_if_exists(&tmpl("Freight", obj! { "freightId" => fid.as_str() }), NO_WAIT, c.txn()).await?.is_none() { continue; }
-			for e in c.space.read_all(&tmpl("Item", obj! { "location" => fid.as_str() }), c.txn()).await? { move_item(c, fields(&e), &fid, &me, &[]).await?; n += 1; }
+			let Some(held) = c.space.take_if_exists(&tmpl("Freight", obj! { "freightId" => fid.as_str() }), NO_WAIT, c.txn()).await? else { continue };
+			let mut rest = 0;
+			for e in c.space.read_all(&tmpl("Item", obj! { "location" => fid.as_str() }), c.txn()).await? {
+				let each = if pack { load_of(c.w(), j::so(fields(&e), "proto")) } else { 0.0 };
+				if each > free + 1e-9 { rest += 1; continue; }
+				move_item(c, fields(&e), &fid, &me, &[]).await?;
+				n += 1;
+				free -= each;
+			}
+			if rest > 0 { left += rest; c.space.write(&tmpl("Freight", fields(&held).clone()), c.txn(), FOREVER).await?; }
 		}
-		if n == 0 { return refuse("Die Fracht ist gerade nicht greifbar; bitte noch einmal."); }
-		return msg(c, "*", "info", &format!("$you() $conj(holst|holt) {n} Stück Fracht vom Bahnsteig."), templ()).await;
+		if n == 0 && left == 0 { return refuse("Die Fracht ist gerade nicht greifbar; bitte noch einmal."); }
+		if n == 0 { return refuse(format!("Das trägst du nicht mehr: {left} Stück Fracht warten hier weiter.")); }
+		return msg(c, "*", "info", &format!("$you() $conj(holst|holt) {n} Stück Fracht vom Bahnsteig.{}", if left > 0 { format!(" {left} Stück warten dort weiter, mehr trägt niemand.") } else { String::new() }), templ()).await;
 	}
 	let currency = j::at(c.w(), "currency").clone();
 	if let Some(send) = send {

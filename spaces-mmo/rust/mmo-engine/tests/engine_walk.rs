@@ -255,6 +255,12 @@ fn building() {
 	w.write(obj! { "type" => "LightUse", "fields" => obj! { "beaconId" => "feuer-anleger", "used" => 100.0 } });
 	run(&mut w, &d, "bau hütte");
 	run(&mut w, &d, "bau regentonne");
+	// a fire carries one lighthouse: with one standing in its light, a second is refused
+	assert!(w.take(obj! { "type" => "LightUse", "fields" => obj! { "beaconId" => "feuer-anleger" } }));
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "epoch.force", "value" => 3.0 } });
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "lt-1", "plan" => "leuchtturm", "name" => "Leuchtturm", "room" => "anleger", "x" => 1.0, "y" => 1.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk9", "ownerName" => "Wanderer9", "accountId" => "a-walk9", "beaconId" => "feuer-anleger", "points" => 3.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	run(&mut w, &d, "bau leuchtturm");
+	assert!(said.last().is_some_and(|r| r.contains("Ein Feuer trägt höchstens einen Bau „Leuchtturm“")), "{:?}", said.last());
 	assert!(said.iter().any(|r| r == "ran") && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 	assert!(w.entries_with("steht! Mitgebaut") >= 1, "the hut never stood");
 }
@@ -1258,6 +1264,14 @@ fn trees() {
 	w.call("treeTick", None);
 	w.call("treeTick", None);
 	for (who, line) in [(&a, "baum"), (&a, "ernte birnbaum")] { run(&mut w, who, line, 0.0); }
+	// the trees count towards the island's stock, and eight of an account are the limit on an island
+	run(&mut w, &a, "epoche", 0.0);
+	w.call("epochTick", None);
+	for i in 0..8 { w.write(obj! { "type" => "Tree", "fields" => obj! { "treeId" => format!("far-{i}"), "sort" => "birke", "room" => "kupferhafen-markt", "x" => i as f64, "y" => 1.0, "w" => 1.0, "h" => 1.0, "owner" => a.as_str(), "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-kai", "points" => 1.0, "stage" => 0.0, "dueWorldMs" => 9e15, "at" => 0.0 } }); }
+	for i in 0..8 { w.write(obj! { "type" => "Tree", "fields" => obj! { "treeId" => format!("near-{i}"), "sort" => "birke", "room" => "klippenpfad", "x" => i as f64, "y" => 1.0, "w" => 1.0, "h" => 1.0, "owner" => a.as_str(), "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "stage" => 0.0, "dueWorldMs" => 9e15, "at" => 0.0 } }); }
+	w.write(thing(&world, "t-limit", "samen-birke", &a));
+	for line in ["pflanze birkensamen", "epoche"] { run(&mut w, &a, line, 0.0); }
+	assert!(said[said.len() - 2].contains("Bäume pflanzt niemand auf einer Insel"), "{:?}", said[said.len() - 2]);
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 15, "{said:?}");
 	assert!(w.entries_with(r#""Tree""#) >= 2, "no trees");
 }
@@ -1815,6 +1829,12 @@ fn sweeping() {
 	] { w.write(item(id, proto, loc, &extra)); }
 	let building = |id: &str, x: f64, until: Json| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => x, "y" => 13.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => until, "builtAt" => 0.0 } };
 	w.write(building("b-1", 2.0, past.clone()));
+	// a settlement's warehouse that falls leaves its goods in the open; a store's orders go with the store
+	w.write(obj! { "type" => "Settlement", "fields" => obj! { "settlementId" => "s-1", "name" => "Graubucht", "nameKey" => "graubucht", "room" => "graue-bucht", "founder" => "a-walk9", "founderName" => "Wanderer9", "members" => Json::Array(vec![]), "closed" => false, "at" => 0.0 } });
+	{ let mut l = building("b-4", 14.0, past.clone()); let f = l.get("fields").cloned().map(|mut f| { walk::j_set(&mut f, "plan", Json::from("lagerhaus")); walk::j_set(&mut f, "name", Json::from("Lagerhaus")); walk::j_set(&mut f, "y", Json::from(16.0)); f }).unwrap(); walk::j_set(&mut l, "fields", f); w.write(l); }
+	w.write(item("i-8", "muschel", "b-4", &[]));
+	{ let mut k = building("b-5", 18.0, later.clone()); let f = k.get("fields").cloned().map(|mut f| { walk::j_set(&mut f, "plan", Json::from("kaufhaus")); walk::j_set(&mut f, "name", Json::from("Kaufhaus")); walk::j_set(&mut f, "y", Json::from(16.0)); f }).unwrap(); walk::j_set(&mut k, "fields", f); w.write(k); }
+	for (id, at) in [("so-1", "b-5"), ("so-2", "b-gone")] { w.write(obj! { "type" => "ShopOrder", "fields" => obj! { "orderId" => id, "buildId" => at, "room" => "graue-bucht", "storeName" => "Kaufhaus", "ownerName" => "Wanderer1", "proto" => "muschel", "protoName" => "Muschel", "count" => 1.0, "reward" => 1.0 } }); }
 	w.write(building("b-2", 6.0, later.clone()));
 	w.write(building("b-3", 10.0, later.clone()));
 	for (_, at, of) in [("p-1", (2.0, 13.0), "b-1"), ("p-2", (14.0, 13.0), "site-1"), ("p-3", (18.0, 13.0), "r-1")] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => at.0, "y" => at.1, "of" => of } }); }
@@ -1845,6 +1865,9 @@ fn sweeping() {
 	w.compare("swept");
 	assert!(w.peek(obj! { "type" => "Ruin", "fields" => obj! { "buildId" => "b-1" } }).is_some(), "no ruin");
 	assert!(w.peek(obj! { "type" => "Estate", "fields" => obj! { "estateId" => "est-b-1" } }).is_some(), "no estate");
+	assert!(w.peek(obj! { "type" => "Estate", "fields" => obj! { "estateId" => "est-b-4" } }).is_none(), "the settlement's goods went to the owner");
+	assert!(w.peek(obj! { "type" => "Item", "fields" => obj! { "itemId" => "i-8", "location" => "graue-bucht" } }).is_some(), "the settlement's goods do not lie in the open");
+	assert!(w.peek(obj! { "type" => "ShopOrder", "fields" => obj! { "orderId" => "so-1" } }).is_some() && w.peek(obj! { "type" => "ShopOrder", "fields" => obj! { "orderId" => "so-2" } }).is_none(), "the orders of the store that is gone");
 	assert!(w.peek(obj! { "type" => "Item", "fields" => obj! { "proto" => "huhn", "location" => a.as_str() } }).is_some(), "the chick did not grow up");
 	for line in ["look", "inventory"] { let r = w.cmd(&a, line, None); w.compare(&format!("{line} -> {r}")); }
 	// storms over many world hours, each with the sweep after it

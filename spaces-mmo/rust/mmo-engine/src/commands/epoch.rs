@@ -50,9 +50,9 @@ pub async fn need_epoch(c: &Ctx, need: Option<f64>, what: &str) -> Result<()> {
 /// `epochFor`: the epoch a stock of `points` reaches, at most `count`.
 pub fn epoch_for(points: f64, limits: &[f64], count: f64) -> f64 { count.min(1.0 + limits.iter().filter(|t| points >= **t).count() as f64) }
 
-/// The held stock of an island: points, and of them by buildings, beds and fields.
+/// The held stock of an island: points, and of them by buildings, beds, fields and trees.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Stock { pub points: f64, pub buildings: f64, pub beds: f64, pub fields: f64 }
+pub struct Stock { pub points: f64, pub buildings: f64, pub beds: f64, pub fields: f64, pub trees: f64 }
 
 /// `islandPoints`: the held stock of every island of this region (in the order of its rooms).
 pub async fn island_points(space: &Space, w: &Json, now: f64) -> Result<Vec<(String, Stock)>> {
@@ -69,8 +69,17 @@ pub async fn island_points(space: &Space, w: &Json, now: f64) -> Result<Vec<(Str
 			match what { 0 => t.buildings += p, 1 => t.beds += p, _ => t.fields += p }
 		}
 	}
-	// a finished road counts as a building of its island (road.rs)
-	for (island, points) in super::road::route_points(space).await? { if let Some((_, t)) = out.iter_mut().find(|(k, _)| *k == island) { t.points += points; t.buildings += points; } }
+	// a planted tree takes light like a bed and counts like one (trees.rs)
+	for e in space.read_all(&obj! { "type" => "Tree" }, None).await? {
+		let b = fields(&e);
+		let Some(i) = island_of(w, j::s(b, "room")).filter(|i| !i.is_empty()) else { continue };
+		let Some((_, t)) = out.iter_mut().find(|(k, _)| *k == i) else { continue };
+		let p = j::no(b, "points").unwrap_or(1.0);
+		t.points += p;
+		t.trees += p;
+	}
+	// a finished road counts as a building of its island while it stands (road.rs)
+	for (island, points) in super::road::route_points(space, now).await? { if let Some((_, t)) = out.iter_mut().find(|(k, _)| *k == island) { t.points += points; t.buildings += points; } }
 	Ok(out)
 }
 
@@ -133,7 +142,7 @@ pub async fn epoche(c: &mut Ctx, _arg: &str) -> Result<()> {
 	let epoch = epoch_of(&c.space, Some(&island), c.txn()).await?;
 	let last = j::a(&eps, "names").len() as f64;
 	let nt = phi_json::number_text;
-	let parts = format!("Bauten {}, Beete {}, Äcker {}", nt(t.buildings), nt(t.beds), nt(t.fields));
+	let parts = format!("Bauten {}, Beete {}, Äcker {}, Bäume {}", nt(t.buildings), nt(t.beds), nt(t.fields), nt(t.trees));
 	let next = if epoch < last {
 		let u = unlocks(c.w(), epoch + 1.0);
 		let limit = limits.get((epoch - 1.0) as usize).filter(|_| epoch >= 1.0).map_or_else(|| "undefined".to_owned(), |l| nt(*l));

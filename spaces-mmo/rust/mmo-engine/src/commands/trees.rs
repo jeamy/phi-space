@@ -78,9 +78,13 @@ pub async fn plant_tree(c: &mut Ctx, arg: &str) -> Result<bool> {
 	let spade = j::s(&d, "spade").to_owned();
 	if !inventory(c).await?.iter().any(|i| j::s(fields(i), "proto") == spade) { let n = proto_name(c, &spade); return refuse(format!("Zum Pflanzen brauchst du einen {n} („craft {}“).", js::lower(&n))); }
 	let acc = j::at(&account, "accountId").clone();
-	if c.space.count(&tmpl("Tree", obj! { "accountId" => acc.clone() }), None).await? >= j::n(&d, "maxTrees") { return refuse(format!("Mehr als {} Bäume pflanzt niemand; fälle erst einen.", txt(j::at(&d, "maxTrees")))); }
+	// the limit holds for each island: a planter keeps a grove on every island it settles
+	let island = super::epoch::island_of(c.w(), c.room());
+	let mine = c.space.read_all(&tmpl("Tree", obj! { "accountId" => acc.clone() }), c.txn()).await?.iter().filter(|e| super::epoch::island_of(c.w(), j::s(fields(e), "room")) == island).count() as f64;
+	if mine >= j::n(&d, "maxTrees") { return refuse(format!("Mehr als {} Bäume pflanzt niemand auf einer Insel; fälle hier erst einen.", txt(j::at(&d, "maxTrees")))); }
 	let points = j::n(&d, "points");
 	let light = match light_for(c, points).await? { Ok(l) => l, Err(why) => return refuse(why.replacen("gebaut wird", "gepflanzt wird", 1).replacen("Bau", "Baum", 1)) };
+	super::build::note_builder(c, &light.beacon_id).await?;
 	let room = room_of(c, None).await?;
 	let tries = match (&m[2], &m[3]) {
 		(Some(x), Some(y)) => vec![Rect { x: js::to_number(x), y: js::to_number(y), w: 1.0, h: 1.0 }],

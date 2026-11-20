@@ -157,6 +157,7 @@ async fn dig(c: &mut Ctx, arg: &str) -> Result<()> {
 	}
 	let points = j::n(&size, "points");
 	let light = match light_for(c, points).await? { Ok(l) => l, Err(why) => return refuse(why.replacen("gebaut wird", "gegärtnert wird", 1).replacen("Bau", "Beet", 1)) };
+	super::build::note_builder(c, &light.beacon_id).await?; // who gardens widens the fire's light like who builds
 	if kind == Some("gemein") && c.space.peek(&tmpl("BedCommons", obj! { "beaconId" => light.beacon_id.as_str() }), None).await?.is_some() { return refuse("Im Licht dieses Feuers liegt schon ein Gemeinschaftsbeet; pflanze dort mit („beet“ zeigt es)."); }
 	let room = room_of(c, None).await?;
 	let (w, h) = (j::n(&size, "w"), j::n(&size, "h"));

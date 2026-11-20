@@ -342,6 +342,7 @@ async fn feed_keeper(c: &mut Ctx, kp: Option<&Json>, arg: &str) -> Result<()> {
 	let mut nb = b.clone();
 	j::set(&mut nb, "keeper", kpr);
 	put_back(c, &nb).await?;
+	if !mine(c, &b) { credit_deed(c, "tiere").await?; } // feeding another's guard is the same good turn as feeding its herd
 	msg(c, "*", "emote", &format!("{} füttert {} von {} mit {} {}; satt für etwa {}.", txt(j::at(&c.actor, "name")), txt(j::at(&k, "acc")), txt(j::at(&b, "ownerName")), nt(count), txt(j::at(fields(&offer[0]), "name")), hours((until - now) / patient)), MsgOpts::default()).await
 }
 

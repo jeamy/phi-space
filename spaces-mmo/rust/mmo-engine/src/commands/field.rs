@@ -136,6 +136,7 @@ async fn stake(c: &mut Ctx, at: &str) -> Result<()> {
 	if c.space.count(&tmpl("Field", obj! { "accountId" => j::at(&account, "accountId").clone() }), None).await? >= max { return refuse(format!("Mehr als {} bestellt niemand allein.", plural(max, "Acker", "Äcker"))); }
 	let points = j::n(&d, "points");
 	let light = match light_for(c, points).await? { Ok(l) => l, Err(why) => return refuse(why.replacen("gebaut wird", "gepflügt wird", 1).replacen("Bau", "Acker", 1)) };
+	super::build::note_builder(c, &light.beacon_id).await?;
 	let room = room_of(c, None).await?;
 	let (fw, fh) = (j::n(&d, "w"), j::n(&d, "h"));
 	let m = js::caps(&js::re(r"^(\d+)\s+(\d+)$", ""), js::trim(at));

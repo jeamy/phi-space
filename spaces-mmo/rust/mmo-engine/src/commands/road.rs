@@ -89,7 +89,7 @@ fn trace(w: &Json, ground: &[String], from: Cell, to: &[Cell], blocked: &HashSet
 }
 
 /// `votersOf`: hut owners of these rooms and the settlers a settlement took in, who are registered people.
-async fn voters_of(space: &Space, w: &Json, rooms: &[&str], txn: Option<&str>) -> Result<Vec<String>> {
+pub async fn voters_of(space: &Space, w: &Json, rooms: &[&str], txn: Option<&str>) -> Result<Vec<String>> {
 	let mut out: Vec<String> = Vec::new();
 	let mut add = |id: String| if !out.contains(&id) { out.push(id); };
 	for room in rooms {
@@ -162,10 +162,10 @@ pub async fn route_links(space: &Space, txn: Option<&str>) -> Result<Vec<(String
 	Ok(routes_of(space, txn).await?.iter().filter(|r| j::s(r, "state") == "built").map(rooms_of).collect())
 }
 /// `routePoints`: the points the finished roads add to each island (epoch.rs `island_points`).
-pub async fn route_points(space: &Space) -> Result<Vec<(String, f64)>> {
+pub async fn route_points(space: &Space, now: f64) -> Result<Vec<(String, f64)>> {
 	let mut out: Vec<(String, f64)> = Vec::new();
 	for r in routes_of(space, None).await? {
-		if j::s(&r, "state") != "built" { continue; }
+		if j::s(&r, "state") != "built" || j::n(&r, "untilWorldMs").partial_cmp(&now) != Some(std::cmp::Ordering::Greater) { continue; }
 		let island = txt(j::at(&r, "island"));
 		match out.iter_mut().find(|(k, _)| *k == island) { Some((_, p)) => *p += j::n(&r, "points"), None => out.push((island, j::n(&r, "points"))) }
 	}
