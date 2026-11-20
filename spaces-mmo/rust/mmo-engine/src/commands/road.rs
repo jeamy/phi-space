@@ -138,6 +138,7 @@ async fn road_save_as(space: &Space, txn: &str, r: &Json, fresh: bool) -> Result
 			"missing" => missing.as_str(), "votes" => votes.as_str()
 		};
 		if j::s(r, "state") == "vote" && !j::a(r, "votedBy").is_empty() { j::set(&mut part, "votedBy", j::at(r, "votedBy").clone()); }
+		if j::s(r, "state") == "vote" { j::set(&mut part, "voters", j::at(r, "voters").clone()); }
 		// a finished road's term (the page offers mending near its end)
 		if j::s(r, "state") == "built" { j::set(&mut part, "untilWorldMs", j::at(r, "untilWorldMs").clone()); }
 		space.write(&tmpl("Road", part), Some(txn), FOREVER).await?;

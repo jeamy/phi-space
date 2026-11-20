@@ -478,7 +478,7 @@ impl Gateway {
 		let fog = self.st.borrow().fog.get(&my_room).copied().unwrap_or(0.0);
 		let hello = obj! {
 			"t" => "hello", "wind" => self.wind_in(&my_room), "build" => self.build.clone().map_or(Json::Null, Json::from), "world" => Json::Object(world),
-			"me" => obj! { "charId" => my_id.as_str(), "name" => j::at(&me, "name").clone(), "guest" => c.me.guest, "admin" => c.me.admin },
+			"me" => obj! { "charId" => my_id.as_str(), "accountId" => c.me.account_id.as_str(), "name" => j::at(&me, "name").clone(), "guest" => c.me.guest, "admin" => c.me.admin },
 			"room" => room, "chars" => Json::Array(chars), "objs" => Json::Array(objs), "log" => Json::Array(log), "fog" => fog, "now" => now(), "worldTime" => self.world_time()
 		};
 		c.ws.send(&hello);
@@ -767,6 +767,7 @@ impl Gateway {
 				put_some(&mut o, "paved", f.get("paved")); put_some(&mut o, "roadState", f.get("state")); put_some(&mut o, "roadTo", f.get("to"));
 				if state == "build" && j::truthy(j::at(f, "missing")) { o.insert("missing", j::at(f, "missing").clone()); }
 				if state == "vote" && !j::a(f, "votedBy").is_empty() { o.insert("votedIds", j::at(f, "votedBy").clone()); }
+				if state == "vote" { put_some(&mut o, "voterIds", f.get("voters")); }
 				if state == "vote" { put_some(&mut o, "votes", f.get("votes")); }
 				if state == "built" { put_some(&mut o, "term", f.get("untilWorldMs")); }
 				self.set_obj(id, Json::Object(o));
