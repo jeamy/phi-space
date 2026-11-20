@@ -474,12 +474,12 @@ Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Am Rathaus einen Antrag stellen; allein: den laufenden zeigen |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Über die Fläche um dich abstimmen lassen |
 | \`antrag steuer <n>\` | | Münzen je Stück für Entnahmen aus dem Lager und Käufe im Kaufhaus |
-| \`antrag abriss\` | | Über den Abriss des Baus neben dir abstimmen lassen; was bleibt, gehört dem Besitzer als Nachlass. Abriss und Steuer brauchen zwei Ja-Stimmen, wo zwei Siedler wohnen |
+| \`antrag abriss\` | | Über den Abriss des Baus neben dir abstimmen lassen; was bleibt, gehört dem Besitzer als Nachlass. Abriss und Steuer brauchen zwei Ja-Stimmen, wo zwei Siedler wohnen. Nur ein Bau darf neben dir stehen; das Rathaus nicht, ein Lager erst, wenn es leer ist |
 | \`stimme ja\|nein\` | \`vote\` | Als Siedler über den Antrag abstimmen |
 | \`repariere\` | \`repair\` | Einen Bau ausbessern |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
 | \`nachlass\` | \`estate\` | Den Nachlass an der Ruine deines Baus abholen |
-| \`räume [x y]\` | \`clear\`, \`räumen\` | Was neben dir im Weg steht abräumen, eine alte Hütte, ein Boot: Arbeit für Arbeit, dann ist das Land frei |
+| \`räume [x y]\` | \`clear\`, \`räumen\` | Was neben dir im Weg steht abräumen, eine alte Hütte, ein Boot: Arbeit für Arbeit, nach jeder ruhst du, dann ist das Land frei |
 | \`betrete [x y]\` | \`hinein\`, \`eintreten\` | In den Bau neben dir gehen, den eigenen oder einen, in den du eingeladen bist; \`hinaus\` führt vor die Tür |
 | \`einladen [name]\` | \`invite\`, \`lade\` | Jemanden in den eigenen Bau einladen; ohne Namen: wer eingeladen ist |
 | \`ausladen <name>\` | \`uninvite\` | Eine Einladung zurücknehmen; wer drinnen ist, steht dann draußen |
@@ -567,7 +567,7 @@ Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Si
 | \`segle <insel>\` | \`sail\` | Mit dem Segelboot vom Steg zu einer anderen Insel |
 | \`luke\` | \`hatch\` | Was in der Luke deines Boots liegt; am Steg \`luke lade [n\|alle] <ding>\`, \`luke entlade alle\` |
 | \`schaufle\` | | Am Strand Sand graben |
-| \`iss <ding>\` | \`eat\` | Etwas essen: Satt ruhst du nach der Arbeit kürzer (ein Drittel), Brot 12 Stunden, ein Festessen 24; Hunger gibt es nicht. Ein Klick auf Essbares unter „Bei dir“ bietet „Essen“ an |
+| \`iss <ding>\` | \`eat\` | Etwas essen: Satt ruhst du nach der Arbeit kürzer (ein Drittel), Brot 12 Stunden, ein Festessen 24; mehrere Mahlzeiten zählen zusammen, bis 24 Stunden, und drinnen bei einem Tisch in der Truhe des Baus hält es ein Viertel länger. Hunger gibt es nicht. Ein Klick auf Essbares unter „Bei dir“ bietet „Essen“ an |
 | \`wirf netz\` | \`fish\` | An einem Steg das Netz auswerfen |
 | \`wetter\` | \`weather\`, \`wind\` | Wie der Wind steht und wie dicht der Nebel ist; der Wind treibt die Mühlen |
 | \`pflege\` | \`tend\` | Einmal am Tag eine Blume in den Park neben dir setzen: Ruf für dich, Rang für die Siedlung |
@@ -669,12 +669,12 @@ Building works only in a fire's light. In detail under [Building](help.game.buil
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Put a motion at a town hall; alone: show the open one |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Put the ground around you to a vote |
 | \`antrag steuer <n>\` | | Coins per thing taken from the warehouse or bought at the department store |
-| \`antrag abriss\` | | Put the building beside you to a vote; what is left is the owner's estate. Tearing down and the tax need two yes votes where two settlers live |
+| \`antrag abriss\` | | Put the building beside you to a vote; what is left is the owner's estate. Tearing down and the tax need two yes votes where two settlers live. Only one building may stand beside you; not the town hall, a warehouse only once it is empty |
 | \`stimme ja\|nein\` | \`vote\` | Vote on the motion as a settler |
 | \`repariere\` | \`repair\` | Repair a building |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
 | \`nachlass\` | \`estate\` | Collect the estate at your building's ruin |
-| \`räume [x y]\` | \`clear\`, \`räumen\` | Clear away what stands in the way beside you, an old hut, a boat: work by work, then the land is free |
+| \`räume [x y]\` | \`clear\`, \`räumen\` | Clear away what stands in the way beside you, an old hut, a boat: work by work, a rest after each, then the land is free |
 | \`betrete [x y]\` | \`enter\`, \`hinein\` | Go into the building beside you, your own or one you are invited into; \`hinaus\` leads back outside |
 | \`einladen [name]\` | \`invite\`, \`lade\` | Invite someone into your own building; without a name: who is invited |
 | \`ausladen <name>\` | \`uninvite\` | Take an invitation back; whoever is inside then stands outside |
@@ -762,7 +762,7 @@ An island grows by what stands on it. In detail under [Village and settlement](h
 | \`segle <insel>\` | \`sail\` | By sailing boat from a jetty to another island |
 | \`luke\` | \`hatch\` | What lies in your boat's hatch; at a jetty \`luke lade [n\|alle] <ding>\`, \`luke entlade alle\` |
 | \`schaufle\` | | Dig sand on the beach |
-| \`iss <ding>\` | \`eat\` | Eat something: sated, you rest less after work (a third), bread 12 hours, a feast 24; there is no hunger. A click on something edible under „Bei dir“ offers „Essen“ |
+| \`iss <ding>\` | \`eat\` | Eat something: sated, you rest less after work (a third), bread 12 hours, a feast 24; meals add up to 24 hours, and indoors with a table in the building's chest it lasts a quarter longer. There is no hunger. A click on something edible under „Bei dir“ offers „Essen“ |
 | \`wirf netz\` | \`fish\` | Cast the net at a jetty |
 | \`wetter\` | \`weather\`, \`wind\` | How the wind stands and how thick the fog is; the wind drives the mills |
 | \`pflege\` | \`tend\` | Once a day set a flower in the park beside you: reputation for you, rank for the settlement |
@@ -833,6 +833,8 @@ Der Nebel kommt, wenn kein Feuer brennt. Er wird langsam dichter, bis man die We
 
 Er hat vier Stufen (0 bis 3). Brennt das Feuer eines Ortes nicht, steigt er alle zwei Minuten um eine Stufe; brennt es, sinkt er ebenso. Bei **Stufe 3 („undurchdringlich“) findest du die meisten Ausgänge nicht mehr**, und kein Kahn fährt. Nur der Weg zu dem Feuer, das diesen Ort erhellt, bleibt zu finden, damit niemand im Nebel gefangen ist. \`look\` beschreibt den Nebel in Worten, die Karte zeigt ihn mit.
 
+**Was ein erloschenes Feuer kostet:** Die Bauten in seinem Licht arbeiten weiter und verfallen nicht schneller. Aber der Nebel steigt und schließt die Ausgänge bis auf den Weg zum Licht, Pflanzen und Bäume wachsen bis zu zweieinhalbmal langsamer, das [Wild](help.game.wild) kommt an Beete, Äcker, Ställe und Truhen, in seinem Licht wird nichts Neues abgesteckt (kein Bau, kein Beet, kein Acker, kein Baum), Signalketten brechen, und niemand beamt zu ihm.
+
 ## Die Flut {#tide}
 
 Die Flut bringt das **Strandgut**, von dem alle leben. Sie kommt jede Minute und legt neue Stücke an die Strände aller Inseln. Wer zuerst da ist, bekommt sie.
@@ -880,6 +882,8 @@ A fire accepts at most two hours ahead; more is not taken. Marta in Kupferhafen 
 The fog comes when no fire burns. It slowly thickens until you can no longer find the paths. A burning fire pushes it back.
 
 It has four levels (0 to 3). If a place's fire does not burn, it rises one level every two minutes; if it burns, it sinks just as fast. At **level 3 (“impenetrable”) you no longer find most exits**, and no ferry runs. Only the way to the fire that lights this place can still be found, so nobody is trapped in the fog. \`look\` describes the fog in words, the map shows it too.
+
+**What a dead fire costs:** the buildings in its light keep working and decay no faster. But the fog rises and closes the exits but for the way to the light, plants and trees grow up to two and a half times slower, the [wild](help.game.wild) comes to beds, fields, coops and chests, nothing new is staked out in its light (no building, bed, field or tree), signal chains break, and nobody beams to it.
 
 ## The tide {#tide}
 
@@ -1274,7 +1278,7 @@ Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um
 
 ## Die Truhe {#chest}
 
-Eine Hütte hat eine Truhe für deine Sachen. Was darin liegt, trägst du nicht mehr mit dir herum.
+Eine Hütte hat eine Truhe für deine Sachen. Was darin liegt, trägst du nicht mehr mit dir herum. Eine Räucherei und eine Metzgerei haben eine Truhe wie die Hütte; sie zählen mit, wenn du mehrere Truhen hast.
 
 Die Hütte hat eine Truhe, die **nur dir** gehört: \`truhe\` zeigt sie, \`verstaue 3 muscheln\` (oder „leg die muscheln in die truhe“) legt etwas hinein, \`entnimm 2 muscheln\` (oder „nimm … aus der truhe“) holt es heraus. Herausnehmen kannst du nur direkt neben der Hütte oder drinnen an der Truhe, hineinlegen **von überall**: Neben einer deiner Hütten geht es in diese, sonst in deine einzige. Hast du mehrere, sagst du welche, mit ihrer Nummer oder ihrem Ort: \`verstaue 3 muscheln in 2\`, \`verstaue 3 muscheln in die hütte am anleger\` (oder „leg 3 muscheln in die truhe 2“). Ohne Angabe nennt \`verstaue\` die Nummern. Unter „Bei dir“ legst du ein gewähltes Ding in die gewählte Truhe: eine Zahl und „Stück verstauen“ (etwa 300), oder „Alle … verstauen“. Liegt die Hütte in einer anderen Gegend, bringt ein Bote die Sachen hin, das dauert einen Moment.
 
@@ -1294,15 +1298,16 @@ Am Herd kocht man, was man in der Hütte macht (Rührei, Braten, Käse …): neb
 
 ## Last {#load}
 
-Eine Figur trägt höchstens **1500 Last** (der Betreiber stellt es ein). Jedes Ding wiegt nach seiner Art:
+Eine Figur trägt höchstens **1500 Last** (der Betreiber stellt es ein), mit einer Ledertasche 250 mehr. Jedes Ding wiegt nach seiner Art:
 
 | Last | Dinge |
 |---|---|
-| 0 | Münzen |
-| ½ | Muscheln, Samen, Perlen, Bernstein, Wachs, Kerzen, Daunen |
+| 0 | Münzen, Wechsel |
+| ½ | Muscheln, Samen, Perlen, Bernstein, Bernsteinkette, Wachs, Kerzen, Daunen, Salz, Knochenmehl |
 | 1 | Tang, Fisch, Eier, Honig, Milch, Werkzeug, Ernte, Brot und alles andere |
-| 2 | Treibholz, Tangseil, Stein, Kohl, Ziegel, Bohlen, Lehm, Hund, Katze |
-| 4 | Holzbündel, Huhn, Ente, Gans, Schaf, Ziege, Schwein, Bienenvolk, Ruderboot, Karren |
+| 2 | Treibholz, Tangseil, Tauwerk, Stein, Kohl, Ziegel, Bohlen, Obstkiste, Fensterläden, Lehm, Hund, Katze, Ferkel |
+| 3 | Speiseschrank |
+| 4 | Holzbündel, Huhn, Ente, Gans, Schaf, Ziege, Schwein, Bienenvolk, Ruderboot, Karren, Fass, Tisch |
 | 8 | Rind, Segelboot |
 
 Unter „Bei dir“ steht, wie viel du trägst. Was dich über die Grenze brächte (aufheben, sammeln, ernten, kaufen, herstellen, aus der Truhe nehmen), geht nicht, bis du etwas in eine Truhe legst oder ablegst. Was dir andere bringen (eine Lieferung, ein Geschenk, Münzen für dein Angebot), kommt trotzdem an. Wer schon mehr trägt, verliert nichts, nimmt aber nichts mehr auf. Eine Truhe nimmt dagegen alles auf, ohne Grenze: verteile, was du nicht tragen kannst, auf deine Truhen.
@@ -1380,7 +1385,7 @@ Delivering and working work **from up to two cells away**, so many fit around a 
 
 ## The chest {#chest}
 
-A hut has a chest for your things. What lies in it you no longer carry around.
+A hut has a chest for your things. What lies in it you no longer carry around. A smokehouse and a butcher's shop have a chest like the hut's; they count among your chests when you have several.
 
 The hut has a chest that is **yours alone**: \`truhe\` (\`chest\`) shows it, \`verstaue 3 muscheln\` (\`store\`, or “leg die muscheln in die truhe”) puts something in, \`entnimm 2 muscheln\` (\`retrieve\`) takes it out. You take things out only right next to the hut or inside at the chest; you put them in **from anywhere**: beside one of your huts into that one, else into your only one. With several you say which, by its number or its place: \`verstaue 3 muscheln in 2\`, \`verstaue 3 muscheln in die hütte am anleger\` (or “leg 3 muscheln in die truhe 2”). Without it, \`verstaue\` names the numbers. Under “Bei dir” you put a chosen thing into the chosen chest: a number and “Stück verstauen” (say 300), or “Alle … verstauen”. If the hut lies in another region, a courier brings the things there; that takes a moment.
 
@@ -1400,15 +1405,16 @@ At the hearth you cook what is made in the hut (scrambled eggs, roasts, cheese �
 
 ## Load {#load}
 
-A figure carries at most **1500 load** (the operator sets it). Each thing weighs by its kind:
+A figure carries at most **1500 load** (the operator sets it), 250 more with a leather bag. Each thing weighs by its kind:
 
 | Load | Things |
 |---|---|
-| 0 | coins |
-| ½ | shells, seeds, pearls, amber, wax, candles, down |
+| 0 | coins, bills of exchange |
+| ½ | shells, seeds, pearls, amber, amber necklace, wax, candles, down, salt, bone meal |
 | 1 | kelp, fish, eggs, honey, milk, tools, crops, bread and everything else |
-| 2 | driftwood, kelp rope, stone, cabbage, bricks, planks, clay, dog, cat |
-| 4 | bundle of wood, hen, duck, goose, sheep, goat, pig, bee colony, rowing boat, cart |
+| 2 | driftwood, kelp rope, rope, stone, cabbage, bricks, planks, fruit crate, shutters, clay, dog, cat, piglet |
+| 3 | food cupboard |
+| 4 | bundle of wood, hen, duck, goose, sheep, goat, pig, bee colony, rowing boat, cart, barrel, table |
 | 8 | cow, sailing boat |
 
 “Bei dir” shows how much you carry. Whatever would take you over the limit (picking up, gathering, harvesting, buying, crafting, taking from a chest) does not work until you put something in a chest or drop it. What others bring you (a delivery, a gift, coins for your listing) arrives anyway. Whoever already carries more loses nothing but takes nothing more. A chest, on the other hand, takes everything, without a limit: spread what you cannot carry over your chests.
@@ -1702,6 +1708,7 @@ Samen findest du in der wilden Natur der Inseln, oder du kaufst sie bei Gesa. Ni
 | Nebelblume | nur Nebelholm | Nebelblume (selten) |
 | Strandkohl | wo Kräuter wachsen, überall | 2 Kohl |
 | Möhre | Graue Insel, Kupferhafen, Rauchholm, Krabbensand | 2 Möhren |
+| Hopfen | Nebelholm, Rauchholm, Schären | 2 Hopfen |
 
 \`pflanze strandnelke\` setzt einen Samen in dein Beet, eine Pflanze je Feld (\`pflanze kohl <x> <y>\` in ein bestimmtes). Jede Ernte gibt neue Samen, manchmal zwei.
 
@@ -1825,6 +1832,7 @@ You find seeds in the wild plants of the islands, or you buy them from Gesa. Not
 | Nebelblume (fog flower) | Nebelholm only | fog flower (rare) |
 | Strandkohl (sea kale) | where herbs grow, everywhere | 2 cabbages |
 | Möhre (carrot) | Graue Insel, Kupferhafen, Rauchholm, Krabbensand | 2 carrots |
+| Hopfen (hops) | Nebelholm, Rauchholm, Schären | 2 hops |
 
 \`pflanze strandnelke\` (\`plant\`) puts a seed into your bed, one plant per cell (\`pflanze kohl <x> <y>\` into a given one). Every harvest gives new seeds, sometimes two.
 
@@ -1977,7 +1985,7 @@ Aus der Ernte lässt sich mehr machen. Wer Korn mahlt und Brot bäckt, verdient 
 
 Aus der Ernte wird mehr: **Korn → Mehl → Brot** und **Flachs → Leinen**.
 
-**Windmühle** (\`bau windmühle\`: 2×2 Felder, 8 Treibholz, 2 Tangseil, **2 Leinen** für die Flügel, 16 Arbeit). Mahlen darf jeder an jeder Mühle: \`mahle alle weizen\` schüttet dein Korn hinein (Weizen, Gerste oder Hafer, auch Knochen zu Knochenmehl, bis 12 auf einmal, höchstens drei Säcke je Figur). Sie mahlt eine Weltstunde je Handvoll, was vor dir kam, zuerst. \`mahle\` allein sagt, wie lange sie noch zu tun hat; ist dein Mehl fertig, holt \`abholen\` es (bis zwei Felder Abstand). Bei **Sturmflut** auf ihrer Insel dreht sie schneller und mahlt sechs Stunden voraus. Fällt die Mühle, bevor dein Korn gemahlen ist, holst du an ihrer Stelle dein Korn zurück. Was zwei Wochen niemand abholt, ist verloren.
+**Windmühle** (\`bau windmühle\`: 2×2 Felder, 8 Treibholz, 2 Tangseil, **2 Leinen** für die Flügel, 16 Arbeit). Mahlen darf jeder an jeder Mühle: \`mahle alle weizen\` schüttet dein Korn hinein (Weizen, Gerste oder Hafer, auch Knochen zu Knochenmehl, bis 12 auf einmal, höchstens drei Säcke je Figur). Sie mahlt eine Weltstunde je Handvoll, was vor dir kam, zuerst. \`mahle\` allein sagt, wie lange sie noch zu tun hat; ist dein Mehl fertig, holt \`abholen\` es (bis zwei Felder Abstand). Der Wind ihrer Insel treibt sie: bei Flaute halb so schnell, bei frischem Wind anderthalbmal, bei Sturm doppelt so schnell (\`wetter\`). Bei **Sturmflut** auf ihrer Insel dreht sie schneller und mahlt sechs Stunden voraus. Fällt die Mühle, bevor dein Korn gemahlen ist, holst du an ihrer Stelle dein Korn zurück. Was zwei Wochen niemand abholt, ist verloren.
 
 **Backhaus** (\`bau backhaus\`: 2×2 Felder, 6 Treibholz, 6 Muscheln, 1 Tangseil, 12 Arbeit). Daneben bäckt \`backe brot\` aus **2 Mehl, einer Kanne Wasser und einem Scheit Treibholz** drei Brote, an jedem Backhaus, wem es auch gehört.
 
@@ -2027,7 +2035,7 @@ The harvest can become more. Grinding grain and baking bread earns more than the
 
 The harvest becomes more: **grain → flour → bread** and **flax → linen**.
 
-**Windmill** (\`bau windmühle\`: 2×2 cells, 8 driftwood, 2 kelp rope, **2 linen** for the sails, 16 work). Anyone may grind at any mill: \`mahle alle weizen\` (\`grind\`) pours your grain in (wheat, barley or oats, bones into bone meal too, up to 12 at once, at most three sacks per figure). It grinds a world hour per handful, what came before you first. \`mahle\` alone says how long it still has to go; when your flour is ready, \`abholen\` (\`pickup\`) fetches it (from up to two cells away). In a **storm surge** on its island it turns faster and grinds six hours ahead. If the mill falls before your grain is ground, you fetch your grain back at its place. What nobody fetches in two weeks is lost.
+**Windmill** (\`bau windmühle\`: 2×2 cells, 8 driftwood, 2 kelp rope, **2 linen** for the sails, 16 work). Anyone may grind at any mill: \`mahle alle weizen\` (\`grind\`) pours your grain in (wheat, barley or oats, bones into bone meal too, up to 12 at once, at most three sacks per figure). It grinds a world hour per handful, what came before you first. \`mahle\` alone says how long it still has to go; when your flour is ready, \`abholen\` (\`pickup\`) fetches it (from up to two cells away). The wind of its island drives it: half as fast in a calm, one and a half times in a fresh wind, twice as fast in a gale (\`wetter\`). In a **storm surge** on its island it turns faster and grinds six hours ahead. If the mill falls before your grain is ground, you fetch your grain back at its place. What nobody fetches in two weeks is lost.
 
 **Bakery** (\`bau backhaus\`: 2×2 cells, 6 driftwood, 6 shells, 1 kelp rope, 12 work). Beside it \`backe brot\` (\`bake\`) bakes three loaves from **2 flour, a can of water and a log of driftwood**, at any bakery, whoever owns it.
 
@@ -2255,7 +2263,7 @@ Was daraus wird (\`craft <name>\`):
 
 ## Verderb {#spoil}
 
-Frisches verdirbt: **rohes Fleisch** nach drei Tagen, **Gekochtes** (Braten, Suppen, Bratwurst, Steak, Schmalzbrot, Festessen) nach fünf, gerechnet in echter Zeit ab dem Schlachten oder Kochen, wo immer es liegt, in der Tasche wie in der Truhe. Dann ist es fort, und wer es trägt, hört es. **Geräuchertes** (Speck, Schinken, Räucherwurst, Trockenfleisch) und **Gepökeltes** hält, ebenso Felle, Leder, Talg und Knochen. Was am Marktbrett hängt, verdirbt nicht.
+Frisches verdirbt: **rohes Fleisch** und Kohlsuppe nach drei Tagen, **Gekochtes** (Braten, die anderen Suppen, Eintopf, Bratwurst, Steak, Rührei, Pfannkuchen, Kuchen, Schmalz- und Honigbrot, Festessen) und Birnen nach fünf, Äpfel nach sieben, Saft nach zehn; gerechnet in echter Zeit ab dem Schlachten oder Kochen, wo immer es liegt, in der Tasche wie in der Truhe. Dann ist es fort, und wer es trägt, hört es. In einer Truhe hält ein Fass Saft, Suppen, Eintopf und rohes Fleisch doppelt so lange, eine Obstkiste das Obst, ein Speiseschrank das übrige Gekochte ([Rezepte](help.game.recipes)). **Geräuchertes** (Speck, Schinken, Räucherwurst, Trockenfleisch) und **Gepökeltes** hält, ebenso Felle, Leder, Talg und Knochen. Was am Marktbrett hängt, verdirbt nicht.
 
 ## Salz und Salzgarten {#salt}
 
@@ -2458,7 +2466,7 @@ What becomes of it (\`craft <name>\`):
 
 ## Spoiling {#spoil}
 
-Fresh food spoils: **raw meat** after three days, **cooked food** (roasts, soups, sausages, steak, dripping bread, the feast) after five, counted in real time from the slaughtering or cooking, wherever it lies, in the pack or in a chest. Then it is gone, and whoever carries it hears so. **Smoked** food (bacon, ham, smoked sausage, dried meat) and **cured** meat keep, and so do skins, leather, tallow and bones. What hangs on a market board does not spoil.
+Fresh food spoils: **raw meat** and cabbage soup after three days, **cooked food** (roasts, the other soups, stew, sausages, steak, scrambled eggs, pancakes, cake, dripping and honey bread, the feast) and pears after five, apples after seven, juice after ten; counted in real time from the slaughtering or cooking, wherever it lies, in the pack or in a chest. Then it is gone, and whoever carries it hears so. In a chest, a barrel keeps juice, soups, stew and raw meat twice as long, a fruit crate fruit, a food cupboard the rest of what is cooked ([recipes](help.game.recipes)). **Smoked** food (bacon, ham, smoked sausage, dried meat) and **cured** meat keep, and so do skins, leather, tallow and bones. What hangs on a market board does not spoil.
 
 ## Salt and the salt garden {#salt}
 
@@ -2641,8 +2649,8 @@ In einer Siedlung hat jeder einen Rang. Wer dort eine Hütte hat, ist von selbst
 
 | Rang | Wer | darf, wenn die Siedlung geschlossen ist |
 | --- | --- | --- |
-| Siedler | Hüttenbesitzer, und wen ein Siedler aufnimmt | bauen, Beete und Äcker anlegen, liefern, mitarbeiten |
-| Helfer | wen ein Siedler als Helfer aufnimmt; ein Gast ist höchstens Helfer | liefern, mitarbeiten |
+| Siedler | Hüttenbesitzer, und wen ein Siedler aufnimmt | bauen, Beete und Äcker anlegen, Bäume pflanzen, Straßen planen, und alles, was Helfer dürfen |
+| Helfer | wen ein Siedler als Helfer aufnimmt; ein Gast ist höchstens Helfer | liefern, mitarbeiten, abräumen, Stein brechen, Lehm stechen, Salz harken |
 | Fremder | alle anderen | nichts davon |
 
 \`siedlung aufnehmen <name>\` nimmt jemanden als Siedler auf, \`siedlung aufnehmen <name> helfer\` als Helfer, \`siedlung entlassen <name>\` nimmt das zurück. Das entscheiden nur Siedler. Hüttenbesitzer lassen sich nicht entlassen.
@@ -2673,7 +2681,7 @@ Im Kontor leiht \`kredit <n> gegen <ding>\` Münzen gegen ein Pfand, bis zum dop
 - **Segelboot** (Werft, ab Stadt): \`segle <insel>\` fährt vom Steg in die Bucht jeder Insel, auch in eine andere Gegend.
 - **Luke**: Jedes Boot hat eine. Am Steg lädt \`luke lade [n|alle] <ding>\` ein, 8 Dinge im Ruderboot, 20 im Segelboot; \`luke entlade alle\` holt sie heraus. Die Ladung fährt mit dem Boot.
 - **Großes Schiff**: Es fährt nur von Insel zu Insel, von Bucht zu Bucht, und es ist eines: eine Runde über alle Inseln, in jeder Bucht liegt es eine Weile. Du siehst es einlaufen und ablegen; auf der [Weltkarte](help.game.controls#atlas) zeigen eine gestrichelte Linie seine Route und eine Marke, wo es gerade fährt. \`fahrplan\` sagt, wo es ist und wann es hier liegt. \`einschiffen <insel>\` geht für 3 Münzen an Bord, solange es hier liegt: Du fährst mit, bis es die Insel erreicht hat, und gehst dort von Bord. Du musst nicht bis zum Ende fahren: Oben steht an Bord **Beim nächsten Halt aussteigen** mit dem Namen der nächsten Insel auf der Fahrt und wann das Schiff dort liegt (oder \`ausschiffen nächster\`); liegt es gerade dort, heißt es **Hier aussteigen**. An Bord gehst du nicht umher, du kannst dich aber umsehen und reden.
-- **Inselbahn** (ab Netz): Ein Raum hat höchstens einen Bahnhof. Neben ihm fährt \`zug <ort>\` für eine Münze zu jedem anderen Bahnhof derselben Insel. Zwischen den Bahnhöfen liegen Gleise, die du auf der Karte siehst; sie versperren niemandem den Weg. Alle 20 Weltminuten steht der Zug zehn Minuten am Bahnsteig, nur dann fährt er. \`zug sende [n|alle] <ding> nach <ort>\` gibt bis zu 20 Dinge für eine Münze als Fracht auf, \`zug abholen\` holt sie am Ziel; was sieben Tage liegt oder dessen Bahnhof fällt, wird dein Nachlass. Die Bahn verlässt ihre Insel nicht.
+- **Inselbahn** (ab Netz): Ein Raum hat höchstens einen Bahnhof. Neben ihm fährt \`zug <ort>\` für eine Münze zu jedem anderen Bahnhof derselben Insel. Zwischen den Bahnhöfen liegen Gleise, die du auf der Karte siehst; sie versperren niemandem den Weg. Alle 20 Weltminuten steht der Zug zehn Minuten am Bahnsteig, nur dann fährt er. \`zug sende [n|alle] <ding> nach <ort>\` gibt bis zu 20 Dinge für eine Münze als Fracht auf, solange der Zug am Bahnsteig steht (nur mit Konto, Münzen schickt man nicht); sie ist gleich am Ziel, und \`zug abholen\` holt sie dort, so viel du tragen kannst; was sieben Tage liegt oder dessen Bahnhof fällt, wird dein Nachlass. Die Bahn verlässt ihre Insel nicht.
 - **Signalfeuer** (ab Netz): ein kleiner Bau, einer je Raum. Signalfeuer in Räumen nebeneinander, auch über eine Fähre zu einer Nachbarinsel derselben Gegend, die im Licht von wenigstens zwei Feuern stehen, bilden eine Kette. Solange jedes dieser Feuer brennt, teilen sie ihr Licht: du baust im Licht jedes Feuers der Kette, wo immer eines von ihnen hinreicht. Geht eines aus, ist die Kette unterbrochen. \`signalfeuer\` zeigt die Ketten deiner Insel und welche Insel dieser Gegend ihre Kette am längsten ohne Unterbrechung brennen ließ.
 - **Straße und Karren** (ab Dorf): Eine Straße verbindet zwei Orte einer Insel, von Platz zu Platz. Niemand legt sie allein: \`straße plane <ort>\` zieht die Trasse von der Mitte hier durch den Ausgang zur Mitte des Nachbarorts (oder „Straße planen“ am Ausgang). Die Siedler beider Orte (wer dort eine Hütte hat oder als Siedler aufgenommen ist; Gäste und Figuren des Spiels nicht) stimmen zwei Tage lang mit \`straße ja\` oder \`straße nein\` ab; mehr Ja als Nein, und sie wird gebaut, stimmt sonst niemand ab, sofort. Gebaut wird gemeinsam neben der Trasse: \`liefere stein\` (ein Stein je zwei Felder, dazu 2 Treibholz) und \`arbeite\`; jede Arbeit pflastert ein Stück weiter. Fertig hält sie 45 Tage, \`straße repariere\` (2 Stein) bessert sie aus. Man geht auf ihr, gebaut wird auf ihr nichts; \`straße\` zeigt die Straßen hier. Einen **Karren** stellst du direkt neben einer Werkstatt her (\`craft karren\`): aus 4 Bohlen und 1 Tauwerk, also 8 Treibholz und 9 Tang mit einem Muschelmesser; kaufen kann man ihn nicht. \`karren stelle\` stellt ihn neben dir ab. Ein Karren fährt auf Straßen allein mit bis zu 20 Stück, einen Raum je Weltstunde: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`. \`karren pendel <ort> [mit <ding>]\` lässt ihn von selbst zwischen zwei Orten fahren, an denen dir ein Bau mit Truhe gehört: Hier lädt er aus deiner Truhe, dort legt er alles in deine Truhe und kommt zurück, leer fährt er nicht; \`karren halt\` beendet es. Über das Wasser kommt ein Karren nur als Ding (\`karren nimm\`).
 - **Beamen** (ab Netz): \`beam <ort>\` springt von jedem Ort zu einem brennenden Feuer, ohne die Wege zu laufen. Nur das Ziel braucht ein brennendes Feuer, dein Standort nicht. Es kostet Münzen nach der Entfernung auf der [Weltkarte](help.game.controls#atlas), standardmäßig eine je Feld (mindestens eine); danach ruhst du 10 Weltminuten, bevor du wieder beamst. \`beam\` allein zeigt die Ziele und die Pause. Auf der Weltkarte tippst du das Feuer an, die Linie und der Preis erscheinen, **Hierher beamen** springt. Betreiber ändern Preis, Pause und Stufe.
@@ -2710,8 +2718,8 @@ In a settlement everyone has a rank. Whoever has a hut there is a settler by the
 
 | Rank | Who | may, when the settlement is closed |
 | --- | --- | --- |
-| Settler | hut owners, and whom a settler takes in | build, lay out beds and fields, deliver, help |
-| Helper | whom a settler takes in as a helper; a guest is a helper at most | deliver, help |
+| Settler | hut owners, and whom a settler takes in | build, lay out beds and fields, plant trees, plan roads, and all a helper may |
+| Helper | whom a settler takes in as a helper; a guest is a helper at most | deliver, help, clear, break stone, cut clay, rake salt |
 | Stranger | everyone else | none of that |
 
 \`settlement aufnehmen <name>\` takes someone in as a settler, \`settlement aufnehmen <name> helfer\` as a helper, \`settlement entlassen <name>\` reverses it. Only settlers decide that. Hut owners cannot be dismissed.
@@ -2742,7 +2750,7 @@ In a counting house \`kredit <n> gegen <ding>\` lends coins against a pledge, up
 - **Sailing boat** (shipyard, from the town on): \`segle <insel>\` goes from a jetty to the bay of any island, to another region too.
 - **Hatch**: every boat has one. At a jetty \`luke lade [n|alle] <ding>\` loads it, 8 things in a rowing boat, 20 in a sailing boat; \`luke entlade alle\` takes them out. The cargo goes with the boat.
 - **Large ship**: it sails only from island to island, from bay to bay, and there is one: a loop over all islands, it lies a while in each bay. You see it run in and cast off; on the [world map](help.game.controls#atlas) a dashed line shows its route and a mark where it is now. \`fahrplan\` says where it is and when it lies here. \`einschiffen <island>\` boards for 3 coins while it lies here: you sail with it until it reaches the island and go ashore there. You need not sail to the end: aboard, **Beim nächsten Halt aussteigen** at the top names the next island on the way and when the ship lies there (or \`ausschiffen nächster\`); while it lies there, it says **Hier aussteigen**. Aboard you do not walk about, but you can look around and talk.
-- **Island railway** (from the network on): a room has one station at most. Beside it \`zug <ort>\` goes for a coin to any other station of the same island. Tracks lie between the stations, and you see them on the map; they block nobody's way. Every 20 world minutes the train stands at the platform for ten minutes, and only then does it go. \`zug sende [n|alle] <ding> nach <ort>\` sends up to 20 things for a coin as freight, \`zug abholen\` fetches them at the other end; what lies seven days, or whose station falls, becomes your estate. The railway does not leave its island.
+- **Island railway** (from the network on): a room has one station at most. Beside it \`zug <ort>\` goes for a coin to any other station of the same island. Tracks lie between the stations, and you see them on the map; they block nobody's way. Every 20 world minutes the train stands at the platform for ten minutes, and only then does it go. \`zug sende [n|alle] <ding> nach <ort>\` sends up to 20 things for a coin as freight while the train stands at the platform (with an account only; coins are not sent); it is at the other end at once, and \`zug abholen\` fetches as much of it as you can carry; what lies seven days, or whose station falls, becomes your estate. The railway does not leave its island.
 - **Signal fire** (from the network on): a small building, one to a room. Signal fires in rooms next to each other, also across a ferry to a neighbouring island of the same region, that stand in the light of at least two fires form a chain. While each of those fires burns, they share their light: you build in the light of any fire of the chain wherever one of them reaches. When one goes out, the chain is broken. \`signalfeuer\` shows the chains of your island and which island of this region kept its chain burning longest without a break.
 - **Road and cart** (from the village on): a road links two places of an island, plaza to plaza. Nobody lays one alone: \`straße plane <ort>\` (\`road plane\`) draws the trace from the middle here through the exit to the middle of the next place (or „Plan a road“ at the exit). The settlers of both places (whoever has a hut there or was taken in as a settler; not guests, not the game's figures) vote for two days with \`straße ja\` or \`straße nein\`; more yes than no and it is built, at once if nobody else votes. It is built together beside the trace: \`liefere stein\` (\`deliver\`; one stone per two cells, plus 2 driftwood) and \`arbeite\` (\`work\`); each work paves a stretch further. Finished it lasts 45 days, \`straße repariere\` (2 stone) mends it. One walks on it, nothing is built on it; \`straße\` (\`road\`) shows the roads here. You make a **cart** right beside a workshop (\`craft karren\`): from 4 planks and 1 rope, so 8 driftwood and 9 kelp with a shell knife; nobody sells one. \`karren stelle\` sets it down beside you. A cart goes alone on roads with up to 20 pieces, a room per world hour: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`. \`karren pendel <ort> [mit <ding>]\` sends it back and forth by itself between two places where you own a building with a chest: here it loads from your chest, there it puts everything into your chest and comes back, never empty; \`karren halt\` ends it. A cart crosses the water only as a thing (\`karren nimm\`).
 - **Beaming** (from the network on): \`beam <place>\` jumps from anywhere to a burning fire without walking the paths. Only the destination needs a burning fire, not where you stand. It costs coins by the distance on the [world map](help.game.controls#atlas), by default one per cell (at least one); afterwards you rest 10 world minutes before you beam again. \`beam\` alone lists the destinations and the rest. On the world map you tap the fire, the line and the price appear, **Hierher beamen** jumps. Operators change price, rest and stage.

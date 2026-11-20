@@ -315,6 +315,14 @@ test("a shop prices by its shelf, pays from its till and mints nothing; a loan f
 		assert.match(await does(p, "luke", "(8/8)"), /8× Tang/);
 		assert.match(await does(p, "luke entlade 3 tang", "aus der Luke"), /Du holst 3× Tang/);
 		assert.equal(await s.count({ type: "Item", fields: { location: boat } }), 5);
+		// a boat with cargo is not sold: a trader or a store would take it, and its cargo would be lost
+		const at = (await s.readAll({ type: "Character", fields: { charId: me } }))[0]!.fields as unknown as CharacterFields;
+		for (const e of await s.readAll({ type: "Building", fields: { buildId: "shop" } })) await s.takeIfExists({ id: e.id }, 0);
+		await s.write({ type: "Building", fields: house("shop", "kaufhaus", "Kaufhaus", at.room, at.x - 1, at.y, "o") as never }, null, FOREVER);
+		assert.match(await does(p, "laden verkaufe ruderboot", "Luke"), /In der Luke von Ruderboot liegt noch etwas/);
+		assert.match(await does(p, "markt biete ruderboot für 5", "Luke"), /In der Luke von Ruderboot liegt noch etwas/);
+		assert.equal(await s.count({ type: "Item", fields: { location: boat } }), 5, "the cargo stays in the boat");
+		assert.equal(await s.count({ type: "Item", fields: { location: me, proto: "ruderboot" } }), 1, "and the boat with its owner");
 		await does(p, `rudere ${other.name}`, "am Steg an");
 		await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields.room === other.roomId, 10_000, "rowed over");
 		assert.equal(await s.count({ type: "Item", fields: { location: boat } }), 5, "the cargo came along");
