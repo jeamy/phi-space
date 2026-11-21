@@ -14,7 +14,7 @@ import { onFpsParts, onFpsStart, sayFps } from "./fps.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
-import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
+import { buildingModel, greenhouseGlass, linerGeometry, sceneryModel } from "./buildings3d.ts";
 import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, FRUIT_AT, TREE_SORT_MODELS, willowRods, placeLook, plantGeometry, prepareModelDetails, propMaterial, contactShadow, propMesh, merge, cached, plainMaterial, solidMesh, propShadow, propShadows, setNight, TINTED, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { shadowSizeAt, closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
@@ -583,6 +583,16 @@ function step(s: Scene3D, dt: number, time: number, me: string): boolean {
 	return moved;
 }
 
+let glassMaterial: import("three").MeshStandardMaterial | null = null;
+/** Panes of glass (a greenhouse's): clear, a little green, glossy, so the sky shows in them and the plants behind them;
+ *  they cast no shadow and take none, and write no depth, so what stands behind them is drawn. */
+function glassPanes(t: T, geometry: import("three").BufferGeometry): import("three").Mesh {
+	glassMaterial ??= new t.MeshStandardMaterial({ color: 0xcfeee6, roughness: 0.06, metalness: 0.2, transparent: true, opacity: 0.3, depthWrite: false, side: t.DoubleSide });
+	glassMaterial.userData.noAo = true; glassMaterial.userData.shared = true;
+	const glass = new t.Mesh(geometry, glassMaterial); glass.userData.unshaded = true; glass.renderOrder = 2;
+	return glass;
+}
+
 /** The own figure carries a lantern: from dusk on it lights the way round it, warm and flickering, brighter the darker it
  *  is; by day it is out. The light is there from the start (at 0), so lighting it compiles no shader anew. */
 function lantern(s: Scene3D, e: Entry, time: number): void {
@@ -858,6 +868,7 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		// a coop with a fence round it (foxes keep out), a dog or cat on guard at its front corner (wild.ts, animals.ts)
 		if (obj.kind === "building" && obj.fenced) group.add(propMesh(t, fenceGeometry(t, w + 0.5, d + 0.5)));
 		if (obj.kind === "building" && obj.plan === "leuchtturm") e.beam = lighthouseLamp(t, group);
+		if (obj.kind === "building" && obj.plan === "gewaechshaus") group.add(glassPanes(t, greenhouseGlass(t, w, d)));
 		if (obj.kind === "building" && obj.keeper) { const k = propMesh(t, keeperGeometry(t, obj.keeper, variant)); k.position.set(w / 2 + 0.05, 0, d / 2 + 0.05); k.rotation.y = 0.6; group.add(k); }
 		return e;
 	}
@@ -1226,7 +1237,7 @@ function showCatalogue(s: Scene3D, names: string[], level: ModelLevel): void {
 			else if (kind === "fire") geometry = fireGeometry(t);
 			else if (kind === "fish" || kind === "smoked") { const f = fishModel(t, model as FishKind, propMaterial(t), kind === "smoked"); f.tail.rotation.y = 0.3; group.add(f.group); }
 			else if (kind === "fence") geometry = fenceGeometry(t, 2, 2);
-			else geometry = buildingModel(t, name, 2, 2, 0) ?? buildingGeometry(t, name, 2, 2, 0x9a7a4a, 0);
+			else { geometry = buildingModel(t, name, 2, 2, 0) ?? buildingGeometry(t, name, 2, 2, 0x9a7a4a, 0); if (name === "gewaechshaus") group.add(glassPanes(t, greenhouseGlass(t, 2, 2))); }
 			if (geometry) group.add(propMesh(t, geometry));
 			prepareModelDetails(t, group);
 			group.traverse((o) => { const mesh = o as import("three").Mesh; if (mesh.geometry?.userData.modelVariant) { mesh.geometry = mesh.geometry.userData.modelVariant(level); mesh.userData.modelLevel = level; } if (o.userData.detailOnly) o.visible = level === "near"; });

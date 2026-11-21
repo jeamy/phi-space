@@ -330,24 +330,49 @@ function shipyard(t: T, w: number, d: number): Geo {
 		return merge(t, parts, "werft");
 	});
 }
-/** The greenhouse: a frame of dark timber with a roof of glass strips (gaps between them), plants and pots inside. */
+/** The greenhouse's measures for a site of w×d: the frame's width and depth, the walls' height, the roof's rise. */
+const greenhouseSize = (w: number, d: number) => ({ ww: w * 0.88, dd: d * 0.78, wh: 0.5, rise: 0.32, door: 0.34 });
+/** The greenhouse: a frame of dark timber on a low stone footing, plants and pots inside, a wooden door; its panes are
+ *  a model of their own (greenhouseGlass), drawn clear and glossy over it, so one sees in. */
 function greenhouse(t: T, w: number, d: number): Geo {
 	return cached(`gewaechshaus:${w}x${d}`, () => {
-		const r = rand("greenhouse"), ww = w * 0.88, dd = d * 0.78, wh = 0.5, rise = 0.32, glass = 0xcfe8e4, parts: Part[] = [b(t, w * 0.94, 0.08, d * 0.9, STONE, 0, 0.04, 0)];
+		const r = rand("greenhouse"), { ww, dd, wh, rise, door } = greenhouseSize(w, d), parts: Part[] = [b(t, w * 0.94, 0.08, d * 0.9, STONE, 0, 0.04, 0)];
 		for (const sz of [-1, 1]) {
 			parts.push(b(t, ww, 0.05, 0.05, WOOD_DARK, 0, 0.1, (sz * dd) / 2), b(t, ww, 0.05, 0.05, WOOD_DARK, 0, 0.1 + wh, (sz * dd) / 2));
 			for (let i = 0; i <= 4; i++) parts.push(b(t, 0.05, wh, 0.05, WOOD_DARK, -ww / 2 + (i * ww) / 4, 0.1 + wh / 2, (sz * dd) / 2));
 		}
-		for (const sx of [-1, 1]) parts.push(b(t, 0.05, 0.05, dd, WOOD_DARK, (sx * ww) / 2, 0.1, 0), b(t, 0.05, 0.05, dd, WOOD_DARK, (sx * ww) / 2, 0.1 + wh, 0), b(t, 0.04, wh * 0.45, dd * 0.9, glass, (sx * ww) / 2, 0.1 + wh * 0.25, 0));
+		for (const sx of [-1, 1]) {
+			parts.push(b(t, 0.05, 0.05, dd, WOOD_DARK, (sx * ww) / 2, 0.1, 0), b(t, 0.05, 0.05, dd, WOOD_DARK, (sx * ww) / 2, 0.1 + wh, 0), b(t, 0.05, wh, 0.05, WOOD_DARK, (sx * ww) / 2, 0.1 + wh / 2, 0));
+			// the gable's two rafters
+			const slope = Math.atan2(rise, dd / 2), len = Math.hypot(rise, dd / 2);
+			for (const side of [-1, 1]) parts.push(b(t, 0.04, 0.04, len, WOOD_DARK, (sx * ww) / 2, 0.1 + wh + rise / 2, side * (dd / 4), [side * slope, 0, 0]));
+		}
 		const slope = Math.atan2(rise, dd / 2), len = Math.hypot(rise, dd / 2);
 		parts.push(b(t, ww + 0.1, 0.05, 0.05, WOOD_DARK, 0, 0.1 + wh + rise + 0.02, 0)); // the ridge, once
-		for (const side of [-1, 1]) {
-			for (let i = 0; i < 5; i++) parts.push(b(t, ww / 6, 0.025, len * 0.9, glass, -ww / 2 + ww / 10 + (i * ww) / 5 + ww / 20, 0.1 + wh + rise / 2 + 0.03, side * (dd / 4), [side * slope, 0, 0]));
-			for (let i = 0; i <= 4; i++) parts.push(b(t, 0.035, 0.035, len, WOOD_DARK, -ww / 2 + (i * ww) / 4, 0.1 + wh + rise / 2 + 0.02, side * (dd / 4), [side * slope, 0, 0]));
-		}
+		for (const side of [-1, 1]) for (let i = 1; i < 4; i++) parts.push(b(t, 0.035, 0.035, len, WOOD_DARK, -ww / 2 + (i * ww) / 4, 0.1 + wh + rise / 2 + 0.02, side * (dd / 4), [side * slope, 0, 0]));
 		for (let i = 0; i < 7; i++) { const x = -ww * 0.4 + (i % 4) * ww * 0.27, z = i < 4 ? -dd * 0.22 : dd * 0.22; parts.push(cy(t, 0.07, 0.06, 0.1, 0xb4673a, x, 0.08, z, 6), ball(t, 0.09 + r() * 0.04, [0x5c9c42, 0x4f8f3a, 0x6aaa4a][i % 3]!, x, 0.28, z), ball(t, 0.035, [0xd9534f, 0xf0c040][i % 2]!, x + 0.05, 0.36, z)); }
-		parts.push(b(t, 0.34, 0.5, 0.04, WOOD_DARK, 0, 0.35, dd / 2 + 0.01));
+		// the door, framed, in the front's middle bay
+		parts.push(b(t, door, wh - 0.02, 0.03, WOOD_DARK, 0, 0.1 + wh / 2, dd / 2 + 0.01), b(t, door * 0.7, wh * 0.45, 0.035, 0x2a3a3c, 0, 0.1 + wh * 0.68, dd / 2 + 0.012));
 		return merge(t, parts, "gewaechshaus");
+	});
+}
+/** The panes of a greenhouse: the four walls (none in the door) and the two slopes of its roof, each one sheet. */
+export function greenhouseGlass(t: T, w: number, d: number): Geo {
+	return cached(`gewaechshaus-glas:${w}x${d}`, () => {
+		const { ww, dd, wh, rise, door } = greenhouseSize(w, d), y = 0.1 + wh / 2, c = 0xffffff, side = (ww - door) / 2;
+		const slope = Math.atan2(rise, dd / 2), len = Math.hypot(rise, dd / 2);
+		const parts: Part[] = [
+			b(t, ww, wh, 0.01, c, 0, y, -dd / 2),
+			b(t, side, wh, 0.01, c, -(door + side) / 2, y, dd / 2), b(t, side, wh, 0.01, c, (door + side) / 2, y, dd / 2),
+			b(t, 0.01, wh, dd, c, -ww / 2, y, 0), b(t, 0.01, wh, dd, c, ww / 2, y, 0),
+		];
+		// the gables: a triangle over each end wall
+		for (const sx of [-1, 1]) {
+			const g = new t.BufferGeometry(); g.setAttribute("position", new t.Float32BufferAttribute([0, 0, -dd / 2, 0, 0, dd / 2, 0, rise, 0, 0, 0, dd / 2, 0, 0, -dd / 2, 0, rise, 0], 3));
+			parts.push({ g, c, p: [(sx * ww) / 2, 0.1 + wh, 0] });
+		}
+		for (const s of [-1, 1]) parts.push(b(t, ww, 0.01, len, c, 0, 0.1 + wh + rise / 2 + 0.005, s * (dd / 4), [s * slope, 0, 0]));
+		return merge(t, parts, "gewaechshaus-glas");
 	});
 }
 /** The lighthouse: a tapering tower in red and white bands, a gallery with a rail, a lit lantern under a cap. */
