@@ -157,8 +157,8 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	}
 	// to the registered players in the room, near or not (the server asks no more): those nearest first; not to guests, nor to NPCs
 	if (!guest) for (const c of [...chars.values()].filter((x) => x.charId !== me && registered(x)).sort((x, y) => Math.max(Math.abs(x.x - self.x), Math.abs(x.y - self.y)) - Math.max(Math.abs(y.x - self.x), Math.abs(y.y - self.y)))) {
-		add({ label: `${c.name} geben`, line: `give ${name} an ${c.name}` });
-		if (offer) add({ label: `${c.name} anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
+		add({ label: `${c.name} schenken`, line: `give ${name} an ${c.name}` });
+		if (offer) add({ label: `${c.name} einen Tausch anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
 	}
 	if (o.market) add({ label: "Am Markt verkaufen …", line: "#sell", run: o.market });
 	return restful([...out.values()], input.tired);

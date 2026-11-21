@@ -247,6 +247,9 @@ button.link:hover { transform: none; text-decoration: underline; }
 .pack-store select, .pack-store span { flex: 1; min-width: 0; }
 .pack-store-n { display: flex; gap: 6px; align-items: center; }
 .pack-store-n input { width: 5.5em; }
+/* the word over each part of a chosen thing (Benutzen, Verstauen, Weitergeben): a line of its own */
+.pack-label, .pack-store .pack-label { flex: 0 0 100%; font-size: max(11px, calc(var(--min-font) - 2px)); color: var(--muted, var(--text)); }
+.pack-can + .pack-store, .pack-store + .pack-can, .pack-can + .pack-can { margin-top: 6px; }
 .pack-load { font-weight: 400; color: var(--muted, inherit); }
 .pack-load.over { color: var(--danger, #c0392b); font-weight: 700; }
 .pack-hint { margin: 6px 0 0; padding-left: 8px; border-left: 3px solid var(--warning); font-size: max(12px, var(--min-font)); line-height: 1.4; color: var(--text); }

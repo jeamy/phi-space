@@ -519,20 +519,9 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 				{/* a tap on a thing: its name and what it can do come first, above the pack, scrolled into view */}
 				{chosen && <div className="pack-chosen" ref={chosenBox}>
 					<div className="pack-do"><b>{chosen[0]}{chosen[1].length > 1 ? ` ×${chosen[1].length}` : ""}</b>
-						<button onClick={() => send(`drop ${chosen[0]}`)}>Ablegen</button>
 						<button onClick={() => send(`look ${chosen[0]}`)}>Ansehen</button>
+						<button onClick={() => send(`drop ${chosen[0]}`)}>Ablegen</button>
 					</div>
-					{/* into a chest of one's own, from anywhere (verstaue … in <nr>) */}
-					{/* a dog or cat goes to no chest: it guards a building (einstallen) */}
-					{!guest && chestAt && !KEEPERS.includes(chosen[0]) && <div className="pack-store">
-						{chests.length > 1 ? <select aria-label="Truhe" value={chestAt.nr} onChange={(e) => setChestNr(Number(e.target.value))}>{chests.map((x) => <option key={x.nr} value={x.nr}>{x.label}</option>)}</select> : <span>{`Truhe: ${chestAt.label}`}</span>}
-						{/* how many: a number (at most what is carried), empty: one */}
-						<form className="pack-store-n" onSubmit={(e) => { e.preventDefault(); const n = Math.min(chosen[1].length, Math.max(1, Math.floor(Number(storeN) || 1))); send(`verstaue ${n} ${chosen[0]} in ${chestAt.nr}`); setStoreN(""); }}>
-							<input type="number" inputMode="numeric" min={1} max={chosen[1].length} value={storeN} placeholder="1" aria-label="Wie viele" onChange={(e) => setStoreN(e.target.value)} />
-							<button type="submit">Stück verstauen</button>
-						</form>
-						{chosen[1].length > 1 && <button onClick={() => send(`verstaue alle ${chosen[0]} in ${chestAt.nr}`)}>{`Alle ${chosen[1].length} verstauen`}</button>}
-					</div>}
 					{/* a cross not named yet: its breeder names it here (server: garden.ts benenne; it says when one may not) */}
 					{!guest && chosen[0] === "Kreuzungssamen" && (() => {
 						// several crosses of one's own carried: which one is named, by its colour and the sort it came from
@@ -547,12 +536,31 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 							<button type="submit">Benennen</button>
 						</form>;
 					})()}
-					{uses && (() => {
+					{(() => {
 						// what it can do here and now; the rest of the world's uses stay in the help
 						// a recipe its hint below offers (the line that says what it takes, with „Herstellen“) is not a button here too
 						const hinted = new Set(shownHints.flatMap((h) => (h.line ? [h.line] : [])));
-						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses.beds, ...bar, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) }).filter((e) => !hinted.has(e.line));
-						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => { const go = () => { if (e.run) e.run(); else send(e.line); }; if (e.confirm) void ask(e.confirm).then((ok) => { if (ok) go(); }); else go(); }}>{e.label}</button>)}</div>;
+						const can = uses ? itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses.beds, ...bar, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) }).filter((e) => !hinted.has(e.line)) : [];
+						// three parts, each under its word: using it, putting it away, handing it on (to someone or the market)
+						const handOn = (e: { line: string }) => /^(give |#offer|#sell)/.test(e.line);
+						const button = (e: (typeof can)[number]) => <button key={e.line} onClick={() => { const go = () => { if (e.run) e.run(); else send(e.line); }; if (e.confirm) void ask(e.confirm).then((ok) => { if (ok) go(); }); else go(); }}>{e.label}</button>;
+						const use = can.filter((e) => !handOn(e)), on = can.filter(handOn);
+						return <>
+							{use.length > 0 && <div className="pack-can"><span className="pack-label">Benutzen</span>{use.map(button)}</div>}
+							{/* into a chest of one's own, from anywhere (verstaue … in <nr>) */}
+							{/* a dog or cat goes to no chest: it guards a building (einstallen) */}
+							{!guest && chestAt && !KEEPERS.includes(chosen[0]) && <div className="pack-store">
+								<span className="pack-label">Verstauen</span>
+								{chests.length > 1 ? <select aria-label="Truhe" value={chestAt.nr} onChange={(e) => setChestNr(Number(e.target.value))}>{chests.map((x) => <option key={x.nr} value={x.nr}>{x.label}</option>)}</select> : <span>{`Truhe: ${chestAt.label}`}</span>}
+								{/* how many: a number (at most what is carried), empty: one */}
+								<form className="pack-store-n" onSubmit={(e) => { e.preventDefault(); const n = Math.min(chosen[1].length, Math.max(1, Math.floor(Number(storeN) || 1))); send(`verstaue ${n} ${chosen[0]} in ${chestAt.nr}`); setStoreN(""); }}>
+									<input type="number" inputMode="numeric" min={1} max={chosen[1].length} value={storeN} placeholder="1" aria-label="Wie viele" onChange={(e) => setStoreN(e.target.value)} />
+									<button type="submit">Verstauen</button>
+								</form>
+								{chosen[1].length > 1 && <button onClick={() => send(`verstaue alle ${chosen[0]} in ${chestAt.nr}`)}>{`Alle ${chosen[1].length} verstauen`}</button>}
+							</div>}
+							{on.length > 0 && <div className="pack-can"><span className="pack-label">Weitergeben</span>{on.map(button)}</div>}
+						</>;
 					})()}
 					{shownHints.map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>)}
 				</div>}
