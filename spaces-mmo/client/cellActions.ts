@@ -16,7 +16,7 @@ export type CellInput = {
 	/** How far ahead an animal is fed (ItemUses.feeding), the world time now and the clock's patience: feeding is offered only while it eats (unknown: offered). */ fed?: NonNullable<ItemUses["feeding"]> & { now: number; patience: number };
 	/** The player's tasks (AtlasState.todos): a mill offers "Mehl abholen" only with flour of one's own ready there (unknown: offered). */ todos?: Todo[];
 	/** The second clock now (WorldTimeView.decayMs): mending a building or a road is offered only in its last days (MEND_WITHIN; unknown: offered). */ decay?: number;
-	/** The figure rests from its last work (TradeView.workRestUntilWorldMs): the work that waits for it is not offered then (TIRING). */ tired?: boolean;
+	/** The real minutes the figure still rests from its last work (TradeView.workRestUntilWorldMs; absent or 0: rested): the work that waits for it is offered with them, and the server answers „Du bist noch müde …“ (TIRING). */ tired?: number;
 	/** The trade offers made to the player (TradeView.offersIn): a figure with one gets "accept" and "decline" first. */ offersIn?: Array<{ fromName: string; giveNames: string[]; want: Array<{ name: string; count: number }> }>;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
 	/** Whether wild plants grow in the room (wildHere); without it seeds are offered anyway and the command answers. */ wild?: boolean;
@@ -38,6 +38,10 @@ const INFO = /^(?:look|inventory|who|time|reputation|bau)\b/;
 /** The work after which a figure rests (server: build.ts rested and tire, field.ts tire): arbeite, breche, steche, harke,
  *  schaufle, wirf, räume, fälle, the harvest of a field. While it rests the command only says how long still. */
 const TIRING = /^(?:arbeite|breche|steche|harke|schaufle|wirf|räume|fälle|ernte flur)(?:\s|$)/;
+/** While the figure rests, its work stays on offer and says how long the rest lasts: the server's answer to it is
+ *  „Du bist noch müde von der letzten Arbeit; in etwa … Minuten wieder.“ */
+const restful = (entries: CellEntry[], minutes: number | undefined): CellEntry[] =>
+	minutes && minutes > 0 ? entries.map((e) => (TIRING.test(e.line) ? { ...e, label: `${e.label} (müde, noch etwa ${minutes} Min.)` } : e)) : entries;
 /** How near its end a building or a road is offered for mending (server/todos.ts warns as early): before, `repariere`
  *  takes the material and gives a term it nearly had. */
 /** Who eats at a coop, pen or hive, by its kind (world.animals.kinds[].key), named on its feeding entries as a dog is. */
@@ -157,7 +161,7 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 		if (offer) add({ label: `${c.name} anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
 	}
 	if (o.market) add({ label: "Am Markt verkaufen …", line: "#sell", run: o.market });
-	return [...out.values()].filter((e) => !(input.tired && TIRING.test(e.line)));
+	return restful([...out.values()], input.tired);
 }
 
 
@@ -184,8 +188,7 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 }
 
 export function cellEntries(input: CellInput): CellEntry[] {
-	const entries = cellEntriesAll(input);
-	return input.tired ? entries.filter((e) => !TIRING.test(e.line)) : entries;
+	return restful(cellEntriesAll(input), input.tired);
 }
 
 function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos, feed, fed, decay, account }: CellInput): CellEntry[] {
