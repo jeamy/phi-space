@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasState, AtlasView, CharView, ObjView } from "../shared/frames.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
+import { lighthouseLamp, lighthouseTick, type LighthouseLamp } from "./lighthouse3d.ts";
 import { ease, ROW_IN_MS, ROW_OUT_MS, rowboat, rowOars, rowPath, seatRower } from "./rowing3d.ts";
 import { onFpsParts, onFpsStart, sayFps } from "./fps.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
@@ -34,7 +35,7 @@ import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
 type T = typeof import("three");
 type O3 = import("three").Object3D;
-type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; /** The own figure's lantern, lit in the dark. */ lantern?: { light: import("three").PointLight; glow: import("three").Mesh }; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string; /** An animal's body, looked up once. */ body?: O3 | null; /** The look a figure was made for (the object sync saw). */ look?: CharView["look"] };
+type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; /** The own figure's lantern, lit in the dark. */ lantern?: { light: import("three").PointLight; glow: import("three").Mesh }; /** A lighthouse's lamp and its turning beams, lit in the dark. */ beam?: LighthouseLamp; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string; /** An animal's body, looked up once. */ body?: O3 | null; /** The look a figure was made for (the object sync saw). */ look?: CharView["look"] };
 /** What a bed shows: rebuilt when its plants or weeds change. */
 const bedSig = (o: ObjView) => (o.kind === "road" ? `${o.roadState}:${o.paved}:${(o.runs?.[0] ?? []).map((c) => `${c.x},${c.y}`).join(" ")}` : o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "tree" ? `${o.treeStage}|${o.ripe ? 1 : 0}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
@@ -577,6 +578,7 @@ function step(s: Scene3D, dt: number, time: number, me: string): boolean {
 			e.flame.cone.visible = on; e.flame.cone.scale.y = on ? 1 + Math.sin(time * 9 + id) * 0.07 : 1;
 			e.flame.light.intensity = on ? (4 + 6 * dark) * flicker : 0; e.flame.light.distance = 4 + 3 * dark;
 		}
+		if (e.beam) lighthouseTick(e.beam, s.light, time);
 	}
 	return moved;
 }
@@ -855,6 +857,7 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		if (obj.kind === "site" && obj.ownerId === me) { const mark = label(t, "Deine Baustelle", "#dfff73"); mark.position.y = 1.3; group.add(mark); }
 		// a coop with a fence round it (foxes keep out), a dog or cat on guard at its front corner (wild.ts, animals.ts)
 		if (obj.kind === "building" && obj.fenced) group.add(propMesh(t, fenceGeometry(t, w + 0.5, d + 0.5)));
+		if (obj.kind === "building" && obj.plan === "leuchtturm") e.beam = lighthouseLamp(t, group);
 		if (obj.kind === "building" && obj.keeper) { const k = propMesh(t, keeperGeometry(t, obj.keeper, variant)); k.position.set(w / 2 + 0.05, 0, d / 2 + 0.05); k.rotation.y = 0.6; group.add(k); }
 		return e;
 	}
