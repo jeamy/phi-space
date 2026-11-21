@@ -117,7 +117,9 @@ pub const EXIT_REACH: f64 = 2.0;
 
 /// `refusal`: why `rect` cannot be built on (None: it can). `green`: a green plan or a bed; `on_people`: dug under
 /// anyone's feet.
-pub async fn refusal(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: bool) -> Result<Option<String>> {
+pub async fn refusal(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: bool) -> Result<Option<String>> { refusal_own(c, room, rect, green, on_people, None).await }
+/// `refusal` with `own`: the object being moved there (versetze, builder.rs): its own cells are no obstacle.
+pub async fn refusal_own(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: bool, own: Option<&Json>) -> Result<Option<String>> {
 	let ground = rows(j::at(room, "ground"));
 	let (height, width) = (ground.len() as f64, ground.first().map_or(0, |r| js::len16(r)) as f64);
 	if rect.x < 0.0 || rect.y < 0.0 || rect.x + rect.w > width || rect.y + rect.h > height { return Ok(Some("Dort ist der Raum zu Ende.".into())); }
@@ -125,7 +127,8 @@ pub async fn refusal(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: b
 	let cs = cells(rect);
 	if let Some(z) = zone_refusal(c, room_id, &cs, green).await? { return Ok(Some(z)); }
 	let exits = fields_of(exits_here(c, Some(room_id)).await?);
-	let blocked = blocked_in(&c.space, room_id).await?;
+	let mut blocked = blocked_in(&c.space, room_id).await?;
+	if let Some(own) = own { for e in c.space.read_all(&tmpl("Plot", obj! { "room" => room_id, "of" => own.clone() }), None).await? { blocked.remove(&cell_of(fields(&e))); } }
 	let people: HashSet<String> = occupied_in(&c.space, room_id, Some(c.char_id())).await?.into_iter().map(|(k, _)| k).collect();
 	let things: HashSet<String> = c.space.read_all(&tmpl("Item", obj! { "location" => room_id }), None).await?.iter().map(|e| cell_of(fields(e))).collect();
 	let fires: Vec<&Json> = j::a(c.w(), "beacons").iter().filter(|b| j::s(b, "room") == room_id).collect();
@@ -313,7 +316,7 @@ pub async fn note_builder(c: &Ctx, beacon_id: &str) -> Result<()> {
 	Ok(())
 }
 
-fn touches_water(w: &Json, ground: &[String], r: Rect) -> bool {
+pub fn touches_water(w: &Json, ground: &[String], r: Rect) -> bool {
 	cells(Rect { x: r.x - 1.0, y: r.y - 1.0, w: r.w + 2.0, h: r.h + 2.0 }).iter().any(|p| tile(ground, p.0, p.1).is_some() && !walkable(w, ground, p.0, p.1))
 }
 

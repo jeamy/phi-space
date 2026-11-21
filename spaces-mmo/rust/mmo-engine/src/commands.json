@@ -1073,6 +1073,17 @@
 			],
 			"locks": "cmd:perm(Admin)",
 			"help": "perm <name> = <stufe> – einem registrierten Konto eine Stufe geben (Player, Builder)"
+		},
+		{
+			"module": "builder",
+			"key": "versetze",
+			"aliases": [
+				"verschiebe",
+				"rücke",
+				"ruecke"
+			],
+			"locks": "cmd:perm(Admin)",
+			"help": "versetze <id> <x> <y> – einen Bau, eine Baustelle, eine Ruine, ein Beet, einen Acker oder einen Baum hier mit allen seinen Zellen an eine andere Stelle desselben Orts setzen (x y: seine linke obere Ecke; im Bearbeiten-Modus der Karte: anklicken, Pfeiltasten, Leertaste)"
 		}
 	]
 }

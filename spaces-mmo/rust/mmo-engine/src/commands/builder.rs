@@ -93,6 +93,7 @@ pub async fn run(c: &mut Ctx, key: &str, arg: &str) -> Result<()> {
 		"examine" => examine(c, arg).await,
 		"destroy" => destroy(c, arg).await,
 		"perm" => perm(c, arg).await,
+		"versetze" => versetze(c, arg).await,
 		k => Err(Error::Other(format!("unported: builder/{k}"))),
 	}
 }
@@ -260,3 +261,83 @@ async fn perm(c: &mut Ctx, arg: &str) -> Result<()> {
 	let me = c.char_id().to_owned();
 	msg(c, &me, "info", &format!("{} ist jetzt {level}.", txt(j::at(&acc, "name"))), info()).await
 }
+
+/// `MOVABLE`: what `versetze` moves, the things that stand on cells of their own (Plot entries), with the field that
+/// names them; green: what may lie in a green zone and under people (refusal), as when it was laid out; people: under people.
+const MOVABLE: [(&str, &str, &str, bool, bool); 6] = [
+	("Building", "buildId", "Bau", false, false), ("Site", "buildId", "Baustelle", false, false), ("Ruin", "buildId", "Ruine", false, false),
+	("Bed", "bedId", "Beet", true, false), ("Field", "fieldId", "Acker", false, true), ("Tree", "treeId", "Baum", true, false),
+];
+
+/// `versetze <id> <x> <y>` (admin): a building, site, ruin, bed, field or tree here with all its cells to another spot of
+/// the same place; a bed's plants go with it, a building's inside knows where it stands and its door leads out in front.
+async fn versetze(c: &mut Ctx, arg: &str) -> Result<()> {
+	let a = js::trim(arg).to_owned();
+	let Some(m) = js::re(r"^(\S+)\s+(-?\d+)\s+(-?\d+)$", "").exec(&a) else { return refuse("So geht es: versetze <id> <x> <y>") };
+	let id = m.group(&a, 1).unwrap_or("").to_owned();
+	let (x, y) = (js::to_number(m.group(&a, 2).unwrap_or("")), js::to_number(m.group(&a, 3).unwrap_or("")));
+	if crate::commands::interior::is_interior(c.room()) { return refuse("Drinnen wird nichts versetzt."); }
+	let mut found = None;
+	for kind in MOVABLE {
+		if let Some(e) = c.space.peek(&tmpl(kind.0, obj! { kind.1 => id.as_str(), "room" => c.room() }), None).await? { found = Some((kind, e)); break; }
+	}
+	let Some((kind, e)) = found else { return refuse(format!("Hier steht nichts mit der Kennung „{}“.", js::slice16(&id, 0, Some(30)))) };
+	let f = fields(&e).clone();
+	let name = j::so(&f, "name").map_or_else(|| kind.2.to_owned(), str::to_owned);
+	let (dx, dy) = (x - j::n(&f, "x"), y - j::n(&f, "y"));
+	let me = c.char_id().to_owned();
+	if dx == 0.0 && dy == 0.0 { return msg(c, &me, "info", &format!("{name} steht schon dort."), info()).await; }
+	if j::truthy(j::at(&f, "of")) { return refuse(format!("{name} gehört zu einem Gebäude und bleibt, wo es liegt.")); }
+	let plan = j::so(&f, "plan").and_then(|p| super::build::plan_of(c.w(), p)).cloned();
+	if plan.as_ref().is_some_and(|p| j::b(p, "water")) { return refuse(format!("{name} liegt im Wasser; versetzen lässt es sich nicht.")); }
+	let room = room_of(c, None).await?;
+	let rect = super::build::Rect { x, y, w: j::n(&f, "w"), h: j::n(&f, "h") };
+	let green = kind.3 || plan.as_ref().is_some_and(|p| j::b(p, "green"));
+	let people = green || kind.4;
+	let mut no = super::build::refusal_own(c, &room, rect, green, people, Some(&Json::from(id.as_str()))).await?;
+	if no.is_none() && plan.as_ref().is_some_and(|p| j::b(p, "shore")) && !super::build::touches_water(c.w(), &rows(j::at(&room, "ground")), rect) { no = Some("Das muss ans Wasser grenzen.".into()); }
+	if let Some(no) = no { return refuse(format!("Dorthin lässt sich {name} nicht versetzen: {no}")); }
+	let Some(t) = c.space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, c.txn()).await? else { return refuse("Das ist gerade in Benutzung; bitte gleich noch einmal.") };
+	let room_id = j::s(&room, "roomId").to_owned();
+	let txn = c.txn().unwrap_or("").to_owned();
+	// the cells it leaves go, the ones it comes onto are written; those it keeps stay
+	let to: std::collections::HashSet<String> = super::build::cells(rect).iter().map(|p| format!("{},{}", nt(p.0), nt(p.1))).collect();
+	let mut had = std::collections::HashSet::new();
+	for p in c.space.read_all(&tmpl("Plot", obj! { "room" => room_id.as_str(), "of" => id.as_str() }), None).await? {
+		let k = format!("{},{}", nt(j::n(fields(&p), "x")), nt(j::n(fields(&p), "y")));
+		if to.contains(&k) { had.insert(k); } else { c.space.take_if_exists(&obj! { "id" => j::at(&p, "id").clone() }, NO_WAIT, Some(&txn)).await?; }
+	}
+	for p in super::build::cells(rect) {
+		if had.contains(&format!("{},{}", nt(p.0), nt(p.1))) { continue; }
+		let r = c.space.write_unique(&tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => p.0, "y" => p.1, "of" => id.as_str() }), c.txn(), FOREVER, &["room", "x", "y"]).await;
+		match r { Err(e) if e.to_string().contains("unique entry already exists") => return refuse("Dort hat gerade jemand anderes abgesteckt."), Err(e) => return Err(e), Ok(_) => {} }
+	}
+	let mut moved = fields(&t).clone();
+	j::set(&mut moved, "x", x);
+	j::set(&mut moved, "y", y);
+	if let Some(plants) = j::ao(&f, "plants") {
+		let shifted: Vec<Json> = plants.iter().map(|p| { let mut q = p.clone(); j::set(&mut q, "x", j::n(p, "x") + dx); j::set(&mut q, "y", j::n(p, "y") + dy); q }).collect();
+		j::set(&mut moved, "plants", Json::Array(shifted));
+	}
+	let types: Vec<Json> = j::a(&t, "types").iter().skip(1).cloned().collect();
+	c.space.write(&obj! { "type" => j::at(&t, "type").clone(), "types" => Json::Array(types), "fields" => moved }, c.txn(), FOREVER).await?;
+	if kind.0 == "Building" {
+		let inside_id = crate::commands::interior::interior_of(&id);
+		if let Some(inside) = c.space.take_if_exists(&tmpl("Room", obj! { "roomId" => inside_id.as_str() }), NO_WAIT, c.txn()).await? {
+			let mut r = fields(&inside).clone();
+			if j::truthy(j::at(&r, "building")) { let mut b = j::at(&r, "building").clone(); j::set(&mut b, "x", x); j::set(&mut b, "y", y); j::set(&mut r, "building", b); }
+			let types: Vec<Json> = j::a(&inside, "types").iter().skip(1).cloned().collect();
+			c.space.write(&obj! { "type" => j::at(&inside, "type").clone(), "types" => Json::Array(types), "fields" => r }, c.txn(), FOREVER).await?;
+		}
+		let exit_id = crate::commands::interior::exit_id_of(&id);
+		if let Some(door) = c.space.take_if_exists(&tmpl("Exit", obj! { "exitId" => exit_id.as_str() }), NO_WAIT, c.txn()).await? {
+			let mut d = fields(&door).clone();
+			if j::truthy(j::at(&d, "arrive")) { let a = j::at(&d, "arrive").clone(); j::set(&mut d, "arrive", obj! { "x" => j::n(&a, "x") + dx, "y" => j::n(&a, "y") + dy }); }
+			let types: Vec<Json> = j::a(&door, "types").iter().skip(1).cloned().collect();
+			c.space.write(&obj! { "type" => j::at(&door, "type").clone(), "types" => Json::Array(types), "fields" => d }, c.txn(), FOREVER).await?;
+		}
+	}
+	eprintln!("[world] versetze by {} in {}: {} {id} {},{} -> {},{}", txt(j::at(&c.actor, "name")), c.room(), kind.0, nt(j::n(&f, "x")), nt(j::n(&f, "y")), nt(x), nt(y));
+	msg(c, &me, "info", &format!("{name} steht jetzt bei {} {}.", nt(x), nt(y)), info()).await
+}
+fn nt(n: f64) -> String { phi_json::number_text(n) }

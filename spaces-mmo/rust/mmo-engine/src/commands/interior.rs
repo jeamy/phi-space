@@ -29,7 +29,7 @@ pub fn interior_of(build_id: &str) -> String { format!("{INTERIOR}{build_id}") }
 pub fn is_interior(room: &str) -> bool { room.starts_with(INTERIOR) }
 /// The building whose inside `room` is (None outside).
 pub fn build_id_of(room: &str) -> Option<&str> { room.strip_prefix(INTERIOR) }
-fn exit_id_of(build_id: &str) -> String { format!("x-{}", interior_of(build_id)) }
+pub fn exit_id_of(build_id: &str) -> String { format!("x-{}", interior_of(build_id)) }
 fn furnishing_id(build_id: &str, kind: &str) -> String { format!("f-{build_id}-{kind}") }
 fn templ(room: Option<&str>) -> MsgOpts { MsgOpts { templ: true, room: room.map(str::to_owned), ..MsgOpts::default() } }
 fn xy(f: &Json) -> (f64, f64) { (j::n(f, "x"), j::n(f, "y")) }

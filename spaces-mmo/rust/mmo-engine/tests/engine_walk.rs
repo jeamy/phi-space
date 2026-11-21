@@ -1062,6 +1062,46 @@ fn shaping_the_world() {
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 30 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 }
 
+/// The admin moves what stands on cells of its own (builder.ts versetze): a hut with its cells, its inside's record and
+/// its door, a bed with its plants, a tree; refused beside the fire, on another's cells, past the room's end, for an unknown
+/// id and indoors; for a player the command does not exist.
+#[test]
+fn moving_things() {
+	let mut w = Walk::new("moving", 61, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (14.0, 12.0), true, false);
+	assert!(w.take(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk2" } }));
+	w.write(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk2", "name" => "Wanderer2", "guest" => false, "admin" => true, "perms" => Json::Array(vec![]), "createdAt" => START, "touchedAt" => START } });
+	for x in [15.0, 16.0] { for y in [12.0, 13.0] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => x, "y" => y, "of" => "h-w" } }); } }
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-w", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 15.0, "y" => 12.0, "w" => 2.0, "h" => 2.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	for x in [20.0, 21.0] { for y in [12.0, 13.0] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => x, "y" => y, "of" => "bed-w" } }); } }
+	w.write(obj! { "type" => "Bed", "fields" => obj! { "bedId" => "bed-w", "room" => "graue-bucht", "x" => 20.0, "y" => 12.0, "w" => 2.0, "h" => 2.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 1.0, "sponsors" => Json::Array(vec![]),
+		"plants" => Json::Array(vec![obj! { "x" => 21.0, "y" => 12.0, "sort" => "strandnelke", "stage" => 1.0, "dueWorldMs" => 9e15 }]), "wateredWorldMs" => START, "weedy" => false, "dueWorldMs" => 9e15, "untilWorldMs" => 9e15, "at" => START } });
+	w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => 3.0, "y" => 14.0, "of" => "tree-w" } });
+	w.write(obj! { "type" => "Tree", "fields" => obj! { "treeId" => "tree-w", "sort" => "birke", "room" => "graue-bucht", "x" => 3.0, "y" => 14.0, "w" => 1.0, "h" => 1.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 1.0, "stage" => 0.0, "dueWorldMs" => 9e15, "at" => START } });
+	w.compare("setup");
+	let i = std::cell::Cell::new(0);
+	let mut said = Vec::new();
+	let mut run = |w: &mut Walk, who: &str, line: &str| {
+		i.set(i.get() + 1);
+		let i = i.get();
+		w.at(START + i as f64 * 7_000.0);
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{i}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	for (who, line) in [
+		(&a, "versetze h-w 16 12"), (&b, "versetze"), (&b, "versetze h-w"), (&b, "versetze niemand 1 1"), (&b, "versetze h-w 15 12"),
+		(&b, "versetze h-w 9 11"), (&b, "versetze h-w 15 15"), (&b, "versetze h-w 19 12"),
+		(&b, "betrete"), (&b, "hinaus"), (&b, "versetze h-w 16 12"), (&b, "versetze h-w 17 13"), (&b, "look"),
+		(&b, "versetze bed-w 18 12"), (&b, "verschiebe bed-w 21 13"), (&b, "versetze tree-w 4 14"), (&b, "rücke tree-w 3 13"),
+		(&b, "move 17 12"), (&b, "betrete"), (&b, "versetze h-w 15 12"), (&b, "hinaus"), (&b, "versetze h-w 15 12"), (&b, "look"),
+	] { run(&mut w, who, line); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 6 && said.iter().filter(|r| r.starts_with("refused")).count() > 5, "{said:?}");
+}
+
 /// The world's time at real time `real` (the clock's anchor and rate).
 fn world_now(w: &mut Walk, real: f64) -> f64 {
 	let clock = w.peek(obj! { "type" => "WorldClock" }).unwrap();
