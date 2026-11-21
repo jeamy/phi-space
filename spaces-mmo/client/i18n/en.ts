@@ -580,7 +580,7 @@ export const EN: Record<string, string> = {
 	"Du bist in keiner Gruppe. „gruppe neu <name>“ gründet eine.": "You aren't in a group. „group neu <name>“ founds one.",
 	"Du bist nicht in dieser Gruppe.": "You aren't in this group.",
 	"Du bist noch müde von der letzten Arbeit; in etwa {0} Minuten wieder.": "You're still tired from your last job; try again in about {0} minutes.",
-	"{0} (müde, noch etwa {1} Min.)": "{0} (tired, about {1} min. left)",
+	"{0} (müde)": "{0} (tired)",
 	"Du darfst heute noch {0} von {1} Dingen nehmen.": "You may take {0} more of {1} things today.",
 	"Du erschaffst {0}.": "You create {0}.",
 	"Du findest {0}.": "You find {0}.",

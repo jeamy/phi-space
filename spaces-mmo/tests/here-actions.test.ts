@@ -40,21 +40,21 @@ test("what is done and cannot be done again leaves the bar until it can: mending
 	const hut = (term: number | undefined): ObjView => ({ id: "h", kind: "building", name: "Hütte", plan: "huette", location: "r", x: 6, y: 5, w: 2, h: 2, owner: "Ole", ownerId: "c", ...(term === undefined ? {} : { term }) });
 	const road = (term: number): ObjView => ({ id: "rd", kind: "road", name: "Straße nach Mitte", location: "r", x: 4, y: 5, through: true, runs: [[{ x: 4, y: 5 }, { x: 4, y: 6 }]], roadState: "built", roadTo: "m", term });
 	const plans = [{ key: "huette", name: "Hütte", w: 2, h: 2, needs: "", work: 1, repair: [{ name: "Treibholz", count: 1 }] }];
-	const lines = (o: ObjView[], more: { decay?: number; tired?: number; todos?: [] } = {}) => hereEntries({ ...input([wood, ...o]), plans, ...more }).map((e) => e.line);
+	const lines = (o: ObjView[], more: { decay?: number; tired?: boolean; todos?: [] } = {}) => hereEntries({ ...input([wood, ...o]), plans, ...more }).map((e) => e.line);
 	// just mended (40 days ahead): neither the building nor the road is offered; in its last five days both are; without the clock as before
 	assert.ok(!lines([hut(decay + 40 * DAY), road(decay + 40 * DAY)], { decay }).some((l) => l.startsWith("repariere") || l === "straße repariere"));
 	assert.ok(lines([hut(decay + 4 * DAY), road(decay + 4 * DAY)], { decay }).includes("repariere @6,5"));
 	assert.ok(lines([hut(decay + 4 * DAY), road(decay + 4 * DAY)], { decay }).includes("straße repariere"));
 	assert.ok(lines([hut(decay + 40 * DAY)]).includes("repariere @6,5"), "no clock: offered");
 	assert.ok(lines([hut(undefined)], { decay }).includes("repariere @6,5"), "no term: offered");
-	// work while the figure rests: still offered, saying how long the rest lasts (the server answers „Du bist noch müde …“); delivering stays as it is
+	// work while the figure rests: still offered, marked „(müde)“ (the server answers „Du bist noch müde …“ with the minutes); delivering stays as it is
 	const pick = { id: "i2", kind: "item", name: "Treibholz", location: "c", x: -1, y: -1 } as ObjView;
 	const withSite = [pick, site(7)];
-	const work = (more: { tired?: number } = {}) => hereEntries({ ...input([wood, ...withSite]), plans, ...more }).find((e) => e.line === "arbeite");
+	const work = (more: { tired?: boolean } = {}) => hereEntries({ ...input([wood, ...withSite]), plans, ...more }).find((e) => e.line === "arbeite");
 	assert.ok(work() && !/müde/.test(work()!.label));
-	assert.match(work({ tired: 12 })!.label, /\(müde, noch etwa 12 Min\.\)$/);
-	assert.ok(work({ tired: 0 }) && !/müde/.test(work({ tired: 0 })!.label));
-	assert.ok(!hereEntries({ ...input([wood, ...withSite]), plans, tired: 12 }).some((e) => !e.line.startsWith("arbeite") && /müde/.test(e.label)), "only work says so");
+	assert.match(work({ tired: true })!.label, /\(müde\)$/);
+	assert.ok(work({ tired: false }) && !/müde/.test(work({ tired: false })!.label));
+	assert.ok(!hereEntries({ ...input([wood, ...withSite]), plans, tired: true }).some((e) => !e.line.startsWith("arbeite") && /müde/.test(e.label)), "only work says so");
 	// a yield is offered only when the tasks say it is ready (the bar now has them, as the menu)
 	const coop: ObjView = { id: "k", kind: "building", name: "Hühnerstall", plan: "huehnerstall", location: "r", x: 6, y: 5, w: 2, h: 1, owner: "Ole", ownerId: "c", herd: "huhn" };
 	assert.ok(lines([coop]).some((l) => l.startsWith("einsammeln")), "no tasks: offered");
