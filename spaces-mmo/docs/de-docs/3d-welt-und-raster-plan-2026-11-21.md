@@ -1,0 +1,254 @@
+# Analyse & Plan: 3D-Welt, Rendering-Verbesserungen und Server-Raster-Verfeinerung auf 1/4 Zellfläche
+
+**Datum:** 2026-11-21 (überarbeitet am selben Tag)  
+**Zielsystem:** `spaces-mmo` (3D-Client `Three.js 0.186.1`, 2D-Client `PixiJS 8.22`, Dual-Engine TypeScript & Rust `mmo-engine`, `mmo-web`, `phi-spaces`)  
+**Festgelegte Zielrichtung:**
+1. **Zellgröße auf 1/4 Fläche** (`gridScale = 2`, Kantenlänge halbiert → 2×2 Subzellen pro bisheriger Zelle: `24×16` → `48×32`, max. Wachstum `36×24` → `72×48`).
+2. **Echte Server-Raster-Verfeinerung** (autoritative Koordinaten in TypeScript- & Rust-Engine, inklusive Store-Migration, 2D- und 3D-Client).
+3. **Aufbauend auf 3D-V3** ([`docs/3D-V3/README.md`](../3D-V3/README.md)) und den Optimierungen aus [`docs/code-analyse-2026-11-19.md`](../../../docs/code-analyse-2026-11-19.md).
+
+---
+
+**Status:** Entwurf. Die Zielregeln und Prüfungen ab Abschnitt 2 beschreiben geplantes Verhalten. Die Smartphone-Werte in Abschnitt 1 stammen aus früheren Messungen. Alle Regeln sind Festlegungen dieses Entwurfs; Figurendichte und Umstellung der Belegung sind in Abschnitt 2.3 entschieden.
+
+**Leitregel.** Der erste Wechsel ist *lagegleich*: Alles, was heute eine Zelle physisch belegt, sperrt oder auslöst, belegt, sperrt oder löst nach der Umstellung dieselbe physische Fläche aus, also den ganzen 2×2-Block. Feiner wird zunächst nur, *wo* Figuren stehen und *wohin* Neues gesetzt werden kann. Jede Ausnahme von dieser Regel ist in Abschnitt 2 ausdrücklich genannt.
+
+1. [Ist-Analyse](#bestand)
+2. [Raster und Spielregeln](#raster)
+3. [Bewegung, Belegung und Wachstum](#engine)
+4. [Ansichten und Rendering](#ansichten)
+5. [Migration und Umschaltung](#migration)
+6. [Reihenfolge und Abnahme](#abnahme)
+
+<a id="bestand"></a>
+
+## 1. Ist-Analyse: 3D-Welt, Welterzeugung & Modelle
+
+### 1.1 Gesamtarchitektur
+
+Die 3D-Ansicht (`client/MapView3D.tsx`) ist heute eine rein visuelle Repräsentation des autoritativen 2D-Rasters auf dem Server (`docs/architektur.en.md`, „3D-Ansicht“). Sämtliche Kollisionen, Wege, Belegungen und Spielregeln laufen in `mmo-engine` (produktiv Rust auf `big` und `nano`, TypeScript als Referenz/Orakel).
+
+```mermaid
+flowchart TD
+    subgraph WorldDef["Welterzeugung (worlds/leuchtfeuer/)"]
+        W["world.ts (37 Räume, 8 Inseln, Pläne, Innenräume)"]
+        I["islands.ts (land(), plants() — 24×16 FNV-1a + Smooth Noise)"]
+        S["scenery.ts (Kulissen als Plot-Objekte)"]
+        W --> I & S
+    end
+
+    subgraph Server["Autoritative Engine (mmo-engine Rust / TS)"]
+        SP["phi-spaces (Room, Plot, Spot, Building, Bed, Field, Road)"]
+        RG["room-growth.ts / room_growth.rs (bis maxW=36, maxH=24)"]
+        SP --> RG
+    end
+
+    subgraph Web["Web-Gateway (mmo-web)"]
+        GW["WebSocket Frames (hello, atlas, room, chars, objs)"]
+    end
+
+    subgraph Client3D["3D-Ansicht (spaces-mmo/client/)"]
+        MV["MapView3D.tsx (Scene, Sync, Loop, Picking)"]
+        TER["terrain3d.ts + terrace.ts + terraces3d.ts"]
+        GR["ground3d.ts (PBR) + water3d.ts (Shore-Shader)"]
+        BL["block3d.ts (Diorama-Block, islandBlock, fishSchool)"]
+        MOD["props3d.ts + buildings3d.ts + figure3d.ts + fish3d.ts"]
+        LOD["modelDetail3d.ts (far / room / near)"]
+        SURF["surfaces3d.ts (Triplanar 2DArray, 7 Oberflächen)"]
+        PIPE["atmosphere3d.ts + shadow3d.ts + ao3d.ts + post3d.ts + closeup3d.ts"]
+    end
+
+    WorldDef -->|world.json| Server
+    Server --> GW --> MV
+    MV --> TER & GR & BL & MOD & PIPE
+    MOD --> LOD & SURF
+```
+
+### 1.2 Welterzeugung (`worlds/leuchtfeuer/`)
+
+- **Raumgrößen:** Alle 37 Außenräume auf 8 Inseln haben eine Basisgröße von **24×16 = 384 Zellen** (`islands.ts`: `W = 24, H = 16`). Ab 70 % Belegung des bebaubaren Landes (begehbare Zellen ohne Wege und Passagen) und bei geeigneter Einfügestelle wächst ein Raum über `growthTick` (`server/engine/commands/growth.ts`, `rust/mmo-engine/src/commands/growth.rs`) in Streifen zu 4 Zellen bis auf **36×24 = 864 Zellen** (`world.ts`: `growth`). Innenräume (`interior` bei Hütte, Backhaus, Metzgerei, Gewächshaus) sind eigene kleine Räume (`7×6` bis `10×7`).
+- **Terrain-Generator (`islands.ts` `land()`):**
+  - `graue-bucht` und `klippenpfad` sind handgezeichnete ASCII-Grids (`~` Wasser, `.` Sand, `:` Pflaster, `,` Gras). Das `dig`-Template (`world.ts`, Builder-Befehl „grabe“) ist eine Vorlage für neue Räume, kein eigener Raum.
+  - Die übrigen 35 Räume werden deterministisch aus `roomId`-Seed generiert: FNV-1a-Hash + 2-Oktaven-Smooth-Noise (`step = 4` und `step = 2`) für Küsten-Wobble, Strandbreite (`beach`), Bodenflecken (`step = 3`), runde Pflasterplätze (`plaza`) und gerade Pflasterwege von der Raummitte `(12, 8)` zu den Türen/Stegen (`DOOR`).
+- **Flora & Deko:**
+  - **Server (`islands.ts` `plants()`):** Erzeugt das statische `decor`-Grid (Blumen-Patches, Kräuter, Büsche, Bäume) auf freiem Gras mit 1-Zellen-Abstand zu Wegen, Türen und markierten Objekten. Begehbar. Die im Raum vorkommenden Decor-Arten bestimmen auch, welche Samen gesammelt werden können.
+  - **Client (`MapView3D.tsx` `buildPlants()`):** Ergänzt deterministisch per `stableHash` rein visuelle Wildblumen auf 28 % der freien Graszellen (1–2 Stück pro Zelle) sowie Palmen auf 7 % der freien Sandzellen.
+- **Kulissen & Gebäude (`scenery.ts`, `world.ts`):** Rechteckige Grundrisse von `1×1` (Regentonne, Vogelscheuche, Baum) über `2×2` (Hütte, Mühle, Beet) bis `4×4` (Acker, Park). Begehbare Kulissen mit `through` erhalten keinen Plot. Jede reservierte Grundrisszelle wird im Space als eigener `Plot`-Eintrag mit `unique: ["room", "x", "y"]` reserviert (`build.ts`). Diese `unique`-Prüfung des Space ist heute der Mechanismus, der überlappende Bauten auch zwischen parallelen Workern ausschließt.
+- **Grenzen der Wegsuche heute:** Server `findPath` mit `max = 40` Schritten (`server/engine/world.ts`), Client-BFS mit höchstens 1024 besuchten Zellen (`client/walk.ts`).
+
+### 1.3 3D-Terrain, Diorama & Rendering-Pipeline
+
+- **Terrassen-Geometrie (`terrain3d.ts`, `terrace.ts`, `terraces3d.ts`):**
+  - Feste Höhenstufen pro Kachelart: `~` = 0,06, `.` = 0,20, `_` = 0,30, `:` = 0,36, `,` = 0,50, `#` = 1,30. Das per-cell-Rauschen `terrainHeight()` (±0,03) wird in `MapView3D.tsx` nicht genutzt, um dunkle Fugen zwischen Nachbarzellen zu vermeiden.
+  - `outlineLoops()` + `withHoles()` extrahieren Konturen aller Zellen ab einer Höhenstufe, `rounded(CORNER = 0.42, 6)` rundet Ecken (außer am Raumrand), `ExtrudeGeometry` (5 Bevel-Segmente) erzeugt pro Land-Art ein Mesh mit 3 Materialgruppen (`top`, `flank`, `wall`).
+- **Boden & Wasser (`ground3d.ts`, `water3d.ts`):**
+  - 6 PBR-Materialsets unter `public/materials/{sand,grass,paving,planks,plaster,rock}/` (`color.jpg`, `normal.jpg`, `arm.jpg`; ca. 4,8 MB Download), 1,5–2,5 Zellen Repeat, prozedurales 2-Oktaven-Makro-Noise gegen Kachelung, Ufer-Nässe über `shoreTexture` (Chamfer-Distanz, `SHORE_REACH = 4`).
+  - Wasser als einzelne `BoxGeometry` unter dem Raum mit prozeduralem Wellen-Normalen-Shader (3 Sinus + 2 Noise-Oktaven), Flach-/Tiefwasser-Verlauf und animiertem Schaum.
+- **Diorama-Block & Insel-Ebene (`block3d.ts`, `fish3d.ts`):**
+  - Unter dem Raum hängt ein Block (`BLOCK_DEPTH = 2.6`) mit Gesteinsschichten (`rockSide` + `strataTexture`), halbtransparenten Seeseiten, Sandhang (`SEABED = 1.6`) und instanziierten Fischschwärmen (`fishSchool`, max. 6 Draw-Calls; auf Insel-Zoom ausgeblendet).
+  - Nachbarräume der Insel (`islandBlock`, `ISLAND_GAP = 5`) werden als ein zusammengefügtes Voxel-Deckel-Mesh gezeichnet (bis 5 Quads = **10 Dreiecke pro Zelle**).
+- **Licht, Schatten, AO & Postprocessing (`atmosphere3d.ts`, `shadow3d.ts`, `ao3d.ts`, `post3d.ts`, `closeup3d.ts`):**
+  - Physischer `Sky`-Shader + `PMREMGenerator` Environment-Map (alle 0,1 Weltstunden neu gerendert) + Horizont-Farbprobe für `FogExp2`.
+  - **Split-Shadow-Map (`shadow3d.ts`):** Bis 4096² (skaliert mit `sharp.scale` auf 2048² / 1024²). Statische Szene (`STILL`) wird gecacht und 1×/s bzw. bei Änderung aktualisiert; bewegte Figuren (`MOVING_LAYER`) werden darüber gezeichnet.
+  - **Baked 2.5D-AO (`ao3d.ts`):** Orthografischer Tiefen-Pass von oben (`AO.texels = 8` Texel/Zelle, max. 2048²) + separabler Gauss-Blur (`AO.reach = 0.45`, `AO.depth = 0.7`, `AO.strength = 0.45`). Ein Textur-Lookup pro Fragment in allen beleuchteten Materialien.
+  - **Postprocessing (`post3d.ts`):** `HalfFloatType` Target mit 4× MSAA + DepthTexture → `UnrealBloomPass` → `BokehPass` (nur Zoom > 2, liest bestehende DepthTexture) → `OutputPass` (ACES Filmic). Layer 1 (Labels/Sprechblasen) separat danach ohne Tone-Mapping.
+  - **Dynamische Auflösung (`closeup3d.ts` `sharpen()`):** Regelt Pixel-Ratio zwischen 100 % und 50 % (min. 0,75 DPR) im Zielkorridor 42–56 FPS.
+  - **Historische Smartphone-Messung (`docs/3D-V3/README.md`):** **26 FPS (39 ms/Frame)** nachts bei halber Auflösung (Teilproben, keine additive Zerlegung: ca. 20 ms Grundlast Boden+Wasser, 13 ms Dinge+Figuren, 5 ms Schatten, 5 ms Pflanzen, 3 ms Bloom), ca. **120–217 Draw-Calls** und **~160k Dreiecke** in Graue Bucht.
+
+### 1.4 Modelle (`props3d.ts`, `buildings3d.ts`, `figure3d.ts`, `modelDetail3d.ts`, `surfaces3d.ts`)
+
+- **Prozedurale Geometrie:** Alle Modelle werden aus Three.js-Primitiven zusammengesetzt und via `merge()` in non-indexed `BufferGeometry` mit Vertex-Farben, `glow`, `surface`, optional `tint` und geglätteten `creaseNormals()` (50°-Grenzwinkel) überführt und im Cache (`cached()`) gehalten.
+- **3 LOD-Stufen (`far`, `room`, `near`):** `updateModelDetails()` läuft alle 150 ms. `far` bei Zoom ≤ 0,55 (Hysterese 0,65), `near` bei Zoom ≥ 2 und Kamera-Distanz ≤ 16 (Hysterese 18) mit Budget-Limit **48 Near-Meshes** und **120.000 Modell-Dreiecken**. `BoxGeometry` wird ab `room` per `ExtrudeGeometry` abgeschrägt (Bevel); große Kugeln werden mit `lumpy()` verformt.
+- **Laub:** Echtes 3D-Geometrie-Laub (`blade()` = 4 Dreiecke, Vor- und Rückseite explizit) mit 800 Blättern/Zelle² (`room`) bzw. 1500 (`near`) über einer inneren Schattenkugel (`SHADE`). Größter Dreieckstreiber der Szene.
+- **Material & Oberflächen (`surfaces3d.ts`):** Ein geteiltes `propMaterial` mit 3D-Value-Noise-Grain, Screen-Space-Bump (`dFdx`/`dFdy`, distanz- und pixelgrößen-gecullt) und triplanarer Projektion aus zwei `DataArrayTexture`s (7 Oberflächen: `bark`, `thatch`, `brick`, `slate`, `wood`, `rock`, `plaster`; 512×512 Color + ARM, ohne Normal-Maps). Einschränkung: Ohne UVs liegt die Maserung auf liegenden Balken senkrecht, und jedes texturierte Fragment führt **6 `textureGrad`-Fetches** aus.
+- **Figuren (`figure3d.ts`):** Ein `SkinnedMesh` mit 7 Bones (`FIGURE_SCALE = 1.3`), eigenes `figureMaterial` (nur Vertex-Farben, ohne Stoff-/Haut-Texturen oder `surfaces3d`).
+
+---
+
+<a id="raster"></a>
+
+## 2. Raster und Spielregeln
+
+Leuchtfeuer erhält ein autoritatives Raster mit halber Kantenlänge. Server, Befehle, Store und Raum-Frames verwenden ganzzahlige Zellen. `gridScale` gilt für die ganze Welt einschließlich Innenräumen. Unterstützt werden 1 und 2. Für alte Weltdefinitionen gilt 1. Das Fehlen einer Angabe im Store wird beim Start gesondert behandelt (Abschnitt 5). Welche Zellen begehbar sind, entscheiden Terrain, Belegung und Spielregeln. [Architektur](../architektur.en.md)
+
+**Block.** Ein *Block* ist das Quadrat aus `gridScale × gridScale` Zellen, dessen linke obere Zelle beide Koordinaten durch `gridScale` teilbar hat. Bei Skala 1 ist jeder Block eine Zelle. Blöcke sind die Einheit der lagegleichen Abbildung, der Straßen, der Wachstumsnähte und der Atlas-Vorschau.
+
+**Herkunft der Geometrie.** Die Weltdefinition führt neben `gridScale` die Angabe `derivedFrom`. `derivedFrom: 1` bedeutet: Der Generator (`land()`, `plants()`, handgezeichnete Räume, `DOOR`, `ARRIVE`) läuft mit den Skala-1-Parametern und wird blockweise hochskaliert. Ohne `derivedFrom` entwirft der Generator nativ in Zellen der eigenen Skala. Leuchtfeuer wechselt zuerst auf `gridScale: 2, derivedFrom: 1`. Dadurch liefern jeder Loader-Neustart und jede frische Welt dieselbe Geometrie wie die Migration des Bestands. Der Startcheck (Abschnitt 5) vergleicht beide Angaben mit dem Store.
+
+### 2.1 Größen
+
+| Größe | Heute | Ziel bei Skala 2 |
+| --- | --- | --- |
+| Basisraum und physische Größe | 24×16 Zellen | 48×32 Zellen auf denselben 24×16 World-Units |
+| Wachstum | Streifen 4, höchstens 36×24 | Streifen 8, höchstens 72×48. Nähte liegen auf Blockgrenzen (Abschnitt 3). |
+| Innenräume | 7×6 bis 10×7 | 14×12 bis 20×14, Türen, Ausgänge, Innen-Beete (Gewächshaus) und Einrichtung nach denselben Regeln wie außen |
+| Grundriss | Hütte 2×2, Acker 4×4 | Hütte 4×4, Acker 8×8. Ursprung ist die linke obere Zelle, die rechte und untere Grenze sind exklusiv. |
+| Einzelobjekte | Baum und Vogelscheuche 1×1 | Grundriss 2×2 in allen Wachstumsstadien. Den Typvertrag von `TreeFields` (`w: 1; h: 1`) auf `w/h = gridScale` erweitern. |
+| Reichweiten | Regeln in Zellen | Bestehende physische Reichweiten mit Faktor 2 in Zellen ausdrücken. Die jeweilige Distanzmetrik beibehalten. Gemessen wird von der Figurenzelle zur nächsten Zelle des Zielgrundrisses. Da migrierte Figuren auf der linken oberen Zelle ihres Blocks landen (Abstand 2 auf West-/Nordseiten gegenüber 1 auf Ost-/Südseiten), erhält Faktor 2 die Erreichbarkeit auf allen Seiten; Passage, Ausstieg, Interaktion, NPCs, Wildtiere, Feuer, Gewächshaus und Zonen auf allen vier Seiten an der Grenze und eine Zelle außerhalb prüfen. |
+| Beete und Äcker | Ein Pflanzplatz je bisheriger Beetzelle | Jeder Block eines Beets ist ein logischer Pflanzplatz. Ein altes Beet mit vier Plätzen behält vier. Beete und Äcker haben Breite und Höhe als Vielfache von `gridScale`, ihre Position darf auf jeder Zelle liegen; die Slots zählen ab dem Beetursprung. Für dieselbe physische Ackerfläche `seedPerCells` von 4 auf 16, `sowPerCells` von 8 auf 32 und `harvestPerCells` von 2 auf 8 erhöhen, `perCell` der Erträge vierteln. Da `harvestOf` mit `floor(Zellen · perCell · Faktor)` rechnet, bleiben die Mengen gleich; die Rundung an `Math.ceil` für Saat, Arbeit und Ernte trotzdem testen. |
+| Straßen | Ein Weg aus Zellen, Stein- und Arbeitsbedarf aus der Zellzahl | Straßen sind blockgebunden: Geplant wird auf dem Blockraster, gespeichert werden alle Zellen der Blöcke. Stein- und Arbeitsbedarf werden je Block berechnet, die heutigen Divisoren gelten also unverändert für die Blockzahl. Pflaster im `ground` und `Road.cells` decken dieselben Zellen. |
+| Wegsuche | Server höchstens 40 Schritte, Client 1024 Zellen | Befehlsgebundene Wege: 80 Schritte. Raumweite Navigation: siehe Abschnitt 3. |
+
+### 2.2 Punkte und Flächen
+
+Jeder Eintragstyp mit Koordinaten erhält genau eine der folgenden Klassen. Die Zuordnung steht als Tabelle im Code (TS und Rust gleich) und wird gegen die Liste aus [`shared/model.ts`](../../shared/model.ts) geprüft: Ein Typ ohne Klasse lässt den Startcheck scheitern.
+
+| Klasse | Typen (Ausgangsliste, beim Umsetzen vervollständigen) | Regel bei Skala 2 |
+| --- | --- | --- |
+| Fläche | Baustelle, Gebäude, Ruine, Kulisse, Baum, Beet, Acker, Zone, Mühlenladung, Bauauftrag | Position und Grundriss mit `gridScale` multipliziert. |
+| Blockpunkt | Feuer, Ausgang, Ankunftsort (`arrive`, Raum-Spawn) | Liegt auf einem Block. Wirkt auf alle Zellen des Blocks: Ein Feuer sperrt den ganzen Block, ein Ausgang löst auf jeder Zelle des Blocks aus. Ankunft: die linke obere Zelle des Blocks, ist sie belegt, die nächste freie nach der heutigen Regel „onto a free cell starting at `at`“. |
+| Zellpunkt | Figur und ihr `Spot`, Tier, Wagen, Boden-Item, Pflanze in einem Slot (über den Slot) | Steht auf genau einer Zelle. Bei der Migration auf die linke obere Zelle des Blocks. Was heute nicht sperrt, sperrt auch künftig nicht. |
+| Ohne Raumbezug | Atlasposition (`Room.map`), Inventar-Sentinel `(-1,-1)` | Unverändert. |
+
+### 2.3 Entscheidungen
+
+1. **Figurendichte.** Eine Figur belegt eine Zelle, also passen physisch bis zu vier Figuren dorthin, wo heute eine steht. Die Figurengröße (2D 32 px, 3D `FIGURE_SCALE 1.3`) ist größer als eine Zelle von 0,5 World-Units.  
+   *Festlegung:* Figuren behalten ihre Größe. Die Darstellung versetzt Figuren auf Nachbarzellen innerhalb ihrer Zelle zum Zellrand hin, ohne die autoritative Position zu ändern. Abnahme per Screenshot mit vier Figuren in einem Block, in 2D und 3D. Eine Abstandsregel zwischen Figuren auf dem Server gibt es nicht, weil sie über den `unique`-Eintrag pro Zelle nicht atomar durchsetzbar ist.
+2. **Belegung getrennt umstellen.**  
+   *Festlegung:* Das Belegungsformat wird zuerst auf Skala 1 in Produktion umgestellt, mit eigener Offline-Migration (Abschnitt 6, Phase 1b), und erst danach das Raster. Die Rasterumstellung ist damit eine reine Koordinatenmigration.
+
+### 2.4 Weltdefinition
+
+Für den ersten Wechsel (`derivedFrom: 1`) entsteht dieselbe Küstenform, Wege, Plätze und dasselbe Decor wie heute, blockweise hochskaliert. Das Decor-Symbol einer Altzelle liegt auf der linken oberen Zelle ihres Blocks, die übrigen drei bleiben leer. Damit bleibt die Artenmenge der wild sammelbaren Samen je Raum gleich; das wird trotzdem vor und nach der Umstellung verglichen.
+
+Ein späterer nativer Entwurf (ohne `derivedFrom`) bemisst `DOOR`, `ARRIVE`, Wege, Plätze, Küstenbreiten, Noise-Schrittlängen und Pflanzabstände in physischen Einheiten. Die beiden handgezeichneten Räume, das Grabungs-Template, Innenräume und `scenery.ts` werden dabei gesondert behandelt. Je Raum Ein- und Ausgänge, Spawn und beabsichtigte Verbindungen per Flutsuche prüfen. Bestehende Räume erhalten dann eine eigene Prüfung aller Bauten, Wege, Samenarten und Ankunftsorte (Abschnitt 5). Rein clientseitige Pflanzen können unabhängig davon variiert werden. Nach jeder geänderten Weltdefinition `npm --prefix spaces-mmo run world:json` ausführen. [Welterzeugung](../../worlds/leuchtfeuer/islands.ts) · [Samenregeln](../../server/engine/commands/garden.ts)
+
+<a id="engine"></a>
+
+## 3. Bewegung, Belegung und Wachstum
+
+**Bewegung.** Einzelnes Antippen bewegt eine Zelle. Gehaltene Richtung oder Klickpfad dürfen bei Skala 2 zwei aufeinanderfolgende Schritte auf derselben Achse in einem nummerierten Intent anfordern. Der Takt bleibt 150 ms, auf freier gerader Strecke also rund 6,7 Intents pro Sekunde und dieselbe physische Geschwindigkeit wie heute. Bei Skala 1 bleibt die zulässige Länge eins. TS- und Rust-Gateway validieren nummerierte Frames einschließlich Sequenznummer. Die Engine prüft Richtung und Länge für jeden Zugangsweg, auch für Textbefehle ohne Sequenznummer. Der bestehende Schrittpuffer von acht Intents (`MAX_AHEAD`) und die Nachfüllrate von zehn Intents/s sind Ausgangswerte. CPU und Schreiblast pro ausgeführtem Weg werden gemessen. [Gateway](../../server/gateway.ts) · [Rust-Gateway](../../rust/mmo-web/src/gateway.rs) · [Vorhersage](../../client/walk.ts)
+
+**Wegglättung.** Damit schräge Wege nicht in Einzelschritte zerfallen, wählt die Client-Wegsuche unter gleich langen Wegen den mit den wenigsten Richtungswechseln, und ein Richtungswechsel folgt möglichst erst nach einer geraden Zahl von Schritten. Einzelschritte bleiben für ungerade Reste und Hindernisse. Messgröße: Auf einer diagonalen Testroute ohne Hindernisse erreicht die Figur mindestens 90 % der physischen Geschwindigkeit der geraden Strecke.
+
+**Ausführung.** Die Engine prüft beide Teilstrecken in Reihenfolge gegen Terrain, blockierende Objekte und Figuren. Bei blockiertem ersten Schritt bleibt die Figur am Start. Wird erst der zweite verweigert, endet sie auf der ersten Zelle. Ein gültiger Ausgang löst beim ersten Betreten einer Zelle seines Blocks sofort den Übergang aus und beendet diesen Intent. Position und endgültiger Spot beziehungsweise die Übergabe werden atomar festgeschrieben. Bei konkurrierender Spot-Reservierung sichert die Transaktion den letzten zulässigen Endpunkt oder die Figur bleibt am Start. [Bewegungsregeln](../../server/engine/commands/default.ts) · [Spot-Reservierung](../../server/engine/occupancy.ts)
+
+**Bestätigung.** Für jeden angenommenen nummerierten Intent enthält genau eine Bestätigung den tatsächlich erreichten Zustand, auch bei Verkürzung oder Ablehnung. Sie wird wie heute als `CharacterFields.ack {conn, seq}` mit dem Commit geschrieben, der den Intent beendet. Bei einem Übergang in eine andere Region reist `ack` mit `Handover.character` und wird mit Raum und Ankunftszelle im Zielraum bestätigt. Raumwechsel verwirft alte Vorhersagen. Tests umfassen belegte Zwischenzellen, Gegenverkehr, Ausgang auf Teilstrecke eins, Ausgang über eine Regionsgrenze und einen während der Vorhersage belegten Zielplatz.
+
+**Wegsuche.** Für die raumweite Navigation auf Skala 2 darf jede Zelle einmal besucht werden. Das Suchbudget entspricht der tatsächlichen Raumfläche (höchstens 72×48 = 3456 Zellen), ein einfacher Weg umfasst höchstens Fläche minus eins Schritte. Im maximalen offenen Raum sind es von Ecke zu Ecke 118 Schritte, Hindernisse können längere Wege erzwingen. Befehlsgebundene Wege behalten eine eigene Grenze (80 Schritte, das Doppelte der heutigen 40). Beispiele für beide Engines und den Client: ein offener Maximalraum, ein verbundener Umweg über 128 Schritte (bewusst über der befehlsgebundenen Grenze und über der heutigen Client-Grenze, als Fall für die raumweite Navigation) und ein unerreichbares Ziel. Bei Skala 1 die bestehenden Grenzen als Kompatibilitätsfall prüfen. [Server-Wegsuche](../../server/engine/world.ts) · [Client-Wegsuche](../../client/walk.ts)
+
+**Belegung.** Die Objektgrundrisse ersetzen die dauerhaften Einzel-Plots. Eine gemeinsame Abfrage liefert pro Zelle Objekt-ID, Bewegungsblockade, Baublockade und Beitrag zur Wachstumsquote. Ihre Ausgabe bei Skala 1 wird vor der Umschaltung zellenweise mit dem bisherigen Verhalten verglichen.
+
+- Baustelle, Gebäude, Ruine, Beet, Acker, Baum und feste blockierende Kulissen behalten ihre reservierte Fläche. Abbaubare blockierende Kulissen zählen ebenfalls. Bei `Scenery.through` gelten die bisherigen Durchgangsregeln. Feuer sperren ihren Block. Straßen bleiben begehbar und verhindern auf ihren Blöcken Neubauten. Zonen behalten ihre eigenen Bauregeln.
+- Figuren können ein unter ihnen angelegtes Beet oder Feld über die Zellen desselben Objekts verlassen. Versetzen ignoriert den eigenen alten Grundriss. Abriss, Verfall, Ernte, Tierplatzierung, nahe Objektwahl und der Wechsel von Baustelle zu Gebäude verwenden dieselbe Zuordnung. `Spot` bleibt die eindeutige Reservierung für Figuren außerhalb von Passagen, weiterhin mit `unique` auf Raum und Zelle.
+
+**Sperren.** Weil mit den Plots die `unique`-Prüfung als Schutz gegen überlappende Bauten wegfällt, übernehmen Sperreinträge diese Aufgabe:
+
+- *Raumsperre:* ein Eintrag je Raum. Wer statische Belegung eines Raums ändert, nimmt ihn per `take` in seiner Transaktion und schreibt ihn mit dem Commit zurück. Bricht die Transaktion ab oder läuft ihre Frist ab, fällt der Eintrag nach den Transaktionsregeln von phi-spaces an den Space zurück; ein abgestürzter Worker hält die Sperre also höchstens bis zum Fristablauf.
+- *Inselsperre:* ein Eintrag je Insel, für Änderungen, die mehrere Räume einer Insel betreffen (Wachstum mit seinen Begleitänderungen, Straßen über Raumgrenzen).
+- Reihenfolge: `WORLD_LOCK` (geteilt über `pinTerrain` oder exklusiv für Loader und Wachstum) vor Inselsperre vor Raumsperre, mehrere Räume in stabiler ID-Reihenfolge. Das verhindert Deadlocks zwischen `growthTick`/Loader und Baubefehlen und gilt für alle Änderungen an statischer Belegung, einschließlich Loader, Hintergrundjobs und Reparaturen. Die entscheidende Überlappungsprüfung liest nach dem Erwerb den aktuellen autoritativen Stand innerhalb der Transaktion. Ein vor dem Erwerb gelesener Prozessspiegel reicht dafür nicht aus.
+- Jeder heutige Plot-Leser und -Schreiber in TS und Rust erhält einen zugeordneten Ersatz (heute u. a. `build.ts`, `builder.ts`, `field.ts`, `garden.ts`, `trees.ts`, `interior.ts`, `wild.ts`, `growth.ts`, `loader.ts`, `occupancy.ts`, `fire.ts`, `server/npc/settlers.ts` und die Rust-Gegenstücke). Insbesondere nutzt `takeNear()` (`build.ts` und das Rust-Gegenstück) heute `Plot`-Einträge, um von einer anderen offenen Transaktion gehaltene Baustellen oder Beete zu erkennen (`held`), und muss auf die Raumsperre oder direkte Objektkonkurrenz umgestellt werden. Zwei gleichzeitige überlappende Bauversuche über getrennte Worker müssen genau einen Erfolg liefern. Zusätzlich Bau gegen Wachstum, Abbruch mit erneutem Versuch, Worker-Absturz mit gehaltener Sperre und parallelen Bau in verschiedenen Räumen prüfen. [Bau und Objektzuordnung](../../server/engine/commands/build.ts) · [Momentaufnahme im Worker](../../server/world-host.ts) · [Wildtiere](../../server/engine/commands/wild.ts)
+
+**Wachstum.** Zähler ist die Vereinigung der Grundrisszellen aller Objekte, die heute einen Plot schreiben, innerhalb des bebaubaren Landes. Punktobjekte zählen nicht, wie heute. Nenner ist die Zahl der begehbaren Zellen ohne Wege und Ausgangspassagen. Weil Zähler und Nenner lagegleich je mit 4 multipliziert werden, bleibt die Quote beim Wechsel gleich; das wird je Raum geprüft. Ab 70 % Belegung darf ein Streifen eingefügt werden. Nähte liegen auf Blockgrenzen (`at` durch `gridScale` teilbar), damit Terrain, Straßen und Blockpunkte auch nach Wachstum blockweise liegen. Der Streifen darf keine Grundrisse schneiden und muss bisher erreichbare freie Flächen sowie das neue Bauland verbunden halten. Die Engine liest die betroffenen Objekte und schreibt die tatsächlich verschobenen Einträge sowie Raum, Wachstumshistorie und Begleitänderungen. Beim Einfügen sind auch verschachtelte Positionen und Straßen beider beteiligten Räume konsistent zu verschieben. Ein Einfügen quer durch eine Straße muss die Lücke mit Straßenblöcken schließen oder die Naht als ungeeignet verwerfen. [Wachstum](../../server/engine/commands/growth.ts) · [Wachstumstransformation](../../server/engine/room-growth.ts)
+
+<a id="ansichten"></a>
+
+## 4. Ansichten und Rendering
+
+**2D.** Der Basisraum bleibt bei nominalem Zoom 768×512 Pixel groß. Die vorhandenen Tilesets liefern weiter 32×32 Quellpixel, ein Autotile-Viertel 16×16. Pixi zeichnet sie bei Skala 2 in 16×16 beziehungsweise 8×8 Zielpixel. Quellrechteck und Zielmaß erhalten getrennte Größen, auch für die in 3D verwendeten Tileset-Looks. Bei `derivedFrom: 1` darf das Terrain weiter je Block mit einer 32×32-Kachel gezeichnet werden; das spart Sprites und wird gegen die Zeichnung je Zelle verglichen. Animierte Wasser-Viertel, Sprites, Figurenversatz (Abschnitt 2.3), Labels und Touch-Picking am Rand mit beiden Skalen prüfen. Die Anzahl der Pixi-Sprites und die Kosten beim Raumwechsel separat messen. [Pixi-Karte](../../client/MapView.tsx) · [3D-Tileset](../../client/tiles3d.ts)
+
+**3D.** Die Zellkante beträgt `1 / gridScale` World-Units. Die Zellmitte liegt eine halbe Zellkante vom Zellrand entfernt. Vorwärts- und Rücktransformation verwenden denselben Raumursprung und dieselben Grenzen für Raycast, Objektanker, Straßen, Modellgrundrisse und Kameraziel. Materialien wiederholen sich je World-Unit. Höhen, Wandstärken, AO-Reichweite, Schattenkamera, Sichtweiten und Diorama-Tiefe werden in World-Units geführt; `AO.texels` gilt je World-Unit. Die Eckenrundung ist `min(0.42, 0.45 · Zellkante)` World-Units, damit sie bei einzelnen Subzellen (nativer Entwurf) nicht entartet; bei `derivedFrom: 1` bleibt sie 0,42 World-Units. Da `rounded()` (`terrace.ts` / `terraces3d.ts`) heute in Zelleinheiten arbeitet, wird `CORNER` konsistent in dieselbe Einheit umgerechnet (`0,42 · gridScale` Zellen bei `derivedFrom: 1`, `0,45` Zellen nativ). `SHORE_REACH` gilt in World-Units: vier World-Units sind acht Zellen. Das Ufer bekommt doppelte lineare Auflösung. Clientseitige Pflanzwahrscheinlichkeit pro geeigneter Zelle mit feinerem Hash-Modulo durch vier teilen (z. B. `% 1000` statt `% 100`, damit Palmen bei 1,75 % nicht durch Ganzzahlrundung verzerrt werden) und die tatsächliche Pflanzzahl je Raum messen. Eine Touch-Toleranz darf die Objektauswahl erleichtern. Der an den Server gesendete Bau- oder Bewegungspunkt bleibt explizit und sichtbar.
+
+**Atlas.** Das Gateway sendet den Atlas in seinem eigenen `atlas`-Frame. Nur das Gateway reduziert das Gelände auf eine Vorschau. Jeder Raumeintrag liefert Originalbreite und -höhe in Spielzellen sowie die Abtastung je Vorschauzelle (1 oder 2). Die Vorschau benutzt eine deterministische Mehrheitswahl je Block mit fester Reihenfolge bei Gleichstand. Weil Nähte auf Blockgrenzen liegen und Raummaße Vielfache von `gridScale` sind, gibt es keine unvollständigen Randblöcke; der Fall wird trotzdem abgefangen. Feuer und Objektmarker behalten Spielzellenkoordinaten. Die Atlasansicht rechnet sie genau einmal in Bildkoordinaten um. `Room.map` zählt Raumschritte. Der 3D-Client baut den Deckel direkt aus der gelieferten Vorschau in der physischen Ausdehnung des jeweiligen Raums. Der aktive Raum verwendet immer sein volles Raumraster. Alte Frames ohne Zusatzfelder gelten als unverdichtete Vorschau. Vor Aktivierung von Skala 2 müssen Browser und Gateway das neue Format unterstützen, auch nach einem Reconnect aus einem alten Tab. [Frames](../../shared/frames.ts) · [Atlas-Erzeugung](../../server/gateway.ts) · [Inselansicht](../../client/MapView3D.tsx)
+
+Bei acht Räumen auf der größten Insel werden maximal sieben Nachbardeckel gezeichnet. Für sieben Basisräume entstehen heute höchstens `7 × 384 × 10 = 26.880` Deckel-Dreiecke. Ohne Vorschau wären es 107.520, mit 2×2-Vorschau wieder 26.880. Diese Rechnung erfasst nur die Deckel. Gewachsene Räume, Diorama-Seiten, Figuren und Pflanzen separat zählen. [Weltdaten](../../worlds/leuchtfeuer/world.json) · [Deckelgeometrie](../../client/block3d.ts)
+
+**Renderbudget der Rasterumstellung.** Die physische Raumgröße bleibt gleich. Die Rasterumstellung allein darf Draw-Calls, Dreiecke und Framezeit gegenüber der neu gemessenen Skala-1-Referenz derselben Szene um höchstens 5 % erhöhen. Was darüber hinausgeht, ist ein Fehler der Umstellung, keine Folge des Rasters.
+
+| Ausbauschritt aus 3D-V3 | Erwarteter Nutzen | Vergleich vor Übernahme |
+| --- | --- | --- |
+| Primitive-UVs, indizierte Geometrie, einseitige Blattgeometrie mit sichtbarer Rückseite | Ausgerichtete Maserung, weniger Texturzugriffe und doppelte Vertices | UV-Nähte, harte Normalen, Materialattribute, Beleuchtung beider Blattseiten, Schatten, Buffer-Bytes und GPU-Framezeit |
+| Geglättetes Heightfield und Splat-Blending | Feinere Küsten, Dünen und Materialübergänge | Ebene Standflächen, Höhen beim Picking, Befestigung von Modellen, Durchgänge und visuelle Übereinstimmung mit der autoritativen Küste |
+| Wind, Blatt-Transluzenz, Gras, Regen und nasse Flächen | Sichtbare Reaktion auf Wind und Wetter | Numerischen Wind- und Wetterzustand über Gateway und Renderer führen. Sichtweite, Instanzbudget, Schatten und Framezeiten je Effekt messen. |
+| KTX2, Figurenmaterial, Texel-Snapping, Unterwasserboden, Instancing und spätere glTF-Modelle | Weniger Texturspeicher, detailliertere Modelle, stabilere Schatten und Wasserwirkung | Auf Zielgeräten Ladezeit, unterstütztes Texturformat und Fallback, GPU-Speicher sowie Framezeit bei gleicher Bildqualität erfassen. |
+
+Die Renderarbeiten lassen sich einzeln auf beiden Rastern vergleichen. Die Zielwerte für Draw-Calls und Dreiecke in Abschnitt 6 (Fall 5) liegen unter dem heutigen Höchstwert von 217 Draw-Calls; sie sind Ziel dieser Renderarbeiten, nicht der Rasterumstellung. Der Smartphone-Versuch aus 3D-V3 ergab nachts bei halber Auflösung rund 39 ms pro Frame. Aus Dreieckszahlen oder einzelnen Shaderänderungen ergibt sich keine belastbare FPS-Prognose. [3D-V3-Messungen](../3D-V3/README.md)
+
+<a id="migration"></a>
+
+## 5. Migration und Umschaltung
+
+**Startbedingung.** Eine neue persistierte Raster- und Belegungsversion ist unabhängig von `WorldLoaded.version`. Sie besteht aus Rasterversion (`gridScale`, `derivedFrom`) und Belegungsformat (Plots oder Grundrisse), jeweils mit abgeschlossenem Migrationsstand. Fehlt der Marker in einem bestehenden Weltstore, gilt dessen Format als Legacy (Skala 1, Plots). Vor dem ersten schreibenden Loader, Seed, Job oder Clientzugriff prüfen beide Laufzeiten Welt-ID, Rasterversion, Belegungsformat, Migrationsstand und die Klassenzuordnung aller Koordinatentypen (Abschnitt 2.2) gegen die Weltdefinition. Eine leere Welt darf im Zielformat initialisiert werden. Ein Bestandsstore mit abweichendem Format erfordert Offline-Migration. Das schützt auch gewachsene Räume, deren Loader die gespeicherten Basismaße mit der Definition vergleicht. [Loader](../../server/engine/loader.ts) · [Basismaßprüfung](../../server/engine/room-growth.ts)
+
+| Bestand | Transformation von 1 auf 2 und fachliche Prüfung |
+| --- | --- |
+| Terrain, Spawn und Wachstum | Persistiertes `ground` blockweise vervierfachen. Decor-Symbole je Altzelle auf die linke obere Zelle des Blocks, die übrigen drei Zellen leer. Bei gebauten und gegrabenen Räumen den vorhandenen Zustand erhalten. Basismaße, `east/south` und je Schritt `at/size` verdoppeln, jedes Element des quer laufenden `fill` zweimal übernehmen. Schrittfolge und Revisionsnummern erhalten. Aus der skalierten Basis (`derivedFrom: 1`) und der Historie rekonstruieren und gegen das konvertierte Terrain vergleichen, auch für alte Summen ohne Einzelschritte. Die Wachstumsquote je Raum vor und nach vergleichen. |
+| Flächen | Position und Grundriss nach Klasse „Fläche“ skalieren (Abschnitt 2.2). `Motion.zone` und der äußere Grundriss in `Room.building` folgen ihrem Bezugsraum. |
+| Blockpunkte und Zellpunkte | Feuer, Ausgänge und Ankunftsorte auf ihren Block, Figuren, Spots, Tiere, Wagen und Boden-Items auf die linke obere Zelle ihres Blocks. Atlaspositionen und Inventar-Sentinel wie `(-1,-1)` behalten ihre Bedeutung. |
+| Ausgänge und Regionen | `Exit.x/y` im Quellraum und `arrive` im Zielraum einschließlich der vorhandenen `arriveGrowthRevision` transformieren. Auch bei laufender Schiffsreise den gespeicherten Landepunkt in `Character.aboard.spot` im Zielraum skalieren und die Ankunftszeit erhalten. Gegen die rekonstruierte Zielgeometrie prüfen. Vor dem Snapshot Regionenübergaben und ausstehende koordinatenhaltige Aufträge abschließen. Verbleibt ein `Handover.character` oder ein unausgeführter Bewegungsintent, wird der betreffende Store mit ID gemeldet und der Umschaltpunkt nicht freigegeben. |
+| Straßen und Baufortschritt | `Route.cells` je Raum blockweise abbilden: Jede Altzelle wird ihr Block, alle vier Zellen gehören zur Straße. `Road.cells` und `paved` aus der konvertierten Route und deren Arbeitsstand neu ableiten; `paved` zählt Blöcke. Gelieferte Materialien, Stimmen, Restarbeit und Laufzeiten erhalten. Jede Straßenhälfte muss zusammenhängend sein, zu ihrem Ausgang führen und mit dem Pflaster im `ground` übereinstimmen. |
+| Beetpflanzen, Feldfrüchte und Besitz | Bestehende Pflanzkoordinaten sind im Store absolut. Der Client erhält heute die Differenz zum Beetursprung. Beim Konvertieren diese Differenz als logischen Slot sichern, auf Grenzen und doppelte Belegung prüfen und den neuen Zeichenanker aus Beetursprung und Slot ableiten. Bei widersprüchlichem Altbestand mit Beet-ID anhalten. Slotposition, Sorte, Stadium und Fälligkeit prüfen. Beim laufenden Acker bereits festgelegte Erträge (`yields`), Lieferungen und Arbeitsanteile erhalten; `seedNeed`, `workNeed` und Erntebedarf neu berechnen und auf Gleichheit prüfen. IDs, Eigentümer, Vorräte und Fristen über die Umstellung vergleichen. |
+| Innenräume | Wie Außenräume: Terrain, Einrichtung, Innen-Beete, Tür und Ausgang (`exit_id_of`) skalieren, die Verbindung von Tür und Gebäude auf dem Außenraum prüfen. |
+| Alt-Plots und neue Belegung (Migration der Phase 1b, auf Skala 1) | Vor Entfernen jedes Legacy-Plots dessen Objekt-ID, Zellabdeckung und Sonderregeln gegen die abgeleitete Belegung im Quellraster prüfen. Fehlende, verwaiste oder widersprüchliche Zuordnungen mit Raum und Objekt ausweisen. Die Zielkopie erst nach erfolgreichem Abgleich freigeben. Sperreinträge (Raum, Insel) anlegen. Die Rastermigration setzt das Belegungsformat „Grundrisse“ voraus und verweigert einen Store mit Plots. |
+
+Jeder Loader-Neustart und jede spätere Anwendung der Wachstumshistorie muss dieselben Positionen liefern; `derivedFrom: 1` stellt das für die Geometrie sicher. Manuelle oder native Küstenänderungen an bestehenden Räumen erhalten später eine eigene Prüfung aller Bauten, Wege, Samenarten und Ankunftsorte. Für jeden weiteren koordinatenhaltigen Eintrag im tatsächlichen Store ist vor Freigabe die passende Klasse und Transformationsregel nachzuweisen. [Eintragsfelder](../../shared/model.ts) · [Straßenfortschritt](../../server/engine/commands/road.ts) · [Übergaben](../../server/engine/handover.ts)
+
+**Betriebsfolge für einen später freigegebenen Termin.**
+
+1. Rollen und Pfade der tatsächlich beteiligten Stores inventarisieren. Auf `big` die Weltregionen erfassen. Auf `nano` den Account-Store auf koordinatenhaltige Felder durchsuchen (z. B. gespeicherte letzte Position, Spawn); nur wenn keine vorhanden sind, braucht er keine Rastertransformation, sonst erhält jedes Feld eine Klasse nach Abschnitt 2.2. Alle beteiligten Versionen und den zusammengehörenden Sicherungsstand protokollieren.
+2. In einer isolierten lokalen Umgebung zuerst auf Kopien proben. Für die Umschaltung Schreibzugriffe, Einlieferung neuer Intents und Hintergrundjobs koordiniert anhalten, laufende Arbeit abschließen, Regionswechsel kontrollieren und alle SQLite-Stores konsistent sichern. Ein einzelner `WORLD_LOCK` umfasst nur seinen eigenen Space.
+3. In getrennte Zielkopien migrieren. Abbruch während eines Batches durch Neuaufbau aus demselben gesicherten Quellstand behandeln. Ein zweiter Lauf auf vollständig markierten Zielen prüft nur. Logische Prüfsummen und Datensätze müssen übereinstimmen. Fehler in einer Region verhindern die Freigabe aller Zielkopien.
+4. Vor Öffnung für Spieler alle Regionen mit kompatiblen Binaries, Webclient und Zieldefinition isoliert starten. Loader zweimal starten, Übergabe über eine Regionsgrenze und Rückkehr testen. Rückweg vor Öffnung durch Wiederherstellen des gesamten gesicherten Stands mit den zugehörigen Binaries proben. Nach neuen Spieler-Schreibvorgängen würde eine Rücksicherung Fortschritt verwerfen und erfordert eine eigene Entscheidung.
+
+<a id="abnahme"></a>
+
+## 6. Reihenfolge und Abnahme
+
+| Phase | Ergebnis und Voraussetzung für den nächsten Schritt |
+| --- | --- |
+| 0 · Referenz | Auf Skala 1 semantische Beispiele, reproduzierbare Wachstumsfälle, Atlasgrößen, Renderreferenz je Zoom und Smartphone-Referenz aufnehmen. Startprüfung, Versionsmarker und Klassenzuordnung (Abschnitt 2.2) vor jeder Änderung des Bestandsformats implementieren. |
+| 1 · Belegung | Rechteckabfrage, Raum- und Inselsperren auf isolierten Stores bei Skala 1 einführen. Gegen Alt-Plots, Spielverhalten und parallele Worker prüfen. Bis Phase 1b bleibt der Bestand im Plot-Format. |
+| 1b · Belegung in Betrieb (Abschnitt 2.3) | Belegungsformat auf Skala 1 mit eigener Offline-Migration und der Betriebsfolge aus Abschnitt 5 in Produktion umstellen und im Betrieb bewähren. Erst danach beginnt Phase 2. |
+| 2 · Raster | Generator mit `derivedFrom`, TS-/Rust-Engine, beide Gateways, Clients und Atlas auf frischen Zielstores und auf migrierten Testkopien gemeinsam prüfen. Mobile Renderoptimierungen einzeln zuschalten. |
+| 3 · Migrationsprobe | Die vollständige Betriebsfolge aus Abschnitt 5 mit Unterbrechung, Wiederholung, Neustart und Rücksicherung lokal üben. Größere visuelle Änderungen werden separat gemessen. |
+| 4 · Freigabe | Erst nach bestandenen Funktions-, Budget-, Paritäts- und Geräteprüfungen gemeinsam umschalten. Tests mit Last oder Prozessabbruch ausschließlich am isolierten Testsystem ausführen. |
+
+**Abnahmefälle und Messgrößen**
+
+1. **Echtes Wachstum.** Einen Raum mit `64×48` aus der Basis `48×32` und einer protokollierten Wachstumshistorie (zwei X-Schritte, zwei Y-Schritte) aufbauen, sodass die Basismaßprüfung des Loaders gilt, mit 75 % Belegung des tatsächlich bebaubaren Landes. Eine gültige innere X-Naht auf einer Blockgrenze erzwingen und zahlreiche zu verschiebende Objekte, ein Feuer und eine Straße dahinter platzieren. Genau ein Wachstum auf `72×48`, verschobene Objekt- und Ankunftspositionen, Straßenkontinuität, freie Wege und korrekte Historie nachweisen. Anschließend bleibt der Maximalraum beim nächsten Tick stabil. Unterhalb der 70-%-Schwelle, bei ungeeigneter Naht und bei einer Naht, die nur auf einer ungeraden Zelle möglich wäre, findet kein Wachstum statt.
+2. **Space-Budget.** Beim erfolgreichen Tick beide Implementierungen unter dem tatsächlich konfigurierten Commit-Limit betreiben. Spitzenwert der reservierten Commit-Bytes einschließlich Abschlusskosten, Zahl gelesener und geänderter Einträge sowie serialisierte Raumgröße separat ausweisen. Das Standardlimit beträgt 192 KiB (`maxCommitBytes`), das Ziel für den definierten Testfall < 40 KiB. Einen Grenzfall mit vielen kleinen Objekten ergänzen. Die Einsparung ergibt sich aus Vorher-/Nachher-Messung mit gleicher Szene. Auch Loader-Batches und Migration auf das Limit prüfen. [Core-Budget](../../../spaces/src/core.ts)
+3. **Funktion und Parität.** Root und MMO jeweils mit Typecheck und Tests prüfen. Im MMO-Rust-Workspace zusätzlich `cargo test` und `cargo clippy --all-targets`. Der bestehende Walk verwendet standardmäßig einen eingefrorenen TS-Stand. Den alten Stand für die Prüfung des bisherigen Verhaltens heranziehen. Für die neuen Zustände `MMO_ORACLE` auf den passenden explizit protokollierten TS-Stand setzen und Szenarien auf beiden Skalen laufen lassen. Bewusst geänderte Speicherrepräsentationen auf Skala 1 zusätzlich anhand fachlicher Antworten, Besitz, Belegung und Erreichbarkeit vergleichen. Auf migrierter Kopie `test:play`, Regionswechsel sowie Wechsel zwischen TS und Rust einschließlich Wiederöffnung prüfen. [Oracle-Auswahl](../../rust/mmo-engine/tests/common/mod.rs) · [Spielbetrieb](../betrieb.en.md)
+4. **Netzwerk und Bedienung.** UTF-8-Bytes von `hello`, `atlas` und `atlasState` separat für dieselbe Welt erfassen. Für `atlas` gilt 25 KiB als Ziel bei 37 Basisräumen. Marker, Deckel und Picking für einen gewachsenen Nachbarraum sowie nach Raumwechsel vergleichen. Einzel- und Doppelschritte über die echten Gateways inklusive Ack, Teilbewegung, abgelehnten Schritten und Ausgang über eine Regionsgrenze prüfen. Die physische Geschwindigkeit auf gerader und diagonaler Strecke messen (Wegglättung, Abschnitt 3). Server-CPU, Commit-Rate und Antwortzeiten bei gleicher Spielerzahl und gleicher physischer Wegstrecke vergleichen. [Lasttest als Referenz](../lasttest-2026-11-08.en.md)
+5. **Mobil und Bildqualität.** Vorher/nachher auf demselben Smartphone, Browser, Datenstand und mit identischer effektiver Renderauflösung messen; dafür `sharpen()` abschalten und die Pixel-Ratio fest setzen. Nach Aufwärmen je drei gleich lange Läufe für Raum-, Nah- und Inselzoom erfassen, Median und p95 der Framezeit, Draw-Calls, Dreiecke und Raumwechselzeit ausweisen. Volle Schattenaktualisierung separat vom gewöhnlichen Frame zählen. Rasterumstellung allein: höchstens 5 % über der Skala-1-Referenz je Zoom (Abschnitt 4). Mit den Renderarbeiten: für die reproduzierte Nachtszene in Graue Bucht mindestens 26 FPS im Median bei halber Auflösung, Ziel 30 FPS, im gewöhnlichen Raumframe höchstens 200 Draw-Calls und 180.000 Dreiecke. Screenshots für Tag, Dämmerung, Nacht, Nebel, Nahansicht und Insel sowie eine 2D-Prüfung von Wasseranimation, Figuren, Figurenversatz und Touch-Zielen festhalten.
+
+Alle Zahlen mit Zielcharakter sind Abnahmewerte für die spätere Umsetzung. Messprotokolle, Teststand und getestete Store-Version gehören zum jeweiligen Ergebnis.
