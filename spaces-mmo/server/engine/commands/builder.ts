@@ -2,7 +2,7 @@
 // for everyone below the level the command does not exist. Lock strings a builder writes are parsed before they are
 // stored; a string that does not parse is refused with the reason.
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
-import { fieldsOf, type AccountFields, type ExitFields, type ItemFields, type RoomFields, type TagFields } from "../../model.ts";
+import { fieldsOf, type AccountFields, type BedFields, type ExitFields, type ItemFields, type RoomFields, type TagFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, exitsHere, inventory, itemsHere, msg, roomOf, type CommandCtx, itemsNamed } from "../context.ts";
 import { LEVELS, LockError, parseLocks } from "../locks.ts";
@@ -11,7 +11,8 @@ import { draftOf, typeChain } from "../typeclasses.ts";
 import { walkable } from "../world.ts";
 import { peek } from "../../space.ts";
 import { randomBytes } from "../source.ts";
-import { logGone } from "./build.ts";
+import { cells, logGone, planOf, refusal, touchesWater } from "./build.ts";
+import { exitIdOf, interiorOf, isInterior } from "./interior.ts";
 
 const BUILDER = "cmd:perm(Builder)";
 const ADMIN = "cmd:perm(Admin)";
@@ -223,4 +224,66 @@ const perm: Command = {
 	},
 };
 
-export const BUILDER_COMMANDS: Command[] = [dig, open, create, spawn, set, lock, tag, examine, destroy, perm];
+/** What `versetze` moves: the things that stand on cells of their own (Plot entries), with the field that names them;
+ *  green: what may lie in a green zone and under people (refusal), as when it was laid out. */
+const MOVABLE = [
+	{ type: "Building", id: "buildId", word: "Bau" }, { type: "Site", id: "buildId", word: "Baustelle" }, { type: "Ruin", id: "buildId", word: "Ruine" },
+	{ type: "Bed", id: "bedId", word: "Beet", green: true }, { type: "Field", id: "fieldId", word: "Acker", people: true }, { type: "Tree", id: "treeId", word: "Baum", green: true },
+] as const;
+
+const versetze: Command = {
+	key: "versetze", aliases: ["verschiebe", "rücke", "ruecke"], locks: ADMIN,
+	help: "versetze <id> <x> <y> – einen Bau, eine Baustelle, eine Ruine, ein Beet, einen Acker oder einen Baum hier mit allen seinen Zellen an eine andere Stelle desselben Orts setzen (x y: seine linke obere Ecke; im Bearbeiten-Modus der Karte: anklicken, Pfeiltasten, Leertaste)",
+	async func(c, arg) {
+		const m = /^(\S+)\s+(-?\d+)\s+(-?\d+)$/.exec(arg.trim());
+		if (!m) throw new CommandError("So geht es: versetze <id> <x> <y>");
+		const id = m[1]!, x = Number(m[2]), y = Number(m[3]);
+		if (isInterior(c.actor.room)) throw new CommandError("Drinnen wird nichts versetzt.");
+		let found: { kind: typeof MOVABLE[number]; e: Taken } | null = null;
+		for (const kind of MOVABLE) { const e = await peek(c.space, { type: kind.type, fields: { [kind.id]: id, room: c.actor.room } }); if (e) { found = { kind, e }; break; } }
+		if (!found) throw new CommandError(`Hier steht nichts mit der Kennung „${id.slice(0, 30)}“.`);
+		const { kind, e } = found, f = e.fields as unknown as { name?: string; plan?: string; x: number; y: number; w: number; h: number; of?: string; plants?: BedFields["plants"] };
+		const name = f.name ?? kind.word, dx = x - f.x, dy = y - f.y;
+		if (!dx && !dy) return msg(c, c.actor.charId, "info", `${name} steht schon dort.`);
+		if (f.of) throw new CommandError(`${name} gehört zu einem Gebäude und bleibt, wo es liegt.`);
+		const plan = f.plan ? planOf(c.world, f.plan) : undefined;
+		if (plan?.water) throw new CommandError(`${name} liegt im Wasser; versetzen lässt es sich nicht.`);
+		const room = await roomOf(c);
+		const rect = { x, y, w: f.w, h: f.h };
+		const green = "green" in kind || !!plan?.green, people = green || "people" in kind;
+		const no = (await refusal(c, room, rect, green, people, id)) ?? (plan?.shore && !touchesWater(c.world, room, rect) ? "Das muss ans Wasser grenzen." : null);
+		if (no) throw new CommandError(`Dorthin lässt sich ${name} nicht versetzen: ${no}`);
+		const t = await c.space.takeIfExists({ id: e.id }, NO_WAIT, { txn: c.txn });
+		if (!t) throw new CommandError("Das ist gerade in Benutzung; bitte gleich noch einmal.");
+		// the cells it leaves go, the ones it comes onto are written; those it keeps stay (a cell taken in this transaction
+		// still holds its place for `unique`)
+		const to = new Set(cells(rect).map((p) => `${p.x},${p.y}`)), had = new Set<string>();
+		for (const p of await c.space.readAll({ type: "Plot", fields: { room: room.roomId, of: id } })) {
+			const k = `${p.fields.x},${p.fields.y}`;
+			if (to.has(k)) had.add(k); else await c.space.takeIfExists({ id: p.id }, NO_WAIT, { txn: c.txn });
+		}
+		for (const p of cells(rect)) {
+			if (had.has(`${p.x},${p.y}`)) continue;
+			try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: p.x, y: p.y, of: id } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
+			catch (err) { if (/unique entry already exists/.test((err as Error).message)) throw new CommandError("Dort hat gerade jemand anderes abgesteckt."); throw err; }
+		}
+		await c.space.write({ type: t.type, types: t.types.slice(1), fields: { ...t.fields, x, y, ...(f.plants ? { plants: f.plants.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) } : {}) } as never }, c.txn, FOREVER);
+		// a building with an inside: the inside knows where it stands, and its door leads out in front of it
+		if (kind.type === "Building") {
+			const inside = await c.space.takeIfExists({ type: "Room", fields: { roomId: interiorOf(id) } }, NO_WAIT, { txn: c.txn });
+			if (inside) {
+				const r = fieldsOf<RoomFields>(inside);
+				await c.space.write({ type: inside.type, types: inside.types.slice(1), fields: { ...r, ...(r.building ? { building: { ...r.building, x, y } } : {}) } as never }, c.txn, FOREVER);
+			}
+			const door = await c.space.takeIfExists({ type: "Exit", fields: { exitId: exitIdOf(id) } }, NO_WAIT, { txn: c.txn });
+			if (door) {
+				const d = fieldsOf<ExitFields>(door);
+				await c.space.write({ type: door.type, types: door.types.slice(1), fields: { ...d, ...(d.arrive ? { arrive: { x: d.arrive.x + dx, y: d.arrive.y + dy } } : {}) } as never }, c.txn, FOREVER);
+			}
+		}
+		console.error(`[world] versetze by ${c.actor.name} in ${c.actor.room}: ${kind.type} ${id} ${f.x},${f.y} -> ${x},${y}`);
+		await msg(c, c.actor.charId, "info", `${name} steht jetzt bei ${x} ${y}.`);
+	},
+};
+
+export const BUILDER_COMMANDS: Command[] = [dig, open, create, spawn, set, lock, tag, examine, destroy, perm, versetze];

@@ -274,6 +274,8 @@ Mit der Tastatur geht vieles schneller. Die Pfeiltasten laufen, die Leertaste he
 
 Die Tasten gelten, solange die Befehlszeile nicht den Fokus hat.
 
+**Für Admins: Bearbeiten.** Unter **⋯** schaltet **Bearbeiten** einen Modus ein, in dem ein Klick auf einen Bau, eine Baustelle, eine Ruine, ein Beet, einen Acker oder einen Baum ihn auswählt (statt zu gehen). Dann verschieben ihn die **Pfeiltasten** Feld für Feld auf der Karte, die **Leertaste** setzt ihn dort ab (der Befehl \`versetze <id> <x> <y>\`; der Server prüft den Platz wie beim Bauen), **Esc** bricht ab. **Bearbeiten beenden** oben schaltet den Modus aus.
+
 ## Seitenfeld {#side}
 
 Das Seitenfeld zeigt, was gerade wichtig ist: was neben dir liegt, was du trägst und wie lange das Feuer noch brennt. Darunter steht alles, was du siehst und hörst.
@@ -381,6 +383,8 @@ The keyboard makes many things quicker. The arrow keys walk, the space bar picks
 | Esc | Leave the command line back to the map; closes menus and this help |
 
 The keys work as long as the command line does not have the focus.
+
+**For admins: editing.** Under **⋯**, **Bearbeiten** turns on a mode in which a click on a building, site, ruin, bed, field or tree picks it (instead of walking). The **arrow keys** then move it cell by cell on the map, the **space bar** puts it there (the command \`versetze <id> <x> <y>\`; the server checks the place as for building), **Esc** cancels. **Bearbeiten beenden** at the top turns the mode off.
 
 ## Side panel {#side}
 

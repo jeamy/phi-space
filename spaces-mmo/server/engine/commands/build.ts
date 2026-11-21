@@ -79,13 +79,16 @@ export const PATH = ":";
 /** How far from an exit a plan `atExit` may lie: the cells right beside it stay free (isPassage). */
 export const EXIT_REACH = 2;
 
-export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green = false, onPeople = false): Promise<string | null> {
+/** Why `rect` cannot be built on, or null. `own`: the object being moved there (versetze, builder.ts): its own cells
+ *  are no obstacle. */
+export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green = false, onPeople = false, own?: string): Promise<string | null> {
 	const height = room.ground.length, width = room.ground[0]?.length ?? 0;
 	if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height) return "Dort ist der Raum zu Ende.";
 	const zoned = await zoneRefusal(c, room.roomId, cells(rect), green);
 	if (zoned) return zoned;
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
 	const blocked = await blockedIn(c.space, c.world, room.roomId);
+	if (own) for (const e of await c.space.readAll({ type: "Plot", fields: { room: room.roomId, of: own } })) blocked.delete(cellKey(e.fields as never));
 	// the builder is no one in the way: it steps off the site it staked out (bau); beds and fields are dug under anyone's feet
 	const people = await occupiedIn(c.space, room.roomId, c.actor.charId);
 	const things = new Set((await c.space.readAll({ type: "Item", fields: { location: room.roomId } })).map((e) => cellKey(e.fields as never)));
@@ -211,7 +214,7 @@ function jettyTries(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">, at?: { x: num
 }
 
 /** Whether a cell beside the rect is water. */
-const touchesWater = (w: WorldDef, room: RoomFields, r: Rect) => cells({ x: r.x - 1, y: r.y - 1, w: r.w + 2, h: r.h + 2 }).some((p) => room.ground[p.y]?.[p.x] !== undefined && !walkable(w, room.ground, p.x, p.y));
+export const touchesWater = (w: WorldDef, room: RoomFields, r: Rect) => cells({ x: r.x - 1, y: r.y - 1, w: r.w + 2, h: r.h + 2 }).some((p) => room.ground[p.y]?.[p.x] !== undefined && !walkable(w, room.ground, p.x, p.y));
 
 /** A burning fire that covers the room and has light left for `points` (its LightUse taken in the transaction); null with
  *  the reason. */

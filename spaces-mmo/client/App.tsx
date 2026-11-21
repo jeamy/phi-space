@@ -82,6 +82,15 @@ const shortCpu = (cpu: string) => cpu.replace(/\((R|TM)\)/g, "").replace(/\b(\d+
 
 /** The bar below the game, like in the codemode chat and the help system: which hosts the game runs on (roles, CPU,
  *  cores, memory) and how many entries the world space holds. From GET /api/system, every 15 s. */
+/** What the admin's edit mode moves (engine/commands/builder.ts versetze): what stands on cells of its own. */
+const MOVABLE = new Set(["building", "site", "ruin", "bed", "field", "tree"]);
+/** The objects as the map shows them while one is being moved: that one shifted (its plants lie relative to it). */
+function movedView(objs: Map<string, ObjView>, moving: { id: string; dx: number; dy: number } | null): Map<string, ObjView> {
+	const o = moving && objs.get(moving.id);
+	if (!moving || !o || (!moving.dx && !moving.dy)) return objs;
+	return new Map(objs).set(o.id, { ...o, x: o.x + moving.dx, y: o.y + moving.dy });
+}
+
 function SystemBar() {
 	const [info, setInfo] = useState<{ hosts: SystemHost[]; entries: number } | null>(null);
 	useEffect(() => {
@@ -638,6 +647,11 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const [cmdHelp, setCmdHelp] = useState<HelpView | null>(null);
 	// on a phone the map modes and logging out sit behind "⋯"
 	const [more, setMore] = useState(false);
+	// the admin's edit mode: a click picks what stands on cells of its own (MOVABLE), the arrows move it on the map only,
+	// the space bar sends „versetze“ (engine/commands/builder.ts), Esc puts it back
+	const [editing, setEditing] = useState(false);
+	const [shifting, setShifting] = useState<{ id: string; dx: number; dy: number } | null>(null);
+	const shiftingRef = useRef(shifting); shiftingRef.current = shifting;
 	const [stale, setStale] = useState(false);
 	// how far the sheet is open, the bag beside log and chats with its part, the world map as a page, the article the help opens
 	// on, the steering cross (off, left, right; a mouse has no need of it), the word of a new message over the map
@@ -1010,6 +1024,12 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		if (fire && fuel) return send(`put ${fuel.name} in ${fire.name}`);
 		append({ kind: "error", text: "Hier liegt nichts zum Aufheben.", from: "", at: Date.now() });
 	}, [chars, me, hello, objs, send, append, pickUp]);
+	const placeMoved = useCallback(() => {
+		const m = shiftingRef.current, o = m && objs.get(m.id);
+		setShifting(null);
+		if (!m || !o || (!m.dx && !m.dy)) return;
+		send(`versetze ${o.id} ${o.x + m.dx} ${o.y + m.dy}`);
+	}, [objs, send]);
 
 	// a double click (or double tap) on a thing on the map: walk there (the first click already does) and pick it up as
 	// Space does, once the figure stands next to it
@@ -1081,8 +1101,17 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	}, [hello?.room.roomId]); // eslint-disable-line react-hooks/exhaustive-deps
 	const holding = !!rowing && Date.now() < rowing.until;
 	useEffect(() => { if (!holding) lastMap.current = hello ? { room: hello.room, chars: mapChars, objs: shownObjs } : null; });
-	const mapRoom = holding ? rowing!.held.room : hello?.room, mapCharsShown = holding ? rowing!.held.chars : mapChars, mapObjsShown = holding ? rowing!.held.objs : shownObjs;
+	const mapRoom = holding ? rowing!.held.room : hello?.room, mapCharsShown = holding ? rowing!.held.chars : mapChars, mapObjsShown = useMemo(() => movedView(holding ? rowing!.held.objs : shownObjs, shifting), [holding, rowing, shownObjs, shifting]);
+	const movingObj = shifting ? mapObjsShown.get(shifting.id) : undefined;
 	const rowView = rowing ? { at: rowing.at, from: rowing.from, out: holding } : undefined;
+
+	/** In the edit mode a click picks what covers the cell and stands on cells of its own; elsewhere it says so. */
+	const pickToMove = useCallback((x: number, y: number) => {
+		if (!hello) return;
+		const hit = [...objs.values()].find((o) => o.location === hello.room.roomId && MOVABLE.has(o.kind) && x >= o.x && y >= o.y && x < o.x + (o.w ?? 1) && y < o.y + (o.h ?? 1));
+		if (!hit) { append({ kind: "error", text: "Hier steht nichts, was sich versetzen lässt.", from: "", at: Date.now() }); return; }
+		setShifting({ id: hit.id, dx: 0, dy: 0 });
+	}, [hello, objs, append]);
 
 	/** A tap of a finger: on a thing lying there, go and pick it up; on what stands there, its actions (a phone); else walk. */
 	const onTap = useCallback((x: number, y: number) => {
@@ -1121,6 +1150,14 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		const dirOf = (k: string) => ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[k];
 		const onKey = (e: KeyboardEvent) => {
 			if (document.activeElement === input.current || ["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
+			// the admin moves what it picked: the arrows on the map only, the space bar puts it there, Esc puts it back
+			const picked = shiftingRef.current;
+			if (picked) {
+				const d = dirOf(e.key);
+				if (d) { e.preventDefault(); const [gx, gy] = onGrid(d); setShifting({ ...picked, dx: picked.dx + gx, dy: picked.dy + gy }); return; }
+				if (e.key === " ") { e.preventDefault(); if (!e.repeat) placeMoved(); return; }
+				if (e.key === "Escape") { e.preventDefault(); setShifting(null); return; }
+			}
 			if (e.key === "Enter") { e.preventDefault(); release(); openLineRef.current(); return; }
 			if (e.key === " ") { e.preventDefault(); if (!e.repeat) action(); return; }
 			// typing text: the first letter goes to the command line, which takes the rest (a shortcut with Ctrl, Alt or
@@ -1142,7 +1179,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		window.addEventListener("keydown", onKey);
 		window.addEventListener("keyup", onUp);
 		return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onUp); };
-	}, [hold, release, action]);
+	}, [hold, release, action, onGrid, placeMoved]);
 
 	const logout = async () => { await post("/api/logout").catch(() => {}); await forgetDeviceKeys(); onAccount(null); };
 
@@ -1223,15 +1260,17 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 
 	const mapView = mapMode === "text" ? null : hello ? (
 		<>
+		{editing && <div className="aboard edit-bar" role="status"><span>{shifting ? `${movingObj?.name ?? ""}: Pfeiltasten verschieben · Leertaste ablegen · Esc abbrechen` : "Bearbeiten: ein Objekt anklicken (Bau, Baustelle, Ruine, Beet, Acker, Baum)"}</span>
+			<button className="aboard-leave" onClick={() => { setShifting(null); setEditing(false); }}>Bearbeiten beenden</button></div>}
 		{aboard && worldTime && <div className="aboard" role="status"><span>{tr("An Bord des Großen Schiffs")} → {tr(aboard.island)} · {tr(`Ankunft in etwa ${Math.max(1, Math.ceil((aboard.arriveWorldMs - shownWorldMs(worldTime.v, worldTime.at, Date.now())) / 60_000))} Weltminuten`)}</span>
 			{/* a passenger need not sail to the end: the next stop on the way, with when the ship lies there */}
 			{(() => { const now = shownWorldMs(worldTime.v, worldTime.at, Date.now()), next = liner && aboard.to ? nextStop(liner, now, aboard.from, aboard.to) : null;
 				return next && <button className="aboard-leave" onClick={() => send("ausschiffen nächster")}>{next.inMs > 0 ? `${tr("Beim nächsten Halt aussteigen")}: ${tr(next.stop.island)} · ${tr(`in etwa ${Math.max(1, Math.ceil(next.inMs / 60_000))} Weltminuten`)}` : `${tr("Hier aussteigen")}: ${tr(next.stop.island)}`}</button>; })()}
 		</div>}
 		<MapRenderer key={`${(mapRoom ?? hello.room).ground[0]?.length}x${(mapRoom ?? hello.room).ground.length}`} mode={mapMode} viewReset={startView} world={hello.world} room={mapRoom ?? hello.room} chars={mapCharsShown} objs={mapObjsShown} rowing={rowView} me={me} fog={fog} atlas={atlas} atlasState={atlasState} said={said} worldTime={worldTime} onTurn={onTurn}
-			fill goal={walkGoal} insetBottom={isShort() ? 0 : detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
+			fill goal={movingObj ? { x: movingObj.x, y: movingObj.y } : walkGoal} insetBottom={isShort() ? 0 : detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
 			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}
-			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (hereOpen) setHereOpen(false); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}
+			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (editing) { pickToMove(x, y); return; } if (hereOpen) setHereOpen(false); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}
 			onMenu={(x, y, left, top) => { input.current?.blur(); stopWalk.current(); setMenu({ x, y, left, top }); }}
 			onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
 		</>
@@ -1445,6 +1484,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 						{!account.guest && <button onClick={() => { setMore(false); setPanel("alias"); }}>Alias</button>}
 						{account.guest && <button onClick={() => { setMore(false); setPanel("account"); }}>Registrieren</button>}
 						{account.admin && <button onClick={() => { setMore(false); setPanel("admin"); }}>Systemeinstellungen</button>}
+						{account.admin && <button aria-pressed={editing} onClick={() => { setMore(false); setShifting(null); setEditing((v) => !v); }}>{editing ? "Bearbeiten beenden" : "Bearbeiten"}</button>}
 						<button onClick={() => { setMore(false); if (account.guest) setPanel("leave"); else void logout(); }}>Abmelden</button>
 					</span></div>
 					<SystemBar />

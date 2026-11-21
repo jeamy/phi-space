@@ -28,7 +28,7 @@ export const interiorOf = (buildId: string) => `${INTERIOR}${buildId}`;
 export const isInterior = (room: string) => room.startsWith(INTERIOR);
 /** The building whose inside `room` is, by its id (null outside). */
 export const buildIdOf = (room: string): string | null => (isInterior(room) ? room.slice(INTERIOR.length) : null);
-const exitIdOf = (buildId: string) => `x-${interiorOf(buildId)}`;
+export const exitIdOf = (buildId: string) => `x-${interiorOf(buildId)}`;
 const furnishingId = (buildId: string, kind: string) => `f-${buildId}-${kind}`;
 /** A bed laid with the inside, by its place in the plan (no draw: the same id on every server). */
 const bedIdOf = (buildId: string, i: number) => `bed-${buildId}-${i}`;
