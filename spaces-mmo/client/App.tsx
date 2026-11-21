@@ -1284,7 +1284,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const shownNow = Date.now(), decayShown = worldTime ? shownDecayMs(worldTime.v, worldTime.at, shownNow) : null;
 	const barState: Pick<CellInput, "todos" | "feed" | "fed" | "decay" | "tired" | "account"> = {
 		...(atlasState?.todos ? { todos: atlasState.todos } : {}), ...(hello ? { feed: hello.world.uses.feed } : {}),
-		...(hello?.world.uses.feeding && worldTime && worldTime.v.patience ? { fed: { ...hello.world.uses.feeding, now: shownWorldMs(worldTime.v, worldTime.at, shownNow), patience: worldTime.v.patience } } : {}),
+		...(hello?.world.uses.feeding && worldTime && worldTime.v.patience ? { fed: { ...hello.world.uses.feeding, now: shownWorldMs(worldTime.v, worldTime.at, shownNow), patience: worldTime.v.patience, ...(worldTime.v.paused ? {} : { rate: worldTime.v.rate }) } } : {}),
 		...(decayShown !== null ? { decay: decayShown } : {}), tired: !!worldTime && (trade?.workRestUntilWorldMs ?? 0) > shownWorldMs(worldTime.v, worldTime.at, shownNow), ...(hello?.me.accountId ? { account: hello.me.accountId } : {}) };
 	// the epoch of the island the player stands on (the world map's state names each island's), for the header
 	const islandHere = atlas?.rooms.find((r) => r.roomId === hello?.room.roomId)?.island;

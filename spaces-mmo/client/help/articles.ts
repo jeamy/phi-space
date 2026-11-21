@@ -2182,7 +2182,7 @@ Tiere fressen, was auf Feldern und Beeten wächst. Füttern darf jeder, nicht nu
 
 Satte Tiere geben regelmäßig etwas. Abholen darf das nur, wem sie gehören.
 
-Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass. Wer Fleisch will, schlachtet ([Schlachten und Küche](help.game.animals#slaughter)).
+Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist; bei Hühnern schlüpft ein Küken, bei Schweinen kommt ein Ferkel, die erst heranwachsen. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass. Wer Fleisch will, schlachtet ([Schlachten und Küche](help.game.animals#slaughter)).
 
 ## Huhn {#hen}
 
@@ -2385,7 +2385,7 @@ Animals eat what grows on fields and beds. Anyone may feed them, not just the ow
 
 Fed animals give something regularly. Only their owner may collect it.
 
-Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`collect\` fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate. Whoever wants meat slaughters ([slaughtering and cooking](help.game.animals#slaughter)).
+Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`collect\` fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full; hens hatch a chick, pigs have a piglet, and these grow up first. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate. Whoever wants meat slaughters ([slaughtering and cooking](help.game.animals#slaughter)).
 
 ## Hen {#hen}
 

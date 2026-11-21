@@ -997,7 +997,9 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
        nothing and lose nothing. Up to three per animal wait in the stable, `einsammeln` (also `sammle eier`, `melke`,
        `schere`) fetches them, only the owner.
      - **Offspring:** Two sated animals of a kind now and then get a young one (chickens every four, goats every five,
-       sheep every six days), until the stable is full. So the stock grows beyond Gesa's supply.
+       sheep every six days), until the stable is full. So the stock grows beyond Gesa's supply. A kind with a young one
+       (`young`: hens a chick, pigs a piglet) gets that young one, which grows up in the house on the second clock
+       (`turns`) and gives nothing until then; the others get a grown one.
      - **Writes:** The stable carries its herd (`herd`: kind, sated until, yield and offspring since `atWorldMs`). As with the
        rain barrel it is only recalculated when a command takes the stable; no ticker writes for animals.
      - **Use:** Gesa buys eggs, wool and milk; three new jobs ask for them.

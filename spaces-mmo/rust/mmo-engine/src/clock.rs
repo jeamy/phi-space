@@ -19,6 +19,11 @@ pub async fn decay_now_of(space: &Space, txn: Option<&str>) -> Result<f64> { Ok(
 pub fn patience(clock: &Json) -> f64 { let rate = j::n(clock, "rate"); rate / j::no(clock, "decayRate").unwrap_or(rate) }
 /// `patienceOf`.
 pub async fn patience_of(space: &Space, txn: Option<&str>) -> Result<f64> { Ok(patience(&read_clock(space, txn).await?)) }
+/// `realRateOf`: the life rate to tell a span in real time by, None while the clock stands.
+pub async fn real_rate_of(space: &Space, txn: Option<&str>) -> Result<Option<f64>> {
+	let clock = read_clock(space, txn).await?;
+	Ok(if j::truthy(j::at(&clock, "paused")) { None } else { Some(j::n(&clock, "rate")) })
+}
 
 /// `materialize`.
 pub fn materialize(clock: &Json, real_now: f64) -> Json {

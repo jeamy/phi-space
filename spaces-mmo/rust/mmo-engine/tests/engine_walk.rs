@@ -1544,6 +1544,23 @@ fn keeping_animals() {
 	for line in ["einstallen ferkel", "einstallen ziege", "stall"] { run(&mut w, &a, line, 0.0); }
 	assert!(w.peek(obj! { "type" => "Item", "fields" => obj! { "proto" => "ziege", "location" => "p-9" } }).is_none(), "a goat among the piglets");
 	assert!(w.peek(obj! { "type" => "Item", "fields" => obj! { "proto" => "ferkel", "location" => "p-9" } }).is_some(), "the piglet is not in the pen");
+	// the rates of big (life 24, decay 1): a herd's time told in real time too, a dog's day of the second clock a real one
+	let real = at.get();
+	let mut clock = w.peek(obj! { "type" => "WorldClock" }).unwrap().get("fields").cloned().unwrap();
+	let n = |k: &str| clock.get(k).and_then(Json::as_f64);
+	let life = n("worldAnchorMs").unwrap() + (real - n("realAnchorMs").unwrap()) * n("rate").unwrap();
+	let decay = n("decayAnchorMs").map_or(life, |d| d + (real - n("realAnchorMs").unwrap()) * n("decayRate").unwrap());
+	assert!(w.take(obj! { "type" => "WorldClock" }));
+	for (k, v) in [("worldAnchorMs", life), ("decayAnchorMs", decay), ("realAnchorMs", real), ("rate", 24.0), ("decayRate", 1.0)] { walk::j_set(&mut clock, k, Json::from(v)); }
+	w.write(obj! { "type" => "WorldClock", "fields" => clock });
+	w.write(building("s-3", "huehnerstall", "Hühnerstall", 19.0, 12.0, 1));
+	give(&mut w, &a, "huhn", 2);
+	give(&mut w, &a, "weizen", 8);
+	give(&mut w, &a, "hund", 1);
+	give(&mut w, &a, "ei", 2);
+	for line in ["einstallen huhn @19,12", "einstallen huhn @19,12", "füttere @19,12", "stall @19,12", "füttere alle weizen @19,12", "füttere weizen @19,12", "stall @19,12", "einstallen hund @19,12", "füttere hund ei", "füttere hund ei", "wache"] { run(&mut w, &a, line, 0.0); }
+	// the feeding and the second look at the coop; the dog's day is a real one, told once
+	assert_eq!(w.entries_with("(echt "), 2, "the times told in real time");
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 }
 

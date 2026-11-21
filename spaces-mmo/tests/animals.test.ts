@@ -177,11 +177,11 @@ test("a pen of pigs: they eat potatoes, not kelp, and root up a truffle every th
 		assert.match(await does(bo.p, "füttere tang", "mögen"), /Tang mögen Schweine nicht; sie fressen Kartoffel/);
 		await give(s, bo.me, "kartoffel", 2);
 		assert.match(await does(bo.p, "füttere", "satt für"), /Knollenbo füttert die Schweine von Schweineole mit 2 Kartoffel/);
-		// six fed days: two truffles per pig, and a piglet (they breed every five days)
+		// six fed days: two truffles per pig, and a piglet (they breed every five days), which grows up first
 		await timePasses(s, pen.buildId, 6 * DAY);
 		assert.match(await does(ole.p, "einsammeln", "sammelst"), /Du sammelst 4 Trüffel/);
 		assert.equal(await pack(s, ole.me, "trueffel"), 4);
-		assert.match(await does(ole.p, "stall", "Schwein"), /3 Schweine/);
+		assert.match(await does(ole.p, "stall", "Schwein"), /2 Schweine und 1 Jungtier/);
 		await ole.p.leave(); await bo.p.leave();
 	} finally { await srv.close(); }
 });
@@ -351,17 +351,19 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		assert.equal(await pack(s, anna.me, "ei"), 3);
 		assert.match(await does(anna.p, "einsammeln", "Noch kein"), /Noch kein Ei bereit; das nächste in etwa/);
 
-		// fed long enough, two get a young one
+		// fed long enough, two get a young one: a chick, which lays nothing yet
 		await timePasses(s, coop.buildId, kind("huhn").breedWorldMs);
-		assert.match(await does(anna.p, "stall", "Hühnerstall von"), /4 Hühner/);
-		assert.equal(await s.count({ type: "Item", fields: { location: coop.buildId, proto: "huhn" } }), 4);
+		assert.match(await does(anna.p, "stall", "Hühnerstall von"), /3 Hühner und 1 Jungtier/);
+		assert.equal(await s.count({ type: "Item", fields: { location: coop.buildId, proto: "huhn" } }), 3);
+		assert.equal(await s.count({ type: "Item", fields: { location: coop.buildId, proto: "kueken" } }), 1);
 		assert.match(await does(anna.p, "einsammeln", "sammelst"), /Du sammelst 9 Ei/, "the nest held three per hen");
 		assert.match(await does(anna.p, "ausstallen", "nimmt"), /Bäuerin nimmt ein Huhn aus dem Stall/);
 		assert.equal(await pack(s, anna.me, "huhn"), 1);
 
 		// demolished: the hens come back into the pack
 		assert.match(await does(anna.p, "abriss hühnerstall", "reißt"), /Aus der Truhe: 3 Dinge/);
-		assert.equal(await pack(s, anna.me, "huhn"), 4);
+		assert.equal(await pack(s, anna.me, "huhn"), 3);
+		assert.equal(await pack(s, anna.me, "kueken"), 1);
 
 		// a pen: sheep or goats, not both
 		const pen = await building(s, { buildId: "gehege-1", plan: "gehege", name: "Gehege", x: 4, y: 4, w: 3, h: 3, owner: anna.me, ownerName: anna.name, accountId, points: 2 });
@@ -405,13 +407,13 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 	} finally { await srv.close(); }
 });
 
-test("with the second clock slower (patience 24) a herd can be fed ahead for three of its days, a food still a world day; a dog's food is told in its time", { timeout: 300_000 }, async () => {
+test("with the second clock slower (patience 24, as on big: life 24, decay 1) a herd can be fed ahead for three of its days, a food still a world day; a dog's food is told in its time; both in real time too where that reads otherwise", { timeout: 300_000 }, async () => {
 	const srv = await startServer();
 	try {
 		const s = srv.stack.space;
-		// the life rate 24 times the decay rate, without speeding the world up: the second clock runs at 1/24
+		// the rates of big: the world lives 24 times as fast as real time, the second clock runs in real time
 		const clock = (await s.take({ type: "WorldClock" }, 5_000))!.fields as unknown as WorldClockFields, now = Date.now();
-		await s.write({ type: "WorldClock", fields: { ...clock, decayAnchorMs: decayNow(clock, now), realAnchorMs: now, worldAnchorMs: worldNow(clock, now), decayRate: clock.rate / 24 } as never }, null, FOREVER);
+		await s.write({ type: "WorldClock", fields: { ...clock, decayAnchorMs: decayNow(clock, now), realAnchorMs: now, worldAnchorMs: worldNow(clock, now), rate: 24, decayRate: 1 } as never }, null, FOREVER);
 		assert.equal(await patienceOf(s), 24);
 		const anna = await player(srv.url, "Vorfuetterin");
 		const accountId = String((await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields.accountId);
@@ -421,15 +423,42 @@ test("with the second clock slower (patience 24) a herd can be fed ahead for thr
 		await does(anna.p, "einstallen huhn", "(1 Huhn)");
 		await give(s, anna.me, "tang", 30);
 		// one hen, a food a world day: a day without a count, then all the other 29 (three days of the second clock are
-		// 72 world days), before only 3
-		assert.match(await does(anna.p, "füttere", "satt für"), /mit 1 Tang; satt für etwa 24 Stunden/);
-		assert.match(await does(anna.p, "füttere alle", "satt für"), /mit 29 Tang; satt für etwa 30 Tage/);
+		// 72 world days), before only 3; a world day is a real hour
+		assert.match(await does(anna.p, "füttere", "satt für"), /mit 1 Tang; satt für etwa 24 Stunden \(echt 1 Stunde\)\./);
+		assert.match(await does(anna.p, "füttere alle", "satt für"), /mit 29 Tang; satt für etwa 30 Tage \(echt 30 Stunden\)\./);
+		assert.match(await does(anna.p, "stall", "Hühnerstall von"), /satt noch 30 Tage \(echt 30 Stunden\)/);
 		await give(s, anna.me, "hund", 1);
 		await does(anna.p, "einstallen hund", "wachen");
 		await give(s, anna.me, "ei", 1);
-		// a dog's food is a day of the second clock (24 world days), told as such
-		assert.match(await does(anna.p, "füttere hund", "satt für"), /mit 1 Ei; satt für etwa 24 Stunden/);
-		assert.match(await does(anna.p, "wache", "Hier wachen"), /der Hund von Vorfuetterin am Bau \(Hühnerstall\), satt noch 24 Stunden/);
+		// a dog's food is a day of the second clock (24 world days), told as such: a real day too, so no second time
+		assert.match(await does(anna.p, "füttere hund", "satt für"), /mit 1 Ei; satt für etwa 24 Stunden\./);
+		assert.match(await does(anna.p, "wache", "Hier wachen"), /der Hund von Vorfuetterin am Bau \(Hühnerstall\), satt noch 24 Stunden[.;]/);
 		await anna.p.leave();
+	} finally { await srv.close(); }
+});
+
+test("two fed hens get a chick, not a hen: it takes a place and grows up on the second clock; pigs a piglet the same way", { timeout: 300_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const hen = w.animals!.kinds.find((k) => k.key === "huhn")!;
+		const ida = await player(srv.url, "Kuekenida");
+		const accountId = String((await s.readAll({ type: "Character", fields: { charId: ida.me } }))[0]!.fields.accountId);
+		const coop = await building(s, { buildId: "stall-kueken", plan: "huehnerstall", name: "Hühnerstall", x: 16, y: 12, w: 2, h: 1, owner: ida.me, ownerName: ida.name, accountId });
+		await walkBeside(ida, s, coop, new Set());
+		await give(s, ida.me, "huhn", 2);
+		await does(ida.p, "einstallen huhn", "(1 Huhn)");
+		await does(ida.p, "einstallen huhn", "(2 Hühner)");
+		// fed for a breeding time already: the next look settles it
+		const now = await worldNowOf(s);
+		const e = (await s.take({ type: "Building", fields: { buildId: coop.buildId } }, 5_000))!;
+		await s.write({ type: "Building", fields: { ...e.fields, herd: { kind: "huhn", fedUntilWorldMs: now + DAY, atWorldMs: now - hen.breedWorldMs, goods: 0, bred: 0 } } as never }, null, FOREVER);
+		assert.match(await does(ida.p, "stall", "dazugekommen"), /Im Stall von Kuekenida ist ein Küken dazugekommen\./);
+		assert.match(await does(ida.p, "stall", "Platz"), /2 Hühner und 1 Jungtier \(Platz für 6\)/);
+		const inside = (await s.readAll({ type: "Item", fields: { location: coop.buildId } })).map((x) => x.fields as { proto: string; turnsAtMs?: number });
+		assert.deepEqual(inside.map((i) => i.proto).sort(), ["huhn", "huhn", "kueken"]);
+		const chick = inside.find((i) => i.proto === "kueken")!;
+		assert.ok(Math.abs(chick.turnsAtMs! - (await decayNowOf(s)) - 3 * DAY) < 60_000, "it grows up in three days of the second clock");
+		await ida.p.leave();
 	} finally { await srv.close(); }
 });

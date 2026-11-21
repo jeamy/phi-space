@@ -941,7 +941,9 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
        hungrige geben nichts und verlieren nichts. Bis zu drei je Tier warten im Stall, `einsammeln` (auch
        `sammle eier`, `melke`, `schere`) holt sie, nur der Besitzer.
      - **Nachwuchs:** Zwei satte Tiere einer Art bekommen ab und zu ein Junges (Hühner alle vier, Ziegen alle fünf,
-       Schafe alle sechs Tage), bis der Stall voll ist. So wächst der Bestand über Gesas Vorrat hinaus.
+       Schafe alle sechs Tage), bis der Stall voll ist. So wächst der Bestand über Gesas Vorrat hinaus. Eine Art mit
+       Jungtier (`young`: Hühner ein Küken, Schweine ein Ferkel) bekommt dieses, das im Stall auf der zweiten Uhr
+       heranwächst (`turns`) und bis dahin nichts gibt; die anderen bekommen ein ausgewachsenes Tier.
      - **Schreibvorgänge:** Der Stall trägt seine Herde (`herd`: Art, satt bis, Ertrag und Nachwuchs seit `atWorldMs`).
        Wie bei der Regentonne wird sie erst nachgerechnet, wenn ein Befehl den Stall nimmt; für Tiere schreibt kein
        Ticker.

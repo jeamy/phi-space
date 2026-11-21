@@ -401,4 +401,7 @@ test("feeding is offered only while the animal eats: a sated herd or cat has no 
 	assert.ok(half.includes("Hühner einen Tag mit Weizen füttern") && !half.includes("Katze einen Tag mit Fisch füttern"));
 	// with patience 24, three days are 72: the cat fed two days ahead still eats
 	assert.ok(labels(coop(now + 3 * DAY, now + 2 * DAY), { ...fed, patience: 24 }).includes("Katze einen Tag mit Fisch füttern"));
+	// with the rates of big (life 24, decay 1) a herd's day is a real hour, a cat's day a real one (told once)
+	const big = labels(coop(now - DAY, now), { ...fed, patience: 24, rate: 24 } as typeof fed);
+	assert.ok(big.includes("Hühner einen Tag mit Weizen füttern (echt 1 Stunde)") && big.includes("Katze einen Tag mit Fisch füttern"), big.join(" | "));
 });

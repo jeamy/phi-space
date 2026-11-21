@@ -13,7 +13,7 @@ export type CellInput = {
 	/** The operator: gives up anyone's bed beside it (server: garden.ts „beet aufgeben“). */ admin?: boolean;
 	/** What the windmill grinds (ItemUses.grinds). */ grinds?: string[];
 	/** What each herd and keeper eats, by name (ItemUses.feed): feeding is offered only with some of it carried (unknown: offered). */ feed?: ItemUses["feed"];
-	/** How far ahead an animal is fed (ItemUses.feeding), the world time now and the clock's patience: feeding is offered only while it eats (unknown: offered). */ fed?: NonNullable<ItemUses["feeding"]> & { now: number; patience: number };
+	/** How far ahead an animal is fed (ItemUses.feeding), the world time now, the clock's patience and its life rate (absent while it stands): feeding is offered only while it eats (unknown: offered), its day told in real time too where that reads otherwise. */ fed?: NonNullable<ItemUses["feeding"]> & { now: number; patience: number; rate?: number };
 	/** The player's tasks (AtlasState.todos): a mill offers "Mehl abholen" only with flour of one's own ready there (unknown: offered). */ todos?: Todo[];
 	/** The second clock now (WorldTimeView.decayMs): mending a building or a road is offered only in its last days (MEND_WITHIN; unknown: offered). */ decay?: number;
 	/** The figure rests from its last work (TradeView.workRestUntilWorldMs): the work that waits for it is offered marked „(müde)“, and the server answers „Du bist noch müde …“ with the minutes (TIRING). */ tired?: boolean;
@@ -191,6 +191,8 @@ export function cellEntries(input: CellInput): CellEntry[] {
 	return restful(cellEntriesAll(input), input.tired);
 }
 
+/** A span in hours as the server tells it (animals.ts hours): days from two days on, minutes under an hour. */
+function spanHours(ms: number): string { const h = Math.round(ms / 3600_000); return h >= 48 ? `${Math.round(h / 24)} Tage` : h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; }
 function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos, feed, fed, decay, account }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: CellEntry[] = [];
@@ -358,6 +360,9 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 		const canFeed = (kind: string, until: number | undefined, share: number) => (!feed || (feed[kind] ?? []).some((n) => carriedNames.has(n))) && eats(until, share);
 		// a day's feed, one entry for each kind carried (server: animals.ts füttere feeds a day and asks which kind when
 		// none is named); without the lists one entry, and the server asks
+		// a day's feed in real time, where it reads otherwise than a day (server: animals.ts span): a herd's day is a world day,
+		// a dog's or cat's one of the second clock
+		const realDay = (worldMs: number) => { if (!fed?.rate) return ""; const real = spanHours(worldMs / fed.rate); return real === spanHours(fed.feedWorldMs) ? "" : ` (echt ${real})`; };
 		const feedWith = (kind: string, label: (n: string) => string, line: (n: string) => string, bare: CellEntry) =>
 			feed ? (feed[kind] ?? []).filter((n) => carriedNames.has(n)).map((n) => ({ label: label(n), line: line(n) })) : [bare];
 		// this one, not all in the room: the command takes its cell
@@ -384,7 +389,7 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 			// a coop, pen or hive: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
 			if (HOUSES[o.plan ?? ""]) {
 				// the house carries its herd while an animal is in it: nothing to feed in an empty one
-				if (o.herd && canFeed(o.herd, o.fedUntil, fed ? fed.feedWorldMs / (fed.houses[o.plan ?? ""] ?? 1) : 0)) { const who = HERD_NAME[o.herd] ?? "Tiere"; entries.push(...feedWith(o.herd, (n) => `${who} einen Tag mit ${n} füttern`, (n) => here(`füttere ${n}`), { label: `${who} füttern`, line: here("füttere") })); }
+				if (o.herd && canFeed(o.herd, o.fedUntil, fed ? fed.feedWorldMs / (fed.houses[o.plan ?? ""] ?? 1) : 0)) { const who = HERD_NAME[o.herd] ?? "Tiere"; entries.push(...feedWith(o.herd, (n) => `${who} einen Tag mit ${n} füttern${fed ? realDay(fed.feedWorldMs) : ""}`, (n) => here(`füttere ${n}`), { label: `${who} füttern`, line: here("füttere") })); }
 				if (o.ownerId === me) {
 					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", schwein: "Trüffel", gans: "Daunen", biene: "Honig" };
 					// this house, not the neighbour beside it; only with something ready (todos.ts "<house>:ertrag")
@@ -402,7 +407,7 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 			if (o.plan === "metzgerei") slaughterEntries();
 			// a dog or cat on guard: anyone feeds it; at an own building one leaves one or takes it along (server: animals.ts)
 			const keeperName: Record<string, string> = { hund: "Hund", katze: "Katze" };
-			if (o.keeper && canFeed(o.keeper, o.keeperFedUntil, fed ? fed.feedWorldMs * fed.patience : 0)) { const who = keeperName[o.keeper] ?? "Tier"; entries.push(...feedWith(o.keeper, (n) => `${who} einen Tag mit ${n} füttern`, (n) => here(`füttere ${o.keeper} ${n}`), { label: `${who} füttern`, line: here(`füttere ${o.keeper}`) })); }
+			if (o.keeper && canFeed(o.keeper, o.keeperFedUntil, fed ? fed.feedWorldMs * fed.patience : 0)) { const who = keeperName[o.keeper] ?? "Tier"; entries.push(...feedWith(o.keeper, (n) => `${who} einen Tag mit ${n} füttern${fed ? realDay(fed.feedWorldMs * fed.patience) : ""}`, (n) => here(`füttere ${o.keeper} ${n}`), { label: `${who} füttern`, line: here(`füttere ${o.keeper}`) })); }
 			if (o.keeper) entries.push({ label: "Wer wacht hier?", line: "wache" });
 			if (o.ownerId === me) {
 				if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} mitnehmen`, line: here(`ausstallen ${o.keeper}`) });

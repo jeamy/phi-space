@@ -8,7 +8,7 @@ use super::build::{at_cell, dist_to, give_back, no_article, plan_of, put_back, t
 use super::epoch::need_epoch;
 use super::garden::proto_name;
 use super::trade::{consume, move_item};
-use crate::clock::{patience_of, world_now_of};
+use crate::clock::{patience_of, real_rate_of, world_now_of};
 use crate::context::{inventory, items_named, msg, plural_of, stem, Ctx, MsgOpts};
 use crate::deeds::credit_deed;
 use crate::fire::key_text;
@@ -24,6 +24,13 @@ fn hours(ms: f64) -> String {
 	let h = js::round(ms / 3_600_000.0);
 	if h >= 48.0 { return format!("{} Tage", nt(js::round(h / 24.0))); } // from two days on in days ("satt noch 5 Tage")
 	if h >= 1.0 { format!("{} {}", nt(h), if h == 1.0 { "Stunde" } else { "Stunden" }) } else { format!("{} Minuten", nt(1f64.max(js::round(ms / 60_000.0)))) }
+}
+/// `span`: a span of world time told by `per` (1: world time, the patience: the second clock) and, where that reads
+/// otherwise, in real time at the life rate too ("satt noch 3 Tage (echt 3 Stunden)"); None: the clock stands.
+fn span(ms: f64, per: f64, rate: Option<f64>) -> String {
+	let shown = hours(ms / per);
+	let real = rate.map_or_else(|| shown.clone(), |r| hours(ms / r));
+	if real == shown { shown } else { format!("{shown} (echt {real})") }
 }
 fn few(k: &Json, n: f64) -> String { format!("{} {}", nt(n), txt(j::at(k, if n == 1.0 { "name" } else { "plural" }))) }
 fn young_word(n: f64) -> &'static str { if n == 1.0 { "Jungtier" } else { "Jungtiere" } }
@@ -55,7 +62,8 @@ pub fn herd_now(k: &Json, d: &Json, h: &Json, n: f64, max: f64, now: f64) -> (Js
 /// A coop or pen with its herd brought up to now.
 pub struct House { pub b: Json, pub k: Option<Json>, pub n: f64, pub max: f64, pub now: f64, pub small: f64, pub born: f64 }
 
-/// `settleHerd`: a coop or pen `b` (taken in `txn`) with its herd brought up to `now`; the young born meanwhile are put in it.
+/// `settleHerd`: a coop or pen `b` (taken in `txn`) with its herd brought up to `now`; the young born meanwhile are put in it,
+/// as the kind's young one where it has one (a chick, a piglet, growing up on the second clock), else grown.
 pub async fn settle_herd(space: &Space, txn: &str, w: &Json, b: &Json, now: f64) -> Result<House> {
 	let d = j::at(w, "animals");
 	let max = house_max(d, j::s(b, "plan"));
@@ -67,13 +75,14 @@ pub async fn settle_herd(space: &Space, txn: &str, w: &Json, b: &Json, now: f64)
 	let (Some(kk), Some(h)) = (&k, herd) else { return Ok(House { b: b.clone(), k, n, max, now, small, born: 0.0 }) };
 	let (h, born) = herd_now(kk, d, h, n, max - small, now);
 	if born > 0.0 {
-		if let Some(p) = resolve_prototype(space, j::s(kk, "proto")).await? {
+		if let Some(p) = resolve_prototype(space, if j::opt(kk, "young").is_some() { j::s(kk, "young") } else { j::s(kk, "proto") }).await? {
 			for _ in 0..born as usize { spawn(space, Some(txn), w, &p, At { location: j::s(b, "buildId").to_owned(), x: -1.0, y: -1.0, ..Default::default() }, &Json::Null).await?; }
 		}
 	}
 	let mut nb = b.clone();
 	j::set(&mut nb, "herd", h);
-	Ok(House { b: nb, k, n: n + born, max, now, small, born })
+	let young = j::opt(kk, "young").is_some();
+	Ok(House { b: nb, n: if young { n } else { n + born }, small: if young { small + born } else { small }, k, max, now, born })
 }
 
 /// `houseHere`: the coop or pen beside the actor, taken in the transaction, its herd brought up to now.
@@ -86,14 +95,19 @@ async fn house_here(c: &Ctx, d: &Json, prefer: &dyn Fn(&Json) -> bool) -> Result
 	let h = settle_herd(&c.space, c.txn().unwrap_or(""), c.w(), &b, now).await?;
 	if h.born > 0.0 {
 		if let Some(k) = &h.k {
-			msg(c, "*", "emote", &format!("Im Stall von {} {} dazugekommen.", txt(j::at(&h.b, "ownerName")), if h.born == 1.0 { format!("ist ein junges {}", txt(j::at(k, "name"))) } else { format!("sind {} junge {}", nt(h.born), txt(j::at(k, "plural"))) }), MsgOpts::default()).await?;
+			msg(c, "*", "emote", &format!("Im Stall von {} {} dazugekommen.", txt(j::at(&h.b, "ownerName")), match j::opt(k, "young") {
+				// a young one by its name, the same in the plural (Küken, Ferkel)
+				Some(y) => { let name = proto_name(c, &txt(y)); if h.born == 1.0 { format!("ist ein {name}") } else { format!("sind {} {name}", nt(h.born)) } }
+				None if h.born == 1.0 => format!("ist ein junges {}", txt(j::at(k, "name"))),
+				None => format!("sind {} junge {}", nt(h.born), txt(j::at(k, "plural"))),
+			}), MsgOpts::default()).await?;
 		}
 	}
 	Ok(h)
 }
 fn mine(c: &Ctx, b: &Json) -> bool { c.account.as_ref().is_some_and(|a| j::at(a, "accountId") == j::at(b, "accountId")) }
-fn fed_text(h: Option<&Json>, now: f64) -> String {
-	match h { Some(h) if j::n(h, "fedUntilWorldMs") > now => format!("satt noch {}", hours(j::n(h, "fedUntilWorldMs") - now)), _ => "hungrig („füttere“)".into() }
+fn fed_text(h: Option<&Json>, now: f64, rate: Option<f64>) -> String {
+	match h { Some(h) if j::n(h, "fedUntilWorldMs") > now => format!("satt noch {}", span(j::n(h, "fedUntilWorldMs") - now, 1.0, rate)), _ => "hungrig („füttere“)".into() }
 }
 const EMPTY_HINT: &str = "„einstallen <tier>“ bringt ein Tier hinein; Tiere verkauft Gesa am Markt von Kupferhafen.";
 
@@ -115,17 +129,18 @@ async fn stall(c: &mut Ctx) -> Result<()> {
 	let d = animals_of(c)?;
 	let House { b, k, n, max, now, small, .. } = house_here(c, &d, &|h| herd_of(h).is_some()).await?;
 	put_back(c, &b).await?;
+	let rate = real_rate_of(&c.space, c.txn()).await?;
 	let me = c.char_id().to_owned();
 	let head = format!("{} von {}", txt(j::at(&b, "name")), txt(j::at(&b, "ownerName")));
 	if let (Some(k), true) = (&k, small != 0.0 && n == 0.0) {
-		return msg(c, &me, "info", &format!("{head}: {} {} ({}), die heranwachsen (Platz für {}), {}.", nt(small), young_word(small), proto_name(c, j::s(k, "young")), nt(max), fed_text(herd_of(&b), now)), MsgOpts::default()).await;
+		return msg(c, &me, "info", &format!("{head}: {} {} ({}), die heranwachsen (Platz für {}), {}.", nt(small), young_word(small), proto_name(c, j::s(k, "young")), nt(max), fed_text(herd_of(&b), now, rate)), MsgOpts::default()).await;
 	}
 	let Some(k) = k.filter(|_| n != 0.0) else {
 		return msg(c, &me, "info", js::trim(&format!("{head}: leer (Platz für {}). {}", nt(max), if mine(c, &b) { EMPTY_HINT } else { "" })), MsgOpts::default()).await;
 	};
 	let ready = herd_of(&b).and_then(|h| j::no(h, "goods")).unwrap_or(0.0).floor();
 	let y = proto_name(c, j::s(&k, "yields"));
-	let text = format!("{head}: {}{} (Platz für {}), {}. {} Sie fressen {}.", few(&k, n), if small != 0.0 { format!(" und {} {}", nt(small), young_word(small)) } else { String::new() }, nt(max), fed_text(herd_of(&b), now),
+	let text = format!("{head}: {}{} (Platz für {}), {}. {} Sie fressen {}.", few(&k, n), if small != 0.0 { format!(" und {} {}", nt(small), young_word(small)) } else { String::new() }, nt(max), fed_text(herd_of(&b), now, rate),
 		if ready != 0.0 { format!("Bereit: {} {y} („einsammeln“).", nt(ready)) } else { format!("Noch kein {y} bereit.") }, feeds(c, j::a(&k, "feed")));
 	msg(c, &me, "info", &text, MsgOpts::default()).await
 }
@@ -254,7 +269,8 @@ async fn fuettere(c: &mut Ctx, arg: &str) -> Result<()> {
 	let from = now.max(j::n(&herd, "fedUntilWorldMs"));
 	// a food is a world day for one animal (they eat by the life rate); fed ahead as far as a dog, for people who are away
 	let room = now + j::n(&d, "fedMaxWorldMs") * patience_of(&c.space, c.txn()).await? - from;
-	if room < per { return refuse(format!("Die {} sind satt (noch {}).", txt(j::at(&k, "plural")), hours(from - now))); }
+	let rate = real_rate_of(&c.space, c.txn()).await?;
+	if room < per { return refuse(format!("Die {} sind satt (noch {}).", txt(j::at(&k, "plural")), span(from - now, 1.0, rate))); }
 	if m2.is_empty() { if let Some(ask) = which_feed(c, &kf, &offer, &|name| format!("füttere {name}")) { return refuse(ask); } }
 	// without a count one day for the house (a food for each animal), with one that many, "alle" as far ahead as it goes
 	let want = (room / per).floor().min(offer.len() as f64).min(feed_count(m1.as_deref(), n));
@@ -275,7 +291,7 @@ async fn fuettere(c: &mut Ctx, arg: &str) -> Result<()> {
 	j::set(&mut nb, "herd", h);
 	put_back(c, &nb).await?;
 	if !mine(c, &b) { credit_deed(c, "tiere").await?; }
-	msg(c, "*", "emote", &format!("{} füttert die {} von {} mit {}; satt für etwa {}.", txt(j::at(&c.actor, "name")), txt(j::at(&k, "plural")), txt(j::at(&b, "ownerName")), used.iter().map(|(nm, x)| format!("{} {nm}", nt(*x))).collect::<Vec<_>>().join(" und "), hours(until - now)), MsgOpts::default()).await
+	msg(c, "*", "emote", &format!("{} füttert die {} von {} mit {}; satt für etwa {}.", txt(j::at(&c.actor, "name")), txt(j::at(&k, "plural")), txt(j::at(&b, "ownerName")), used.iter().map(|(nm, x)| format!("{} {nm}", nt(*x))).collect::<Vec<_>>().join(" und "), span(until - now, 1.0, rate)), MsgOpts::default()).await
 }
 
 async fn keep_at(c: &mut Ctx, it: &Json, kp: &Json) -> Result<()> {
@@ -327,7 +343,8 @@ async fn feed_keeper(c: &mut Ctx, kp: Option<&Json>, arg: &str) -> Result<()> {
 	let feed_ms = j::n(&d, "feedWorldMs") * patient;
 	let from = now.max(j::n(&keeper, "fedUntilWorldMs"));
 	let room = now + j::n(&d, "fedMaxWorldMs") * patient - from;
-	if room < feed_ms { return refuse(format!("{} ist satt (noch {}).", cap(&the), hours((from - now) / patient))); }
+	let rate = real_rate_of(&c.space, c.txn()).await?;
+	if room < feed_ms { return refuse(format!("{} ist satt (noch {}).", cap(&the), span(from - now, patient, rate))); }
 	if m2.is_empty() { if let Some(ask) = which_feed(c, &kf, &offer, &|name| format!("füttere {} {name}", txt(j::at(&k, "key")))) { return refuse(ask); } }
 	let want = (room / feed_ms).floor().min(offer.len() as f64).min(feed_count(m1.as_deref(), 1.0));
 	let me = c.char_id().to_owned();
@@ -343,7 +360,7 @@ async fn feed_keeper(c: &mut Ctx, kp: Option<&Json>, arg: &str) -> Result<()> {
 	j::set(&mut nb, "keeper", kpr);
 	put_back(c, &nb).await?;
 	if !mine(c, &b) { credit_deed(c, "tiere").await?; } // feeding another's guard is the same good turn as feeding its herd
-	msg(c, "*", "emote", &format!("{} füttert {} von {} mit {} {}; satt für etwa {}.", txt(j::at(&c.actor, "name")), txt(j::at(&k, "acc")), txt(j::at(&b, "ownerName")), nt(count), txt(j::at(fields(&offer[0]), "name")), hours((until - now) / patient)), MsgOpts::default()).await
+	msg(c, "*", "emote", &format!("{} füttert {} von {} mit {} {}; satt für etwa {}.", txt(j::at(&c.actor, "name")), txt(j::at(&k, "acc")), txt(j::at(&b, "ownerName")), nt(count), txt(j::at(fields(&offer[0]), "name")), span(until - now, patient, rate)), MsgOpts::default()).await
 }
 
 async fn wache(c: &mut Ctx) -> Result<()> {
@@ -352,7 +369,8 @@ async fn wache(c: &mut Ctx) -> Result<()> {
 	let guards = j::opt(c.w(), "wild").map_or(&[][..], |w| j::a(w, "guards")).to_vec();
 	let mut out: Vec<String> = Vec::new();
 	let patient = patience_of(&c.space, c.txn()).await?;
-	let fed = |until: f64, per: f64| if until > now { format!("satt noch {}", hours((until - now) / per)) } else { "hungrig".to_owned() };
+	let rate = real_rate_of(&c.space, c.txn()).await?;
+	let fed = |until: f64, per: f64| if until > now { format!("satt noch {}", span(until - now, per, rate)) } else { "hungrig".to_owned() };
 	for b in &all {
 		if let (Some(kp), Some(kr)) = (keeper_of(c, b), j::opt(b, "keeper").filter(|x| j::truthy(x))) {
 			out.push(format!("{} von {} am Bau ({}), {}", txt(j::at(&kp, "the")), txt(j::at(b, "ownerName")), txt(j::at(b, "name")), fed(j::n(kr, "fedUntilWorldMs"), patient)));

@@ -28,6 +28,12 @@ export async function patienceOf(space: SpaceLike, txn?: string | null): Promise
 	return patience(await readClock(space, txn));
 }
 
+/** The life rate (world ms per real ms) to tell a span in real time by, null while the clock stands. */
+export async function realRateOf(space: SpaceLike, txn?: string | null): Promise<number | null> {
+	const clock = await readClock(space, txn);
+	return clock.paused ? null : clock.rate;
+}
+
 /** The admin's two rates reach the clock of this region (the settings are written to every region); -1 leaves it alone. */
 export async function syncRates(space: SpaceLike): Promise<void> {
 	const life = await setting(space, "clock.life"), decay = await setting(space, "clock.decay");
