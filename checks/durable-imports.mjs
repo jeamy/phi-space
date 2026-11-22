@@ -12,7 +12,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { APPS, PACKAGE_PREFIX, REPO } from "./roots.mjs";
 
 /** The package's directories and the applications' (paths from the repository root). */
-const DIRS = [...["src", "examples", "test", "scripts", "agent"].map((d) => `${PACKAGE_PREFIX}${d}`), "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "help-site", "spaces-mmo"];
+const DIRS = [...["src", "examples", "test", "scripts", "agent"].map((d) => `${PACKAGE_PREFIX}${d}`), "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "codemode-forum", "help-site", "spaces-mmo"];
 const missing = [...DIRS.filter((d) => !existsSync(join(REPO, d))), ...APPS.filter((a) => !DIRS.some((d) => d === a || d.startsWith(`${a}/`)))];
 if (missing.length) { console.error(`durable imports: not found or not scanned: ${missing.join(", ")}`); process.exit(1); }
 const EXT = /\.(ts|tsx|mts|mjs|js)$/;
@@ -23,9 +23,9 @@ const PACKAGES = ["@earendil-works/pi-durable", "@earendil-works/chord", "@earen
 const ALLOWED = [
 	`${PACKAGE_PREFIX}agent/`, // the agent package, with its own dependencies
 ];
-/** pi-ai alone (models, no durable store) is also allowed here: the chat, the help site and spaces-mmo call models
- *  themselves. */
-const ALLOWED_PI_AI = ["codemode-chat/", "help-site/", "spaces-mmo/"];
+/** pi-ai alone (models, no durable store) is also allowed here: the chat, the forum, the help site and spaces-mmo call
+ *  models themselves. */
+const ALLOWED_PI_AI = ["codemode-chat/", "codemode-forum/", "help-site/", "spaces-mmo/"];
 
 /** Every source file under the scanned directories. */
 function files(dir, out = []) {

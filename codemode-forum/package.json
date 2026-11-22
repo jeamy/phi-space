@@ -1,0 +1,33 @@
+{
+  "name": "phi-spaces-codemode-forum",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Next.js 16 + React 19 codemode forum: at least three AI models develop one plan together in a phi-space, until a majority agrees it can be carried out",
+  "scripts": {
+    "build": "next build",
+    "typecheck": "tsc",
+    "dev": "node --no-warnings --experimental-strip-types server/launch.ts --dev",
+    "start": "node --no-warnings --experimental-strip-types server/launch.ts",
+    "space": "node --no-warnings --experimental-strip-types server/space-host.ts",
+    "sources": "node --no-warnings --experimental-strip-types server/source-host.ts",
+    "agents": "node --no-warnings --experimental-strip-types server/agent-host.ts",
+    "model": "node --no-warnings --experimental-strip-types server/model-host.ts",
+    "web": "node --no-warnings --experimental-strip-types server/index.ts",
+    "backup": "node --no-warnings --experimental-strip-types server/backup.ts",
+    "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "next": "16.4.6",
+    "phi-spaces": "file:../spaces",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "typescript": "5.9.3"
+  },
+  "license": "MIT"
+}

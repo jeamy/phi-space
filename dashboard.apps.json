@@ -2,6 +2,7 @@
   "about": "The app spaces the dashboard shows (src/dashboard.ts, docs/dashboard.en.md): each app's addresses in turn, the unix socket of a plain start, the loopback port docker:local publishes, then the loopback port on big (a tunnel to nano for the chat and the help system, the region's own port for the world). space names a named space of that service, * every space it lists (stats only). The spaces-mmo accounts space (credentials, sessions) is left out on purpose; the help hub serves only figures. DASHBOARD_APPS and --app replace this list; an id of it keeps its label and space.",
   "apps": [
     { "id": "codemode-chat", "label": "Codemode Chat", "addresses": ["unix:/tmp/codemode-space.sock", "tcp:127.0.0.1:3810", "tcp:127.0.0.1:3800"] },
+    { "id": "codemode-forum", "label": "Codemode Forum", "addresses": ["unix:/tmp/codemode-forum-space.sock", "tcp:127.0.0.1:4190", "tcp:127.0.0.1:4180"] },
     { "id": "spaces-mmo", "label": "spaces-mmo · Welt", "addresses": ["unix:/tmp/spaces-mmo-world.sock", "tcp:127.0.0.1:3960", "tcp:127.0.0.1:3950"] },
     { "id": "help-swarm", "label": "Help · Swarm-Shard", "addresses": ["unix:/tmp/swarm-b.sock", "tcp:127.0.0.1:3600"], "space": "social-swarm" },
     { "id": "help-swarm-hub", "label": "Help · Swarm-Hub", "addresses": ["unix:/tmp/swarm-space.sock", "tcp:127.0.0.1:3610"], "space": "social-swarm" },
