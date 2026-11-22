@@ -34,7 +34,24 @@ export const SLOPPY = "Phase 1: rewrite `missing.md`.\n\nPhase 2: ship it. Verif
 const kickoff = (c: TextCall, messages: string[] = []) => ({ text: ["UNDERSTANDING", `${c.model} understands the brief.`, ...(messages.length ? ["MESSAGES", ...messages] : [])].join("\n"), model: c.model, usage: use(150, 0.015) });
 const owedIn = (c: TextCall) => [...(c.user.split("You owe the table a reply to these:")[1] ?? "").matchAll(/^#([0-9a-f]{4}) (question|proposal)/gm)].map((m) => ({ id: m[1]!, kind: m[2]! }));
 const reply = (c: TextCall, stance = "agree") => ({ text: owedIn(c).map((o) => (o.kind === "question" ? `answer #${o.id}: The answer of ${c.model}.` : `${stance} #${o.id}: Says ${c.model}.`)).join("\n"), model: c.model, usage: use(250, 0.025) });
-const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "kickoff" ? kickoff(c) : call.kind === "reply" ? reply(c) : call.kind === "outline" ? outline(c) : draft(c));
+/** Table B: a pick of the first outline offered (120 tokens), a review without objections (600), and a revision that
+ *  says it is one. */
+const pick = (c: TextCall, of = /Outline by (M\d+):/.exec(c.user)?.[1]) => ({ text: `PICK ${of}: It is the clearest.`, model: c.model, usage: use(120, 0.012) });
+const review = (c: TextCall, lines: string[] = ["NO OBJECTIONS"]) => ({ text: lines.join("\n"), model: c.model, usage: use(600, 0.06) });
+const revised = (c: TextCall) => { const d = draft(c); return { ...d, text: `${d.text}\n\nRevised by ${c.model}: the target is 256.` }; };
+const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "kickoff" ? kickoff(c) : call.kind === "reply" ? reply(c) : call.kind === "outline" ? outline(c) : call.kind === "pick" ? pick(c) : call.kind === "review" ? review(c) : call.kind === "revise" ? revised(c) : draft(c));
+/** Table B: the outline each model proposes, and the one all of them prefer (alpha's). */
+const OUTLINES: Record<string, string[]> = { "fake/alpha": OUTLINE, "fake/beta": ["Aim", "Way", "Dangers"], "fake/gamma": ["First", "Second", "Third"] };
+const proposal = (c: TextCall) => ({ text: (OUTLINES[c.model] ?? OUTLINE).map((h) => `## ${h}\nWhat ${h.toLowerCase()} must say.`).join("\n\n"), model: c.model, usage: use(400, 0.04) });
+const pickGoal = (c: TextCall) => pick(c, /Outline by (M\d+):\n## Goal/.exec(c.user)?.[1] ?? /Outline by (M\d+):/.exec(c.user)?.[1]);
+const OBJECT_GOAL = 'objection on "Goal": It does not name the target value. | fix: Name 256 as the target. | quote: "The goal of the plan"';
+/** The table-B scenarios: outlines of their own, alpha's picked; what each model objects to in its first review. */
+const tableB = (objections: Record<string, string[]>, hold = false) => (s: string, space: SpaceLike, log: Log): Team => ({ text: async (c, call) => {
+	const first = call.kind === "review" && (await space.count({ type: "FakeCall", fields: { session: s, kind: "review", model: c.model } })) === 0;
+	await log({ model: c.model, kind: call.kind, callId: call.callId, prompt: c.user });
+	if (hold && call.kind === "revise") await gate(space, s);
+	return call.kind === "outline" ? proposal(c) : call.kind === "pick" ? pickGoal(c) : first && objections[c.model] ? review(c, objections[c.model]) : answer(c, call);
+} });
 /** What the three models say at the kickoff of the talking scenarios: a proposal, a question to the table, a question
  *  to the person. */
 const TALK: Record<string, string[]> = {
@@ -59,6 +76,12 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	} }),
 	// dear answers: 3000 tokens each
 	dear: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); return { ...answer(c, call), usage: use(3000, 0.3) }; } }),
+	// table B: beta objects to the goal in the first review and says something to the table with it
+	tableb: tableB({ "fake/beta": [OBJECT_GOAL, "MESSAGES", "note: The target value belongs in the goal."] }),
+	// the same, and the revision waits at the gate
+	bhold: tableB({ "fake/beta": [OBJECT_GOAL] }, true),
+	// two models object to one section, the third to another
+	crowd: tableB({ "fake/beta": [OBJECT_GOAL], "fake/gamma": ['objection on "goal": It gives no reason. | fix: Say why 256.'], "fake/alpha": ['objection on "Steps": Phase 1 is too coarse. | fix: Split it in two.', 'objection on "Nowhere": no such section | fix: none', "objection on \"Risks\": could be more detailed"] }),
 	// the table talks at the kickoff (TALK); gamma disagrees with what it is asked to vote on
 	talk: (_s, _space, log) => ({ text: async (c, call) => {
 		await log({ model: c.model, kind: call.kind, prompt: c.user });

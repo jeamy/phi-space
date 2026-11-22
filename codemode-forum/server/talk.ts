@@ -20,6 +20,8 @@ export type PlanDecision = { session: string; blockId: string; table: string; th
 /** A message as a model wrote it, before it is kept: whom it addresses is still a name at the table. */
 export type Said = { kind: Exclude<MessageKind, "understanding">; to?: string; thread?: string; stance?: "agree" | "disagree"; text: string };
 
+/** The table a person's messages are kept under: they belong to the block, and every table reads them. */
+export const PERSON_TABLE = "*";
 export const newMsgId = () => randomBytes(2).toString("hex");
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
 
@@ -52,7 +54,9 @@ export function parseKickoff(text: string): { understanding: string; messages: S
 const key = (d: { session: string; blockId: string; table: string }) => ({ session: d.session, blockId: d.blockId, table: d.table });
 /** The messages of a table's discussion, oldest first. */
 export async function messagesOf(space: SpaceLike, d: { session: string; blockId: string; table: string }, txn: string | null = null): Promise<PlanMessage[]> {
-	return (await space.readAll({ type: "PlanMessage", fields: key(d) }, { limit: 2000, txn })).map((e) => e.fields as unknown as PlanMessage).sort((a, b) => a.ts - b.ts || a.msgId.localeCompare(b.msgId));
+	// what the person says is said to every table of the block (PERSON_TABLE)
+	const rows = [...(await space.readAll({ type: "PlanMessage", fields: key(d) }, { limit: 2000, txn })), ...(d.table === PERSON_TABLE ? [] : await space.readAll({ type: "PlanMessage", fields: { ...key(d), table: PERSON_TABLE } }, { limit: 500, txn }))];
+	return rows.map((e) => e.fields as unknown as PlanMessage).sort((a, b) => a.ts - b.ts || a.msgId.localeCompare(b.msgId));
 }
 export async function decisionsOf(space: SpaceLike, d: { session: string; blockId: string; table: string }, txn: string | null = null): Promise<PlanDecision[]> {
 	return (await space.readAll({ type: "PlanDecision", fields: key(d) }, { limit: 500, txn })).map((e) => e.fields as unknown as PlanDecision).sort((a, b) => a.ts - b.ts);

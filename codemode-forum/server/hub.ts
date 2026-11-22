@@ -14,13 +14,15 @@ import { checkOf } from "./check-host.ts";
 import type { Failure } from "./checks.ts";
 import { askSources, indexPages } from "./source-host.ts";
 import { checkDocs, docsPack, indexHash, type PlanSource } from "./sources.ts";
-import { decisionsOf, messagesOf, newMsgId, owed, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
+import { decisionsOf, messagesOf, newMsgId, owed, PERSON_TABLE, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
+import { objectionsOf, type PlanObjection } from "./review.ts";
+import { MAX_ROUNDS } from "./run.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
 
 const LIMITS = { sessions: 50, lines: 200, blocks: 30 };
-/** The table whose document a block shows (the two tables of the plan follow with their phases). */
-const TABLE = "A";
+type Table = "A" | "B";
+const asTable = (v: unknown): Table | undefined => (v === "A" || v === "B" ? v : undefined);
 /** How long the slots of a new run may wait for an agents process before the page says so. */
 const SLOT_GRACE_MS = 15_000;
 /** The room lock's transaction lease (renewed while the operation runs), and how long an operation waits for it. */
@@ -34,7 +36,10 @@ type Session = { id: string; clients: Set<WsConnection>; buckets: Map<string, nu
 
 export type Line = { text: string; ts: number };
 /** A plan task of the room with the state of its document: the newest version's sections, without their texts. */
-export type Block = Omit<PlanTask, "session"> & { sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>;
+export type Block = Omit<PlanTask, "session"> & {
+	/** The table whose document and discussion the block shows: the one of the newest run on it, else one that has a
+	 *  document. */
+	table: Table; sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>;
 	/** The table's discussion in numbers: messages, decisions, and the questions to the person still open. */
 	talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"];
 		/** The mechanical check of the newest version (checks.ts); null: not checked yet. */
@@ -213,15 +218,24 @@ export class ForumHub {
 		const lines = (await this.host.readAll({ type: "ForumLine", fields: { session: s.id } }, { limit: LIMITS.lines + 50 })).map((e) => e.fields as unknown as Line & { session: string }).sort((a, b) => a.ts - b.ts).slice(-LIMITS.lines).map(({ text, ts }) => ({ text, ts }));
 		const tasks = (await this.#tasks(s.id));
 		const blocks = await Promise.all(tasks.map(async ({ session: _s, ...t }): Promise<Block> => {
+			const TABLE = await this.#tableOf(s.id, t.blockId, run);
 			const versions = await versionsOf(this.host, { session: s.id, blockId: t.blockId, table: TABLE }), head = versions.at(-1);
 			const sources = (await this.host.readAll({ type: "PlanSource", fields: { session: s.id, blockId: t.blockId } }, { limit: 4 })).map((e) => e.fields as unknown as PlanSource).sort((a, b) => a.sourceId.localeCompare(b.sourceId))
 				.map(({ sourceId, kind, name, commit, ref, files, bytes }) => ({ sourceId, kind, name, ...(commit ? { commit } : {}), ...(ref ? { ref } : {}), files, bytes }));
 			const d = { session: s.id, blockId: t.blockId, table: TABLE }, messages = await messagesOf(this.host, d);
 			const talk = { messages: messages.length, decisions: (await decisionsOf(this.host, d)).length, forPerson: owed(messages, [], {}).person.length };
 			const check = head ? await checkOf(this.host, d, head.version) : null;
-			return { ...t, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
+			return { ...t, table: TABLE, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
 		}));
 		return { session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
+	}
+
+	/** The table of a block that is shown when none is asked for: the one the room's run (active or last) works at on
+	 *  this block, else table B if it has a document, else A. */
+	async #tableOf(session: string, blockId: string, run?: RunInfo | null): Promise<Table> {
+		if (run === undefined) run = await this.#runShown(await this.session(session));
+		if (run?.blockId === blockId) return run.table;
+		return (await headOf(this.host, { session, blockId, table: "B" })) ? "B" : "A";
 	}
 
 	/** The room's plan tasks, oldest first. */
@@ -272,8 +286,8 @@ export class ForumHub {
 
 	/** A version of a block's document with its texts (the newest unless `version` names one); null: no such block or
 	 *  version. A block without a document yet has none. */
-	async plan(id: string, blockId: string, version?: number): Promise<PlanView | null> {
-		const d = { session: id, blockId, table: TABLE };
+	async plan(id: string, blockId: string, version?: number, table?: unknown): Promise<PlanView | null> {
+		const d = { session: id, blockId, table: asTable(table) ?? (await this.#tableOf(id, blockId)) };
 		const versions = await versionsOf(this.host, d), doc = version === undefined ? versions.at(-1) : versions.find((v) => v.version === version);
 		if (!doc) return null;
 		const { session: _s, slot: _k, ...full } = await fullDoc(this.host, doc);
@@ -282,9 +296,9 @@ export class ForumHub {
 	}
 
 	/** The discussion of a block: its messages, oldest first, and the decisions. */
-	async talk(id: string, blockId: string): Promise<{ messages: Array<Omit<PlanMessage, "session">>; decisions: Array<Omit<PlanDecision, "session">> }> {
-		const d = { session: id, blockId, table: TABLE };
-		return { messages: (await messagesOf(this.host, d)).map(({ session: _s, ...m }) => m), decisions: (await decisionsOf(this.host, d)).map(({ session: _s, ...x }) => x) };
+	async talk(id: string, blockId: string, table?: unknown): Promise<{ table: Table; messages: Array<Omit<PlanMessage, "session">>; decisions: Array<Omit<PlanDecision, "session">>; objections: Array<Omit<PlanObjection, "session">> }> {
+		const d = { session: id, blockId, table: asTable(table) ?? (await this.#tableOf(id, blockId)) };
+		return { table: d.table, objections: (await objectionsOf(this.host, d)).map(({ session: _s, ...o }) => o), messages: (await messagesOf(this.host, d)).map(({ session: _s, ...m }) => m), decisions: (await decisionsOf(this.host, d)).map(({ session: _s, ...x }) => x) };
 	}
 
 	/** What a person says to the table: an answer in a thread (`thread`: the id of the message it answers), or a note of
@@ -297,7 +311,9 @@ export class ForumHub {
 		const task = (await this.#tasks(s.id)).find((t) => t.blockId === String(o.blockId ?? ""));
 		if (!task) throw new Error("Unknown plan task");
 		if (!this.#allow(s, "message", 20)) throw new Error("Too many messages, slow down");
-		const d = { session: s.id, blockId: task.blockId, table: TABLE }, root = o.thread ? (await messagesOf(this.host, d)).find((m) => m.msgId === String(o.thread)) : undefined;
+		// said to the block: every table reads it (a thread may be of either table)
+		const d = { session: s.id, blockId: task.blockId, table: PERSON_TABLE };
+		const root = o.thread ? (await Promise.all((["A", "B"] as const).map((table) => messagesOf(this.host, { ...d, table })))).flat().find((m) => m.msgId === String(o.thread)) : undefined;
 		if (o.thread && !root) throw new Error("Unknown message to answer");
 		const msgId = newMsgId();
 		const m: PlanMessage = { ...d, msgId, thread: root?.thread ?? msgId, kind: root?.kind === "question" ? "answer" : "note", author: String(o.by ?? "").replace(/\s+/g, " ").trim().slice(0, 40) || "guest", model: "human", text, round: 0, ts: Date.now() };
@@ -307,8 +323,8 @@ export class ForumHub {
 	}
 
 	/** The newest version of a block's document as Markdown, under the first line of its brief. */
-	async planMarkdown(id: string, blockId: string): Promise<string | null> {
-		const task = (await this.#tasks(id)).find((t) => t.blockId === blockId), head = await headOf(this.host, { session: id, blockId, table: TABLE });
+	async planMarkdown(id: string, blockId: string, table?: unknown): Promise<string | null> {
+		const task = (await this.#tasks(id)).find((t) => t.blockId === blockId), head = await headOf(this.host, { session: id, blockId, table: asTable(table) ?? (await this.#tableOf(id, blockId)) });
 		if (!task || !head) return null;
 		return renderMarkdown(await fullDoc(this.host, head), task.brief.split("\n")[0]!.slice(0, 120));
 	}
@@ -368,10 +384,11 @@ export class ForumHub {
 	/** Starts a run on a plan task of the room (`blockId`; else the newest): at least three models, the same number of
 	 *  agents for each, a budget. A run so far: the roll call, in which every model says that it is there, then the
 	 *  outline and the first draft of every section by one of them. The joint work follows with its phases.
-	 *  The models write in the task's language.
+	 *  The models write in the task's language. `way`: "parallel" for table B, where every model proposes an outline,
+	 *  the sections are dealt out and the models review each other in `rounds` rounds; else table A, one writer.
 	 *  `client` is set by the server, never from the request body: a visitor's run gets the default budget at most and
 	 *  counts against the day's allowance of the address. Without it (tests, scripts in-process) it counts as admin. */
-	async startRun(id: string, o: { blockId?: unknown; models?: unknown; perModel?: unknown; budgetTokens?: unknown; budgetUsd?: unknown; client?: { ip: string; admin: boolean } }): Promise<{ runId: string }> {
+	async startRun(id: string, o: { blockId?: unknown; way?: unknown; rounds?: unknown; models?: unknown; perModel?: unknown; budgetTokens?: unknown; budgetUsd?: unknown; client?: { ip: string; admin: boolean } }): Promise<{ runId: string }> {
 		const s = await this.session(id);
 		const models = [...new Set(Array.isArray(o.models) ? o.models.map(String) : [])];
 		if (models.length < MIN_MODELS) throw new Error(`A run needs at least ${MIN_MODELS} different models`);
@@ -389,9 +406,12 @@ export class ForumHub {
 		const budget = { ...(budgetTokens ? { tokens: budgetTokens } : {}), ...(positive(o.budgetUsd) ? { usd: positive(o.budgetUsd)! } : {}) };
 		if (!Object.keys(budget).length) throw new Error("A run needs a budget in tokens or dollars");
 		if (visitor && ipTokensPerDay() && (await spentToday(this.host, visitor.ip)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (FORUM_TOKENS_PER_IP_DAY); try again tomorrow");
+		// the way of working: one model writes (table A), or all write at the same time and review each other (table B),
+		// in at most `rounds` review rounds
+		const table: Table = o.way === "parallel" ? "B" : "A", rounds = Math.min(MAX_ROUNDS, Math.max(0, Math.floor(Number(o.rounds ?? 2)) || 0));
 		const tasks = await this.#tasks(s.id), task = o.blockId ? tasks.find((t) => t.blockId === String(o.blockId)) : tasks.at(-1);
 		if (!task) throw new Error(o.blockId ? "Unknown plan task" : "No plan task yet: create one first");
-		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, blockId: task.blockId, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: task.lang, budget, ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
+		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, blockId: task.blockId, table, rounds, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: task.lang, budget, ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
 		// a request that was refused above started nothing and does not count
 		if (!this.#allow(s, "run", 6)) throw new Error("Too many runs, slow down");
 		await this.#trimLines(s);
@@ -403,7 +423,7 @@ export class ForumHub {
 			const t = await this.host.createTransaction(30_000);
 			try {
 				await startSpaceRun(this.host, t.id, this.#ttl, { session: s.id, params });
-				await systemLine(this.host, t.id, this.#ttl, s.id, `Run started: ${models.length} models, ${perModel} agent${perModel === 1 ? "" : "s"} each, budget ${limits}`);
+				await systemLine(this.host, t.id, this.#ttl, s.id, `Run started at table ${table} (${table === "B" ? `all write, ${rounds} review round${rounds === 1 ? "" : "s"}` : "one model writes"}): ${models.length} models, ${perModel} agent${perModel === 1 ? "" : "s"} each, budget ${limits}`);
 				await this.host.commit(t.id);
 			} catch (e) {
 				await this.host.abort(t.id).catch(() => {});

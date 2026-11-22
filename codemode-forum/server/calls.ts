@@ -9,7 +9,10 @@
 //   reply     a model answers the questions addressed to it and votes on the proposals of the others.
 //   outline   one model proposes the document's sections, each with a line on what it is to say.
 //   draft     one model writes one section.
-//   revise    one model writes a section anew, with what the checker found wrong in it (checks.ts).
+//   revise    one model writes a section anew, with what the checker found wrong in it (checks.ts) and the objections
+//             of the table to it.
+//   pick      table B: a model names the outline it prefers among those the others proposed.
+//   review    table B: a model reads the whole document and says what is wrong with it, section by section.
 // The kinds of the joint work (kickoff, review, revise, ballot, …) follow with their phases.
 //
 // Reading: when the task has sources, an outline or draft is worked out in steps. In each step the model either asks
@@ -24,9 +27,10 @@ import { criteriaOf, TASK_LIMITS, type PlanTask } from "./plantask.ts";
 import type { RunEntry } from "./run.ts";
 import type { PlanSource, SourceCall } from "./sources.ts";
 import { decisionsOf, discussionText, messagesOf, nameOf, TALK_LIMITS } from "./talk.ts";
+import { objectionsOf, outlinesOf, REVIEW_LIMITS } from "./review.ts";
 import { readExisting } from "./space.ts";
 
-export type CallKind = "rollcall" | "kickoff" | "reply" | "outline" | "draft" | "revise";
+export type CallKind = "rollcall" | "kickoff" | "reply" | "outline" | "pick" | "draft" | "revise" | "review";
 /** A request for a model call, as an agent writes it (and the model process takes it). */
 export type LlmCall = {
 	callId: string; session: string; runId?: string; kind: CallKind;
@@ -37,6 +41,8 @@ export type LlmCall = {
 	table?: string; sectionId?: string;
 	/** reply: the threads the model owes a reply to. */
 	threads?: string[];
+	/** revise: the objections of the table the revision is to take up. */
+	objections?: string[];
 	/** Who started the run: a visitor's calls count against the day's allowance of their address. */
 	client?: { ip: string; admin: boolean };
 	ts: number;
@@ -164,7 +170,32 @@ export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextC
 		].join("\n\n"),
 	};
 	const d = { session: call.session, blockId: run.params.blockId, table: call.table ?? "" };
+	if (call.kind === "pick") {
+		const outlines = (await outlinesOf(space, d, run.runId)).filter((o) => o.model !== call.model && aliases[o.model]).sort((a, b) => aliases[a.model]!.localeCompare(aliases[b.model]!));
+		return {
+			model: call.model, system: SYSTEM, maxTokens: 300,
+			user: [
+				who, taskText(task), ...talk,
+				`The others proposed these outlines for the plan document:\n\n${outlines.map((o) => `Outline by ${aliases[o.model]}:\n${o.sections.map((x) => `## ${x.title}\n${x.intent}`).join("\n")}`).join("\n\n")}`,
+				`Which of them should the table write the plan along? Yours is not among them; you choose among the others'. Answer with one line and nothing else:\nPICK <name at the table>: <why, in one sentence>\n\n${answerIn(call.lang)}`,
+			].join("\n\n"),
+		};
+	}
 	const head = await headOf(space, d);
+	if (call.kind === "review") {
+		if (!head) throw new Error("the document is gone");
+		const whole = await fullDoc(space, head), open = (await objectionsOf(space, d)).filter((o) => o.state === "open");
+		return {
+			model: call.model, system: SYSTEM, maxTokens: 1500,
+			user: [
+				who, taskText(task), ...talk, ...reading,
+				`The plan document as it is now (version ${head.version}):\n"""\n${whole.sections.map((x) => `## ${x.title}\n${x.text}`).join("\n\n")}\n"""`,
+				...(open.length ? [`Objections that are open already (do not raise them again):\n${open.map((o) => `- on "${whole.sections.find((x) => x.sectionId === o.sectionId)?.title ?? "?"}" by ${aliases[o.model] ?? "an earlier participant"}: ${o.defect}`).join("\n")}`] : []),
+				`Review the whole document against the brief and the criteria. Say what stands in the way of carrying this plan out. An objection names the section, a concrete defect and what would resolve it; "could be more detailed" is none. At most ${REVIEW_LIMITS.objections}.`,
+				[`${reading.length ? "When you hand in: answer" : "Answer"} in this form, one line per objection:`, 'objection on "<the section\'s heading>": <the defect> | fix: <what would resolve it> | quote: "<the words of the plan it is about>"', "or, if you have none, the one line:  NO OBJECTIONS", "After that you may add a line MESSAGES and below it messages for the table (question to M2: …, question: …, proposal: …, note: …).", answerIn(call.lang)].join("\n"),
+			].join("\n\n"),
+		};
+	}
 	const ref = head?.sections.find((s) => s.sectionId === call.sectionId);
 	if (!head || !ref) throw new Error("the section is gone");
 	const doc = await fullDoc(space, head);
@@ -180,8 +211,14 @@ export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextC
 	// revise: what the checker found in this section of the newest checked version, and the section as it is
 	const check = call.kind === "revise" ? ((await space.readAll({ type: "PlanCheck", fields: d }, { limit: 200 })).map((e) => e.fields as unknown as PlanCheck).sort((a, b) => b.version - a.version)[0]) : undefined;
 	const found = (check?.failures ?? []).filter((f) => f.sectionId === ref.sectionId || (!f.sectionId && call.kind === "revise"));
+	const objs = call.kind === "revise" && call.objections?.length ? (await objectionsOf(space, d)).filter((o) => call.objections!.includes(o.objId)) : [];
 	const job = call.kind === "revise"
-		? [`The section "${mine.title}" as it is now:\n"""\n${mine.text}\n"""`, `A program checked the document and found this, which must be mended. It is not a matter of opinion:\n${found.map((f) => `- ${f.text}`).join("\n") || "- (nothing in this section; make sure it follows the conventions below)"}`, `Write the section "${mine.title}" anew, mending every point and keeping what was right.`]
+		? [
+			`The section "${mine.title}" as it is now:\n"""\n${mine.text}\n"""`,
+			...(found.length || !objs.length ? [`A program checked the document and found this, which must be mended. It is not a matter of opinion:\n${found.map((f) => `- ${f.text}`).join("\n") || "- (nothing in this section; make sure it follows the conventions below)"}`] : []),
+			...(objs.length ? [`The table objects to this section. Take up each objection: mend what it names, or leave the text where the objection is wrong.\n${objs.map((o) => `- ${aliases[o.model] ?? "an earlier participant"}: ${o.defect} What would resolve it: ${o.fix}${o.quote ? ` (about: "${o.quote}")` : ""}`).join("\n")}`] : []),
+			`Write the section "${mine.title}" anew, mending every point and keeping what was right.`,
+		]
 		: [`Write the section "${mine.title}". What it is to say: ${mine.rev === 1 ? mine.text : "(revise what is there)"}`];
 	return {
 		model: call.model, system: SYSTEM, maxTokens: 3000,

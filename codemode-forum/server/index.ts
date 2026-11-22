@@ -144,18 +144,18 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			if (pl && req.method === "GET") {
 				if (!ID.test(pl[1]!)) return json(res, 400, { error: "Invalid room id" });
 				if (pl[3]) {
-					const md = await hub.planMarkdown(pl[1]!, pl[2]!);
+					const md = await hub.planMarkdown(pl[1]!, pl[2]!, url.searchParams.get("table"));
 					if (md === null) return json(res, 404, { error: "No document yet" });
 					res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "cache-control": "no-store" });
 					return res.end(md);
 				}
 				const v = url.searchParams.get("version");
 				if (v !== null && !/^\d{1,6}$/.test(v)) return json(res, 400, { error: "Invalid version" });
-				const got = await hub.plan(pl[1]!, pl[2]!, v === null ? undefined : Number(v));
+				const got = await hub.plan(pl[1]!, pl[2]!, v === null ? undefined : Number(v), url.searchParams.get("table"));
 				return got ? json(res, 200, got) : json(res, 404, { error: "No document yet" });
 			}
 			const tk = /^\/api\/rooms\/([^/]+)\/talk\/([a-z0-9]{1,40})$/.exec(p);
-			if (tk && req.method === "GET") return ID.test(tk[1]!) ? json(res, 200, await hub.talk(tk[1]!, tk[2]!)) : json(res, 400, { error: "Invalid room id" });
+			if (tk && req.method === "GET") return ID.test(tk[1]!) ? json(res, 200, await hub.talk(tk[1]!, tk[2]!, url.searchParams.get("table"))) : json(res, 400, { error: "Invalid room id" });
 			const m = /^\/api\/rooms\/([^/]+)(?:\/(task|run|stop|message))?$/.exec(p);
 			if (m) {
 				const id = m[1]!, action = m[2];
@@ -166,7 +166,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				const b = await readBody(req, action === "task" ? 1_500_000 : 64_000);
 				// a visitor's run: the default token budget at most, counted against the day's allowance of the address
 				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria, docs: b.docs, repo: b.repo, admin: await isAdmin(req) })) });
-				if (action === "run") return json(res, 200, { ok: true, ...(await hub.startRun(id, { blockId: b.blockId, models: b.models, perModel: b.perModel, budgetTokens: b.budgetTokens, budgetUsd: b.budgetUsd, client: { ip: clientIp(req), admin: await isAdmin(req) } })) });
+				if (action === "run") return json(res, 200, { ok: true, ...(await hub.startRun(id, { blockId: b.blockId, way: b.way, rounds: b.rounds, models: b.models, perModel: b.perModel, budgetTokens: b.budgetTokens, budgetUsd: b.budgetUsd, client: { ip: clientIp(req), admin: await isAdmin(req) } })) });
 				if (action === "message") return json(res, 200, { ok: true, ...(await hub.say(id, { blockId: b.blockId, thread: b.thread, text: b.text, by: b.by })) });
 				await hub.stopRun(id);
 				return json(res, 200, { ok: true });

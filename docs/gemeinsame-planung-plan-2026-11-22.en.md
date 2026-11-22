@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 to 5 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 6 to 12 open. Second version,
+Status: phases 1 to 6 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 7 to 12 open. Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -328,7 +328,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 | 3 ✓ | Uploaded documents as a pack; the sources process with local repositories, read from the objects of a commit; reading in steps. | path escape, symbolic link, deny list, limits; a killed sources process; a killed agent goes on from its `ReadStep`s |
 | 4 ✓ | Discussion: messages, threads, reply items, decisions, the person's messages, limits; kickoff. Messages travel with a work call from phase 6 on (review and revise); until then they are written at the kickoff and in the replies. | an unanswered question holds the table until its deadline; a decision reaches the next context; the message limit |
 | 5 ✓ | The checker process and its six checks; the conventions told to the writer; check after the drafts, revision of the sections with findings, at most three checks a run. | each check with a plan that fails exactly it |
-| 6 | Table B: outline by proposal, parallel drafts, rounds of review and revise. | restart of all processes in a round; an objection becomes one item |
+| 6 ✓ | Table B: an outline proposed by every model and one picked, sections dealt out and drafted in parallel, rounds of review and revise with objections kept as entries; messages travel with a review. A run chooses its table (`way`). | restart of all processes in a round; an objection becomes one item |
 | 7 | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
 | 8 | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
 | 9 | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
@@ -370,3 +370,73 @@ Not part of this plan:
 - writing into a repository, opening pull requests, or any call that changes something;
 - any change to codemode-chat;
 - deploying to big or nano.
+
+## 15. Proposed addition: the process in a GitHub repository (asked 2026-11-22, not decided)
+
+The wish: a new repository for one decision process, named by the person; access to that repository only; every
+intermediate document and step of the decision kept there in a form one can follow; Markdown, HTML and PDF of the
+result at the end.
+
+**Access to one repository only.** A token that may create repositories can reach more than one, so the creation
+and the daily access are kept apart:
+
+1. *Once, by the operator:* a script (`server/github-setup.ts`) asks for the name, creates the private repository with
+   the operator's own `gh` login, generates a key pair, and registers the public key as a **deploy key with write
+   access** of that repository. The `gh` login is never given to a process of the forum.
+2. *From then on:* a new role, the **archive** process, pushes with that deploy key. GitHub itself confines a deploy
+   key to its one repository; nothing in the forum can widen it.
+
+**What is kept, and how.** The archive process follows the Space's change stream and turns events into commits, in
+their order, so the history of the repository is the history of the process:
+
+| Path | Content | Commit |
+|---|---|---|
+| `brief.md`, `sources.md` | the task; the source packs by name and commit (never their content) | task created |
+| `discussion/round-<n>.md`, `decisions.md` | messages by thread, votes, decisions, the person's word | each phase of talking |
+| `outlines/<model>.md` | the outlines proposed and which one the table picked | outline round |
+| `plan.md` | the document; **one commit per version**, authored as the model that wrote it, the changed sections in the message | every version |
+| `checks/v<n>.md`, `objections.md`, `ballots/v<n>.md` | what the checker found, objections with their state, votes | each check, review, ballot |
+| `runs/<run>.md` | the run's log, models at the table, cost | run ended |
+| `result/plan.md`, `plan.html`, `plan.pdf`, `PROCESS.md` | the accepted plan and the generated account of how it came about | acceptance |
+
+What a model read in the sources is not archived by default: a private source would otherwise leave through the
+archive. A cursor entry in the Space says how far the archive is, so a restart neither loses nor repeats a commit.
+
+**HTML and PDF.** HTML comes from the Markdown renderer the page already has. PDF needs a program the repository does
+not have yet: a headless Chromium on the host (`--print-to-pdf`) or pandoc. That is a new dependency to decide; without
+one, the PDF is left out and the archive says so.
+
+**Effort,** measured in phases of the size built so far (each of phases 2 to 5 was one):
+
+| Part | Size | Tests |
+|---|---|---|
+| Setup script, deploy key, the archive process, layout and commits, cursor | one phase | against a local bare repository: every event one commit, a killed archive process, a rejected push |
+| Result export (Markdown with the appendix, HTML), PDF if a renderer is decided | half a phase; overlaps the export of phase 10 | the export equals the accepted version |
+| One real run against GitHub | an hour with the operator's `gh` login | by hand |
+
+Not verified: the GitHub side (deploy keys, `gh repo create`) is written here from knowledge, not tried. Best placed
+after phase 9, when ballots and acceptance exist and there is a result to archive.
+
+## 16. Proposed addition: a map of the decision process (asked 2026-11-22, not decided)
+
+The wish: a flip chart or organisation chart of how the decision came about, clickable, with the documents linked.
+
+Everything such a map needs is already an entry with a time in the Space: the roll call, the kickoff messages, threads
+and decisions, the outlines and the picks, every version of the document with who changed which section, every check,
+every review round with its objections and what became of them. So the map is a view, not new data.
+
+- **The page.** Per table a lane, time from left to right, a node per step: roll call, kickoff, each decision, the
+  outlines and the one picked, each version, each check (passed or what it found), each review round, later ballots
+  and acceptance. Arrows say what led to what: an objection to the revision that took it up, a finding to the version
+  that mended it, a decision to the sections written under it. Colours say how a step ended.
+- **Clickable.** A node opens what it stands for: a version opens the document at that version with its changes, a
+  decision its thread with the votes, an objection the section before and after, a check its findings.
+- **Drawn without a new dependency:** as SVG from a small layout of its own (lanes and columns), like the rest of the
+  page.
+- **In the archive of section 15,** the same map as a static `process.html` whose nodes link to the files of the
+  repository at their commits.
+
+**Effort:** about half a phase for the map on the page (a function that turns the entries of a block into steps and
+arrows, with tests; the SVG view), and a small addition to the archive for the static copy. Best placed after phase
+9, when both tables, ballots and acceptance are steps the map can show; a first version over what exists now would
+need redoing then.

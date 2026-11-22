@@ -4,14 +4,20 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 to 5 of that plan.** The application has its processes, its space, the run mechanics, the admin
+**Status: phases 1 to 6 of that plan.** The application has its processes, its space, the run mechanics, the admin
 login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2),
-read-only sources the models read in (phase 3), the discussion of the table (phase 4), and the checker, a program
-that checks every finished draft against its sources (phase 5). A run so far: the **roll call**; the **kickoff**, in
-which each model says how it understands the brief and may ask and propose; the **replies**; then one model writes
-the outline and the first draft of every section, bound by what the table decided and the person said; then the
-**check**, and the writer mends what it found. Review rounds, the second table and the ballots follow with phases 6
-to 9.
+read-only sources the models read in (phase 3), the discussion of the table (phase 4), the checker (phase 5), and
+**table B**, where the models write at the same time and review each other (phase 6). A run begins with the **roll
+call**, the **kickoff** and the **replies**; then it writes at one of two tables:
+
+- **table B** (`way: "parallel"`): every model proposes an outline and the table picks one; the sections are dealt
+  out and drafted side by side; the checker checks; then **review rounds**: every model reads the whole document and
+  raises objections, and each section with objections is revised by a model that did not raise them;
+- **table A**: one model writes the outline and every section, and mends what the checker finds. The turns of table
+  A follow with phase 8.
+
+Ballots and acceptance (phase 7), both tables in one run and their comparison (phase 9) are still to come: a run at
+table B ends after its review rounds, or when a round raises no objection.
 
 The application is a directory of its own. Its base is copied from `codemode-chat/` (the comments at the top of each
 file say so) and it imports nothing from there; it depends on the library as `"phi-spaces": "file:../spaces"`.
@@ -63,6 +69,28 @@ every model can produce: `question to M2: …`, `question: …` (to the table), 
 
 A model learns the others only by their names at the table. `GET /api/rooms/<room>/talk/<block>` returns the messages
 and decisions. A block that already has a document skips the kickoff: a run on it goes on writing.
+
+## Table B: writing at the same time
+
+(`server/review.ts`, and the flow in `server/run.ts`.)
+
+1. **Outlines.** Every model at the table proposes an outline (`PlanOutline`). With a `pick` item each names the one
+   it prefers among the others' (`PICK M2: why`); the outline most models named becomes version 1, among equals the
+   one whose proposer comes first at the table. If the person fixed the headings there is nothing to pick.
+2. **Drafts.** The sections are dealt out in turn, beginning with the proposer, and drafted in parallel, each a
+   version of its own (the document store takes concurrent writers of different sections).
+3. **Check**, as at table A; what the checker finds goes to the model that wrote the section.
+4. **Review rounds** (`rounds`, default 2, at most 8). Every model reads the whole document, may read in the sources,
+   and answers with objections in a fixed form, `objection on "<heading>": <defect> | fix: <what would resolve it> |
+   quote: "<words of the plan>"`, or `NO OBJECTIONS`. An objection names a section of the document and a fix, or it is
+   none; at most six a review. With its review a model may say things to the table (after a line `MESSAGES`); what
+   it asks or proposes there is answered and voted on in the same round.
+5. **Revisions.** Each section with open objections gets one `revise` item that carries all of them and is not for
+   the models that raised them (unless every model at the table did). The reviser mends what an objection names, or
+   leaves the text where it is wrong: then the objection is kept as declined. A `PlanObjection` is open, resolved
+   (with the version that took it up) or declined. Then the check, then the next round.
+
+A round with no objection and nothing to answer ends the run.
 
 ## The checker
 
@@ -130,7 +158,7 @@ transactions lapse, and its work comes back for another process of the same role
 There is no judge and no sandbox: nothing here runs code from an entry.
 
 Entries in the space so far: `ForumRoom`, `RoomLock`, `PlanTask`, `PlanSource`, `SourceFile`, `SourceIndex`, `SourceInfo`, `SourceRequest`, `SourceResult`, `ReadStep`,
-`PlanMessage`, `PlanDecision`, `PlanDoc`, `PlanSection`, `PlanCheck`, `CheckRequest`, `CheckResult`, `ForumRun` (the run and its
+`PlanMessage`, `PlanDecision`, `PlanOutline`, `OutlinePick`, `PlanObjection`, `PlanDoc`, `PlanSection`, `PlanCheck`, `CheckRequest`, `CheckResult`, `ForumRun` (the run and its
 lock, one per room), `AgentSlot`, `WorkItem`, `ItemStart`, `RollCall`, `ForumRunDone`, `ForumLine`, `LlmCall`, `LlmResult`, `Spend`, `ModelInfo`,
 `ForumAdmin`, `AdminSession`, `QuotaLock`, `QuotaUse`, `Process`.
 
@@ -201,7 +229,10 @@ one vote a model), who owes a reply and when a proposal is decided, a run whose 
 decision and the person's word in the writer's prompt), and the two deadlines (a reply that never comes, a question
 the person does not answer). `tests/checks.test.ts` has a plan that passes and, for each check, a plan that fails
 exactly it; what counts as a path, a quote and a phase; a run whose writer mends what the checker found; and a writer
-that mends nothing, which ends after three checks.
+that mends nothing, which ends after three checks. `tests/table-b.test.ts` covers the reading of a review and a
+pick, the picked outline and the dealing of sections, a run at table B (three outlines, picks, dealt drafts, two
+review rounds, an objection taken up by another model, a note said with a review), objections of two models to one
+section, and a review round across a restart of every process.
 
 ## Safety notes
 
