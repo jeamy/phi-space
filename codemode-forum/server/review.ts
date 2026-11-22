@@ -12,9 +12,11 @@ import type { SpaceLike } from "phi-spaces";
 export const REVIEW_LIMITS = { objections: 6, text: 600 };
 export type PlanOutline = { session: string; blockId: string; table: string; runId: string; model: string; author: string; sections: Array<{ title: string; intent: string }>; ts: number };
 export type OutlinePick = { session: string; blockId: string; table: string; runId: string; model: string; choice: string; ts: number };
-/** `state`: open until a revision of its section took it up (`revisedIn`: that version), or declined when the reviser
- *  left the section as it was. Whether the one who raised it agrees that it is resolved is asked with the ballots. */
-export type PlanObjection = { session: string; blockId: string; table: string; runId: string; objId: string; sectionId: string; defect: string; fix: string; quote?: string; author: string; model: string; round: number; state: "open" | "resolved" | "declined"; revisedIn?: number; ts: number };
+/** `state`: open until a revision of its section took it up (resolved, `revisedIn`: that version), or declined when the
+ *  reviser left the section as it was. With its next ballot the one who raised it says what became of it: confirmed,
+ *  open again (`reopened` counts how often), or withdrawn. A note was never blocking (ballots.ts). `model` is "human"
+ *  for a person's objection, which no reviser can decline. */
+export type PlanObjection = { session: string; blockId: string; table: string; runId: string; objId: string; sectionId: string; defect: string; fix: string; quote?: string; author: string; model: string; round: number; state: "open" | "resolved" | "confirmed" | "declined" | "withdrawn" | "note"; revisedIn?: number; reopened?: number; ts: number };
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
 

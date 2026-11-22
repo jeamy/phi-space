@@ -1,7 +1,8 @@
 // Table B, where the models write at the same time: every model proposes an outline and the table picks one, the
 // sections are dealt out and drafted side by side, and in review rounds each model reads the whole document and
-// raises objections. An objection becomes one revision of its section, not by the one who raised it; and a round goes
-// on after every process was restarted in the middle of it.
+// writes its ballot, with its objections. The objections to a section become one revision of it, not by those who
+// raised them; and a round goes on after every process was restarted in the middle of it. (When the table has agreed
+// is in ballots.test.ts.)
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
@@ -54,14 +55,15 @@ test("a review, a pick, the picked outline and the dealing of sections", () => {
 	assert.deepEqual(deal(["s1", "s2", "s3", "s4"], THREE, ALIASES, "fake/alpha"), { s1: "fake/alpha", s2: "fake/gamma", s3: "fake/beta", s4: "fake/alpha" });
 });
 
-test("table B: outlines of all, one picked, sections dealt out, two review rounds, an objection taken up by another model", async (t) => {
+test("table B: outlines of all, one picked, sections dealt out, two rounds, two objections taken up by the third model, then agreed", async (t) => {
 	const srv = await startServer();
 	t.after(() => srv.close());
 	const id = room("tableb");
 	const { blockId } = (await post(srv.url, `/api/rooms/${id}/task`, { brief: BRIEF })).body;
 	assert.equal((await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 200_000, way: "parallel" })).status, 200);
 	const s = await ended(srv.url, id), aliases = s.run!.aliases;
-	assert.deepEqual([s.run!.table, s.run!.phase, s.run!.round, s.run!.rounds, s.run!.objections, s.run!.check?.ok, s.blocks[0]!.table], ["B", "done", 2, 2, { raised: 1, open: 0 }, true, "B"]);
+	assert.deepEqual([s.run!.table, s.run!.phase, s.run!.round, s.run!.rounds, s.run!.objections, s.run!.check?.ok, s.blocks[0]!.table], ["B", "accepted", 2, 2, { raised: 2, open: 0 }, true, "B"]);
+	assert.deepEqual([s.run!.accepted, s.blocks[0]!.accepted?.version], [{ version: 5, round: 2, approvals: 3, of: 3 }, 5]);
 	// every model proposed and picked; alpha's outline has the two picks of the others
 	assert.ok(s.lines.some((l) => l.text === `The table writes along the outline of ${aliases["fake/alpha"]} (2 of 3 picks, 3 outlines)`), JSON.stringify(s.lines.map((l) => l.text)));
 	const calls = await callsOf(srv.stack.space, id), count = (kind: string) => calls.filter((c) => c.kind === kind).length;
@@ -71,24 +73,29 @@ test("table B: outlines of all, one picked, sections dealt out, two review round
 	const view = (await (await fetch(`${srv.url}/api/rooms/${id}/plan/${blockId}`)).json()) as PlanView;
 	assert.deepEqual(view.doc.sections.map((x) => x.title), ["Goal", "Steps", "Risks"]);
 	assert.deepEqual(calls.filter((c) => c.kind === "draft").map((c) => [/Write the section "([^"]+)"/.exec(c.prompt)![1], c.model]).sort(), [["Goal", owners[0]], ["Risks", owners[2]], ["Steps", owners[1]]]);
-	// beta's objection: one revision of the goal, by a model that is not beta, with the objection in its prompt
-	const [o] = await objections(srv.stack.space, id);
-	assert.deepEqual([o!.model, o!.sectionId, o!.defect, o!.fix, o!.quote, o!.state, o!.revisedIn, o!.round], ["fake/beta", "s1", "It does not name the target value.", "Name 256 as the target.", "The goal of the plan", "resolved", 5, 1]);
+	// beta's and gamma's objections to the goal: one revision of it, by the one that raised neither, with both in its
+	// prompt; in the second round each confirmed that its objection is resolved
+	const all = await objections(srv.stack.space, id), o = all.find((x) => x.model === "fake/beta");
+	assert.deepEqual([o!.sectionId, o!.defect, o!.fix, o!.quote, o!.state, o!.revisedIn, o!.round], ["s1", "It does not name the target value.", "Name 256 as the target.", "The goal of the plan", "confirmed", 5, 1]);
+	assert.deepEqual(all.map((x) => [x.model, x.state]).sort(), [["fake/beta", "confirmed"], ["fake/gamma", "confirmed"]]);
 	const revise = calls.find((c) => c.kind === "revise")!;
-	assert.notEqual(revise.model, "fake/beta");
-	assert.ok(revise.prompt.includes(`The table objects to this section. Take up each objection: mend what it names, or leave the text where the objection is wrong.\n- ${aliases["fake/beta"]}: It does not name the target value. What would resolve it: Name 256 as the target. (about: "The goal of the plan")`));
+	assert.equal(revise.model, "fake/alpha");
+	assert.ok(revise.prompt.includes(`- ${aliases["fake/gamma"]}: It gives no reason. What would resolve it: Say why 256.`));
+	// (the two objections in the order they were raised, whichever came first)
+	assert.ok(revise.prompt.includes("The table objects to this section. Take up each objection: mend what it names, or leave the text where the objection is wrong.\n- M"));
+	assert.ok(revise.prompt.includes(`- ${aliases["fake/beta"]}: It does not name the target value. What would resolve it: Name 256 as the target. (about: "The goal of the plan")`));
 	assert.doesNotMatch(revise.prompt, /A program checked the document/);
 	assert.deepEqual([view.doc.version, view.doc.sections[0]!.rev, view.doc.sections[0]!.model, view.check?.ok], [5, 3, revise.model, true]);
 	assert.match(view.doc.sections[0]!.text, new RegExp(`Revised by ${revise.model}: the target is 256\\.$`));
-	// the second round's reviewers saw the revised text, and nobody objected again
+	// in the second round everybody saw the revised text, and nobody objected again
 	const second = calls.filter((c) => c.kind === "review").filter((c) => c.prompt.includes("(version 5)"));
 	assert.equal(second.length, 3);
 	for (const c of second) assert.ok(c.prompt.includes("the target is 256."));
 	// what beta said to the table with its review is kept, in its round
 	const talk = (await (await fetch(`${srv.url}/api/rooms/${id}/talk/${blockId}`)).json()) as { table: string; messages: PlanMessage[]; objections: PlanObjection[] };
-	assert.deepEqual([talk.table, talk.objections.length], ["B", 1]);
+	assert.deepEqual([talk.table, talk.objections.length], ["B", 2]);
 	assert.deepEqual(talk.messages.filter((m) => m.kind === "note").map((m) => [m.model, m.round, m.text]), [["fake/beta", 1, "The target value belongs in the goal."]]);
-	assert.match(s.lines.at(-1)!.text, /^Run finished: 3 of 3 models answered the roll call; 4 messages, 0 decisions; the table wrote 3 of 3 sections \(version 5, checks passed\); 2 review rounds, 1 objection \(/);
+	assert.match(s.lines.at(-1)!.text, /^Run finished: 3 of 3 models answered the roll call; 4 messages, 0 decisions; the table wrote 3 of 3 sections \(version 5, checks passed\); 2 review rounds, 2 objections; accepted in round 2 by 3 of 3 models \(/);
 	// roll call 300, kickoff 450, outlines 1200, picks 360, drafts 3000, reviews 3600, the revision 1000
 	assert.equal(s.run!.usage.tokens, 300 + 450 + 1200 + 360 + 3000 + 3600 + 1000);
 	for (const type of ["WorkItem", "LlmCall", "LlmResult", "AgentSlot"]) assert.equal(await srv.stack.space.count({ type, fields: { session: id } }), 0, type);
@@ -105,18 +112,20 @@ test("objections of two models to one section are one revision by the third; a s
 	const s = await ended(srv.url, id), aliases = s.run!.aliases;
 	// of alpha's three lines only the one that names a section and a fix is an objection
 	const all = await objections(srv.stack.space, id);
-	assert.deepEqual(all.map((o) => [o.model, o.sectionId, o.state]).sort(), [["fake/alpha", "s2", "resolved"], ["fake/beta", "s1", "resolved"], ["fake/gamma", "s1", "resolved"]]);
+	assert.deepEqual(all.map((o) => [o.model, o.sectionId, o.state]).sort(), [["fake/alpha", "s2", "resolved"], ["fake/beta", "s1", "resolved"], ["fake/gamma", "s1", "resolved"]]); // one round: nobody confirmed yet
 	const revises = await callsOf(srv.stack.space, id, "revise");
 	assert.equal(revises.length, 2);
 	const goal = revises.find((c) => c.prompt.includes('Write the section "Goal" anew'))!, steps = revises.find((c) => c.prompt.includes('Write the section "Steps" anew'))!;
 	assert.equal(goal.model, "fake/alpha"); // the only one that did not object to it
 	assert.ok(["fake/beta", "fake/gamma"].includes(steps.model));
 	for (const who of ["fake/beta", "fake/gamma"]) assert.ok(goal.prompt.includes(`- ${aliases[who]}: `), who);
-	assert.deepEqual([s.run!.round, s.run!.objections, s.run!.doc!.version], [1, { raised: 3, open: 0 }, 6]);
-	assert.equal((await callsOf(srv.stack.space, id, "review")).length, 3); // one round was asked for
+	// one round was asked for: no majority within it
+	assert.deepEqual([s.run!.round, s.run!.objections, s.run!.doc!.version, s.run!.ended, s.run!.ballots], [1, { raised: 3, open: 0 }, 6, "rounds", { round: 1, approve: 0, of: 3 }]);
+	assert.equal((await callsOf(srv.stack.space, id, "review")).length, 3);
+	assert.match(s.lines.at(-1)!.text, /^Run finished \(no majority within 1 round\)/);
 });
 
-test("a review round goes on after every process was restarted in the middle of it: the objection is still one revision", async (t) => {
+test("a round goes on after every process was restarted in the middle of it: the objections are still one revision, and the table agrees", async (t) => {
 	const dir = mkdtempSync(join(tmpdir(), "forum-test-"));
 	const stack = await startStack({ dbPath: join(dir, "space.sqlite"), agents: false, model: false });
 	const srv = await startServer({ stack });
@@ -124,11 +133,11 @@ test("a review round goes on after every process was restarted in the middle of 
 	const checker = await stack.checker(), agents = await stack.agents({ leaseMs: 2000 }), model = await stack.model({ fakes: true });
 	const id = room("bhold");
 	const { blockId } = (await post(srv.url, `/api/rooms/${id}/task`, { brief: BRIEF })).body;
-	assert.equal((await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 200_000, way: "parallel", rounds: 1 })).status, 200);
-	// the round's reviews are in, the one revision is out and waits at the gate
+	assert.equal((await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 200_000, way: "parallel" })).status, 200);
+	// the round's ballots are in, the one revision is out and waits at the gate
 	await until("the revision to be asked for", async () => (await stack.space.count({ type: "FakeCall", fields: { session: id, kind: "revise" } })) >= 1);
 	const before = await snapshot(srv.url, id);
-	assert.deepEqual([before.run!.phase, before.run!.round, before.run!.objections], ["revise", 1, { raised: 1, open: 1 }]);
+	assert.deepEqual([before.run!.phase, before.run!.round, before.run!.objections], ["revise", 1, { raised: 2, open: 2 }]);
 	await stack.kill(agents, "SIGKILL");
 	await stack.kill(model);
 	await stack.kill(checker);
@@ -137,12 +146,15 @@ test("a review round goes on after every process was restarted in the middle of 
 	await until("the space to answer again", () => snapshot(srv.url, id).catch(() => null));
 	await stack.space.write({ type: "FakeGate", fields: { session: id } }, null, 60_000);
 	const s = await ended(srv.url, id);
-	// one objection, one revision of the section (one call, whoever answered it in the end), one new version
+	// two objections, one revision of the section (one call, whoever answered it in the end), one new version; the
+	// second round's ballots confirmed them and accepted it
 	const all = await objections(stack.space, id);
-	assert.deepEqual(all.map((o) => [o.state, o.revisedIn]), [["resolved", 5]]);
+	assert.deepEqual(all.map((o) => [o.state, o.revisedIn]), [["confirmed", 5], ["confirmed", 5]]);
 	assert.equal(new Set((await callsOf(stack.space, id, "revise")).map((c) => c.callId)).size, 1);
 	const view = (await (await fetch(`${srv.url}/api/rooms/${id}/plan/${blockId}`)).json()) as PlanView;
 	assert.deepEqual([view.doc.version, view.doc.sections.map((x) => x.rev), view.versions.length], [5, [3, 2, 2], 5]);
-	assert.deepEqual([s.run!.phase, s.run!.round, s.run!.objections, s.run!.check?.ok], ["done", 1, { raised: 1, open: 0 }, true]);
+	assert.deepEqual([s.run!.phase, s.run!.round, s.run!.objections, s.run!.check?.ok, s.run!.accepted?.version], ["accepted", 2, { raised: 2, open: 0 }, true, 5]);
+	// one ballot a model and round, across the restart
+	assert.equal(await stack.space.count({ type: "PlanBallot", fields: { session: id } }), 6);
 	assert.equal(await stack.space.count({ type: "WorkItem", fields: { session: id } }), 0);
 });

@@ -12,7 +12,8 @@
 //   revise    one model writes a section anew, with what the checker found wrong in it (checks.ts) and the objections
 //             of the table to it.
 //   pick      table B: a model names the outline it prefers among those the others proposed.
-//   review    table B: a model reads the whole document and says what is wrong with it, section by section.
+//   review    table B: a model reads the whole document and writes its ballot: approve or reject, every criterion
+//             rated, what became of its earlier objections, and new objections section by section (ballots.ts).
 // The kinds of the joint work (kickoff, review, revise, ballot, …) follow with their phases.
 //
 // Reading: when the task has sources, an outline or draft is worked out in steps. In each step the model either asks
@@ -28,6 +29,7 @@ import type { RunEntry } from "./run.ts";
 import type { PlanSource, SourceCall } from "./sources.ts";
 import { decisionsOf, discussionText, messagesOf, nameOf, TALK_LIMITS } from "./talk.ts";
 import { objectionsOf, outlinesOf, REVIEW_LIMITS } from "./review.ts";
+import { ballotsOf, SETTLED_FROM_ROUND } from "./ballots.ts";
 import { readExisting } from "./space.ts";
 
 export type CallKind = "rollcall" | "kickoff" | "reply" | "outline" | "pick" | "draft" | "revise" | "review";
@@ -184,15 +186,33 @@ export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextC
 	const head = await headOf(space, d);
 	if (call.kind === "review") {
 		if (!head) throw new Error("the document is gone");
-		const whole = await fullDoc(space, head), open = (await objectionsOf(space, d)).filter((o) => o.state === "open");
+		const whole = await fullDoc(space, head), all = await objectionsOf(space, d), title = (id: string) => whole.sections.find((x) => x.sectionId === id)?.title ?? "?";
+		const open = all.filter((o) => o.state === "open" && o.model !== call.model), round = run.info.round ?? 1, criteria = criteriaOf(task);
+		// its own objections it must speak to: taken up by a revision, or declined by the reviser
+		const mine = all.filter((o) => o.model === call.model && (o.state === "resolved" || o.state === "declined" || o.state === "open"));
+		// what changed since its last ballot (from the third round on only there a new objection blocks)
+		const last = (await ballotsOf(space, d)).filter((x) => x.model === call.model && x.runId === run.runId).at(-1);
+		const before = last ? await headOf(space, d, last.version) : null;
+		const changed = before ? whole.sections.filter((x) => before.sections.find((y) => y.sectionId === x.sectionId)?.rev !== x.rev).map((x) => x.title) : [];
 		return {
-			model: call.model, system: SYSTEM, maxTokens: 1500,
+			model: call.model, system: SYSTEM, maxTokens: 1800,
 			user: [
 				who, taskText(task), ...talk, ...reading,
 				`The plan document as it is now (version ${head.version}):\n"""\n${whole.sections.map((x) => `## ${x.title}\n${x.text}`).join("\n\n")}\n"""`,
-				...(open.length ? [`Objections that are open already (do not raise them again):\n${open.map((o) => `- on "${whole.sections.find((x) => x.sectionId === o.sectionId)?.title ?? "?"}" by ${aliases[o.model] ?? "an earlier participant"}: ${o.defect}`).join("\n")}`] : []),
-				`Review the whole document against the brief and the criteria. Say what stands in the way of carrying this plan out. An objection names the section, a concrete defect and what would resolve it; "could be more detailed" is none. At most ${REVIEW_LIMITS.objections}.`,
-				[`${reading.length ? "When you hand in: answer" : "Answer"} in this form, one line per objection:`, 'objection on "<the section\'s heading>": <the defect> | fix: <what would resolve it> | quote: "<the words of the plan it is about>"', "or, if you have none, the one line:  NO OBJECTIONS", "After that you may add a line MESSAGES and below it messages for the table (question to M2: …, question: …, proposal: …, note: …).", answerIn(call.lang)].join("\n"),
+				...(mine.length ? [`Your own earlier objections. Say under CONFIRM what became of each:\n${mine.map((o) => `#${o.objId} on "${title(o.sectionId)}": ${o.defect} (${o.state === "resolved" ? `a revision took it up in version ${o.revisedIn}` : o.state === "declined" ? "the reviser left the section as it was: it found your objection wrong" : "still open, nobody revised the section yet"})`).join("\n")}`] : []),
+				...(open.length ? [`Objections of the others that are open already (do not raise them again):\n${open.map((o) => `- on "${title(o.sectionId)}" by ${aliases[o.model] ?? (o.model === "human" ? "the person" : "an earlier participant")}: ${o.defect}`).join("\n")}`] : []),
+				`This is round ${round} of the ballots. Vote on this version: can this plan be carried out as it stands? Approve only if every criterion is met, and show it: for each criterion quote words of the plan (at least three, exactly as they stand there) that meet it. If a criterion is not met, reject and raise an objection: it names the section, a concrete defect and what would resolve it; "could be more detailed" is none. At most ${REVIEW_LIMITS.objections}.${round >= SETTLED_FROM_ROUND ? ` From this round on a new objection counts only against a section that changed since your last ballot (${changed.length ? changed.map((x) => `"${x}"`).join(", ") : "none did"}); against any other section it is kept as a note and does not hold the plan up.` : ""}`,
+				[
+					`${reading.length ? "When you hand in: answer" : "Answer"} in this form:`,
+					"BALLOT: APPROVE   (or BALLOT: REJECT)",
+					"CRITERIA",
+					...criteria.map((_c, i) => `${i + 1} met: "<words of the plan>"   (or: ${i + 1} not met: <what is missing>)`),
+					...(mine.length ? ["CONFIRM", "#<id> resolved   (or: #<id> not resolved: <why>   or: #<id> withdrawn)"] : []),
+					"OBJECTIONS   (leave out if you have none)",
+					'objection on "<the section\'s heading>": <the defect> | fix: <what would resolve it> | quote: "<the words of the plan it is about>"',
+					"MESSAGES   (leave out if you have none: question to M2: …, question: …, proposal: …, note: …)",
+					answerIn(call.lang),
+				].join("\n"),
 			].join("\n\n"),
 		};
 	}
@@ -216,7 +236,7 @@ export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextC
 		? [
 			`The section "${mine.title}" as it is now:\n"""\n${mine.text}\n"""`,
 			...(found.length || !objs.length ? [`A program checked the document and found this, which must be mended. It is not a matter of opinion:\n${found.map((f) => `- ${f.text}`).join("\n") || "- (nothing in this section; make sure it follows the conventions below)"}`] : []),
-			...(objs.length ? [`The table objects to this section. Take up each objection: mend what it names, or leave the text where the objection is wrong.\n${objs.map((o) => `- ${aliases[o.model] ?? "an earlier participant"}: ${o.defect} What would resolve it: ${o.fix}${o.quote ? ` (about: "${o.quote}")` : ""}`).join("\n")}`] : []),
+			...(objs.length ? [`The table objects to this section. Take up each objection: mend what it names, or leave the text where the objection is wrong.${objs.some((o) => o.model === "human") ? " What the person objects to must be mended: their word is not for you to decline." : ""}\n${objs.map((o) => `- ${o.model === "human" ? "the person" : aliases[o.model] ?? "an earlier participant"}: ${o.defect} What would resolve it: ${o.fix}${o.quote ? ` (about: "${o.quote}")` : ""}`).join("\n")}`] : []),
 			`Write the section "${mine.title}" anew, mending every point and keeping what was right.`,
 		]
 		: [`Write the section "${mine.title}". What it is to say: ${mine.rev === 1 ? mine.text : "(revise what is there)"}`];

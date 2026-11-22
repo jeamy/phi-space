@@ -4,20 +4,21 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 to 6 of that plan.** The application has its processes, its space, the run mechanics, the admin
+**Status: phases 1 to 7 of that plan.** The application has its processes, its space, the run mechanics, the admin
 login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2),
-read-only sources the models read in (phase 3), the discussion of the table (phase 4), the checker (phase 5), and
-**table B**, where the models write at the same time and review each other (phase 6). A run begins with the **roll
-call**, the **kickoff** and the **replies**; then it writes at one of two tables:
+read-only sources the models read in (phase 3), the discussion of the table (phase 4), the checker (phase 5), table
+B, where the models write at the same time (phase 6), and **ballots**: the table changes the plan until a majority of
+the models agrees that it can be carried out (phase 7). A run begins with the **roll call**, the **kickoff** and the
+**replies**; then it writes at one of two tables:
 
 - **table B** (`way: "parallel"`): every model proposes an outline and the table picks one; the sections are dealt
-  out and drafted side by side; the checker checks; then **review rounds**: every model reads the whole document and
-  raises objections, and each section with objections is revised by a model that did not raise them;
-- **table A**: one model writes the outline and every section, and mends what the checker finds. The turns of table
-  A follow with phase 8.
+  out and drafted side by side; the checker checks; then rounds of **ballots**: every model votes on the version and
+  raises its objections, each section with objections is revised by a model that did not raise them, until a majority
+  approves, the rounds are used up, or the table is stuck and asks the person;
+- **table A**: one model writes the outline and every section, and mends what the checker finds. Its turns and
+  ballots follow with phase 8.
 
-Ballots and acceptance (phase 7), both tables in one run and their comparison (phase 9) are still to come: a run at
-table B ends after its review rounds, or when a round raises no objection.
+Both tables in one run and their comparison (phase 9) are still to come.
 
 The application is a directory of its own. Its base is copied from `codemode-chat/` (the comments at the top of each
 file say so) and it imports nothing from there; it depends on the library as `"phi-spaces": "file:../spaces"`.
@@ -80,8 +81,8 @@ and decisions. A block that already has a document skips the kickoff: a run on i
 2. **Drafts.** The sections are dealt out in turn, beginning with the proposer, and drafted in parallel, each a
    version of its own (the document store takes concurrent writers of different sections).
 3. **Check**, as at table A; what the checker finds goes to the model that wrote the section.
-4. **Review rounds** (`rounds`, default 2, at most 8). Every model reads the whole document, may read in the sources,
-   and answers with objections in a fixed form, `objection on "<heading>": <defect> | fix: <what would resolve it> |
+4. **Rounds of ballots** (`rounds`, default 2, at most 8; see "When a plan counts as agreed"). Every model reads the
+   whole document, may read in the sources, and with its ballot raises objections in a fixed form, `objection on "<heading>": <defect> | fix: <what would resolve it> |
    quote: "<words of the plan>"`, or `NO OBJECTIONS`. An objection names a section of the document and a fix, or it is
    none; at most six a review. With its review a model may say things to the table (after a line `MESSAGES`); what
    it asks or proposes there is answered and voted on in the same round.
@@ -90,7 +91,40 @@ and decisions. A block that already has a document skips the kickoff: a run on i
    leaves the text where it is wrong: then the objection is kept as declined. A `PlanObjection` is open, resolved
    (with the version that took it up) or declined. Then the check, then the next round.
 
-A round with no objection and nothing to answer ends the run.
+The rounds end when the table has agreed, when they are used up, or when the table is stuck.
+
+## When a plan counts as agreed
+
+(`server/ballots.ts`.) In every round each model at the table writes **one ballot** on the newest version; a model
+has one vote however many agents it has. A ballot says `BALLOT: APPROVE` or `REJECT`, rates every criterion, says
+what became of the model's earlier objections, and raises new ones.
+
+**An approval counts** only when the ballot rates every criterion as met and gives for each words that are in the
+plan (at least three, checked by the program), raises no objection, and none of the model's own objections still
+stands. An approval without that evidence is kept, with the reason why it does not count.
+
+**A version is accepted** (`PlanAccept`) when
+
+- more than half of the models at the table approve it; a model that owes the table an answer does not count yet;
+- approval is not the authors' alone: of the sections that changed since the last round of ballots, at least one
+  approving model wrote none; in the first round, where every section is new, each section needs an approver who did
+  not write it;
+- the version passes the checks (one that fails gets no ballots), and nothing the person objected to is open.
+
+**Objections** are a ledger: open; resolved by a revision; then confirmed, opened again or withdrawn by the one who
+raised it, with its next ballot; declined when the reviser left the section as it was. A declined objection stands
+for the model that raised it (its ballot cannot count until it withdraws) and for nobody else.
+
+**Against moving targets:** from the third round on a new objection blocks only against a section that changed
+since the model's last ballot. Against any other section it is kept as a note.
+
+**When the table is stuck** (two rounds end with the same objections standing and no more approvals, or there is no
+majority and nothing to revise), it asks the person and waits `FORUM_PERSON_WAIT_S`; with their answer it goes on,
+without one the run ends there. A run also ends when its rounds are used up without a majority.
+
+**The person has the last word.** `POST /api/rooms/<room>/accept` accepts a version, whatever the table said.
+`POST /api/rooms/<room>/objection` objects to a section: no reviser can decline it, and the table accepts nothing
+while it is open. Stop ends the run.
 
 ## The checker
 
@@ -158,7 +192,7 @@ transactions lapse, and its work comes back for another process of the same role
 There is no judge and no sandbox: nothing here runs code from an entry.
 
 Entries in the space so far: `ForumRoom`, `RoomLock`, `PlanTask`, `PlanSource`, `SourceFile`, `SourceIndex`, `SourceInfo`, `SourceRequest`, `SourceResult`, `ReadStep`,
-`PlanMessage`, `PlanDecision`, `PlanOutline`, `OutlinePick`, `PlanObjection`, `PlanDoc`, `PlanSection`, `PlanCheck`, `CheckRequest`, `CheckResult`, `ForumRun` (the run and its
+`PlanMessage`, `PlanDecision`, `PlanOutline`, `OutlinePick`, `PlanObjection`, `PlanBallot`, `PlanAccept`, `PlanDoc`, `PlanSection`, `PlanCheck`, `CheckRequest`, `CheckResult`, `ForumRun` (the run and its
 lock, one per room), `AgentSlot`, `WorkItem`, `ItemStart`, `RollCall`, `ForumRunDone`, `ForumLine`, `LlmCall`, `LlmResult`, `Spend`, `ModelInfo`,
 `ForumAdmin`, `AdminSession`, `QuotaLock`, `QuotaUse`, `Process`.
 
@@ -232,7 +266,11 @@ exactly it; what counts as a path, a quote and a phase; a run whose writer mends
 that mends nothing, which ends after three checks. `tests/table-b.test.ts` covers the reading of a review and a
 pick, the picked outline and the dealing of sections, a run at table B (three outlines, picks, dealt drafts, two
 review rounds, an objection taken up by another model, a note said with a review), objections of two models to one
-section, and a review round across a restart of every process.
+section, and a round across a restart of every process. `tests/ballots.test.ts` covers the reading of a ballot and
+when it counts, the tally (a majority of the models, not of the authors alone, nothing of the person open) and the
+stall rule, and runs in which everybody approves (three agents a model, three ballots), approvals come without
+evidence, an objection is declined, an objection comes too late against an unchanged section, the table is stuck and
+goes on with the person's answer, and the person objects and accepts.
 
 ## Safety notes
 

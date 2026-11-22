@@ -16,6 +16,7 @@ import { askSources, indexPages } from "./source-host.ts";
 import { checkDocs, docsPack, indexHash, type PlanSource } from "./sources.ts";
 import { decisionsOf, messagesOf, newMsgId, owed, PERSON_TABLE, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
 import { objectionsOf, type PlanObjection } from "./review.ts";
+import { acceptOf, ballotsOf, type PlanAccept, type PlanBallot } from "./ballots.ts";
 import { MAX_ROUNDS } from "./run.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
@@ -39,7 +40,9 @@ export type Line = { text: string; ts: number };
 export type Block = Omit<PlanTask, "session"> & {
 	/** The table whose document and discussion the block shows: the one of the newest run on it, else one that has a
 	 *  document. */
-	table: Table; sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>;
+	table: Table;
+	/** The version the table (or the person) accepted; null: none yet. */
+	accepted: Pick<PlanAccept, "version" | "by" | "who" | "approvals" | "of" | "round"> | null; sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>;
 	/** The table's discussion in numbers: messages, decisions, and the questions to the person still open. */
 	talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"];
 		/** The mechanical check of the newest version (checks.ts); null: not checked yet. */
@@ -225,7 +228,8 @@ export class ForumHub {
 			const d = { session: s.id, blockId: t.blockId, table: TABLE }, messages = await messagesOf(this.host, d);
 			const talk = { messages: messages.length, decisions: (await decisionsOf(this.host, d)).length, forPerson: owed(messages, [], {}).person.length };
 			const check = head ? await checkOf(this.host, d, head.version) : null;
-			return { ...t, table: TABLE, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
+			const acc = await acceptOf(this.host, d);
+			return { ...t, table: TABLE, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
 		}));
 		return { session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
 	}
@@ -296,9 +300,9 @@ export class ForumHub {
 	}
 
 	/** The discussion of a block: its messages, oldest first, and the decisions. */
-	async talk(id: string, blockId: string, table?: unknown): Promise<{ table: Table; messages: Array<Omit<PlanMessage, "session">>; decisions: Array<Omit<PlanDecision, "session">>; objections: Array<Omit<PlanObjection, "session">> }> {
+	async talk(id: string, blockId: string, table?: unknown): Promise<{ table: Table; messages: Array<Omit<PlanMessage, "session">>; decisions: Array<Omit<PlanDecision, "session">>; objections: Array<Omit<PlanObjection, "session">>; ballots: Array<Omit<PlanBallot, "session" | "slot">> }> {
 		const d = { session: id, blockId, table: asTable(table) ?? (await this.#tableOf(id, blockId)) };
-		return { table: d.table, objections: (await objectionsOf(this.host, d)).map(({ session: _s, ...o }) => o), messages: (await messagesOf(this.host, d)).map(({ session: _s, ...m }) => m), decisions: (await decisionsOf(this.host, d)).map(({ session: _s, ...x }) => x) };
+		return { table: d.table, ballots: (await ballotsOf(this.host, d)).map(({ session: _s, slot: _k, ...b }) => b), objections: (await objectionsOf(this.host, d)).map(({ session: _s, ...o }) => o), messages: (await messagesOf(this.host, d)).map(({ session: _s, ...m }) => m), decisions: (await decisionsOf(this.host, d)).map(({ session: _s, ...x }) => x) };
 	}
 
 	/** What a person says to the table: an answer in a thread (`thread`: the id of the message it answers), or a note of
@@ -320,6 +324,42 @@ export class ForumHub {
 		await this.host.write({ type: "PlanMessage", fields: m as never }, null, this.#ttl);
 		this.push(s);
 		return { msgId };
+	}
+
+	/** A person accepts a version of a block's document (the newest unless `version` names one): their word is final.
+	 *  A run on the block ends with it. */
+	async accept(id: string, o: { blockId?: unknown; version?: unknown; by?: unknown; table?: unknown }): Promise<{ version: number }> {
+		const s = await this.session(id), blockId = String(o.blockId ?? "");
+		if (!(await this.#tasks(s.id)).some((t) => t.blockId === blockId)) throw new Error("Unknown plan task");
+		const d = { session: s.id, blockId, table: asTable(o.table) ?? (await this.#tableOf(s.id, blockId)) };
+		const doc = await headOf(this.host, d, o.version === undefined || o.version === null || o.version === "" ? undefined : Number(o.version));
+		if (!doc) throw new Error("No such version to accept");
+		const who = String(o.by ?? "").replace(/\s+/g, " ").trim().slice(0, 40) || "guest";
+		const accept: PlanAccept = { ...d, version: doc.version, by: "person", who, approvals: [], of: 0, ts: Date.now() };
+		await this.host.write({ type: "PlanAccept", fields: accept as never }, null, this.#ttl);
+		await systemLine(this.host, null, this.#ttl, s.id, `${who} accepted version ${doc.version} of table ${d.table}`);
+		const run = await this.#runNow(s);
+		if (run?.blockId === blockId) await this.stopRun(id);
+		this.push(s);
+		return { version: doc.version };
+	}
+
+	/** A person objects to a section of a block's document (`section`: its heading or id): an objection no reviser can
+	 *  decline, and no version is accepted by the table while it is open. The next round of a run takes it up. */
+	async object(id: string, o: { blockId?: unknown; section?: unknown; text?: unknown; fix?: unknown; by?: unknown; table?: unknown }): Promise<{ objId: string }> {
+		const s = await this.session(id), blockId = String(o.blockId ?? ""), text = String(o.text ?? "").replace(/\s+/g, " ").trim();
+		if (!text) throw new Error("Say what is wrong");
+		if (text.length > 600) throw new Error("An objection has at most 600 characters");
+		if (!this.#allow(s, "message", 20)) throw new Error("Too many messages, slow down");
+		const d = { session: s.id, blockId, table: asTable(o.table) ?? (await this.#tableOf(s.id, blockId)) }, head = await headOf(this.host, d);
+		const section = head?.sections.find((x) => x.sectionId === o.section || x.title.toLowerCase() === String(o.section ?? "").trim().toLowerCase());
+		if (!section) throw new Error("Name the section the objection is about");
+		const run = await this.#runNow(s);
+		const objection: PlanObjection = { ...d, runId: run?.blockId === blockId ? run.runId : "", objId: `o${rid()}`, sectionId: section.sectionId, defect: text, fix: String(o.fix ?? "").replace(/\s+/g, " ").trim().slice(0, 600) || "as the person says", author: String(o.by ?? "").replace(/\s+/g, " ").trim().slice(0, 40) || "guest", model: "human", round: run?.round ?? 0, state: "open", ts: Date.now() };
+		await this.host.write({ type: "PlanObjection", fields: objection as never }, null, this.#ttl);
+		await systemLine(this.host, null, this.#ttl, s.id, `${objection.author} objects to "${section.title}": ${text.slice(0, 120)}`);
+		this.push(s);
+		return { objId: objection.objId };
 	}
 
 	/** The newest version of a block's document as Markdown, under the first line of its brief. */

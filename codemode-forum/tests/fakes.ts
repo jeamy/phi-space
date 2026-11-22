@@ -37,7 +37,17 @@ const reply = (c: TextCall, stance = "agree") => ({ text: owedIn(c).map((o) => (
 /** Table B: a pick of the first outline offered (120 tokens), a review without objections (600), and a revision that
  *  says it is one. */
 const pick = (c: TextCall, of = /Outline by (M\d+):/.exec(c.user)?.[1]) => ({ text: `PICK ${of}: It is the clearest.`, model: c.model, usage: use(120, 0.012) });
-const review = (c: TextCall, lines: string[] = ["NO OBJECTIONS"]) => ({ text: lines.join("\n"), model: c.model, usage: use(600, 0.06) });
+/** A ballot (600 tokens). It approves with words that are in every fake section ("of the plan, written"), or rejects
+ *  with `objections`; `confirm` says what became of the model's own earlier objections (default: resolved, when it
+ *  approves; nothing when it rejects). */
+export const QUOTE = "of the plan, written";
+const roundOf = (c: TextCall) => Number(/This is round (\d+) of the ballots/.exec(c.user)?.[1] ?? 1);
+const ownIn = (c: TextCall) => [...(c.user.split("Your own earlier objections.")[1]?.split("\n\n")[0] ?? "").matchAll(/^#(o[0-9a-f]+) on /gm)].map((m) => m[1]!);
+const review = (c: TextCall, objections: string[] = [], o: { confirm?: "resolved" | "not resolved: it is still wrong" | "withdrawn"; quote?: string; messages?: string[] } = {}) => {
+	const n = (c.user.match(/^\d+ met: "<words of the plan>"/gm) ?? []).length, own = ownIn(c), approve = !objections.length && !(o.confirm ?? "").startsWith("not");
+	const confirm = o.confirm ?? (approve ? "resolved" : undefined);
+	return { text: [`BALLOT: ${approve ? "APPROVE" : "REJECT"}`, "CRITERIA", ...Array.from({ length: n }, (_, i) => (approve || i > 0 ? `${i + 1} met: "${o.quote ?? QUOTE}"` : `${i + 1} not met: see my objection`)), ...(own.length && confirm ? ["CONFIRM", ...own.map((id) => `#${id} ${confirm}`)] : []), ...(objections.length ? ["OBJECTIONS", ...objections] : []), ...(o.messages ? ["MESSAGES", ...o.messages] : [])].join("\n"), model: c.model, usage: use(600, 0.06) };
+};
 const revised = (c: TextCall) => { const d = draft(c); return { ...d, text: `${d.text}\n\nRevised by ${c.model}: the target is 256.` }; };
 const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "kickoff" ? kickoff(c) : call.kind === "reply" ? reply(c) : call.kind === "outline" ? outline(c) : call.kind === "pick" ? pick(c) : call.kind === "review" ? review(c) : call.kind === "revise" ? revised(c) : draft(c));
 /** Table B: the outline each model proposes, and the one all of them prefer (alpha's). */
@@ -45,13 +55,19 @@ const OUTLINES: Record<string, string[]> = { "fake/alpha": OUTLINE, "fake/beta":
 const proposal = (c: TextCall) => ({ text: (OUTLINES[c.model] ?? OUTLINE).map((h) => `## ${h}\nWhat ${h.toLowerCase()} must say.`).join("\n\n"), model: c.model, usage: use(400, 0.04) });
 const pickGoal = (c: TextCall) => pick(c, /Outline by (M\d+):\n## Goal/.exec(c.user)?.[1] ?? /Outline by (M\d+):/.exec(c.user)?.[1]);
 const OBJECT_GOAL = 'objection on "Goal": It does not name the target value. | fix: Name 256 as the target. | quote: "The goal of the plan"';
-/** The table-B scenarios: outlines of their own, alpha's picked; what each model objects to in its first review. */
-const tableB = (objections: Record<string, string[]>, hold = false) => (s: string, space: SpaceLike, log: Log): Team => ({ text: async (c, call) => {
-	const first = call.kind === "review" && (await space.count({ type: "FakeCall", fields: { session: s, kind: "review", model: c.model } })) === 0;
-	await log({ model: c.model, kind: call.kind, callId: call.callId, prompt: c.user });
-	if (hold && call.kind === "revise") await gate(space, s);
-	return call.kind === "outline" ? proposal(c) : call.kind === "pick" ? pickGoal(c) : first && objections[c.model] ? review(c, objections[c.model]) : answer(c, call);
+const OBJECT_WHY = 'objection on "goal": It gives no reason. | fix: Say why 256.';
+/** The table-B scenarios: outlines of their own, alpha's picked; `ballot` says what a model answers in a round (null:
+ *  it approves and confirms what was taken up). `hold`: the revision waits at the gate. */
+type BallotOf = (model: string, round: number, c: TextCall) => ReturnType<typeof review> | null;
+const tableB = (ballot: BallotOf, o: { hold?: boolean; revise?: (c: TextCall) => ReturnType<typeof draft> } = {}) => (s: string, space: SpaceLike, log: Log): Team => ({ text: async (c, call) => {
+	await log({ model: c.model, kind: call.kind, callId: call.callId, prompt: c.user, ...(call.kind === "review" ? { round: roundOf(c) } : {}) });
+	if (o.hold && call.kind === "revise") await gate(space, s);
+	if (call.kind === "review") return ballot(c.model, roundOf(c), c) ?? review(c);
+	return call.kind === "outline" ? proposal(c) : call.kind === "pick" ? pickGoal(c) : call.kind === "revise" && o.revise ? o.revise(c) : answer(c, call);
 } });
+/** In the first round beta and gamma each object to the goal; alpha approves. */
+const twoObject: BallotOf = (model, round, c) => (round === 1 && model !== "fake/alpha" ? review(c, [model === "fake/beta" ? OBJECT_GOAL : OBJECT_WHY], model === "fake/beta" ? { messages: ["note: The target value belongs in the goal."] } : {}) : null);
+
 /** What the three models say at the kickoff of the talking scenarios: a proposal, a question to the table, a question
  *  to the person. */
 const TALK: Record<string, string[]> = {
@@ -76,12 +92,25 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	} }),
 	// dear answers: 3000 tokens each
 	dear: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); return { ...answer(c, call), usage: use(3000, 0.3) }; } }),
-	// table B: beta objects to the goal in the first review and says something to the table with it
-	tableb: tableB({ "fake/beta": [OBJECT_GOAL, "MESSAGES", "note: The target value belongs in the goal."] }),
+	// table B: everybody approves the first version
+	agree: tableB(() => null),
+	// table B: beta and gamma object to the goal in the first round (beta says something to the table with it); it is
+	// revised, they confirm, and everybody approves the second version
+	tableb: tableB(twoObject),
 	// the same, and the revision waits at the gate
-	bhold: tableB({ "fake/beta": [OBJECT_GOAL] }, true),
-	// two models object to one section, the third to another
-	crowd: tableB({ "fake/beta": [OBJECT_GOAL], "fake/gamma": ['objection on "goal": It gives no reason. | fix: Say why 256.'], "fake/alpha": ['objection on "Steps": Phase 1 is too coarse. | fix: Split it in two.', 'objection on "Nowhere": no such section | fix: none', "objection on \"Risks\": could be more detailed"] }),
+	bhold: tableB(twoObject, { hold: true }),
+	// all three object in the first round: two to one section, the third to another (and two lines that are no objection)
+	crowd: tableB((model, round, c) => (round !== 1 ? null : review(c, model === "fake/alpha" ? ['objection on "Steps": Phase 1 is too coarse. | fix: Split it in two.', 'objection on "Nowhere": no such section | fix: none', "objection on \"Risks\": could be more detailed"] : [model === "fake/beta" ? OBJECT_GOAL : OBJECT_WHY]))),
+	// approvals without evidence: alpha and beta quote words that are not in the plan
+	bare: tableB((model, _round, c) => (model === "fake/gamma" ? null : review(c, [], { quote: "this all looks fine to me" }))),
+	// the reviser leaves the goal as it is; in the second round gamma withdraws its objection, beta keeps its own
+	declined: tableB((model, round, c) => twoObject(model, round, c) ?? (round === 2 && model !== "fake/alpha" ? review(c, [], { confirm: model === "fake/gamma" ? "withdrawn" : "not resolved: it is still wrong" }) : null), { revise: (c) => draft(c) }),
+	// beta and gamma object to the goal in rounds one and two; in round three beta objects to a section nobody touched
+	settle: tableB((model, round, c) => (model === "fake/alpha" ? null : round === 1 ? review(c, [model === "fake/beta" ? OBJECT_GOAL : OBJECT_WHY]) : round === 2 ? review(c, ['objection on "Goal": The revision names the target, not the date. | fix: Name a date.'], { confirm: "resolved" }) : model === "fake/beta" ? review(c, ['objection on "Risks": It names no risk of the migration. | fix: Name one.'], { confirm: "resolved" }) : null),
+		{ revise: (c) => { const d = draft(c); return { ...d, text: `${d.text}\n\nRevised by ${c.model} after ${(c.user.match(/^- M\d: /gm) ?? []).length} objections, text ${c.user.length}.` }; } }),
+	// beta and gamma say after every revision that their objection is not resolved, until the person has spoken
+	stuck: tableB((model, round, c) => (model === "fake/alpha" || c.user.includes("Take beta's point")) ? null : round === 1 ? review(c, [model === "fake/beta" ? OBJECT_GOAL : OBJECT_WHY]) : review(c, [], { confirm: "not resolved: it is still wrong" }),
+		{ revise: (c) => { const d = draft(c); return { ...d, text: `${d.text}\n\nRevised by ${c.model}, prompt of ${c.user.length} characters.` }; } }),
 	// the table talks at the kickoff (TALK); gamma disagrees with what it is asked to vote on
 	talk: (_s, _space, log) => ({ text: async (c, call) => {
 		await log({ model: c.model, kind: call.kind, prompt: c.user });

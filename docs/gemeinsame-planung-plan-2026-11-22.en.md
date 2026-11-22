@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 to 6 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 7 to 12 open. Second version,
+Status: phases 1 to 7 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 8 to 12 open. Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -271,7 +271,8 @@ be more detailed" is not one. The reviewer does not see who wrote which section.
 **Accepted** means:
 
 - more than half of the participating models approve the same version (three models: two; four: three; five: three);
-- at least one approving model wrote none of the sections changed in that version;
+- at least one approving model wrote none of the sections that changed since the last round of ballots (in the first
+  round, where every section is new, each section needs an approver who did not write it);
 - the mechanical checks of that version pass and no objection of the checker is open;
 - no question addressed to an approving model is unanswered.
 
@@ -279,7 +280,8 @@ A person's 👍 accepts a version at any time, 👎 with a reason becomes an obj
 run.
 
 **Against moving targets.** From the third round on, a model may raise a new blocking objection only against a
-section that changed since its last ballot, or with a source quote that contradicts the plan. Everything else is a
+section that changed since its last ballot (the exception for an objection backed by a source quote is not built:
+such a contradiction is the checker's to find). Everything else is a
 note; notes are appended to the document and do not block. Who raised an objection confirms in its next ballot
 whether it is resolved. An author may decline an objection with a reason; it then stays open and counts against
 approval only for the model that raised it.
@@ -329,7 +331,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 | 4 ✓ | Discussion: messages, threads, reply items, decisions, the person's messages, limits; kickoff. Messages travel with a work call from phase 6 on (review and revise); until then they are written at the kickoff and in the replies. | an unanswered question holds the table until its deadline; a decision reaches the next context; the message limit |
 | 5 ✓ | The checker process and its six checks; the conventions told to the writer; check after the drafts, revision of the sections with findings, at most three checks a run. | each check with a plan that fails exactly it |
 | 6 ✓ | Table B: an outline proposed by every model and one picked, sections dealt out and drafted in parallel, rounds of review and revise with objections kept as entries; messages travel with a review. A run chooses its table (`way`). | restart of all processes in a round; an objection becomes one item |
-| 7 | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
+| 7 ✓ | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall; the person's yes and no. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
 | 8 | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
 | 9 | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
 | 10 | Page: diff, discussion, ballots, standings, export; help articles in German and English; README; Docker with the local test bed. | help links and both languages; the export equals the result |
