@@ -10,7 +10,7 @@ use std::process::Command;
 use std::sync::Once;
 
 /// The commit the port follows (docs/rust-portierung.en.md, R8.2).
-pub const FROZEN: &str = "0e77f9e";
+pub const FROZEN: &str = "e578b2e";
 
 /// The top of the checkout (this crate is spaces-mmo/rust/mmo-engine): `git archive` has to run there, as from a
 /// subdirectory it packs only that one.
