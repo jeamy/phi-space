@@ -2206,7 +2206,7 @@ Die **Ziege** gibt jeden Tag **Milch** und frisst fast alles, auch Möhren und T
 
 ## Schwein {#pig}
 
-Das **Schwein** lebt im Gehege und frisst vor allem **Kartoffeln** und Rüben, dazu Möhren, Kohl, Korn, Eicheln und Äpfel. Es wühlt den Boden um und bringt alle drei Tage eine **Trüffel** heraus. Trüffel sind selten und teuer: Marta kauft sie, und der Koch der Schenke im Hafenviertel fragt an der Auftragstafel danach. Schweine vermehren sich schnell, ein volles Gehege hast du bald.
+Das **Schwein** lebt im Gehege und frisst vor allem **Kartoffeln** und Rüben, dazu Möhren, Kohl, Korn, Eicheln und Äpfel. Es wühlt den Boden um und bringt alle drei Tage eine **Trüffel** heraus. Trüffel sind selten und teuer: Marta am Markt von Kupferhafen kauft sie, Kalle (er pendelt zwischen der Grauen Bucht und Kupferhafen) und Momme in der Krabbenbucht auch, für etwas weniger; der Koch der Schenke im Hafenviertel fragt an der Auftragstafel danach. Schweine vermehren sich schnell, ein volles Gehege hast du bald.
 
 ## Rind (Kuh) {#cow}
 
@@ -2409,7 +2409,7 @@ The **goat** gives **milk** every day and eats almost anything, carrots and kelp
 
 ## Pig {#pig}
 
-The **pig** lives in the pen and eats **potatoes** and beets above all, carrots, cabbage, grain, acorns and apples as well. It roots up the ground and turns up a **truffle** every three days. Truffles are rare and dear: Marta buys them, and the cook of the inn in the harbour quarter asks for them at the job board. Pigs breed quickly; your pen is soon full.
+The **pig** lives in the pen and eats **potatoes** and beets above all, carrots, cabbage, grain, acorns and apples as well. It roots up the ground and turns up a **truffle** every three days. Truffles are rare and dear: Marta at the market of Kupferhafen buys them, Kalle (he goes between the Grey Bay and Kupferhafen) and Momme in the Crab Bay too, for a little less; the cook of the inn in the harbour quarter asks for them at the job board. Pigs breed quickly; your pen is soon full.
 
 ## Cow {#cow}
 

@@ -922,8 +922,9 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
        `bestelle` brings the seed one carries, and one work point with the same rest (`WorkRest`) as at the building site.
        The growing time (two to three days) is stretched by fog as in the bed.
      - **Harvest effort:** The plot stays ripe for two days. Every `ernte` at it is a work point (8 per plot) and
-       immediately gives a share of the yield, which was fixed at sowing. The shares add up exactly to the yield, the last
-       point makes the plot fallow again. After that it is overripe for two days (each share half), then the crop is spoiled.
+       immediately gives a share of the yield, which was fixed at sowing. The shares add up exactly to the yield; where the yield is smaller than the
+       work (tired soil), the points with something come first and an empty one says the field gave no more (since
+       2026-11-22). The last point makes the plot fallow again. After that it is overripe for two days (each share half), then the crop is spoiled.
        NPCs and automata give at most half of the points, as at the building site.
      - **Crop rotation:** The plot counts how often the same kind (grain, root crop, turnips, flax) came in a row: the
        second time 60 % yield, the third time 35 %. A different kind or three days of fallow heal the soil.

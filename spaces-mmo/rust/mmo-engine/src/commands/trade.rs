@@ -777,7 +777,45 @@ async fn ship_off(space: &Space, w: &Json) -> Result<()> {
 }
 
 /// `marketTick`: restocking, shipping off, and what lies in escrow for a listing or notice that lapsed goes back.
+/// `shareCoins`: the coins a trader of this region holds over what it starts with go to the traders here that hold fewer
+/// than that, each up to its own, in the world's order of traders; before the restock.
+async fn share_coins(space: &Space, w: &Json) -> Result<()> {
+	let currency = j::at(w, "currency").clone();
+	let mut held: Vec<(String, usize, Vec<Json>)> = Vec::new();
+	for n in j::a(w, "npcs") {
+		let start = j::a(n, "carry").iter().find(|c| *j::at(c, "proto") == currency).map_or(0.0, |c| j::n(c, "count"));
+		let buys = j::at(n, "prices").as_object().is_some_and(|p| p.iter().any(|(_, v)| v.as_array().and_then(|a| a.first()).and_then(Json::as_f64).unwrap_or(0.0) > 0.0));
+		if start <= 0.0 || !buys { continue; }
+		let char_id = format!("npc-{}", txt(j::at(n, "npcId")));
+		if space.peek(&tmpl("Character", obj! { "charId" => char_id.as_str() }), None).await?.is_none() { continue; } // in another region
+		let coins = space.read_all(&tmpl("Item", obj! { "location" => char_id.as_str(), "proto" => currency.clone() }), None).await?;
+		held.push((char_id, start as usize, coins));
+	}
+	let mut spare: std::collections::VecDeque<Json> = held.iter().flat_map(|(_, start, coins)| coins.iter().skip(*start).cloned()).collect();
+	for (char_id, start, coins) in &held {
+		let need = start.saturating_sub(coins.len()).min(spare.len());
+		if need == 0 { continue; }
+		let txn = space.create_transaction(10_000.0).await?;
+		let r: Result<()> = async {
+			for e in spare.drain(..need) {
+				if let Some(t) = space.take_if_exists(&obj! { "type" => "Item", "id" => j::at(&e, "id").clone() }, NO_WAIT, Some(&txn)).await? {
+					let mut o = j::object(f(&t));
+					o.insert("location", Json::from(char_id.as_str()));
+					o.insert("x", Json::from(-1.0));
+					o.insert("y", Json::from(-1.0));
+					let types: Vec<Json> = j::a(&t, "types").iter().skip(1).cloned().collect();
+					space.write(&obj! { "type" => j::at(&t, "type").clone(), "types" => Json::Array(types), "fields" => Json::Object(o) }, Some(&txn), FOREVER).await?;
+				}
+			}
+			space.commit(&txn).await
+		}.await;
+		if let Err(err) = r { let _ = space.abort(&txn).await; return Err(err); }
+	}
+	Ok(())
+}
+
 pub async fn market_tick(space: &Space, w: &Json) -> Result<()> {
+	share_coins(space, w).await?;
 	restock(space, w).await?;
 	ship_off(space, w).await?;
 	for e in space.read_all(&tmpl("Item", obj! { "location" => "market" }), None).await? {

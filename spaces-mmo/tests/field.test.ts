@@ -34,6 +34,9 @@ test("the soil: the same group twice in a row gives less, another group or a res
 		for (let i = 0; i < need; i++) sum += shareOf(total, need, i);
 		assert.equal(sum, total, `${total} in ${need} shares`);
 	}
+	// a yield smaller than the work: the points with something first, the empty ones at the end
+	assert.deepEqual(Array.from({ length: 8 }, (_, i) => shareOf(5, 8, i)), [1, 1, 1, 1, 1, 0, 0, 0]);
+	assert.deepEqual(Array.from({ length: 8 }, (_, i) => shareOf(18, 8, i)), [3, 3, 2, 2, 2, 2, 2, 2]);
 });
 
 type P = { p: Player; me: string; name: string };

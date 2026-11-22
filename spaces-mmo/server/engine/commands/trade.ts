@@ -602,8 +602,36 @@ async function shipOff(space: SpaceLike, w: WorldDef): Promise<void> {
 	}
 }
 
+/** The coins a trader of this region holds over what it starts with go to the traders here that hold fewer than that, each
+ *  up to its own, in the world's order of traders: what players spend at a seller (seed, animals, sausage) comes back to
+ *  those who buy from them, and the coins in the region stay as many as they were. Before the restock, which makes a coin
+ *  only for whom none came this way. */
+async function shareCoins(space: SpaceLike, w: WorldDef): Promise<void> {
+	const held: Array<{ charId: string; start: number; coins: Taken[] }> = [];
+	for (const n of w.npcs) {
+		const start = (n.carry ?? []).find((c) => c.proto === w.currency)?.count ?? 0;
+		if (!start || !Object.values(n.prices ?? {}).some(([b]) => b > 0)) continue;
+		const charId = `npc-${n.npcId}`;
+		if (!(await space.readAll({ type: "Character", fields: { charId } }, { limit: 1 })).length) continue; // in another region
+		held.push({ charId, start, coins: await space.readAll({ type: "Item", fields: { location: charId, proto: w.currency } }) });
+	}
+	const spare = held.flatMap((h) => h.coins.slice(h.start));
+	for (const h of held) {
+		const need = Math.min(h.start - h.coins.length, spare.length);
+		if (need <= 0) continue;
+		const txn = (await space.createTransaction(10_000)).id;
+		try {
+			for (const e of spare.splice(0, need)) {
+				const t = await space.takeIfExists({ type: "Item", id: e.id }, NO_WAIT, { txn });
+				if (t) await space.write({ type: t.type, types: t.types.slice(1), fields: { ...fieldsOf<ItemFields>(t), location: h.charId, x: -1, y: -1 } as never }, txn, FOREVER);
+			}
+			await space.commit(txn);
+		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+	}
+}
+
 export async function marketTick(space: SpaceLike, w?: WorldDef): Promise<void> {
-	if (w) { await restock(space, w); await shipOff(space, w); }
+	if (w) { await shareCoins(space, w); await restock(space, w); await shipOff(space, w); }
 	for (const e of await space.readAll({ type: "Item", fields: { location: "market" } })) {
 		const f = fieldsOf<ItemFields>(e);
 		try { if (f.listing && (await readExisting(space, f.listing.startsWith("w-") ? { type: "Wanted", fields: { wantedId: f.listing } } : { type: "Listing", fields: { listingId: f.listing } }))) continue; } catch (err) { if (err instanceof StillHeld) continue; throw err; }

@@ -257,7 +257,9 @@ So ist es geschehen: TypeScript in `6cfb0cf`, `FROZEN` zeigt darauf, Rust im Com
    `buendel` 6, `seile` 7, `kaiholz` 7, `riffholz` 7, `schaerenholz` 5, `schaerenmuscheln` 4, `rauchbuendel` 9,
    `krabbenholz` 7, `segel` 17, `kuchen` 33, `tuch` 17, `proviant` 17, `kaese` 15.
 4. **N1 / N2:** Die Münzen eines NPCs, der ankauft, wachsen wie sein Warenbestand nach: eine je Welttag, bis zu dem, womit
-   er anfing (`trade.ts` `restock`).
+   er anfing (`trade.ts` `restock`). Seit 2026-11-22 geben Händler einer Region vorher ab, was sie über ihr Startgeld
+   halten, an die, die darunter liegen (`trade.ts` `shareCoins`): Was Spieler bei Gesa oder Wilma ausgeben, kommt so zu
+   Marta, Greta oder Kalle zurück, und die Geldmenge der Region bleibt gleich.
 5. **W4** (Welt Version 56): Ein **Speiseschrank** aus der Werkstatt (5 Bohlen, 1 Leinen, mit Muschelmesser) hält in
    der Truhe die 15 gekochten Gerichte doppelt so lange. Nur Weltdatei: `keeps` ist generisch.
 6. **W5:** Jorin verkauft das Holzbündel für 5 statt 4; damit zahlt auf keiner Insel ein Händler mehr, als ein anderer

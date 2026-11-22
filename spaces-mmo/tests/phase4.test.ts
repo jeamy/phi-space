@@ -286,6 +286,24 @@ test("market: a trader's stock comes back, one a world day, up to what it starte
 	} finally { await srv.close(); }
 });
 
+test("market: a trader's coins over what it starts with go to the traders of its region that are short, and no coin is made meanwhile", async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space, startOf = (id: string) => w.npcs.find((n) => n.npcId === id)!.carry!.find((c) => c.proto === "muenze")!.count;
+		await eventually(async () => (await pack(s, "npc-marta", "muenze")).length === startOf("marta") && (await pack(s, "npc-gesa", "muenze")).length === startOf("gesa"), 20_000, "the traders' coins");
+		// Marta spent all hers buying; players paid Gesa 25 more for seed
+		for (const e of await s.readAll({ type: "Item", fields: { location: "npc-marta", proto: "muenze" } })) await s.take({ id: e.id }, 2_000);
+		await give(s, "npc-gesa", "muenze", 25);
+		const total = async () => (await s.readAll({ type: "Item", fields: { proto: "muenze" } })).filter((e) => String(e.fields.location).startsWith("npc-")).length;
+		const before = await total();
+		await marketTick(s, w);
+		assert.equal((await pack(s, "npc-marta", "muenze")).length, startOf("marta"), "Marta is paid back up to what she starts with");
+		assert.equal((await pack(s, "npc-gesa", "muenze")).length, startOf("gesa") + 25 - startOf("marta"), "Gesa gives what she holds over hers");
+		assert.equal(await total(), before, "the coins moved, none was made");
+		assert.equal((await s.readAll({ type: "Restock", fields: { charId: "npc-marta", proto: "muenze" } })).length, 0, "nobody short: no restock clock");
+	} finally { await srv.close(); }
+});
+
 test("market: a department store keeps a few tree seeds, one of each coming back a world day; Gesa sells birch seeds and willow cuttings", async () => {
 	assert.ok(w.npcs.find((n) => n.npcId === "gesa")!.carry!.some((c) => c.proto === "weidensteckling"), "Gesa carries willow cuttings");
 	const stock = w.shop!.stock!;

@@ -185,7 +185,7 @@ test("a question about the game is answered from the world's facts and help, tol
 	// a question about a price: every trader's two prices and how they vary
 	const truffle = gameFacts(w, "wieviel kostet ein trüffel").join("\n");
 	assert.ok(isQuestion("wieviel kostet ein trüffel") && isQuestion("was zahlt marta für honig") && isQuestion("how much is a truffle"));
-	assert.match(truffle, /Marta (?:at the market of|in) [^:]*Kupferhafen: buys it for 6 coins, sells it for 10 coins/);
+	assert.match(truffle, /Marta (?:at the market of|in) [^:]*Kupferhafen: buys it for 8 coins, sells it for 12 coins/);
 	assert.match(truffle, /up to twice the base price.*down to half.*the less each/s);
 	assert.match(facts, /sammle samen/);
 	assert.ok(isQuestion("wo bekommt man hafer?") && isQuestion("how does a field work") && !isQuestion("put treibholz in feuer") && !isQuestion("geh nach osten"));

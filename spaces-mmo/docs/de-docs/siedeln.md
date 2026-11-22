@@ -858,8 +858,9 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
        Arbeit. Jedes `bestelle` bringt das Saatgut, das man trägt, und einen Arbeitspunkt mit derselben Ruhe
        (`WorkRest`) wie an der Baustelle. Die Wachszeit (zwei bis drei Tage) streckt der Nebel wie im Beet.
      - **Ernteeinsatz:** Reif bleibt die Flur zwei Tage. Jedes `ernte` an ihr ist ein Arbeitspunkt (8 je Flur) und
-       gibt sofort einen Anteil am Ertrag, der beim Bestellen festgelegt wurde. Die Anteile ergeben genau den Ertrag,
-       der letzte Punkt macht die Flur wieder brach. Danach ist sie zwei Tage überreif (jeder Anteil halb), dann ist
+       gibt sofort einen Anteil am Ertrag, der beim Bestellen festgelegt wurde. Die Anteile ergeben genau den Ertrag; ist der Ertrag kleiner
+       als die Arbeit (müder Boden), kommen die Punkte mit etwas zuerst, und ein leerer sagt, dass der Acker nicht mehr gab
+       (seit 2026-11-22). Der letzte Punkt macht die Flur wieder brach. Danach ist sie zwei Tage überreif (jeder Anteil halb), dann ist
        die Frucht verdorben. NPCs und Automaten geben wie an der Baustelle höchstens die Hälfte der Punkte.
      - **Fruchtfolge:** Die Flur zählt, wie oft dieselbe Art (Getreide, Hackfrucht, Rüben, Flachs) hintereinander kam:
        beim zweiten Mal 60 % Ertrag, beim dritten 35 %. Eine andere Art oder drei Tage Brache heilen den Boden.

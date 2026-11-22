@@ -47,8 +47,8 @@ pub fn soil_for(d: &Json, f: &Json, crop: &Json, now: f64) -> (f64, f64) {
 }
 /// `harvestOf`: what the whole harvest gives.
 pub fn harvest_of(crop: &Json, cells: f64, factor: f64) -> Json { Json::Array(j::a(crop, "yields").iter().map(|y| obj! { "proto" => j::at(y, "proto").clone(), "count" => (cells * j::n(y, "perCell") * factor).floor() }).collect()) }
-/// `shareOf`: the share of work point `i` of `need`; the shares add up to `total`.
-pub fn share_of(total: f64, need: f64, i: f64) -> f64 { ((total * (i + 1.0)) / need).floor() - ((total * i) / need).floor() }
+/// `shareOf`: the share of work point `i` of `need`; the shares add up to `total`, the points with something first.
+pub fn share_of(total: f64, need: f64, i: f64) -> f64 { (total / need).floor() + if i < total % need { 1.0 } else { 0.0 } }
 
 /// `fieldNear`: the field within SITE_REACH, taken in the transaction; None when there is none near.
 async fn field_near(c: &Ctx) -> Result<Option<Json>> {
@@ -322,7 +322,13 @@ pub async fn harvest_field(c: &mut Ctx) -> Result<bool> {
 		msg(c, "*", "world", &format!("Die {crop_word} des {} ist eingebracht! Geerntet haben {helpers}.", field_name(&f).replacen("Acker", "Ackers", 1)), MsgOpts::default()).await?;
 	} else {
 		write_field(c, &f).await?;
-		msg(c, "*", "emote", &format!("{} erntet auf dem Acker ({}/{}): {}.", txt(j::at(&c.actor, "name")), txt(j::at(&f, "work")), txt(j::at(&f, "workNeed")), if got.is_empty() { "nichts mehr".to_owned() } else { got.join(", ") }), MsgOpts::default()).await?;
+		// nothing in this point: the yield was smaller than the work (tired soil, overripe), and all of it is in already
+		let said = if got.is_empty() {
+			let all: Vec<String> = j::a(&f, "yields").iter().filter(|y| j::n(y, "count") > 0.0).map(|y| format!("{} {}", txt(j::at(y, "count")), proto_name(c.w(), j::s(y, "proto")))).collect();
+			let all = if all.is_empty() { "nichts".to_owned() } else { all.join(", ") };
+			format!("nichts mehr; {} gab nur {all} für {} Gänge.{}", if j::n(&f, "soil") < 1.0 { "der ausgelaugte Boden" } else { "der Acker" }, txt(j::at(&f, "workNeed")), if late { " Überreif geht die Hälfte verloren." } else { "" })
+		} else { format!("{}.", got.join(", ")) };
+		msg(c, "*", "emote", &format!("{} erntet auf dem Acker ({}/{}): {said}", txt(j::at(&c.actor, "name")), txt(j::at(&f, "work")), txt(j::at(&f, "workNeed"))), MsgOpts::default()).await?;
 	}
 	Ok(true)
 }

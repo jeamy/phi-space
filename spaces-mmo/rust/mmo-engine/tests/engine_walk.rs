@@ -384,6 +384,12 @@ fn trading() {
 	w.write(obj! { "type" => "Restock", "fields" => obj! { "charId" => "npc-jorin", "proto" => "muschelmesser", "nextWorldMs" => 0.0 } });
 	w.tick("market");
 	w.compare("market ticks");
+	// a trader's coins over what it starts with go to one of the region that is short: Kalle spent all his, Jorin got 15
+	while w.take(obj! { "type" => "Item", "fields" => obj! { "location" => "npc-kalle", "proto" => "muenze" } }) {}
+	give(&mut w, "npc-jorin", "muenze", 15);
+	w.tick("market");
+	w.compare("coins shared");
+	assert!(w.entries_with(r#""location":"npc-kalle""#) >= 12, "Kalle got no coins");
 	// lots and notices posted at the same moment, in the order of their ids
 	for id in ["l-t2", "l-t1"] { w.write(obj! { "type" => "Listing", "fields" => obj! { "listingId" => id, "seller" => "c-x", "sellerName" => "X", "itemId" => "i-x", "itemName" => "Perle", "price" => 5.0, "room" => "graue-bucht", "at" => 1.0, "expiresWorldMs" => 9e15 } }); }
 	for id in ["w-t2", "w-t1"] { w.write(obj! { "type" => "Wanted", "fields" => obj! { "wantedId" => id, "buyer" => "c-x", "buyerName" => "X", "proto" => "perle", "protoName" => "Perle", "price" => 5.0, "room" => "graue-bucht", "at" => 1.0, "expiresWorldMs" => 9e15 } }); }
@@ -1457,6 +1463,8 @@ fn farming() {
 	run(&mut w, &a, "flur", 0.0);
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 15, "{said:?}");
 	assert!(w.entries_with("ist eingebracht") >= 1, "nothing was brought in");
+	// an empty point on the tired, overripe field says why: the yield was smaller than the work
+	assert!(w.entries_with("der ausgelaugte Boden gab nur") >= 1, "no empty point said why");
 }
 
 /// Animals (animals.ts): a coop with its refusals (the kind, its house, the epoch, full), feeding by anyone, yields

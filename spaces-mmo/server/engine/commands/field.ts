@@ -54,7 +54,9 @@ export function soilFor(d: FieldDef, f: Pick<FieldFields, "lastGroup" | "tired" 
 /** What the whole harvest gives: per yield the cells times its count per cell times the soil's factor. */
 export const harvestOf = (crop: CropDef, cellCount: number, factor: number) => crop.yields.map((y) => ({ proto: y.proto, count: Math.floor(cellCount * y.perCell * factor) }));
 /** The share of work point `i` (0-based) of `need`: the shares of all points add up to `total` exactly. */
-export const shareOf = (total: number, need: number, i: number) => Math.floor((total * (i + 1)) / need) - Math.floor((total * i) / need);
+/** The share of work point `i` of `need`: the shares add up to `total`, and where the yield is smaller than the work the
+ *  points with something come first, so an empty one means all of it is in. */
+export const shareOf = (total: number, need: number, i: number) => Math.floor(total / need) + (i < total % need ? 1 : 0);
 
 /** The field within SITE_REACH of the actor, taken in the transaction; null when there is none near. */
 async function fieldNear(c: CommandCtx): Promise<FieldFields | null> {
@@ -245,7 +247,10 @@ export async function harvestField(c: CommandCtx): Promise<boolean> {
 		await msg(c, "*", "world", `Die ${crop?.name ?? "Ernte"} des ${fieldName(f).replace("Acker", "Ackers")} ist eingebracht! Geerntet haben ${helpers}.`);
 	} else {
 		await writeField(c, f);
-		await msg(c, "*", "emote", `${c.actor.name} erntet auf dem Acker (${f.work}/${f.workNeed}): ${got.join(", ") || "nichts mehr"}.`);
+		// nothing in this point: the yield was smaller than the work (tired soil, overripe), and all of it is in already
+		const all = f.yields.filter((y) => y.count > 0).map((y) => `${y.count} ${c.world.prototypes.find((p) => p.key === y.proto)?.name ?? y.proto}`).join(", ") || "nichts";
+		const why = `nichts mehr; ${f.soil < 1 ? "der ausgelaugte Boden" : "der Acker"} gab nur ${all} für ${f.workNeed} Gänge.${late ? " Überreif geht die Hälfte verloren." : ""}`;
+		await msg(c, "*", "emote", `${c.actor.name} erntet auf dem Acker (${f.work}/${f.workNeed}): ${got.length ? `${got.join(", ")}.` : why}`);
 	}
 	return true;
 }
