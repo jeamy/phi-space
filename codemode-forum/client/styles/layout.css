@@ -112,3 +112,23 @@ input.wide { width: 100%; }
   .check { padding: 6px 0; }
   .check input { width: 18px; height: 18px; }
 }
+/* plan tasks and their document */
+.task-field { display: block; margin: 6px 0; min-height: 110px; line-height: 1.45; font-family: var(--font-sans); font-size: 13px; }
+.panel details textarea { font-family: var(--font-sans); font-size: 13px; }
+.tasks { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.tasks__tab { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 13px; }
+.tasks__tab.is-active { border-color: var(--accent); color: var(--text-strong); }
+.briefing { white-space: pre-wrap; margin: 0; color: var(--text-strong); }
+.criteria { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
+.doc__section { border-left: 3px solid var(--line); padding: 2px 0 2px 14px; margin: 14px 0; }
+.doc__section.is-changed { border-left-color: var(--accent); }
+.doc h3 { margin: 0 0 6px; font-size: 17px; color: var(--text-strong); }
+.doc h3 .muted { font-size: 12px; font-weight: 400; margin-left: 8px; }
+.doc h4, .doc h5 { margin: 12px 0 4px; color: var(--text-strong); }
+.doc p { margin: 6px 0; }
+.doc ul, .doc ol { margin: 6px 0; padding-left: 22px; }
+.doc table { border-collapse: collapse; margin: 8px 0; font-size: 13px; display: block; overflow-x: auto; }
+.doc th, .doc td { border: 1px solid var(--line-strong); padding: 4px 8px; text-align: left; vertical-align: top; }
+.doc code { font-family: var(--font-mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 4px; border-radius: 4px; }
+.doc pre { background: var(--code-bg); padding: 10px; border-radius: 8px; overflow: auto; }
+.doc pre code { background: none; padding: 0; }

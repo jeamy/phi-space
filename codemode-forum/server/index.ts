@@ -138,7 +138,21 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				const admin = (await hub.modelInfo()).admin;
 				return json(res, 200, req.method === "POST" ? { ...admin, ...(await hub.adminChoice()) } : admin);
 			}
-			const m = /^\/api\/rooms\/([^/]+)(?:\/(run|stop))?$/.exec(p);
+			const pl = /^\/api\/rooms\/([^/]+)\/plan\/([a-z0-9]{1,40})(\.md)?$/.exec(p);
+			if (pl && req.method === "GET") {
+				if (!ID.test(pl[1]!)) return json(res, 400, { error: "Invalid room id" });
+				if (pl[3]) {
+					const md = await hub.planMarkdown(pl[1]!, pl[2]!);
+					if (md === null) return json(res, 404, { error: "No document yet" });
+					res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "cache-control": "no-store" });
+					return res.end(md);
+				}
+				const v = url.searchParams.get("version");
+				if (v !== null && !/^\d{1,6}$/.test(v)) return json(res, 400, { error: "Invalid version" });
+				const got = await hub.plan(pl[1]!, pl[2]!, v === null ? undefined : Number(v));
+				return got ? json(res, 200, got) : json(res, 404, { error: "No document yet" });
+			}
+			const m = /^\/api\/rooms\/([^/]+)(?:\/(task|run|stop))?$/.exec(p);
 			if (m) {
 				const id = m[1]!, action = m[2];
 				if (!ID.test(id)) return json(res, 400, { error: "Invalid room id" });
@@ -146,7 +160,8 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (!action || req.method !== "POST") return json(res, 405, { error: "POST expected" });
 				const b = await readBody(req);
 				// a visitor's run: the default token budget at most, counted against the day's allowance of the address
-				if (action === "run") return json(res, 200, { ok: true, ...(await hub.startRun(id, { models: b.models, perModel: b.perModel, lang: b.lang, budgetTokens: b.budgetTokens, budgetUsd: b.budgetUsd, client: { ip: clientIp(req), admin: await isAdmin(req) } })) });
+				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria })) });
+				if (action === "run") return json(res, 200, { ok: true, ...(await hub.startRun(id, { blockId: b.blockId, models: b.models, perModel: b.perModel, budgetTokens: b.budgetTokens, budgetUsd: b.budgetUsd, client: { ip: clientIp(req), admin: await isAdmin(req) } })) });
 				await hub.stopRun(id);
 				return json(res, 200, { ok: true });
 			}

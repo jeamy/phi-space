@@ -118,6 +118,6 @@ Run typecheck and tests after every change (root: `npm run typecheck`, `npm test
   one retry to preserve crash recovery, still bounded by the persisted per-job model admission budget.
 - Scripted model tests: filter out system messages before checking the last message (see `docs/examples.en.md`, „Testumfang").
 - Documentation is English: code comments, READMEs and all docs. A document is `name.en.md`; its German version, where one exists, sits in `de-docs/` beside it, and links point to the English document. New documents are English only. The German help corpus (`help-site/corpus/de`) is a language version of the help site, not an old document.
-- Commits and pushes carry no `Co-Authored-By: Claude …` line (the user's decision, 2026-11-02).
+- Commits and pushes carry no `Co-Authored-By: Claude …` line (the user's decision, 2026-11-02) and no `Claude-Session: …` line (2026-11-22).
 - Call this project's library and spaces phi-spaces; the local client class is `PhiSpaces`.
   JavaSpaces names the historical reference only.

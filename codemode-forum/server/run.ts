@@ -7,7 +7,8 @@
 //   AgentSlot    one per agent: an agents process takes it under a long transaction and works as that agent until the
 //                run is over (a process that dies lets the transaction lapse, and another takes the slot).
 //   WorkItem     work of the run. So far: `rollcall`, one per model, in which the model says that it is there (the
-//                opening every run has; the kickoff discussion builds on it). The kinds of the plan work follow.
+//                opening every run has); `outline`, in which one model proposes the document's sections; `draft`, one
+//                per section, in which that model writes it. The kinds of the joint work follow with their phases.
 //   RollCall     a model's answer to the roll call.
 //   ForumRunDone how a run ended (its info), for the page after the ForumRun is gone.
 //   ForumLine    a system line of the room (a run started, how it ended).
@@ -21,32 +22,41 @@
 import { randomBytes } from "node:crypto";
 import { NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import type { Usage } from "./llm.ts";
-import { ROLLCALL_CHARS, type CallKind, type LlmCall, type LlmResultEntry } from "./calls.ts";
-import { FATAL_LLM, modelWaitMs } from "./limits.ts";
+import { parseOutline, parseSection, ROLLCALL_CHARS, type CallKind, type LlmCall, type LlmResultEntry } from "./calls.ts";
+import { FATAL_LLM, MIN_MODELS, modelWaitMs } from "./limits.ts";
+import { DocRefused, headOf, writeVersion, type PlanDoc } from "./plandoc.ts";
+import type { PlanTask } from "./plantask.ts";
 import { keepAlive, readExisting, StillHeld, takeAll, takeExisting } from "./space.ts";
 
 export const rid = () => randomBytes(4).toString("hex");
 
 /** What the page shows of a run. `aliases`: the name each model has at the table (M1, M2, …), drawn per run. */
-export type RunInfo = { active: boolean; runId: string; models: string[]; perModel: number; aliases: Record<string, string>; phase: "rollcall";
+export type RunInfo = { active: boolean; runId: string; blockId: string; models: string[]; perModel: number; aliases: Record<string, string>;
+	/** Where the run is: the roll call, the outline, the drafts of the sections, or through with them. */
+	phase: "rollcall" | "outline" | "draft" | "done";
+	/** The model that writes the first draft (the first by its name at the table among those that answered the roll
+	 *  call), and how far its document is: the table, the newest version, its sections and how many are written. */
+	writer?: string; doc?: { table: string; version: number; sections: number; written: number };
 	items: { open: number; done: number }; usage: { tokens: number; costUsd: number };
 	/** Limits of the run's model calls; whichever is reached first ends it. */
 	budget: { tokens?: number; usd?: number }; note?: string;
-	/** Why the run ended, when it was not stopped and did not finish its work: the budget. */
-	ended?: "budget" };
+	/** Why the run ended, when it was not stopped and did not finish its work: the budget, or fewer than three models
+	 *  answered the roll call. */
+	ended?: "budget" | "models" };
 /** What a run was started with. */
-export type RunParams = { runId: string; startedAt: number; models: string[]; perModel: number; aliases: Record<string, string>; lang: "de" | "en"; budget: { tokens?: number; usd?: number };
+export type RunParams = { runId: string; blockId: string; startedAt: number; models: string[]; perModel: number; aliases: Record<string, string>; lang: "de" | "en"; budget: { tokens?: number; usd?: number };
 	/** Who started it: a visitor's usage counts against the day's allowance of their address; an admin's does not. */
 	client?: { ip: string; admin: boolean } };
 export type RunEntry = { session: string; runId: string; params: RunParams; info: RunInfo;
-	/** Work items written and not done yet (a waiting item that goes back stays counted). */
-	pending: number;
+	/** Work items written and not done yet (a waiting item that goes back stays counted), and how many of them the
+	 *  phase still waits for before the next one begins. */
+	pending: number; phaseLeft: number;
 	/** The budget held by model calls in flight, per item (released when the item books its call), and the calls
 	 *  booked so far (their average is what the next call is expected to cost). */
 	reserved?: Record<string, { tokens: number; usd: number }>; booked?: number; ts: number };
-export type WorkKind = "rollcall";
-/** `onlyModel`: only an agent of that model may take it. */
-export type WorkItem = { session: string; runId: string; itemId: string; kind: WorkKind; ts: number; onlyModel?: string; notBefore?: number; tries?: number };
+export type WorkKind = "rollcall" | "outline" | "draft";
+/** `onlyModel`: only an agent of that model may take it. `table`, `sectionId`: the document and section it works on. */
+export type WorkItem = { session: string; runId: string; itemId: string; kind: WorkKind; ts: number; onlyModel?: string; notBefore?: number; tries?: number; table?: string; sectionId?: string };
 export type Slot = { session: string; runId: string; agent: number; model: string };
 /** A model's answer to the roll call. */
 export type RollCall = { session: string; runId: string; model: string; alias: string; agent: number; text: string; usage?: Usage; ts: number };
@@ -57,7 +67,9 @@ export const ITEM_LEASE_MS = Math.max(1000, Number(process.env.FORUM_AGENT_LEASE
 /** Failed tries of an item before it is given up (it then counts as done, with nothing handed in). */
 const MAX_TRIES = 3;
 /** A failure that trying again will not mend. */
-const FINAL = /is not allowed|has no |the run's budget is used up|stopped \d+ times while/i;
+const FINAL = /is not allowed|has no |the run's budget is used up|stopped \d+ times while|is gone$/i;
+/** The table the first draft is written at. */
+const TABLE = "A";
 /** Hard deaths of an agents process during an item's model call after which the item is given up. */
 const MAX_DEATHS = 2;
 /** What an item's model call used, for a failure after it (the call's result goes back with the item's aborted
@@ -140,9 +152,11 @@ async function admit(d: AgentDeps, it: WorkItem): Promise<void> {
 /** The closing line of a run (how it ended, how far it got). */
 async function closingLine(space: SpaceLike, r: RunEntry, how: "finished" | "stopped"): Promise<string> {
 	const present = await space.count({ type: "RollCall", fields: { session: r.session, runId: r.runId } });
-	const why = r.info.ended === "budget" ? " (budget used up)" : "";
+	const why = r.info.ended === "budget" ? " (budget used up)" : r.info.ended === "models" ? ` (fewer than ${MIN_MODELS} models answered)` : "";
 	const cost = `${r.info.usage.tokens} tokens${r.info.usage.costUsd ? `, $${r.info.usage.costUsd.toFixed(4)}` : ""}`;
-	return `Run ${how}${why}: ${present} of ${r.params.models.length} models answered the roll call (${cost})`;
+	const doc = r.info.doc, writer = r.params.aliases[r.info.writer ?? ""];
+	const draft = doc ? `; ${writer} wrote ${doc.written} of ${doc.sections} sections of the first draft (version ${doc.version})` : "";
+	return `Run ${how}${why}: ${present} of ${r.params.models.length} models answered the roll call${draft} (${cost})`;
 }
 
 /** Ends a run in `txn`: its ForumRun goes (taken: only one ender succeeds), its left-over items and slots go, a
@@ -245,6 +259,8 @@ async function workOnce(d: AgentDeps, slot: Slot): Promise<boolean> {
 			}
 			if (d.stopping()) return false;
 			console.error("[agents] item failed", it.kind, (e as Error).message);
+			// the answer of the try came back with the aborted transaction; the next try asks anew, so it goes
+			await takeAll(space, { type: "LlmResult", fields: { session: it.session, itemId: it.itemId } }).catch(() => null);
 			await inTxn(space, d.open, async (txn) => { if (await space.take({ id }, NO_WAIT, { txn })) await failed(d, it, txn, (e as Error).message, paid.get(it)); }).catch(() => {});
 			return true;
 		}
@@ -264,16 +280,17 @@ async function failed(d: AgentDeps, it: WorkItem, txn: string, why: string, usag
 		await space.write(itemEntry({ ...it, tries, notBefore: Date.now() + 2000 * tries }), txn, d.ttl);
 		return;
 	}
-	await updateRun(space, txn, d.ttl, it.session, it.runId, (r) => {
+	await updateRun(space, txn, d.ttl, it.session, it.runId, async (r) => {
 		book(r, usage, it.itemId);
 		if (FATAL_LLM.test(why)) r.info.ended ??= "budget";
-		done(r);
-		if (it.kind === "rollcall") r.info.note = `${r.params.aliases[it.onlyModel ?? ""] ?? "a model"} did not answer the roll call (${why.slice(0, 120)})`;
+		const who = r.params.aliases[it.onlyModel ?? ""] ?? "a model", reason = why.slice(0, 120);
+		r.info.note = it.kind === "rollcall" ? `${who} did not answer the roll call (${reason})` : it.kind === "outline" ? `${who} wrote no outline (${reason}); the run ends without a document` : `${who} did not write a section (${reason}); it keeps what it is to say`;
+		await finish(d, txn, r, it);
 	});
 }
 
 /** A model call of an item; ModelFailed when it does not answer. The call id carries the item's try. */
-async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, n: number, kind: CallKind): Promise<Record<string, unknown>> {
+async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, n: number, kind: CallKind, more: Partial<LlmCall> = {}): Promise<Record<string, unknown>> {
 	await admit(d, it);
 	// an agents process that dies hard during the call leaves its ItemStart behind: an item that took down MAX_DEATHS
 	// processes is given up instead of taking down the next one (a graceful stop cancels the marker)
@@ -282,26 +299,86 @@ async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: Run
 	if (deaths >= MAX_DEATHS) throw new ModelFailed(`the agents process stopped ${deaths} times while working on this item`);
 	const start = await d.space.write({ type: "ItemStart", fields: k }, null, modelWaitMs() + 120_000);
 	let res: LlmResultEntry;
-	try { res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, runId: it.runId, itemId: it.itemId, kind, agent: slot.agent, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now() }); }
+	try { res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, runId: it.runId, itemId: it.itemId, kind, agent: slot.agent, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now(), ...more }); }
 	finally { await d.space.cancel(start.id).catch(() => {}); }
 	if (!res.ok || !res.value) throw new ModelFailed(res.error ?? "the model call failed", res.usage);
 	paid.set(it, res.usage ?? (res.value.usage as Usage | undefined));
 	return res.value;
 }
 
-/** Does an item in `txn`. A run that ended (budget) only drains its items. */
+/** An item is done, in the run's update (`r`): it no longer counts as open, and when it was the last one its phase
+ *  waited for, the next phase begins in this same transaction. `spawn`: items the item itself sets off. */
+async function finish(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spawn: WorkItem[] = []): Promise<void> {
+	done(r);
+	const items = [...spawn];
+	if (--r.phaseLeft <= 0 && !r.info.ended) {
+		if (it.kind === "rollcall") {
+			// whoever answered is at the table; the first of them by its name writes the outline and the first draft
+			const present = (await d.space.readAll({ type: "RollCall", fields: { session: r.session, runId: r.runId } }, { limit: 50, txn })).map((e) => e.fields as unknown as RollCall).sort((a, b) => a.alias.localeCompare(b.alias));
+			if (present.length < MIN_MODELS) r.info.ended = "models";
+			else {
+				const writer = r.info.writer = present[0]!.model, head = await headOf(d.space, { session: r.session, blockId: r.params.blockId, table: TABLE });
+				if (!head) { r.info.phase = "outline"; items.push(newItem(r, "outline", { onlyModel: writer, table: TABLE })); }
+				else {
+					// the block has a document from an earlier run: the sections that still only say what they are to say
+					// (their first revision) are written now
+					const open = head.sections.filter((x) => x.rev === 1);
+					r.info.doc = { table: TABLE, version: head.version, sections: head.sections.length, written: head.sections.length - open.length };
+					r.info.phase = open.length ? "draft" : "done";
+					items.push(...open.map((x) => newItem(r, "draft", { onlyModel: writer, table: TABLE, sectionId: x.sectionId })));
+				}
+			}
+		} else if (it.kind === "draft") r.info.phase = "done";
+		// an outline that failed leaves no document: the run has nothing more to do
+	}
+	if (items.length) {
+		r.phaseLeft = items.length; r.pending += items.length;
+		r.info.items = { ...r.info.items, open: r.pending };
+		for (const x of items) await d.space.write(itemEntry(x), txn, d.ttl);
+	}
+}
+
+/** Does an item in `txn`. A run that ended (budget, too few models) only drains its items. */
 async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Promise<void> {
 	const { space } = d;
 	const run = await readRun(space, it.session, it.runId);
 	if (!run) throw new RunGone();
-	let usage: Usage | undefined;
-	if (!run.info.ended && it.kind === "rollcall") {
-		const v = await ask(d, txn, it, slot, run, 0, "rollcall") as { text: string; model: string; usage?: Usage };
+	const who = { author: `agent-${slot.agent}`, model: slot.model }, doc = { session: it.session, blockId: run.params.blockId, table: it.table ?? TABLE };
+	let usage: Usage | undefined, spawn: WorkItem[] = [], version: PlanDoc | undefined;
+	/** A model's text that cannot be used was paid all the same: the failure carries the usage. */
+	const usable = <T>(fn: () => T): T => { try { return fn(); } catch (e) { throw new ModelFailed((e as Error).message, usage); } };
+	if (run.info.ended) { /* nothing more is asked of the models */ }
+	else if (it.kind === "rollcall") {
+		const v = await ask(d, txn, it, slot, run, 0, "rollcall") as { text: string; usage?: Usage };
 		usage = v.usage;
 		const answer: RollCall = { session: it.session, runId: it.runId, model: slot.model, alias: run.params.aliases[slot.model] ?? "?", agent: slot.agent, text: String(v.text).trim().slice(0, ROLLCALL_CHARS), ...(usage ? { usage } : {}), ts: Date.now() };
 		await space.write({ type: "RollCall", fields: answer as never }, txn, d.ttl);
+	} else if (it.kind === "outline") {
+		const task = (await readExisting(space, { type: "PlanTask", fields: { session: it.session, blockId: run.params.blockId } }))?.fields as unknown as PlanTask | undefined;
+		if (!task) throw new ModelFailed("the task is gone");
+		const v = await ask(d, txn, it, slot, run, 0, "outline", { table: doc.table }) as { text: string; usage?: Usage };
+		usage = v.usage;
+		const sections = usable(() => parseOutline(String(v.text), task.outline));
+		// the first version: every section with what it is to say, until its draft replaces that
+		try { version = await writeVersion(space, txn, d.ttl, doc, who, { changes: sections.map((s) => ({ title: s.title, text: s.intent })) }); }
+		catch (e) { if (e instanceof DocRefused) throw new ModelFailed(e.message, usage); throw e; }
+		spawn = version.sections.map((s) => newItem(run, "draft", { onlyModel: slot.model, table: doc.table, sectionId: s.sectionId }));
+	} else {
+		const ref = (await headOf(space, doc))?.sections.find((s) => s.sectionId === it.sectionId);
+		if (!ref) throw new ModelFailed("the section is gone");
+		const v = await ask(d, txn, it, slot, run, 0, "draft", { table: doc.table, sectionId: ref.sectionId }) as { text: string; usage?: Usage };
+		usage = v.usage;
+		const text = usable(() => parseSection(String(v.text), ref.title));
+		// against the revision the model saw: a section revised meanwhile throws StaleSection, and the item is tried anew
+		try { version = await writeVersion(space, txn, d.ttl, doc, who, { changes: [{ sectionId: ref.sectionId, base: ref.rev, text }] }); }
+		catch (e) { if (e instanceof DocRefused) throw new ModelFailed(e.message, usage); throw e; }
 	}
-	await updateRun(space, txn, d.ttl, it.session, it.runId, (r) => { book(r, usage, it.itemId); done(r); });
+	await updateRun(space, txn, d.ttl, it.session, it.runId, async (r) => {
+		book(r, usage, it.itemId);
+		if (version) r.info.doc = { table: doc.table, version: Math.max(version.version, r.info.doc?.version ?? 0), sections: version.sections.length, written: (r.info.doc?.written ?? 0) + (it.kind === "draft" ? 1 : 0) };
+		if (it.kind === "outline" && version) r.info.phase = "draft";
+		await finish(d, txn, r, it, spawn);
+	});
 }
 
 /** No work left: the run is over, and this agent ends it (only one succeeds: the ForumRun is taken). Whether it is
@@ -328,12 +405,12 @@ export function drawAliases(models: string[], random: () => number = Math.random
 }
 
 /** The work of starting a run in `txn`: the ForumRun (one per room), `perModel` slots per model, and the first items:
- *  the roll call, one per model. */
+ *  the roll call, one per model. What follows it begins when its last item is done (finish). */
 export async function startSpaceRun(space: SpaceLike, txn: string, ttl: number, run: { session: string; params: RunParams }): Promise<RunInfo> {
 	const p = run.params, key = { session: run.session, runId: p.runId };
 	const items = p.models.map((model) => newItem(key, "rollcall", { onlyModel: model }));
-	const info: RunInfo = { active: true, runId: p.runId, models: p.models, perModel: p.perModel, aliases: p.aliases, phase: "rollcall", items: { open: items.length, done: 0 }, usage: { tokens: 0, costUsd: 0 }, budget: p.budget };
-	await space.write({ type: "ForumRun", fields: { ...key, params: p, info, pending: items.length, ts: Date.now() } as never }, txn, ttl, { unique: ["session"] });
+	const info: RunInfo = { active: true, runId: p.runId, blockId: p.blockId, models: p.models, perModel: p.perModel, aliases: p.aliases, phase: "rollcall", items: { open: items.length, done: 0 }, usage: { tokens: 0, costUsd: 0 }, budget: p.budget };
+	await space.write({ type: "ForumRun", fields: { ...key, params: p, info, pending: items.length, phaseLeft: items.length, ts: Date.now() } as never }, txn, ttl, { unique: ["session"] });
 	let agent = 0;
 	for (const model of p.models) for (let i = 0; i < p.perModel; i++) await space.write({ type: "AgentSlot", fields: { ...key, agent: agent++, model } }, txn, ttl);
 	for (const x of items) await space.write(itemEntry(x), txn, ttl);

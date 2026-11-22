@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phase 1 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 2 to 12 open. Second version,
+Status: phases 1 and 2 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 3 to 12 open. Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -320,7 +320,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 |---|---|---|
 | 0 | Baseline in codemode-chat as it is: both example briefs as text tasks with three models, by hand; record where it breaks, calls and cost. | none (live, costs tokens: ask first) |
 | 1 ✓ | The directory `codemode-forum/` with the copied base: space, web, agents and model processes, launcher, admin, quotas, the run mechanics with the roll call as a run's opening, the refusal of runs with fewer than three models, a page for it; the registrations of section 3. | the stack starts and restarts; the repository's checks pass; a fake model call is booked |
-| 2 | Plan task, the entries of section 4, sectioned document, snapshot and a read-only document view. One table, one model, no sources. | versions share unchanged sections; a second writer of a section is refused; sizes at their limits |
+| 2 ✓ | Plan task, the document entries of section 4 (`PlanTask`, `PlanDoc`, `PlanSection`), sectioned document, snapshot and a read-only document view with its versions. One table; one model writes: after the roll call the first model at the table writes the outline and the first draft of every section. No sources. | versions share unchanged sections; a second writer of a section is refused; sizes at their limits |
 | 3 | Uploaded documents as a pack; the sources process with local repositories; reading in steps. | path escape, symbolic link, deny list, limits; a killed sources process; a killed agent goes on from its `ReadStep`s |
 | 4 | Discussion: messages, threads, reply items, decisions, the person's messages, limits; kickoff. | an unanswered question blocks a ballot until its deadline; a decision reaches the next context; the message limit |
 | 5 | The checker and the criteria. | each check with a plan that fails exactly it |

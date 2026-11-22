@@ -1,16 +1,21 @@
 // The rooms of the forum as the web process serves them. It holds no data of its own: a room's run, its answers and
 // its lines live in the shared space, and the agents and model processes do the work. The hub reads a room into a
-// snapshot, pushes a fresh one to the room's WebSocket clients when the space changes, and starts and stops runs.
+// snapshot, pushes a fresh one to the room's WebSocket clients when the space changes, creates plan tasks (each a block
+// of the room, with its document), and starts and stops runs.
 // The pattern (change stream, debounced pushes, the room lock, the admin's choices) is taken over from
 // codemode-chat/server/hub.ts.
 import { FOREVER, NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import type { WsConnection } from "phi-spaces/ws";
 import { ipTokensPerDay, MAX_AGENTS_PER_MODEL, MAX_MODELS, MIN_MODELS, runBudgetTokens, today } from "./limits.ts";
 import { modelInfoOf, spentToday, type ModelInfoView, type Spend } from "./models.ts";
+import { fullDoc, headOf, renderMarkdown, versionsOf, type FullDoc, type PlanDoc } from "./plandoc.ts";
+import { planTask, type PlanTask } from "./plantask.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
 
-const LIMITS = { sessions: 50, lines: 200 };
+const LIMITS = { sessions: 50, lines: 200, blocks: 30 };
+/** The table whose document a block shows (the two tables of the plan follow with their phases). */
+const TABLE = "A";
 /** How long the slots of a new run may wait for an agents process before the page says so. */
 const SLOT_GRACE_MS = 15_000;
 /** The room lock's transaction lease (renewed while the operation runs), and how long an operation waits for it. */
@@ -23,8 +28,12 @@ type Session = { id: string; clients: Set<WsConnection>; buckets: Map<string, nu
 	tail: Promise<unknown> };
 
 export type Line = { text: string; ts: number };
-/** What the page shows of a room. */
-export type Snapshot = { session: string; run: RunInfo | null; rollcall: Array<Omit<RollCall, "session">>; lines: Line[]; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
+/** A plan task of the room with the state of its document: the newest version's sections, without their texts. */
+export type Block = Omit<PlanTask, "session"> & { doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"] } | null };
+/** A version of a block's document with its texts, and the versions there are. */
+export type PlanView = { blockId: string; doc: Omit<FullDoc, "session" | "slot">; versions: Array<Pick<PlanDoc, "version" | "author" | "model" | "changed" | "ts">> };
+/** What the page shows of a room. `blocks`: oldest first; a run works on the block it names. */
+export type Snapshot = { session: string; blocks: Block[]; run: RunInfo | null; rollcall: Array<Omit<RollCall, "session">>; lines: Line[]; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
 
 export class ForumHub {
 	/** The shared space of all processes (a RemoteSpace on the space host's socket). */
@@ -193,7 +202,50 @@ export class ForumHub {
 		const run = await this.#runShown(s);
 		const rollcall = run ? (await this.host.readAll({ type: "RollCall", fields: { session: s.id, runId: run.runId } }, { limit: 50 })).map((e) => { const { session: _s, ...rest } = e.fields as unknown as RollCall; return rest; }).sort((a, b) => a.alias.localeCompare(b.alias)) : [];
 		const lines = (await this.host.readAll({ type: "ForumLine", fields: { session: s.id } }, { limit: LIMITS.lines + 50 })).map((e) => e.fields as unknown as Line & { session: string }).sort((a, b) => a.ts - b.ts).slice(-LIMITS.lines).map(({ text, ts }) => ({ text, ts }));
-		return { session: s.id, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
+		const tasks = (await this.#tasks(s.id));
+		const blocks = await Promise.all(tasks.map(async ({ session: _s, ...t }): Promise<Block> => {
+			const versions = await versionsOf(this.host, { session: s.id, blockId: t.blockId, table: TABLE }), head = versions.at(-1);
+			return { ...t, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections } : null };
+		}));
+		return { session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
+	}
+
+	/** The room's plan tasks, oldest first. */
+	async #tasks(session: string): Promise<PlanTask[]> {
+		return (await this.host.readAll({ type: "PlanTask", fields: { session } }, { limit: LIMITS.blocks + 10 })).map((e) => e.fields as unknown as PlanTask).sort((a, b) => a.ts - b.ts);
+	}
+
+	/** A new plan task: a block of the room. Its document begins with the first run on it. */
+	async createTask(id: string, o: { brief?: unknown; lang?: unknown; outline?: unknown; criteria?: unknown }): Promise<{ blockId: string }> {
+		const s = await this.session(id);
+		if (!this.#allow(s, "task", 6)) throw new Error("Too many tasks, slow down");
+		const task = planTask(o), blockId = `b${Date.now().toString(36)}${rid()}`;
+		await this.#trimLines(s);
+		await this.#exclusive(s, async () => {
+			if ((await this.#tasks(s.id)).length >= LIMITS.blocks) throw new Error(`A room holds at most ${LIMITS.blocks} plan tasks`);
+			const entry: PlanTask = { session: s.id, blockId, ...task, ts: Date.now() };
+			await this.host.write({ type: "PlanTask", fields: entry as never }, null, this.#ttl);
+			await systemLine(this.host, null, this.#ttl, s.id, `Plan task created: ${task.brief.replace(/\s+/g, " ").slice(0, 100)}${task.brief.length > 100 ? "…" : ""}`);
+		});
+		this.push(s);
+		return { blockId };
+	}
+
+	/** A version of a block's document with its texts (the newest unless `version` names one); null: no such block or
+	 *  version. A block without a document yet has none. */
+	async plan(id: string, blockId: string, version?: number): Promise<PlanView | null> {
+		const d = { session: id, blockId, table: TABLE };
+		const versions = await versionsOf(this.host, d), doc = version === undefined ? versions.at(-1) : versions.find((v) => v.version === version);
+		if (!doc) return null;
+		const { session: _s, slot: _k, ...full } = await fullDoc(this.host, doc);
+		return { blockId, doc: full, versions: versions.map(({ version, author, model, changed, ts }) => ({ version, author, model, changed, ts })) };
+	}
+
+	/** The newest version of a block's document as Markdown, under the first line of its brief. */
+	async planMarkdown(id: string, blockId: string): Promise<string | null> {
+		const task = (await this.#tasks(id)).find((t) => t.blockId === blockId), head = await headOf(this.host, { session: id, blockId, table: TABLE });
+		if (!task || !head) return null;
+		return renderMarkdown(await fullDoc(this.host, head), task.brief.split("\n")[0]!.slice(0, 120));
 	}
 
 	/** Push a fresh snapshot to every client of the room (debounced, so a burst of writes sends one frame). One snapshot
@@ -248,13 +300,14 @@ export class ForumHub {
 		};
 	}
 
-	/** Starts a run in the room: at least three models, the same number of agents for each, a budget. Until the plan
-	 *  work exists, a run is its opening alone: the roll call, in which every model says that it is there.
+	/** Starts a run on a plan task of the room (`blockId`; else the newest): at least three models, the same number of
+	 *  agents for each, a budget. A run so far: the roll call, in which every model says that it is there, then the
+	 *  outline and the first draft of every section by one of them. The joint work follows with its phases.
+	 *  The models write in the task's language.
 	 *  `client` is set by the server, never from the request body: a visitor's run gets the default budget at most and
 	 *  counts against the day's allowance of the address. Without it (tests, scripts in-process) it counts as admin. */
-	async startRun(id: string, o: { models?: unknown; perModel?: unknown; lang?: unknown; budgetTokens?: unknown; budgetUsd?: unknown; client?: { ip: string; admin: boolean } }): Promise<{ runId: string }> {
+	async startRun(id: string, o: { blockId?: unknown; models?: unknown; perModel?: unknown; budgetTokens?: unknown; budgetUsd?: unknown; client?: { ip: string; admin: boolean } }): Promise<{ runId: string }> {
 		const s = await this.session(id);
-		if (!this.#allow(s, "run", 6)) throw new Error("Too many runs, slow down");
 		const models = [...new Set(Array.isArray(o.models) ? o.models.map(String) : [])];
 		if (models.length < MIN_MODELS) throw new Error(`A run needs at least ${MIN_MODELS} different models`);
 		if (models.length > MAX_MODELS) throw new Error(`A run takes at most ${MAX_MODELS} models`);
@@ -271,7 +324,11 @@ export class ForumHub {
 		const budget = { ...(budgetTokens ? { tokens: budgetTokens } : {}), ...(positive(o.budgetUsd) ? { usd: positive(o.budgetUsd)! } : {}) };
 		if (!Object.keys(budget).length) throw new Error("A run needs a budget in tokens or dollars");
 		if (visitor && ipTokensPerDay() && (await spentToday(this.host, visitor.ip)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (FORUM_TOKENS_PER_IP_DAY); try again tomorrow");
-		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: o.lang === "de" ? "de" : "en", budget, ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
+		const tasks = await this.#tasks(s.id), task = o.blockId ? tasks.find((t) => t.blockId === String(o.blockId)) : tasks.at(-1);
+		if (!task) throw new Error(o.blockId ? "Unknown plan task" : "No plan task yet: create one first");
+		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, blockId: task.blockId, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: task.lang, budget, ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
+		// a request that was refused above started nothing and does not count
+		if (!this.#allow(s, "run", 6)) throw new Error("Too many runs, slow down");
 		await this.#trimLines(s);
 		// checked and written under the room's lock and in one transaction: the ForumRun is unique per room, so of two
 		// requests only one starts a run; the agent processes carry it out (model calls by the model process)
@@ -281,7 +338,7 @@ export class ForumHub {
 			const t = await this.host.createTransaction(30_000);
 			try {
 				await startSpaceRun(this.host, t.id, this.#ttl, { session: s.id, params });
-				await systemLine(this.host, t.id, this.#ttl, s.id, `Run started with a roll call: ${models.length} models, ${perModel} agent${perModel === 1 ? "" : "s"} each, budget ${limits}`);
+				await systemLine(this.host, t.id, this.#ttl, s.id, `Run started: ${models.length} models, ${perModel} agent${perModel === 1 ? "" : "s"} each, budget ${limits}`);
 				await this.host.commit(t.id);
 			} catch (e) {
 				await this.host.abort(t.id).catch(() => {});

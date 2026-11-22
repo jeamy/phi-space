@@ -20,19 +20,38 @@ const gate = async (space: SpaceLike, session: string) => {
 	while (!(await space.readIfExists({ type: "FakeGate", fields: { session } }, 500))) signal?.throwIfAborted();
 };
 
+const here = (c: TextCall) => ({ text: `${c.model} is here.`, model: c.model, usage: use(100, 0.01) });
+/** The outline the fakes propose, and a section's body: it names the section and who wrote it. */
+export const OUTLINE = ["Goal", "Steps", "Risks"];
+const outline = (c: TextCall) => ({ text: OUTLINE.map((h) => `## ${h}\nWhat ${h.toLowerCase()} must say.`).join("\n\n"), model: c.model, usage: use(400, 0.04) });
+const sectionOf = (c: TextCall) => /Write the section "([^"]+)"/.exec(c.user)?.[1] ?? "?";
+const draft = (c: TextCall) => ({ text: `The ${sectionOf(c).toLowerCase()} of the plan, written by ${c.model}.`, model: c.model, usage: use(1000, 0.1) });
+const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "outline" ? outline(c) : draft(c));
+
 const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) => Team> = {
-	// every model answers the roll call: 100 tokens and a cent each
-	roll: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind, prompt: c.user }); return { text: `${c.model} is here.`, model: c.model, usage: use(100, 0.01) }; } }),
+	// every model answers the roll call (100 tokens and a cent each); the writer's outline has three sections (400
+	// tokens), and each of its drafts costs 1000
+	roll: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind, prompt: c.user, ...(call.sectionId ? { sectionId: call.sectionId } : {}) }); return answer(c, call); } }),
 	// the models answer only once the test opens the gate (a run that is stopped, or whose processes restart, meanwhile)
-	hold: (s, space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); await gate(space, s); return { text: `${c.model} is here.`, model: c.model, usage: use(100, 0.01) }; } }),
+	hold: (s, space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); await gate(space, s); return answer(c, call); } }),
+	// the drafts are held at the gate; roll call and outline go through
+	slow: (s, space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); if (call.kind === "draft") await gate(space, s); return answer(c, call); } }),
 	// one model never answers properly: its call fails every time, and each failure was paid
 	mute: (_s, _space, log) => ({ text: async (c, call) => {
 		await log({ model: c.model, kind: call.kind });
 		if (c.model === "fake/beta") throw Object.assign(new Error("empty answer"), { usage: use(50, 0.005) });
-		return { text: `${c.model} is here.`, model: c.model, usage: use(100, 0.01) };
+		return answer(c, call);
 	} }),
 	// dear answers: 3000 tokens each
-	dear: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); return { text: `${c.model} is here.`, model: c.model, usage: use(3000, 0.3) }; } }),
+	dear: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); return { ...answer(c, call), usage: use(3000, 0.3) }; } }),
+	// an outline nobody can use the first time (no headings), then a proper one; and one section far too long
+	odd: (s, space, log) => ({ text: async (c, call) => {
+		const n = await space.count({ type: "FakeCall", fields: { session: s, kind: call.kind } });
+		await log({ model: c.model, kind: call.kind });
+		if (call.kind === "outline" && n === 0) return { text: "I would start with the goal and go on from there.", model: c.model, usage: use(300, 0.03) };
+		if (call.kind === "draft" && sectionOf(c) === "Risks") return { text: Array.from({ length: 400 }, (_, i) => `Risk ${i}: ${"x".repeat(90)}`).join("\n\n"), model: c.model, usage: use(1000, 0.1) };
+		return answer(c, call);
+	} }),
 };
 
 export function llmFor(session: string, o: { space: SpaceLike; log: Log }): Partial<Team> {
