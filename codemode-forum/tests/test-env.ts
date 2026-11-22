@@ -13,3 +13,6 @@ process.env.FORUM_ADMIN_PASSWORD = "";
 process.env.FORUM_TTL_HOURS = "";
 process.env.FORUM_REQ_PER_MIN = "100000"; // the tests poll snapshots in tight loops
 process.env.FORUM_MODEL_WAIT_S = "";
+process.env.FORUM_REPOS = "";
+process.env.FORUM_SOURCE_LEASE_MS = "";
+process.env.FORUM_SOURCE_WAIT_S = "";

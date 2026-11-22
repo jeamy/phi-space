@@ -44,6 +44,30 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	} }),
 	// dear answers: 3000 tokens each
 	dear: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); return { ...answer(c, call), usage: use(3000, 0.3) }; } }),
+	// a task with sources: the writer reads before it writes. The outline's first answer asks for three reading calls,
+	// each section's for one (200 tokens an asking answer); with what was read in the prompt it hands in
+	read: (_s, _space, log) => ({ text: async (c, call) => {
+		const read = c.user.includes("What you read so far");
+		await log({ model: c.model, kind: call.kind, callId: call.callId, read, prompt: c.user });
+		if (call.kind === "outline" && !read) return { text: "READ\nlist repo:/\nread repo:README.md\nsearch repo:resolution in *.ts", model: c.model, usage: use(200, 0.02) };
+		if (call.kind === "draft" && !read) return { text: "```\nREAD\nread docs:requirements.md 2 1\n```", model: c.model, usage: use(200, 0.02) };
+		return answer(c, call);
+	} }),
+	// the same, and an answer that follows a reading is held at the gate
+	readhold: (s, space, log) => ({ text: async (c, call) => {
+		const read = c.user.includes("What you read so far");
+		await log({ model: c.model, kind: call.kind, callId: call.callId, read });
+		if (call.kind !== "rollcall" && !read) return { text: "READ\nread README.md", model: c.model, usage: use(200, 0.02) };
+		if (read) await gate(space, s);
+		return answer(c, call);
+	} }),
+	// a writer that reads as long as it may: the outline is handed in only when the prompt says it must be
+	greedy: (_s, _space, log) => ({ text: async (c, call) => {
+		const must = c.user.includes("You cannot read any more");
+		await log({ model: c.model, kind: call.kind, must });
+		if (call.kind === "outline" && !must) return { text: "READ\nlist /\nread README.md 1 1\nread README.md 2 1\nread nothing.md\nread too-many.md", model: c.model, usage: use(200, 0.02) };
+		return answer(c, call);
+	} }),
 	// an outline nobody can use the first time (no headings), then a proper one; and one section far too long
 	odd: (s, space, log) => ({ text: async (c, call) => {
 		const n = await space.count({ type: "FakeCall", fields: { session: s, kind: call.kind } });

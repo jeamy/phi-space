@@ -12,7 +12,8 @@ import { useTheme } from "./lib/theme.ts";
 type RunInfo = { active: boolean; runId: string; blockId: string; models: string[]; perModel: number; aliases: Record<string, string>; phase: "rollcall" | "outline" | "draft" | "done"; writer?: string; doc?: { table: string; version: number; sections: number; written: number }; items: { open: number; done: number }; usage: { tokens: number; costUsd: number }; budget: { tokens?: number; usd?: number }; note?: string; ended?: "budget" | "models" };
 type Answer = { runId: string; model: string; alias: string; agent: number; text: string; ts: number };
 type SectionRef = { sectionId: string; rev: number; title: string; bytes: number; author: string; model: string };
-type Block = { blockId: string; brief: string; lang: "de" | "en"; outline: string[]; criteria: string[]; ts: number; doc: { table: string; version: number; versions: number; bytes: number; sections: SectionRef[] } | null };
+type Source = { sourceId: string; kind: "docs" | "repo"; name: string; commit?: string; ref?: string; files: number; bytes: number };
+type Block = { blockId: string; brief: string; lang: "de" | "en"; outline: string[]; criteria: string[]; ts: number; sources: Source[]; doc: { table: string; version: number; versions: number; bytes: number; sections: SectionRef[] } | null };
 type Snapshot = { session: string; blocks: Block[]; run: RunInfo | null; rollcall: Answer[]; lines: Array<{ text: string; ts: number }>; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
 type PlanView = { blockId: string; doc: { version: number; bytes: number; author: string; model: string; changed: string[]; ts: number; sections: Array<SectionRef & { text: string }> }; versions: Array<{ version: number; author: string; model: string; changed: string[]; ts: number }> };
 type Models = { enabled: boolean; on: boolean; models: Array<{ id: string; label: string }> };
@@ -22,6 +23,8 @@ const T = {
 	de: {
 		room: "Raum", live: "live", offline: "getrennt", off: "Modelle aus", models: "Modelle",
 		task: "Planaufgabe", brief: "Auftrag: wofür ist der Plan, was muss er leisten?", docLang: "Sprache des Dokuments", outline: "Gliederung vorgeben (optional, eine Überschrift je Zeile)", criteria: "Eigene Kriterien (optional, eines je Zeile)", create: "Aufgabe anlegen",
+		sources: "Quellen (optional, nur lesend)", docs: "Dokumente (.md, .txt, .csv, .json, .yaml; bis 10, zusammen 800 kB)", repo: "Repository", noRepo: "kein Repository", ref: "Branch, Tag oder Commit (leer: HEAD)", sourceNote: "Die Modelle lesen in diesen Quellen. Auszüge daraus gehen an die Anbieter der gewählten Modelle.", drop: "entfernen",
+		srcDocs: (n: number) => `${n} Dokument${n === 1 ? "" : "e"}`, srcRepo: (name: string, commit: string, n: number) => `Repository ${name} bei ${commit} (${n} Dateien)`,
 		run: "Lauf", on: "Aufgabe", pick: (min: number, max: number) => `Modelle am Tisch (${min} bis ${max})`, perModel: "Agenten je Modell", tokens: "Budget Tokens", usd: "Budget $",
 		start: "Lauf starten", stop: "Stopp", none: "Keine Modelle verfügbar. Ein Admin schaltet sie frei (FORUM_LLM=1 und Zugangsdaten beim Modell-Prozess).",
 		need: (n: number) => `Ein Lauf braucht mindestens ${n} verschiedene Modelle.`, noTask: "Lege zuerst eine Planaufgabe an.",
@@ -34,6 +37,8 @@ const T = {
 	en: {
 		room: "room", live: "live", offline: "offline", off: "models off", models: "models",
 		task: "Plan task", brief: "Brief: what is the plan for, what must it achieve?", docLang: "Language of the document", outline: "Fix the outline (optional, one heading a line)", criteria: "Criteria of your own (optional, one a line)", create: "Create task",
+		sources: "Sources (optional, read-only)", docs: "Documents (.md, .txt, .csv, .json, .yaml; up to 10, 800 kB together)", repo: "Repository", noRepo: "no repository", ref: "Branch, tag or commit (empty: HEAD)", sourceNote: "The models read in these sources. Excerpts of them go to the providers of the chosen models.", drop: "remove",
+		srcDocs: (n: number) => `${n} document${n === 1 ? "" : "s"}`, srcRepo: (name: string, commit: string, n: number) => `repository ${name} at ${commit} (${n} files)`,
 		run: "Run", on: "Task", pick: (min: number, max: number) => `Models at the table (${min} to ${max})`, perModel: "Agents per model", tokens: "Budget tokens", usd: "Budget $",
 		start: "Start run", stop: "Stop", none: "No models available. An admin allows them (FORUM_LLM=1 and credentials at the model process).",
 		need: (n: number) => `A run needs at least ${n} different models.`, noTask: "Create a plan task first.",
@@ -71,6 +76,10 @@ export function CodemodeForum() {
 	const [docLang, setDocLang] = useState<"de" | "en" | "">("");
 	const [outline, setOutline] = useState("");
 	const [criteria, setCriteria] = useState("");
+	const [docs, setDocs] = useState<Array<{ name: string; text: string }>>([]);
+	const [repos, setRepos] = useState<string[]>([]);
+	const [repo, setRepo] = useState("");
+	const [ref, setRef] = useState("");
 	const [focus, setFocus] = useState<string | null>(null); // the block shown; null: the newest
 	const [version, setVersion] = useState<number | null>(null); // the version shown; null: the newest
 	const [view, setView] = useState<PlanView | null>(null);
@@ -109,6 +118,16 @@ export function CodemodeForum() {
 		return () => { dead = true; clearInterval(timer); };
 	}, []);
 
+	// the repositories a task may read in: only an admin is told them
+	useEffect(() => {
+		if (!admin) { setRepos([]); setRepo(""); return; }
+		api<{ repos: string[] }>("/sources").then((x) => setRepos(x.repos)).catch(() => {});
+	}, [admin]);
+	const addDocs = async (files: FileList | null) => {
+		const read = await Promise.all([...(files ?? [])].map(async (f) => ({ name: f.name, text: await f.text() })));
+		setDocs((cur) => [...cur.filter((d) => !read.some((r) => r.name === d.name)), ...read]);
+	};
+
 	const blocks = snap?.blocks ?? [];
 	const block = blocks.find((b) => b.blockId === focus) ?? blocks.at(-1) ?? null;
 	const headVersion = block?.doc?.version ?? 0;
@@ -126,8 +145,8 @@ export function CodemodeForum() {
 	const run = snap?.run ?? null;
 	const act = async (fn: () => Promise<unknown>) => { setMsg(""); try { await fn(); } catch (e) { setMsg((e as Error).message); } };
 	const create = () => act(async () => {
-		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang || lang, outline, criteria });
-		setBrief(""); setOutline(""); setCriteria(""); setFocus(r.blockId); setVersion(null);
+		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang || lang, outline, criteria, ...(docs.length ? { docs } : {}), ...(repo ? { repo: { name: repo, ref } } : {}) });
+		setBrief(""); setOutline(""); setCriteria(""); setDocs([]); setRepo(""); setRef(""); setFocus(r.blockId); setVersion(null);
 	});
 	const start = () => act(() => api(`/rooms/${rid}/run`, { blockId: block?.blockId, models: picked, perModel, budgetTokens: budgetTokens || undefined, budgetUsd: budgetUsd || undefined }));
 	const toggle = (label: string, add: boolean) => setChosen((cur) => { const n = new Set(cur); if (add) n.add(label); else n.delete(label); return n; });
@@ -163,6 +182,20 @@ export function CodemodeForum() {
 						<details>
 							<summary>{t.criteria}</summary>
 							<textarea rows={3} aria-label={t.criteria} value={criteria} onChange={(e) => setCriteria(e.target.value)} />
+						</details>
+						<details open={docs.length > 0 || !!repo}>
+							<summary>{t.sources}</summary>
+							<label className="fieldlabel" htmlFor="docs">{t.docs}</label>
+							<input id="docs" type="file" multiple accept=".md,.markdown,.txt,.csv,.json,.yaml,.yml" onChange={(e) => { void addDocs(e.target.files); e.target.value = ""; }} />
+							{docs.map((d) => <div key={d.name} className="row"><span>{d.name}</span><span className="muted">{(new Blob([d.text]).size / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB</span><button type="button" className="btn" onClick={() => setDocs((cur) => cur.filter((x) => x.name !== d.name))}>{t.drop}</button></div>)}
+							{admin && repos.length ? (
+								<div className="row">
+									<label htmlFor="repo">{t.repo}</label>
+									<select id="repo" value={repo} onChange={(e) => setRepo(e.target.value)}><option value="">{t.noRepo}</option>{repos.map((r) => <option key={r} value={r}>{r}</option>)}</select>
+									{repo ? <input aria-label={t.ref} placeholder={t.ref} value={ref} onChange={(e) => setRef(e.target.value)} /> : null}
+								</div>
+							) : null}
+							{docs.length || repo ? <div className="notice">{t.sourceNote}</div> : null}
 						</details>
 						<div className="row"><button type="button" className="btn btn--primary" disabled={brief.trim().length < 20} onClick={() => void create()}>{t.create}</button></div>
 					</div>
@@ -215,6 +248,7 @@ export function CodemodeForum() {
 								<h2>{t.task}</h2>
 								<p className="briefing">{block.brief}</p>
 								{block.criteria.length ? <ul className="criteria">{block.criteria.map((c) => <li key={c}>{c}</li>)}</ul> : null}
+								{block.sources.length ? <div className="runline sources">{block.sources.map((x) => <span key={x.sourceId} className="pill">{x.kind === "repo" ? t.srcRepo(x.name, (x.commit ?? "").slice(0, 12), x.files) : t.srcDocs(x.files)}</span>)}</div> : null}
 							</div>
 							{runHere ? (
 								<div className="panel">

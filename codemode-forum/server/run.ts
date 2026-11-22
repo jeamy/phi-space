@@ -9,6 +9,8 @@
 //   WorkItem     work of the run. So far: `rollcall`, one per model, in which the model says that it is there (the
 //                opening every run has); `outline`, in which one model proposes the document's sections; `draft`, one
 //                per section, in which that model writes it. The kinds of the joint work follow with their phases.
+//   ReadStep     a step of an item's reading in the task's sources: the calls its model asked for and what they
+//                returned (calls.ts). Kept per item, so an agent that takes the item over does not read again.
 //   RollCall     a model's answer to the roll call.
 //   ForumRunDone how a run ended (its info), for the page after the ForumRun is gone.
 //   ForumLine    a system line of the room (a run started, how it ended).
@@ -22,7 +24,8 @@
 import { randomBytes } from "node:crypto";
 import { NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import type { Usage } from "./llm.ts";
-import { parseOutline, parseSection, ROLLCALL_CHARS, type CallKind, type LlmCall, type LlmResultEntry } from "./calls.ts";
+import { mayRead, parseOutline, parseReads, parseSection, READING, readSteps, ROLLCALL_CHARS, sourcesOf, type CallKind, type LlmCall, type LlmResultEntry, type ReadStep } from "./calls.ts";
+import { askSources } from "./source-host.ts";
 import { FATAL_LLM, MIN_MODELS, modelWaitMs } from "./limits.ts";
 import { DocRefused, headOf, writeVersion, type PlanDoc } from "./plandoc.ts";
 import type { PlanTask } from "./plantask.ts";
@@ -114,11 +117,11 @@ async function updateRun(space: SpaceLike, txn: string, ttl: number, session: st
 
 /** Whether a run's model calls have used up its budget (tokens or dollars, whichever comes first). */
 const overBudget = (r: RunEntry) => { const b = r.info.budget, u = r.info.usage; return (b.tokens !== undefined && u.tokens >= b.tokens) || (b.usd !== undefined && u.costUsd >= b.usd); };
-/** Books a call's usage on the run and releases the budget the item held for it; over the budget the run ends once
- *  its open items are done. */
-const book = (r: RunEntry, usage: Usage | undefined, itemId: string) => {
+/** Books a call's usage on the run and releases the budget the item held for it (`keep`: the item goes on with
+ *  another call and holds it still); over the budget the run ends once its open items are done. */
+const book = (r: RunEntry, usage: Usage | undefined, itemId: string, keep = false) => {
 	if (usage) { r.info.usage = { tokens: r.info.usage.tokens + usage.total, costUsd: r.info.usage.costUsd + usage.costUsd }; r.booked = (r.booked ?? 0) + 1; }
-	if (r.reserved?.[itemId]) { const { [itemId]: _held, ...rest } = r.reserved; r.reserved = rest; }
+	if (!keep && r.reserved?.[itemId]) { const { [itemId]: _held, ...rest } = r.reserved; r.reserved = rest; }
 	if (overBudget(r)) r.info.ended ??= "budget";
 };
 /** An item is done (in the run's update): it no longer counts as open. */
@@ -306,6 +309,38 @@ async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: Run
 	return res.value;
 }
 
+/** The work of an item that may read in the task's sources first (calls.ts): model calls in steps, each either a
+ *  request for reading calls, which the sources process answers and a ReadStep keeps, or the work itself, which is
+ *  returned. A step is kept and its call booked in one commit, so after a crash the next agent goes on behind the
+ *  last kept step: nothing is read or booked twice. Without sources it is one call. */
+async function work(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, kind: CallKind, more: Partial<LlmCall>): Promise<{ text: string; usage?: Usage }> {
+	const { space } = d, sources = await sourcesOf(space, it.session, run.params.blockId);
+	for (;;) {
+		const steps = sources.length ? await readSteps(space, it.session, it.itemId) : [];
+		// the steps before were booked as they were kept: the budget may be gone by now
+		if (steps.length) { const now = await readRun(space, it.session, it.runId); if (!now) throw new RunGone(); if (now.info.ended || overBudget(now)) throw new ModelFailed("the run's budget is used up"); }
+		const v = await ask(d, txn, it, slot, run, steps.length, kind, more) as { text: string; usage?: Usage };
+		const reads = sources.length ? parseReads(String(v.text), sources.map((x) => x.sourceId)) : null;
+		if (!reads) return v;
+		if (!mayRead(steps)) throw new ModelFailed("the model asked to read when it had to hand in its work", v.usage);
+		const texts: string[] = [];
+		for (const r of reads) {
+			let text: string;
+			try { text = (await askSources(space, { requestId: `${it.itemId}-s${steps.length}-${texts.length}-${rid()}`, session: it.session, blockId: run.params.blockId, op: "call", sourceId: r.sourceId as "docs" | "repo", call: r.call, ts: Date.now() })).text ?? ""; }
+			catch (e) { throw new ModelFailed(`the sources did not answer: ${(e as Error).message}`, v.usage); }
+			texts.push(`> ${r.line}\n${text.length > READING.resultBytes ? text.slice(0, READING.resultBytes) + "\n…" : text}`);
+		}
+		if (!reads.length) texts.push("(none of your lines was a reading call: use list, read or search)");
+		const step: ReadStep = { session: it.session, runId: it.runId, itemId: it.itemId, step: steps.length, slot: `${it.itemId}:${steps.length}`, requests: reads.map((r) => r.line), text: texts.join("\n\n"), ...(v.usage ? { usage: v.usage } : {}), ts: Date.now() };
+		await inTxn(space, d.open, async (t) => {
+			try { await space.write({ type: "ReadStep", fields: step as never }, t, d.ttl, { unique: ["slot"] }); }
+			catch (e) { if (e instanceof UniqueConflict) return; throw e; } // kept before (and booked with it)
+			await updateRun(space, t, d.ttl, it.session, it.runId, (r) => book(r, v.usage, it.itemId, true));
+		});
+		paid.set(it, undefined); // booked with the step: a failure after it has nothing of this call to book
+	}
+}
+
 /** An item is done, in the run's update (`r`): it no longer counts as open, and when it was the last one its phase
  *  waited for, the next phase begins in this same transaction. `spawn`: items the item itself sets off. */
 async function finish(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spawn: WorkItem[] = []): Promise<void> {
@@ -356,7 +391,7 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 	} else if (it.kind === "outline") {
 		const task = (await readExisting(space, { type: "PlanTask", fields: { session: it.session, blockId: run.params.blockId } }))?.fields as unknown as PlanTask | undefined;
 		if (!task) throw new ModelFailed("the task is gone");
-		const v = await ask(d, txn, it, slot, run, 0, "outline", { table: doc.table }) as { text: string; usage?: Usage };
+		const v = await work(d, txn, it, slot, run, "outline", { table: doc.table });
 		usage = v.usage;
 		const sections = usable(() => parseOutline(String(v.text), task.outline));
 		// the first version: every section with what it is to say, until its draft replaces that
@@ -366,13 +401,15 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 	} else {
 		const ref = (await headOf(space, doc))?.sections.find((s) => s.sectionId === it.sectionId);
 		if (!ref) throw new ModelFailed("the section is gone");
-		const v = await ask(d, txn, it, slot, run, 0, "draft", { table: doc.table, sectionId: ref.sectionId }) as { text: string; usage?: Usage };
+		const v = await work(d, txn, it, slot, run, "draft", { table: doc.table, sectionId: ref.sectionId });
 		usage = v.usage;
 		const text = usable(() => parseSection(String(v.text), ref.title));
 		// against the revision the model saw: a section revised meanwhile throws StaleSection, and the item is tried anew
 		try { version = await writeVersion(space, txn, d.ttl, doc, who, { changes: [{ sectionId: ref.sectionId, base: ref.rev, text }] }); }
 		catch (e) { if (e instanceof DocRefused) throw new ModelFailed(e.message, usage); throw e; }
 	}
+	// answers of tries that were cut off (they came back with their transactions) go with the item
+	await takeAll(space, { type: "LlmResult", fields: { session: it.session, itemId: it.itemId } }, { txn });
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (r) => {
 		book(r, usage, it.itemId);
 		if (version) r.info.doc = { table: doc.table, version: Math.max(version.version, r.info.doc?.version ?? 0), sections: version.sections.length, written: (r.info.doc?.written ?? 0) + (it.kind === "draft" ? 1 : 0) };

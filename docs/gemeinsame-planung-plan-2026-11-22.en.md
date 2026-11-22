@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 and 2 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 3 to 12 open. Second version,
+Status: phases 1 to 3 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 4 to 12 open. Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -204,20 +204,20 @@ A source pack is fixed when the task is created and does not change during the r
 | Kind | How it arrives | Limits |
 |---|---|---|
 | Uploaded documents | Markdown, text, CSV, JSON through the page | 10 files, 800 kB together; stored as pages of the block |
-| Local repository | a name from `FORUM_REPOS` (name=path pairs, set by the operator) and a commit or branch | tracked files only (`git archive` of the commit), text files up to 200 kB each, 20 000 files |
+| Local repository | a name from `FORUM_REPOS` (name=path pairs, set by the operator) and a commit or branch | tracked files only (the objects of the commit), text files up to 200 kB each, 20 000 files |
 | Remote repository | an https URL whose host is in `FORUM_GIT_HOSTS`; shallow fetch of one commit | admin only; no submodules, no LFS, no hooks, 200 MB, 60 s |
 
-A repository is not copied into the Space (this one has 2171 tracked files with 42 MB). The sources process unpacks
-the commit into a directory of its own, builds the index and answers `SourceRequest` entries with `SourceResult`
-entries:
+A repository is not copied into the Space (this one has 2171 tracked files with 42 MB) and not unpacked either:
+the sources process reads the objects of the commit (`git ls-tree`, `git cat-file`, `git grep`) and answers
+`SourceRequest` entries with `SourceResult` entries:
 
-- `list({ dir })`: names and sizes, at most 200;
-- `read({ path, from, lines })`: at most 400 lines or 16 kB;
-- `search({ query, glob })`: fixed strings or a bounded regex, at most 40 hits with one line of context.
+- `list <dir>`: names and sizes, at most 200;
+- `read <path> [from] [lines]`: at most 400 lines or 16 kB;
+- `search <text> [in <glob>]`: fixed text, any case, at most 40 hits (no patterns in the first version).
 
 There is no fourth call. The process has no write call, starts no program from the pack and opens no network
-connection after the fetch. The directory can be rebuilt from repository and commit, so it is a process-local
-resource; the index (paths, sizes, hashes) lies in the Space as pages, for the checks of section 9.
+connection. Since nothing is unpacked, no path can lead out of the tree and a symbolic link is an entry that is not
+offered. The index (paths, sizes) lies in the Space as pages, for the checks of section 9.
 
 **How a model reads.** A work item is a sequence of steps. In each step the model either asks for up to four
 reading calls, written as text in a fixed form, or hands in its work. The agents process writes the requests,
@@ -232,7 +232,7 @@ call is admitted against the budget.
 - Excerpts of the sources go to the model providers. The page says so where a pack is chosen.
 - Only tracked files are read, so an untracked `.env` never is; a deny list (`*.pem`, `*.key`, `.env*`,
   `auth.json`) is applied on top.
-- Paths are resolved inside the unpacked directory; symbolic links are not followed.
+- A path is looked up in the commit's tree and nowhere else; symbolic links are not offered.
 - Only the sources process gets the repository paths, as only the model process gets credentials.
 - Runs with a repository need the admin login in the first version.
 
@@ -321,7 +321,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 | 0 | Baseline in codemode-chat as it is: both example briefs as text tasks with three models, by hand; record where it breaks, calls and cost. | none (live, costs tokens: ask first) |
 | 1 ✓ | The directory `codemode-forum/` with the copied base: space, web, agents and model processes, launcher, admin, quotas, the run mechanics with the roll call as a run's opening, the refusal of runs with fewer than three models, a page for it; the registrations of section 3. | the stack starts and restarts; the repository's checks pass; a fake model call is booked |
 | 2 ✓ | Plan task, the document entries of section 4 (`PlanTask`, `PlanDoc`, `PlanSection`), sectioned document, snapshot and a read-only document view with its versions. One table; one model writes: after the roll call the first model at the table writes the outline and the first draft of every section. No sources. | versions share unchanged sections; a second writer of a section is refused; sizes at their limits |
-| 3 | Uploaded documents as a pack; the sources process with local repositories; reading in steps. | path escape, symbolic link, deny list, limits; a killed sources process; a killed agent goes on from its `ReadStep`s |
+| 3 ✓ | Uploaded documents as a pack; the sources process with local repositories, read from the objects of a commit; reading in steps. | path escape, symbolic link, deny list, limits; a killed sources process; a killed agent goes on from its `ReadStep`s |
 | 4 | Discussion: messages, threads, reply items, decisions, the person's messages, limits; kickoff. | an unanswered question blocks a ballot until its deadline; a decision reaches the next context; the message limit |
 | 5 | The checker and the criteria. | each check with a plan that fails exactly it |
 | 6 | Table B: outline by proposal, parallel drafts, rounds of review and revise. | restart of all processes in a round; an objection becomes one item |

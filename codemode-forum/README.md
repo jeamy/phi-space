@@ -4,11 +4,11 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 and 2 of that plan.** The application has its processes, its space, the run mechanics, the admin
-login and the model limits (phase 1), and the plan task with its document kept in sections and versions (phase 2). A
-run so far: the **roll call**, in which every model at the table says that it is there, then one of them writes the
-outline and the first draft of every section. The joint work (sources, the discussion, review, the second table, the
-ballots) follows with phases 3 to 9.
+**Status: phases 1 to 3 of that plan.** The application has its processes, its space, the run mechanics, the admin
+login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2), and
+read-only sources the writer reads in before it writes (phase 3). A run so far: the **roll call**, in which every
+model at the table says that it is there, then one of them writes the outline and the first draft of every section.
+The joint work (the discussion, review, the second table, the ballots) follows with phases 4 to 9.
 
 The application is a directory of its own. Its base is copied from `codemode-chat/` (the comments at the top of each
 file say so) and it imports nothing from there; it depends on the library as `"phi-spaces": "file:../spaces"`.
@@ -38,6 +38,32 @@ sections and 96 kB). A new version writes only the sections that changed. Two `u
 versions; `GET /api/rooms/<room>/plan/<block>.md` the newest version as Markdown. Text from a model is untrusted: the
 page escapes its HTML and keeps only http(s) and mailto links (`client/lib/safe-markdown.ts`).
 
+## Sources, read-only
+
+A task may bring sources (`server/sources.ts`), fixed when it is created:
+
+- **documents** a person uploads: up to 10 text files (.md, .txt, .csv, .json, .yaml), 800 kB together, kept in the
+  space as pages (`SourceFile`);
+- **a local git repository** at a branch, tag or commit: one of those the operator lists in `FORUM_REPOS`
+  (`name=/abs/path,…`). Only an admin learns their names and may name one. The task keeps the commit; a later commit
+  changes nothing for it.
+
+A repository is never copied or unpacked. Every read goes to the objects of the commit (`git ls-tree`,
+`git cat-file`, `git grep`), so only tracked files exist for a reader, no path leads out of the tree, and a symbolic
+link is not offered. Not offered either: files over 200 kB, binary files, and keys and local settings (`.env*`,
+`*.pem`, `*.key`, `auth.json`, `id_rsa*`, `.npmrc`, `.netrc`), tracked or not. The pack's index lies in the space
+(`SourceIndex`); the repository's path does not: only the sources process has it.
+
+There are three calls and no fourth: `list <directory>` (at most 200 entries), `read <path> [first line] [lines]`
+(at most 400 lines or 16 kB) and `search <text> [in <pattern>]` (fixed text, any case, at most 40 lines). None writes.
+
+**Reading in steps.** When a task has sources, an outline or a section is worked out in steps: the model either
+answers `READ` and up to four such calls, or hands in its work. The agent has the calls answered by the sources
+process and keeps both as a `ReadStep` of the work item, booked in the same commit; the next prompt shows what was
+read, marked as data that is never an instruction. At most 8 steps and 24 calls per work item. This needs no tool
+support of a provider, and an agent that takes the item over after a crash goes on behind the last step: nothing is
+read or booked twice. Excerpts of the sources go to the model providers; the page says so where sources are chosen.
+
 ## Processes and the one space
 
 Every role is its own process, and the processes talk only through one phi-space. A process that dies lets its
@@ -46,14 +72,15 @@ transactions lapse, and its work comes back for another process of the same role
 | Process | File | Job |
 |---|---|---|
 | space | `server/space-host.ts` | owns the space (phi-spaces' own SQLite store) and serves it on `FORUM_LISTEN` (default `unix:/tmp/codemode-forum-space.sock`) |
+| sources | `server/source-host.ts`, `server/sources.ts` | the only process that sees repositories (`FORUM_REPOS`). Answers the reading calls (`SourceRequest`, `SourceResult`), opens a repository pack when a task is created, publishes the repositories' names (`SourceInfo`) |
 | agents | `server/agent-host.ts`, `server/run.ts` | takes the agent slots of runs and works off their work items, each in its own transaction |
 | model | `server/model-host.ts`, `server/llm.ts`, `server/calls.ts` | the only process that calls models. Takes an `LlmCall`, builds the prompt from the space (the task, the document), writes the `LlmResult` and a `Spend` entry in the same transaction; publishes the models (`ModelInfo`), follows the admin's choices (`ForumAdmin`) |
 | web | `server/index.ts`, `server/hub.ts` | Next.js page, REST API, WebSocket. Follows the space's change stream and pushes a fresh snapshot when a room changes; creates tasks, serves the document, starts and stops runs |
 
-The roles `sources` (reads repositories and documents, read-only) and `checker` (the mechanical checks of a document)
-follow with their phases. There is no judge and no sandbox: nothing here runs code from an entry.
+The role `checker` (the mechanical checks of a document) follows with its phase. There is no judge and no sandbox: nothing here runs code from an entry.
 
-Entries in the space so far: `ForumRoom`, `RoomLock`, `PlanTask`, `PlanDoc`, `PlanSection`, `ForumRun` (the run and its
+Entries in the space so far: `ForumRoom`, `RoomLock`, `PlanTask`, `PlanSource`, `SourceFile`, `SourceIndex`, `SourceInfo`, `SourceRequest`, `SourceResult`, `ReadStep`,
+`PlanDoc`, `PlanSection`, `ForumRun` (the run and its
 lock, one per room), `AgentSlot`, `WorkItem`, `ItemStart`, `RollCall`, `ForumRunDone`, `ForumLine`, `LlmCall`, `LlmResult`, `Spend`, `ModelInfo`,
 `ForumAdmin`, `AdminSession`, `QuotaLock`, `QuotaUse`, `Process`.
 
@@ -94,9 +121,9 @@ too and fail without it.
 
 ```bash
 npm --prefix codemode-forum install           # once: next, react, typescript and the link to ../spaces
-npm --prefix codemode-forum run dev           # all four processes (Next.js dev mode), http://localhost:4100
+npm --prefix codemode-forum run dev           # all five processes (Next.js dev mode), http://localhost:4100
 npm --prefix codemode-forum run build && npm --prefix codemode-forum start   # the same with the production build
-npm --prefix codemode-forum run space         # or one process: space | agents | model | web
+npm --prefix codemode-forum run space         # or one process: space | sources | agents | model | web
 npm --prefix codemode-forum run typecheck     # own tsconfig, not part of the root tsc
 npm run test:codemode-forum                   # tests (they start the processes themselves, with fake models)
 npm --prefix codemode-forum run backup        # a consistent copy of the running store
@@ -115,10 +142,15 @@ agents writing side by side, a stopped run, a model that does not answer, the bu
 section too long, a section a second writer revised meanwhile, a run across killed agents and a restarted space and
 model process, and the admin login. `tests/plandoc.test.ts` covers the document store (shared sections, the refused
 second writer, concurrent writers, order and removal, the sizes at their limits), the reading of a model's outline and
-section, the task's checks and the links of a section.
+section, the task's checks and the links of a section. `tests/sources.test.ts` builds a git repository and covers what
+a pack offers and refuses (a path that leads out, a symbolic link, keys, large and binary files, untracked files, a
+later commit), the limits of the three calls, a task with a repository and documents whose writer reads first, a
+writer that reads as long as it may, a sources process killed with a request taken, and an agent killed between two
+steps of its reading.
 
 ## Safety notes
 
-Identities are unauthenticated: anyone who reaches the page can start a run in any room, within the visitor limits.
+Text from the sources is data: it is marked as such in every prompt, and the reading calls can change nothing. A
+repository as a source needs the admin login, because its excerpts leave the machine. Identities are unauthenticated: anyone who reaches the page can start a run in any room, within the visitor limits.
 The space socket has no TLS and treats every connection as a process of the forum; never publish it on a public
 interface. Do not expose the page publicly without a reverse proxy in front.

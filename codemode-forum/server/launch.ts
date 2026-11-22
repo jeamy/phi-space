@@ -3,14 +3,14 @@
 // after a second. Taken over from codemode-chat/server/launch.ts.
 //
 //   node --experimental-strip-types server/launch.ts [--dev]
-//   FORUM_ROLES=space,agents,model,web   which roles to start here (default all of them)
+//   FORUM_ROLES=space,sources,agents,model,web   which roles to start here (default all of them)
 //   --dev                                every process restarts when its sources change (node --watch-path), web in dev mode
 import { ROOT } from "./env.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { spaceServer } from "./space-server.ts";
 import { DEFAULT_SPACE } from "./space.ts";
 
-const ROLES = { space: "server/space-host.ts", agents: "server/agent-host.ts", model: "server/model-host.ts", web: "server/index.ts" } as const;
+const ROLES = { space: "server/space-host.ts", sources: "server/source-host.ts", agents: "server/agent-host.ts", model: "server/model-host.ts", web: "server/index.ts" } as const;
 type Role = keyof typeof ROLES;
 const dev = process.argv.includes("--dev");
 const wanted = (process.env.FORUM_ROLES || Object.keys(ROLES).join(",")).split(",").map((r) => r.trim()).filter(Boolean);
@@ -25,7 +25,7 @@ const pipe = (role: Role, stream: NodeJS.ReadableStream | null, out: NodeJS.Writ
 	stream?.on("data", (d: Buffer) => {
 		const lines = (rest + d.toString("utf8")).split("\n");
 		rest = lines.pop() ?? "";
-		for (const l of lines) { out.write(`${role.padEnd(6)} | ${l}\n`); onLine?.(l); }
+		for (const l of lines) { out.write(`${role.padEnd(7)} | ${l}\n`); onLine?.(l); }
 	});
 };
 
@@ -42,13 +42,13 @@ function start(role: Role): Promise<void> {
 		child.on("exit", (code, sig) => {
 			children.delete(role);
 			if (stopping) return;
-			console.error(`${role.padEnd(6)} | exited (${sig ?? code}); starting it again`);
+			console.error(`${role.padEnd(7)} | exited (${sig ?? code}); starting it again`);
 			setTimeout(() => { if (!stopping) void start(role); }, 1000);
 		});
 	});
 }
 
-const order = (["space", "agents", "model", "web"] as Role[]).filter((r) => wanted.includes(r));
+const order = (["space", "sources", "agents", "model", "web"] as Role[]).filter((r) => wanted.includes(r));
 for (const role of order) await start(role);
 console.log(`[launch] ${order.join(", ")} running${dev ? " (dev)" : ""}; space ${env.FORUM_SPACE}`);
 

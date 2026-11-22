@@ -10,6 +10,8 @@ import { ipTokensPerDay, MAX_AGENTS_PER_MODEL, MAX_MODELS, MIN_MODELS, runBudget
 import { modelInfoOf, spentToday, type ModelInfoView, type Spend } from "./models.ts";
 import { fullDoc, headOf, renderMarkdown, versionsOf, type FullDoc, type PlanDoc } from "./plandoc.ts";
 import { planTask, type PlanTask } from "./plantask.ts";
+import { askSources, indexPages } from "./source-host.ts";
+import { checkDocs, docsPack, indexHash, type PlanSource } from "./sources.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
 
@@ -29,7 +31,7 @@ type Session = { id: string; clients: Set<WsConnection>; buckets: Map<string, nu
 
 export type Line = { text: string; ts: number };
 /** A plan task of the room with the state of its document: the newest version's sections, without their texts. */
-export type Block = Omit<PlanTask, "session"> & { doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"] } | null };
+export type Block = Omit<PlanTask, "session"> & { sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>; doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"] } | null };
 /** A version of a block's document with its texts, and the versions there are. */
 export type PlanView = { blockId: string; doc: Omit<FullDoc, "session" | "slot">; versions: Array<Pick<PlanDoc, "version" | "author" | "model" | "changed" | "ts">> };
 /** What the page shows of a room. `blocks`: oldest first; a run works on the block it names. */
@@ -205,7 +207,9 @@ export class ForumHub {
 		const tasks = (await this.#tasks(s.id));
 		const blocks = await Promise.all(tasks.map(async ({ session: _s, ...t }): Promise<Block> => {
 			const versions = await versionsOf(this.host, { session: s.id, blockId: t.blockId, table: TABLE }), head = versions.at(-1);
-			return { ...t, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections } : null };
+			const sources = (await this.host.readAll({ type: "PlanSource", fields: { session: s.id, blockId: t.blockId } }, { limit: 4 })).map((e) => e.fields as unknown as PlanSource).sort((a, b) => a.sourceId.localeCompare(b.sourceId))
+				.map(({ sourceId, kind, name, commit, ref, files, bytes }) => ({ sourceId, kind, name, ...(commit ? { commit } : {}), ...(ref ? { ref } : {}), files, bytes }));
+			return { ...t, sources, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections } : null };
 		}));
 		return { session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
 	}
@@ -215,17 +219,42 @@ export class ForumHub {
 		return (await this.host.readAll({ type: "PlanTask", fields: { session } }, { limit: LIMITS.blocks + 10 })).map((e) => e.fields as unknown as PlanTask).sort((a, b) => a.ts - b.ts);
 	}
 
-	/** A new plan task: a block of the room. Its document begins with the first run on it. */
-	async createTask(id: string, o: { brief?: unknown; lang?: unknown; outline?: unknown; criteria?: unknown }): Promise<{ blockId: string }> {
+	/** The repositories the sources processes offer, by name (their SourceInfo entries). */
+	async repos(): Promise<string[]> {
+		return [...new Set((await this.host.readAll({ type: "SourceInfo" }, { limit: 20 })).flatMap((e) => (e.fields as { repos?: unknown }).repos as string[] ?? []))].sort();
+	}
+
+	/** A new plan task: a block of the room, with its sources fixed now: uploaded documents (`docs`: name and text
+	 *  each), kept in the space, and a repository of the sources process at a branch, tag or commit (`repo`; the server
+	 *  lets only an admin name one: `admin`). Its document begins with the first run on it. */
+	async createTask(id: string, o: { brief?: unknown; lang?: unknown; outline?: unknown; criteria?: unknown; docs?: unknown; repo?: unknown; admin?: boolean }): Promise<{ blockId: string }> {
 		const s = await this.session(id);
+		const task = planTask(o), docs = checkDocs(o.docs), blockId = `b${Date.now().toString(36)}${rid()}`;
+		const repo = o.repo && typeof o.repo === "object" ? { name: String((o.repo as { name?: unknown }).name ?? ""), ref: String((o.repo as { ref?: unknown }).ref ?? "").trim() || "HEAD" } : null;
+		if (repo && o.admin === false) throw new Error("A repository as a source needs the admin login");
+		if (repo && !(await this.repos()).includes(repo.name)) throw new Error(`No such repository: ${repo.name.slice(0, 60)}`);
 		if (!this.#allow(s, "task", 6)) throw new Error("Too many tasks, slow down");
-		const task = planTask(o), blockId = `b${Date.now().toString(36)}${rid()}`;
 		await this.#trimLines(s);
 		await this.#exclusive(s, async () => {
 			if ((await this.#tasks(s.id)).length >= LIMITS.blocks) throw new Error(`A room holds at most ${LIMITS.blocks} plan tasks`);
-			const entry: PlanTask = { session: s.id, blockId, ...task, ts: Date.now() };
+			const sources: PlanSource[] = [], key = { session: s.id, blockId };
+			// the repository first: its sources process resolves the commit and writes the pack's index, or says why not
+			if (repo) {
+				const { opened } = await askSources(this.host, { requestId: `open-${blockId}`, ...key, op: "open", repo: repo.name, ref: repo.ref, ttl: this.#ttl, ts: Date.now() });
+				sources.push({ ...key, sourceId: "repo", kind: "repo", ...opened!, ts: Date.now() });
+			}
+			if (docs.length) {
+				const pack = docsPack(docs);
+				// a document in parts of 12 000 characters: an entry stays under the space's 64 KiB whatever the letters
+				for (const d of docs) for (let part = 0; part * 12_000 < d.text.length; part++) await this.host.write({ type: "SourceFile", fields: { ...key, path: d.path, part, text: d.text.slice(part * 12_000, (part + 1) * 12_000) } }, null, this.#ttl);
+				for (const [part, paths] of indexPages(pack.index).entries()) await this.host.write({ type: "SourceIndex", fields: { ...key, sourceId: "docs", part, parts: 1, paths } as never }, null, this.#ttl);
+				sources.push({ ...key, sourceId: "docs", kind: "docs", name: "documents", files: pack.index.length, bytes: pack.index.reduce((n, [, size]) => n + size, 0), indexHash: indexHash(pack.index), ts: Date.now() });
+			}
+			for (const src of sources) await this.host.write({ type: "PlanSource", fields: src as never }, null, this.#ttl);
+			const entry: PlanTask = { ...key, ...task, ts: Date.now() };
 			await this.host.write({ type: "PlanTask", fields: entry as never }, null, this.#ttl);
-			await systemLine(this.host, null, this.#ttl, s.id, `Plan task created: ${task.brief.replace(/\s+/g, " ").slice(0, 100)}${task.brief.length > 100 ? "…" : ""}`);
+			const with_ = sources.map((x) => (x.kind === "repo" ? `${x.name} at ${x.commit!.slice(0, 12)} (${x.files} files)` : `${x.files} document${x.files === 1 ? "" : "s"}`)).join(" and ");
+			await systemLine(this.host, null, this.#ttl, s.id, `Plan task created${with_ ? ` with ${with_}` : ""}: ${task.brief.replace(/\s+/g, " ").slice(0, 100)}${task.brief.length > 100 ? "…" : ""}`);
 		});
 		this.push(s);
 		return { blockId };
@@ -292,7 +321,7 @@ export class ForumHub {
 			const h = hosts.get(p.name) ?? { host: p, roles: new Set<string>() };
 			h.roles.add(p.role); hosts.set(p.name, h);
 		}
-		const order = ["space", "web", "agents", "model"];
+		const order = ["space", "web", "agents", "model", "sources"];
 		const spends = (await this.host.readAll({ type: "Spend", fields: { day: today() } }, { limit: 5000 })).map((e) => e.fields as unknown as Spend);
 		return {
 			hosts: [...hosts.entries()].map(([name, { host, roles }]) => ({ name, roles: order.filter((r) => roles.has(r)), host })),

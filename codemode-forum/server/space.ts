@@ -37,7 +37,7 @@ export function hostFacts(): HostFacts {
 }
 
 /** The roles of the processes of codemode-forum. */
-export type ProcessRole = "space" | "web" | "agents" | "model";
+export type ProcessRole = "space" | "web" | "agents" | "model" | "sources";
 /** What a Process entry says: the role, the host it runs on, its pid. */
 export type ProcessInfo = HostFacts & { procId: string; role: ProcessRole; pid: number };
 const PROCESS_LEASE_MS = 30_000, PROCESS_BEAT_MS = 10_000;

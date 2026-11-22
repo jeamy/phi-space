@@ -103,6 +103,8 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			if (p.startsWith("/api/") && !allowed(clientIp(req))) return json(res, 429, { error: "Too many requests; retry in a minute" });
 			if (p === "/api/system") return json(res, 200, await hub.systemInfo());
 			if (p === "/api/models" && req.method === "GET") return json(res, 200, (await hub.modelInfo()).info);
+			// the repositories a task may name as a source: only an admin may, so only an admin learns their names
+			if (p === "/api/sources" && req.method === "GET") return json(res, 200, { repos: (await isAdmin(req)) ? await hub.repos() : [] });
 			// ---- admin panel: login with the password from .env, then the choice of models ----
 			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: (await isAdmin(req)), available: !!adminSecret() });
 			if (p === "/api/admin/login" && req.method === "POST") {
@@ -158,9 +160,10 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (!ID.test(id)) return json(res, 400, { error: "Invalid room id" });
 				if (!action && req.method === "GET") return json(res, 200, await hub.snapshot(id));
 				if (!action || req.method !== "POST") return json(res, 405, { error: "POST expected" });
-				const b = await readBody(req);
+				// a task may bring documents (sources.ts: at most 800 kB together)
+				const b = await readBody(req, action === "task" ? 1_500_000 : 64_000);
 				// a visitor's run: the default token budget at most, counted against the day's allowance of the address
-				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria })) });
+				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria, docs: b.docs, repo: b.repo, admin: await isAdmin(req) })) });
 				if (action === "run") return json(res, 200, { ok: true, ...(await hub.startRun(id, { blockId: b.blockId, models: b.models, perModel: b.perModel, budgetTokens: b.budgetTokens, budgetUsd: b.budgetUsd, client: { ip: clientIp(req), admin: await isAdmin(req) } })) });
 				await hub.stopRun(id);
 				return json(res, 200, { ok: true });

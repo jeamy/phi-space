@@ -1,5 +1,6 @@
 // The processes a test needs, started as real OS processes: the space (in memory, or on a SQLite file to survive a
-// restart) on a socket of its own, an agents process and a model process with the fake models of tests/fakes.ts. The
+// restart) on a socket of its own, an agents process and a model process with the fake models of tests/fakes.ts (a
+// sources process when a test starts one). The
 // web part runs in the test process (startServer); it reaches the space over the socket like in production. close()
 // stops them all. Taken over from codemode-chat/tests/stack.ts.
 import { spaceServer } from "../server/space-server.ts";
@@ -33,6 +34,8 @@ export type Stack = {
 	model(o?: { fakes?: boolean | string[] }): Promise<ChildProcess>;
 	/** Starts one more agents process. */
 	agents(o?: { leaseMs?: number }): Promise<ChildProcess>;
+	/** Starts one more sources process (`repos`: FORUM_REPOS; `pause`: a marker file, see holdBeforeAnswer). */
+	sources(o?: { repos?: string; leaseMs?: number; pause?: string }): Promise<ChildProcess>;
 	/** Stops the space process and starts it again on the same socket (and the same file, if it has one). */
 	restartSpace(): Promise<void>;
 	/** Stops a process: SIGTERM, or SIGKILL to make it die in the middle of its work. */
@@ -57,6 +60,11 @@ export async function startStack(o: { dbPath?: string; agents?: boolean; model?:
 		},
 		async agents(a = {}) {
 			const c = await run("server/agent-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", ...(a.leaseMs ? { FORUM_AGENT_LEASE_MS: String(a.leaseMs) } : {}) }, (l) => l.startsWith("[agents]"));
+			others.push(c);
+			return c;
+		},
+		async sources(x = {}) {
+			const c = await run("server/source-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", FORUM_REPOS: x.repos ?? "", ...(x.leaseMs ? { FORUM_SOURCE_LEASE_MS: String(x.leaseMs) } : {}), ...(x.pause ? { FORUM_TEST: "1", FORUM_TEST_SOURCE_PAUSE: x.pause } : {}) }, (l) => l.startsWith("[sources]"));
 			others.push(c);
 			return c;
 		},
