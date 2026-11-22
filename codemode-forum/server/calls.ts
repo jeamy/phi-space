@@ -9,6 +9,7 @@
 //   reply     a model answers the questions addressed to it and votes on the proposals of the others.
 //   outline   one model proposes the document's sections, each with a line on what it is to say.
 //   draft     one model writes one section.
+//   revise    one model writes a section anew, with what the checker found wrong in it (checks.ts).
 // The kinds of the joint work (kickoff, review, revise, ballot, …) follow with their phases.
 //
 // Reading: when the task has sources, an outline or draft is worked out in steps. In each step the model either asks
@@ -17,6 +18,7 @@
 // no tool support of a provider, and an agent that takes the item over finds the steps and does not read again.
 import type { SpaceLike } from "phi-spaces";
 import type { TextCall, Usage } from "./llm.ts";
+import { CONVENTIONS, type PlanCheck } from "./checks.ts";
 import { cleanText, cleanTitle, DOC_LIMITS, fullDoc, headOf } from "./plandoc.ts";
 import { criteriaOf, TASK_LIMITS, type PlanTask } from "./plantask.ts";
 import type { RunEntry } from "./run.ts";
@@ -24,7 +26,7 @@ import type { PlanSource, SourceCall } from "./sources.ts";
 import { decisionsOf, discussionText, messagesOf, nameOf, TALK_LIMITS } from "./talk.ts";
 import { readExisting } from "./space.ts";
 
-export type CallKind = "rollcall" | "kickoff" | "reply" | "outline" | "draft";
+export type CallKind = "rollcall" | "kickoff" | "reply" | "outline" | "draft" | "revise";
 /** A request for a model call, as an agent writes it (and the model process takes it). */
 export type LlmCall = {
 	callId: string; session: string; runId?: string; kind: CallKind;
@@ -170,16 +172,23 @@ export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextC
 	let room = CONTEXT_BYTES;
 	const sofar = doc.sections.map((s) => {
 		const body = s.sectionId === ref.sectionId ? "(the section you write now)" : s.text;
+		if (s.sectionId === ref.sectionId && call.kind === "revise") return `## ${s.title}\n(the section you revise now; its text follows below)`;
 		room -= Buffer.byteLength(body);
 		return `## ${s.title}\n${room >= 0 ? body : "(left out here for length)"}`;
 	}).join("\n\n");
 	const mine = doc.sections.find((s) => s.sectionId === ref.sectionId)!;
+	// revise: what the checker found in this section of the newest checked version, and the section as it is
+	const check = call.kind === "revise" ? ((await space.readAll({ type: "PlanCheck", fields: d }, { limit: 200 })).map((e) => e.fields as unknown as PlanCheck).sort((a, b) => b.version - a.version)[0]) : undefined;
+	const found = (check?.failures ?? []).filter((f) => f.sectionId === ref.sectionId || (!f.sectionId && call.kind === "revise"));
+	const job = call.kind === "revise"
+		? [`The section "${mine.title}" as it is now:\n"""\n${mine.text}\n"""`, `A program checked the document and found this, which must be mended. It is not a matter of opinion:\n${found.map((f) => `- ${f.text}`).join("\n") || "- (nothing in this section; make sure it follows the conventions below)"}`, `Write the section "${mine.title}" anew, mending every point and keeping what was right.`]
+		: [`Write the section "${mine.title}". What it is to say: ${mine.rev === 1 ? mine.text : "(revise what is there)"}`];
 	return {
 		model: call.model, system: SYSTEM, maxTokens: 3000,
 		user: [
 			who, taskText(task), ...talk, ...reading,
 			`The document so far (a section not yet written shows what it is to say):\n"""\n${sofar}\n"""`,
-			`Write the section "${mine.title}". What it is to say: ${mine.rev === 1 ? mine.text : "(revise what is there)"}`,
+			...job, CONVENTIONS,
 			`Write the section's body only, as Markdown: no heading for the section itself (use ### inside it if needed), concrete enough to act on, nothing the other sections already say. At most ${Math.floor(DOC_LIMITS.sectionBytes / 1000)} kB. ${answerIn(call.lang)}`,
 		].join("\n\n"),
 	};

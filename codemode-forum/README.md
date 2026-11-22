@@ -4,13 +4,14 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 to 4 of that plan.** The application has its processes, its space, the run mechanics, the admin
+**Status: phases 1 to 5 of that plan.** The application has its processes, its space, the run mechanics, the admin
 login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2),
-read-only sources the models read in (phase 3), and the discussion of the table (phase 4). A run so far: the **roll
-call**, in which every model says that it is there; the **kickoff**, in which each says how it understands the brief
-and may ask and propose; the **replies**, in which questions are answered and proposals voted on; then one model
-writes the outline and the first draft of every section, bound by what the table decided and the person said.
-Review rounds, the second table and the ballots follow with phases 5 to 9.
+read-only sources the models read in (phase 3), the discussion of the table (phase 4), and the checker, a program
+that checks every finished draft against its sources (phase 5). A run so far: the **roll call**; the **kickoff**, in
+which each model says how it understands the brief and may ask and propose; the **replies**; then one model writes
+the outline and the first draft of every section, bound by what the table decided and the person said; then the
+**check**, and the writer mends what it found. Review rounds, the second table and the ballots follow with phases 6
+to 9.
 
 The application is a directory of its own. Its base is copied from `codemode-chat/` (the comments at the top of each
 file say so) and it imports nothing from there; it depends on the library as `"phi-spaces": "file:../spaces"`.
@@ -63,6 +64,29 @@ every model can produce: `question to M2: …`, `question: …` (to the table), 
 A model learns the others only by their names at the table. `GET /api/rooms/<room>/talk/<block>` returns the messages
 and decisions. A block that already has a document skips the kickoff: a run on it goes on writing.
 
+## The checker
+
+A text has no sandbox, but a plan over sources has facts a program can check (`server/checks.ts`). When every section
+is written, and again after every round of revisions, the checker process checks the newest version, without a model:
+
+| Check | What it wants |
+|---|---|
+| path | every file or directory the plan names in backticks is in a source of the task, or is marked as new: `` `path/new.ts` (new) `` |
+| quote | every line quoted as `` > `path/file.ts`: the line `` is in that file (asked of the sources process) |
+| section | the sections the person fixed are there, and every section is written |
+| phase | the plan numbers its phases ("Phase 1", …; also Step, Schritt, Etappe), and each says how it is verified |
+| link | a link `[title](#anchor)` leads to a section |
+| size | the sections and the document are within their limits |
+
+The writer is told these conventions with every section. A name in backticks counts as a path when it begins with a
+directory the sources have at their top or ends like a file; commands, calls and options do not. Without sources,
+paths and quotes are not checked. The result is a `PlanCheck` entry kept with its version; the page shows it.
+
+What the checker finds goes back to the writer as fact, not as opinion: one `revise` item per section, with the
+findings and the section as it is. A run checks at most three times (after the drafts and after two rounds of
+revisions); what is left then is named in the run's closing line and stays with the version. From phase 7 on a
+version that fails gets no ballots.
+
 ## Sources, read-only
 
 A task may bring sources (`server/sources.ts`), fixed when it is created:
@@ -98,14 +122,15 @@ transactions lapse, and its work comes back for another process of the same role
 |---|---|---|
 | space | `server/space-host.ts` | owns the space (phi-spaces' own SQLite store) and serves it on `FORUM_LISTEN` (default `unix:/tmp/codemode-forum-space.sock`) |
 | sources | `server/source-host.ts`, `server/sources.ts` | the only process that sees repositories (`FORUM_REPOS`). Answers the reading calls (`SourceRequest`, `SourceResult`), opens a repository pack when a task is created, publishes the repositories' names (`SourceInfo`) |
+| checker | `server/check-host.ts`, `server/checks.ts` | runs the mechanical checks on a version (`CheckRequest`, `CheckResult`) and writes the result (`PlanCheck`); asks the sources process about quoted lines |
 | agents | `server/agent-host.ts`, `server/run.ts` | takes the agent slots of runs and works off their work items, each in its own transaction |
 | model | `server/model-host.ts`, `server/llm.ts`, `server/calls.ts` | the only process that calls models. Takes an `LlmCall`, builds the prompt from the space (the task, the document), writes the `LlmResult` and a `Spend` entry in the same transaction; publishes the models (`ModelInfo`), follows the admin's choices (`ForumAdmin`) |
 | web | `server/index.ts`, `server/hub.ts` | Next.js page, REST API, WebSocket. Follows the space's change stream and pushes a fresh snapshot when a room changes; creates tasks, serves the document, starts and stops runs |
 
-The role `checker` (the mechanical checks of a document) follows with its phase. There is no judge and no sandbox: nothing here runs code from an entry.
+There is no judge and no sandbox: nothing here runs code from an entry.
 
 Entries in the space so far: `ForumRoom`, `RoomLock`, `PlanTask`, `PlanSource`, `SourceFile`, `SourceIndex`, `SourceInfo`, `SourceRequest`, `SourceResult`, `ReadStep`,
-`PlanMessage`, `PlanDecision`, `PlanDoc`, `PlanSection`, `ForumRun` (the run and its
+`PlanMessage`, `PlanDecision`, `PlanDoc`, `PlanSection`, `PlanCheck`, `CheckRequest`, `CheckResult`, `ForumRun` (the run and its
 lock, one per room), `AgentSlot`, `WorkItem`, `ItemStart`, `RollCall`, `ForumRunDone`, `ForumLine`, `LlmCall`, `LlmResult`, `Spend`, `ModelInfo`,
 `ForumAdmin`, `AdminSession`, `QuotaLock`, `QuotaUse`, `Process`.
 
@@ -146,9 +171,9 @@ too and fail without it.
 
 ```bash
 npm --prefix codemode-forum install           # once: next, react, typescript and the link to ../spaces
-npm --prefix codemode-forum run dev           # all five processes (Next.js dev mode), http://localhost:4100
+npm --prefix codemode-forum run dev           # all six processes (Next.js dev mode), http://localhost:4100
 npm --prefix codemode-forum run build && npm --prefix codemode-forum start   # the same with the production build
-npm --prefix codemode-forum run space         # or one process: space | sources | agents | model | web
+npm --prefix codemode-forum run space         # or one process: space | sources | checker | agents | model | web
 npm --prefix codemode-forum run typecheck     # own tsconfig, not part of the root tsc
 npm run test:codemode-forum                   # tests (they start the processes themselves, with fake models)
 npm --prefix codemode-forum run backup        # a consistent copy of the running store
@@ -174,7 +199,9 @@ writer that reads as long as it may, a sources process killed with a request tak
 steps of its reading. `tests/talk.test.ts` covers the reading of a model's lines, what the table keeps (the limits,
 one vote a model), who owes a reply and when a proposal is decided, a run whose table talks (kickoff, replies, a
 decision and the person's word in the writer's prompt), and the two deadlines (a reply that never comes, a question
-the person does not answer).
+the person does not answer). `tests/checks.test.ts` has a plan that passes and, for each check, a plan that fails
+exactly it; what counts as a path, a quote and a phase; a run whose writer mends what the checker found; and a writer
+that mends nothing, which ends after three checks.
 
 ## Safety notes
 

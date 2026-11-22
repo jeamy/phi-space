@@ -11,6 +11,9 @@
 //                the brief and may ask and propose (talk.ts); `reply`, one per model that owes the table an answer or
 //                a vote; `person`, which waits for the person's answers until its deadline; `outline`, in which one model proposes the document's sections; `draft`, one
 //                per section, in which that model writes it. The kinds of the joint work follow with their phases.
+//                `check`, in which the checker process runs the mechanical checks on the newest version (checks.ts);
+//                `revise`, one per section the checker found something in, in which the writer mends it. A check
+//                follows the drafts and every round of revisions, at most CHECK_ROUNDS times.
 //   ReadStep     a step of an item's reading in the task's sources: the calls its model asked for and what they
 //                returned (calls.ts). Kept per item, so an agent that takes the item over does not read again.
 //   RollCall     a model's answer to the roll call.
@@ -28,6 +31,8 @@ import { NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import type { Usage } from "./llm.ts";
 import { mayRead, parseOutline, parseReads, parseSection, READING, readSteps, ROLLCALL_CHARS, sourcesOf, type CallKind, type LlmCall, type LlmResultEntry, type ReadStep } from "./calls.ts";
 import { askSources } from "./source-host.ts";
+import { askChecker } from "./check-host.ts";
+import type { PlanCheck } from "./checks.ts";
 import { FATAL_LLM, MIN_MODELS, modelWaitMs, personWaitMs, replyWaitMs } from "./limits.ts";
 import { decide, decisionsOf, keep, messagesOf, owed, parseKickoff, parseMessages } from "./talk.ts";
 import { DocRefused, headOf, writeVersion, type PlanDoc } from "./plandoc.ts";
@@ -39,7 +44,10 @@ export const rid = () => randomBytes(4).toString("hex");
 /** What the page shows of a run. `aliases`: the name each model has at the table (M1, M2, …), drawn per run. */
 export type RunInfo = { active: boolean; runId: string; blockId: string; models: string[]; perModel: number; aliases: Record<string, string>;
 	/** Where the run is: the roll call, the outline, the drafts of the sections, or through with them. */
-	phase: "rollcall" | "kickoff" | "discuss" | "outline" | "draft" | "done";
+	phase: "rollcall" | "kickoff" | "discuss" | "outline" | "draft" | "check" | "revise" | "done";
+	/** The newest mechanical check of the document in this run: the version, whether it passed, how many failures, and
+	 *  the how-manieth check of the run it was. */
+	check?: { version: number; ok: boolean; failures: number; round: number };
 	/** The models that answered the roll call: the table. And what the table said: messages kept, decisions taken. */
 	present?: string[]; talk?: { messages: number; decisions: number };
 	/** The model that writes the first draft (the first by its name at the table among those that answered the roll
@@ -62,7 +70,7 @@ export type RunEntry = { session: string; runId: string; params: RunParams; info
 	/** The budget held by model calls in flight, per item (released when the item books its call), and the calls
 	 *  booked so far (their average is what the next call is expected to cost). */
 	reserved?: Record<string, { tokens: number; usd: number }>; booked?: number; ts: number };
-export type WorkKind = "rollcall" | "kickoff" | "reply" | "person" | "outline" | "draft";
+export type WorkKind = "rollcall" | "kickoff" | "reply" | "person" | "outline" | "draft" | "check" | "revise";
 /** `onlyModel`: only an agent of that model may take it, until its `deadline` has passed: then any agent takes it to
  *  close it. `table`, `sectionId`: the document and section it works on. `threads`: what a reply is owed to. */
 export type WorkItem = { session: string; runId: string; itemId: string; kind: WorkKind; ts: number; onlyModel?: string; notBefore?: number; tries?: number; table?: string; sectionId?: string; threads?: string[]; deadline?: number };
@@ -77,6 +85,8 @@ export const ITEM_LEASE_MS = Math.max(1000, Number(process.env.FORUM_AGENT_LEASE
 const MAX_TRIES = 3;
 /** A failure that trying again will not mend. */
 const FINAL = /is not allowed|has no |the run's budget is used up|stopped \d+ times while|is gone$|came too late/i;
+/** Checks of a document in one run: the one after the drafts, and one after each of two rounds of revisions. */
+export const CHECK_ROUNDS = 3;
 /** The table the first draft is written at. */
 const TABLE = "A";
 /** Hard deaths of an agents process during an item's model call after which the item is given up. */
@@ -165,7 +175,8 @@ async function closingLine(space: SpaceLike, r: RunEntry, how: "finished" | "sto
 	const cost = `${r.info.usage.tokens} tokens${r.info.usage.costUsd ? `, $${r.info.usage.costUsd.toFixed(4)}` : ""}`;
 	const doc = r.info.doc, writer = r.params.aliases[r.info.writer ?? ""];
 	const talk = r.info.talk ? `; ${r.info.talk.messages} messages, ${r.info.talk.decisions} decision${r.info.talk.decisions === 1 ? "" : "s"}` : "";
-	const draft = doc ? `${talk}; ${writer} wrote ${doc.written} of ${doc.sections} sections of the first draft (version ${doc.version})` : "";
+	const check = r.info.check ? (r.info.check.ok ? ", checks passed" : `, ${r.info.check.failures} check failure${r.info.check.failures === 1 ? "" : "s"} left`) : "";
+	const draft = doc ? `${talk}; ${writer} wrote ${doc.written} of ${doc.sections} sections of the first draft (version ${doc.version}${check})` : "";
 	return `Run ${how}${why}: ${present} of ${r.params.models.length} models answered the roll call${draft || talk} (${cost})`;
 }
 
@@ -294,7 +305,7 @@ async function failed(d: AgentDeps, it: WorkItem, txn: string, why: string, usag
 		book(r, usage, it.itemId);
 		if (FATAL_LLM.test(why)) r.info.ended ??= "budget";
 		const who = r.params.aliases[it.onlyModel ?? ""] ?? "a model", reason = why.slice(0, 120);
-		r.info.note = it.kind === "rollcall" ? `${who} did not answer the roll call (${reason})` : it.kind === "kickoff" ? `${who} said nothing at the kickoff (${reason})` : it.kind === "reply" ? `${who} did not reply to the table (${reason}); the run goes on without its reply` : it.kind === "outline" ? `${who} wrote no outline (${reason}); the run ends without a document` : `${who} did not write a section (${reason}); it keeps what it is to say`;
+		r.info.note = it.kind === "rollcall" ? `${who} did not answer the roll call (${reason})` : it.kind === "kickoff" ? `${who} said nothing at the kickoff (${reason})` : it.kind === "reply" ? `${who} did not reply to the table (${reason}); the run goes on without its reply` : it.kind === "outline" ? `${who} wrote no outline (${reason}); the run ends without a document` : it.kind === "check" ? `the document could not be checked (${reason})` : `${who} did not write a section (${reason}); it keeps what it is to say`;
 		await finish(d, txn, r, it);
 	});
 }
@@ -355,8 +366,9 @@ async function writing(d: AgentDeps, r: RunEntry): Promise<WorkItem[]> {
 	if (!head) { r.info.phase = "outline"; return [newItem(r, "outline", { onlyModel: writer, table: TABLE })]; }
 	const open = head.sections.filter((x) => x.rev === 1);
 	r.info.doc = { table: TABLE, version: head.version, sections: head.sections.length, written: head.sections.length - open.length };
-	r.info.phase = open.length ? "draft" : "done";
-	return open.map((x) => newItem(r, "draft", { onlyModel: writer, table: TABLE, sectionId: x.sectionId }));
+	// every section is written: the document is checked (again)
+	r.info.phase = open.length ? "draft" : "check";
+	return open.length ? open.map((x) => newItem(r, "draft", { onlyModel: writer, table: TABLE, sectionId: x.sectionId })) : [newItem(r, "check", { table: TABLE })];
 }
 
 /** The table has talked, in the run's update: the proposals with a majority become decisions, and the writing begins. */
@@ -394,7 +406,10 @@ async function finish(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spaw
 			if (o.person.length && personWaitMs() > 0) items.push(newItem(r, "person", { table: TABLE, deadline: now + personWaitMs() }));
 			if (items.length) r.info.phase = "discuss"; else items.push(...(await afterTalk(d, txn, r)));
 		} else if (it.kind === "reply" || it.kind === "person") items.push(...(await afterTalk(d, txn, r)));
-		else if (it.kind === "draft") r.info.phase = "done";
+		// after the drafts and after every round of revisions the document is checked; a check sets off the revisions
+		// (spawn) or was the last thing to do
+		else if (it.kind === "draft" || it.kind === "revise") { r.info.phase = "check"; items.push(newItem(r, "check", { table: TABLE })); }
+		else if (it.kind === "check") r.info.phase = spawn.length ? "revise" : "done";
 		// an outline that failed leaves no document: the run has nothing more to do
 	}
 	if (items.length) {
@@ -410,7 +425,7 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 	const run = await readRun(space, it.session, it.runId);
 	if (!run) throw new RunGone();
 	const who = { author: `agent-${slot.agent}`, model: slot.model }, doc = { session: it.session, blockId: run.params.blockId, table: it.table ?? TABLE };
-	let usage: Usage | undefined, spawn: WorkItem[] = [], version: PlanDoc | undefined, note: string | undefined;
+	let usage: Usage | undefined, spawn: WorkItem[] = [], version: PlanDoc | undefined, note: string | undefined, checked: Omit<PlanCheck, "session"> | undefined;
 	/** A model's text that cannot be used was paid all the same: the failure carries the usage. */
 	const usable = <T>(fn: () => T): T => { try { return fn(); } catch (e) { throw new ModelFailed((e as Error).message, usage); } };
 	if (run.info.ended) { /* nothing more is asked of the models */ }
@@ -447,10 +462,13 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 		try { version = await writeVersion(space, txn, d.ttl, doc, who, { changes: sections.map((s) => ({ title: s.title, text: s.intent })) }); }
 		catch (e) { if (e instanceof DocRefused) throw new ModelFailed(e.message, usage); throw e; }
 		spawn = version.sections.map((s) => newItem(run, "draft", { onlyModel: slot.model, table: doc.table, sectionId: s.sectionId }));
+	} else if (it.kind === "check") {
+		// no model: the checker process reads the newest version and says what a program can tell about it
+		checked = await askChecker(space, { requestId: `${it.itemId}-t${it.tries ?? 0}-${rid()}`, ...doc, ttl: d.ttl, ts: Date.now() });
 	} else {
 		const ref = (await headOf(space, doc))?.sections.find((s) => s.sectionId === it.sectionId);
 		if (!ref) throw new ModelFailed("the section is gone");
-		const v = await work(d, txn, it, slot, run, "draft", { table: doc.table, sectionId: ref.sectionId });
+		const v = await work(d, txn, it, slot, run, it.kind === "revise" ? "revise" : "draft", { table: doc.table, sectionId: ref.sectionId });
 		usage = v.usage;
 		const text = usable(() => parseSection(String(v.text), ref.title));
 		// against the revision the model saw: a section revised meanwhile throws StaleSection, and the item is tried anew
@@ -462,7 +480,14 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (r) => {
 		book(r, usage, it.itemId);
 		if (note) r.info.note = note;
-		if (version) r.info.doc = { table: doc.table, version: Math.max(version.version, r.info.doc?.version ?? 0), sections: version.sections.length, written: (r.info.doc?.written ?? 0) + (it.kind === "draft" ? 1 : 0) };
+		if (version) r.info.doc = { table: doc.table, version: Math.max(version.version, r.info.doc?.version ?? 0), sections: version.sections.length, written: version.version >= (r.info.doc?.version ?? 0) ? version.sections.filter((x) => x.rev > 1).length : r.info.doc!.written };
+		if (checked) {
+			const round = (r.info.check?.round ?? 0) + 1;
+			r.info.check = { version: checked.version, ok: checked.ok, failures: checked.failures.length, round };
+			// what it found goes back to the writer, section by section, while the run has checks left
+			const sections = [...new Set(checked.failures.map((f) => f.sectionId).filter((x): x is string => !!x))];
+			if (!checked.ok && round < CHECK_ROUNDS && !r.info.ended) spawn = sections.map((sectionId) => newItem(r, "revise", { onlyModel: r.info.writer!, table: doc.table, sectionId }));
+		}
 		if (it.kind === "outline" && version) r.info.phase = "draft";
 		await finish(d, txn, r, it, spawn);
 	});

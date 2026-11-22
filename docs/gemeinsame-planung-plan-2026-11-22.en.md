@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 to 4 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 5 to 12 open. Second version,
+Status: phases 1 to 5 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 6 to 12 open. Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -244,11 +244,15 @@ call is admitted against the budget.
 - every quoted line is in the file it is quoted from;
 - the outline's required sections are there and none is empty;
 - every phase names how it is verified;
-- no section contradicts a `PlanDecision` by its wording where the decision names a path or a number;
 - links between sections resolve, sizes are within the limits.
 
 A version that fails gets no ballots. The failures go back to the table as objections of the checker, which nobody
 can decline.
+
+The checks need a form they can read, which every writer is told: paths in backticks, a new file marked "(new)", a
+quote as a line of its own with its file, phases numbered. Whether a section contradicts a decision of the table is
+not something a program can tell from the wording; that stays with the reviewers (phase 7). Until the review rounds
+exist, what the checker finds goes straight back to the writer, at most twice in a run.
 
 **Criteria.** Fixed for every plan task, plus those of the person:
 
@@ -323,7 +327,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 | 2 ✓ | Plan task, the document entries of section 4 (`PlanTask`, `PlanDoc`, `PlanSection`), sectioned document, snapshot and a read-only document view with its versions. One table; one model writes: after the roll call the first model at the table writes the outline and the first draft of every section. No sources. | versions share unchanged sections; a second writer of a section is refused; sizes at their limits |
 | 3 ✓ | Uploaded documents as a pack; the sources process with local repositories, read from the objects of a commit; reading in steps. | path escape, symbolic link, deny list, limits; a killed sources process; a killed agent goes on from its `ReadStep`s |
 | 4 ✓ | Discussion: messages, threads, reply items, decisions, the person's messages, limits; kickoff. Messages travel with a work call from phase 6 on (review and revise); until then they are written at the kickoff and in the replies. | an unanswered question holds the table until its deadline; a decision reaches the next context; the message limit |
-| 5 | The checker and the criteria. | each check with a plan that fails exactly it |
+| 5 ✓ | The checker process and its six checks; the conventions told to the writer; check after the drafts, revision of the sections with findings, at most three checks a run. | each check with a plan that fails exactly it |
 | 6 | Table B: outline by proposal, parallel drafts, rounds of review and revise. | restart of all processes in a round; an objection becomes one item |
 | 7 | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
 | 8 | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |

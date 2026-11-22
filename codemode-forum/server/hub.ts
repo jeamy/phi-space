@@ -10,6 +10,8 @@ import { ipTokensPerDay, MAX_AGENTS_PER_MODEL, MAX_MODELS, MIN_MODELS, runBudget
 import { modelInfoOf, spentToday, type ModelInfoView, type Spend } from "./models.ts";
 import { fullDoc, headOf, renderMarkdown, versionsOf, type FullDoc, type PlanDoc } from "./plandoc.ts";
 import { planTask, type PlanTask } from "./plantask.ts";
+import { checkOf } from "./check-host.ts";
+import type { Failure } from "./checks.ts";
 import { askSources, indexPages } from "./source-host.ts";
 import { checkDocs, docsPack, indexHash, type PlanSource } from "./sources.ts";
 import { decisionsOf, messagesOf, newMsgId, owed, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
@@ -34,9 +36,11 @@ export type Line = { text: string; ts: number };
 /** A plan task of the room with the state of its document: the newest version's sections, without their texts. */
 export type Block = Omit<PlanTask, "session"> & { sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>;
 	/** The table's discussion in numbers: messages, decisions, and the questions to the person still open. */
-	talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"] } | null };
+	talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"];
+		/** The mechanical check of the newest version (checks.ts); null: not checked yet. */
+		check: { ok: boolean; failures: Failure[] } | null } | null };
 /** A version of a block's document with its texts, and the versions there are. */
-export type PlanView = { blockId: string; doc: Omit<FullDoc, "session" | "slot">; versions: Array<Pick<PlanDoc, "version" | "author" | "model" | "changed" | "ts">> };
+export type PlanView = { blockId: string; doc: Omit<FullDoc, "session" | "slot">; check: { ok: boolean; failures: Failure[] } | null; versions: Array<Pick<PlanDoc, "version" | "author" | "model" | "changed" | "ts">> };
 /** What the page shows of a room. `blocks`: oldest first; a run works on the block it names. */
 export type Snapshot = { session: string; blocks: Block[]; run: RunInfo | null; rollcall: Array<Omit<RollCall, "session">>; lines: Line[]; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
 
@@ -214,7 +218,8 @@ export class ForumHub {
 				.map(({ sourceId, kind, name, commit, ref, files, bytes }) => ({ sourceId, kind, name, ...(commit ? { commit } : {}), ...(ref ? { ref } : {}), files, bytes }));
 			const d = { session: s.id, blockId: t.blockId, table: TABLE }, messages = await messagesOf(this.host, d);
 			const talk = { messages: messages.length, decisions: (await decisionsOf(this.host, d)).length, forPerson: owed(messages, [], {}).person.length };
-			return { ...t, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections } : null };
+			const check = head ? await checkOf(this.host, d, head.version) : null;
+			return { ...t, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
 		}));
 		return { session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
 	}
@@ -272,7 +277,8 @@ export class ForumHub {
 		const versions = await versionsOf(this.host, d), doc = version === undefined ? versions.at(-1) : versions.find((v) => v.version === version);
 		if (!doc) return null;
 		const { session: _s, slot: _k, ...full } = await fullDoc(this.host, doc);
-		return { blockId, doc: full, versions: versions.map(({ version, author, model, changed, ts }) => ({ version, author, model, changed, ts })) };
+		const check = await checkOf(this.host, d, doc.version);
+		return { blockId, doc: full, check: check ? { ok: check.ok, failures: check.failures } : null, versions: versions.map(({ version, author, model, changed, ts }) => ({ version, author, model, changed, ts })) };
 	}
 
 	/** The discussion of a block: its messages, oldest first, and the decisions. */
@@ -351,7 +357,7 @@ export class ForumHub {
 			const h = hosts.get(p.name) ?? { host: p, roles: new Set<string>() };
 			h.roles.add(p.role); hosts.set(p.name, h);
 		}
-		const order = ["space", "web", "agents", "model", "sources"];
+		const order = ["space", "web", "agents", "model", "sources", "checker"];
 		const spends = (await this.host.readAll({ type: "Spend", fields: { day: today() } }, { limit: 5000 })).map((e) => e.fields as unknown as Spend);
 		return {
 			hosts: [...hosts.entries()].map(([name, { host, roles }]) => ({ name, roles: order.filter((r) => roles.has(r)), host })),

@@ -11,6 +11,7 @@
     "start": "node --no-warnings --experimental-strip-types server/launch.ts",
     "space": "node --no-warnings --experimental-strip-types server/space-host.ts",
     "sources": "node --no-warnings --experimental-strip-types server/source-host.ts",
+    "checker": "node --no-warnings --experimental-strip-types server/check-host.ts",
     "agents": "node --no-warnings --experimental-strip-types server/agent-host.ts",
     "model": "node --no-warnings --experimental-strip-types server/model-host.ts",
     "web": "node --no-warnings --experimental-strip-types server/index.ts",

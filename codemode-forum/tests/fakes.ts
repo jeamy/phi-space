@@ -25,7 +25,10 @@ const here = (c: TextCall) => ({ text: `${c.model} is here.`, model: c.model, us
 export const OUTLINE = ["Goal", "Steps", "Risks"];
 const outline = (c: TextCall) => ({ text: OUTLINE.map((h) => `## ${h}\nWhat ${h.toLowerCase()} must say.`).join("\n\n"), model: c.model, usage: use(400, 0.04) });
 const sectionOf = (c: TextCall) => /Write the section "([^"]+)"/.exec(c.user)?.[1] ?? "?";
-const draft = (c: TextCall) => ({ text: `The ${sectionOf(c).toLowerCase()} of the plan, written by ${c.model}.`, model: c.model, usage: use(1000, 0.1) });
+/** A section's body; the one about the way names the plan's phase and how it is verified, as the checker asks. */
+export const PHASE = "\n\nPhase 1: do it. Verified by a test that can fail.";
+const draft = (c: TextCall) => ({ text: `The ${sectionOf(c).toLowerCase()} of the plan, written by ${c.model}.${/^(steps|weg)$/i.test(sectionOf(c)) ? PHASE : ""}`, model: c.model, usage: use(1000, 0.1) });
+export const SLOPPY = "Phase 1: rewrite `missing.md`.\n\nPhase 2: ship it. Verified by a test.\n\n> `README.md`: a line that is not there\n\nSee [the goal](#goals).";
 /** A kickoff without messages (150 tokens), and a reply that answers every question and agrees to every proposal it
  *  is asked about (250 tokens). */
 const kickoff = (c: TextCall, messages: string[] = []) => ({ text: ["UNDERSTANDING", `${c.model} understands the brief.`, ...(messages.length ? ["MESSAGES", ...messages] : [])].join("\n"), model: c.model, usage: use(150, 0.015) });
@@ -66,6 +69,22 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 		await log({ model: c.model, kind: call.kind, prompt: c.user });
 		if (call.kind === "reply" && c.model === "fake/beta") await gate(space, s);
 		return call.kind === "kickoff" ? kickoff(c, TALK[c.model]) : answer(c, call);
+	} }),
+	// a writer whose way section fails the checker four ways at first (a file that is not there, a line that is not in
+	// the file, a phase without a check, a link to nowhere), and mends them when it is told
+	sloppy: (_s, _space, log) => ({ text: async (c, call) => {
+		await log({ model: c.model, kind: call.kind, prompt: c.user });
+		if (call.kind === "draft" && sectionOf(c) === "Steps") return { text: SLOPPY, model: c.model, usage: use(1000, 0.1) };
+		if (call.kind === "revise") return { text: "Phase 1: rewrite `README.md` and add `notes/plan.md` (new). Verified by a test that can fail.\n\n> `README.md`: The resolution is 64.\n\nSee [the goal](#goal).", model: c.model, usage: use(1000, 0.1) };
+		return answer(c, call);
+	} }),
+	// the same writer, who mends nothing: every revision has the same faults in other words
+	stubborn: (s, space, log) => ({ text: async (c, call) => {
+		const n = await space.count({ type: "FakeCall", fields: { session: s, kind: "revise" } });
+		await log({ model: c.model, kind: call.kind });
+		if (call.kind === "draft" && sectionOf(c) === "Steps") return { text: SLOPPY, model: c.model, usage: use(1000, 0.1) };
+		if (call.kind === "revise") return { text: `${SLOPPY}\n\nRevision ${n + 1}.`, model: c.model, usage: use(1000, 0.1) };
+		return answer(c, call);
 	} }),
 	// a task with sources: the writer reads before it writes. The outline's first answer asks for three reading calls,
 	// each section's for one (200 tokens an asking answer); with what was read in the prompt it hands in
