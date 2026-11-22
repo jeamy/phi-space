@@ -5,6 +5,8 @@
 //
 // The kinds so far:
 //   rollcall  the opening of a run: every model says that it is there.
+//   kickoff   before anything is written: every model says how it understands the brief, and may ask and propose.
+//   reply     a model answers the questions addressed to it and votes on the proposals of the others.
 //   outline   one model proposes the document's sections, each with a line on what it is to say.
 //   draft     one model writes one section.
 // The kinds of the joint work (kickoff, review, revise, ballot, …) follow with their phases.
@@ -19,9 +21,10 @@ import { cleanText, cleanTitle, DOC_LIMITS, fullDoc, headOf } from "./plandoc.ts
 import { criteriaOf, TASK_LIMITS, type PlanTask } from "./plantask.ts";
 import type { RunEntry } from "./run.ts";
 import type { PlanSource, SourceCall } from "./sources.ts";
+import { decisionsOf, discussionText, messagesOf, nameOf, TALK_LIMITS } from "./talk.ts";
 import { readExisting } from "./space.ts";
 
-export type CallKind = "rollcall" | "outline" | "draft";
+export type CallKind = "rollcall" | "kickoff" | "reply" | "outline" | "draft";
 /** A request for a model call, as an agent writes it (and the model process takes it). */
 export type LlmCall = {
 	callId: string; session: string; runId?: string; kind: CallKind;
@@ -30,6 +33,8 @@ export type LlmCall = {
 	agent: number; model: string; lang: "de" | "en";
 	/** outline and draft: the table whose document the call works on; draft: the section. */
 	table?: string; sectionId?: string;
+	/** reply: the threads the model owes a reply to. */
+	threads?: string[];
 	/** Who started the run: a visitor's calls count against the day's allowance of their address. */
 	client?: { ip: string; admin: boolean };
 	ts: number;
@@ -124,11 +129,32 @@ export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextC
 	};
 	const task = (await readExisting(space, { type: "PlanTask", fields: { session: call.session, blockId: run.params.blockId } }))?.fields as unknown as PlanTask | undefined;
 	if (!task) throw new Error("the task is gone");
+	const d0 = { session: call.session, blockId: run.params.blockId, table: call.table ?? "A" };
+	const messages = await messagesOf(space, d0), talk = discussionText(messages, await decisionsOf(space, d0), aliases, call.model);
+	if (call.kind === "reply") {
+		const owed = (call.threads ?? []).map((id) => messages.find((m) => m.msgId === id)).filter((m) => !!m);
+		return {
+			model: call.model, system: SYSTEM, maxTokens: 700,
+			user: [
+				who, taskText(task), ...talk,
+				`You owe the table a reply to these:\n${owed.map((m) => `#${m.msgId} ${m.kind} by ${nameOf(m, aliases)}: ${m.text}`).join("\n")}`,
+				`Answer with one line for each and nothing else:\nanswer #<id>: <your answer to a question>\nagree #<id>: <why you agree with a proposal>\ndisagree #<id>: <why not, and what instead>\n\n${answerIn(call.lang)}`,
+			].join("\n\n"),
+		};
+	}
 	const reading = readingText(await sourcesOf(space, call.session, run.params.blockId), call.itemId ? await readSteps(space, call.session, call.itemId) : []);
+	if (call.kind === "kickoff") return {
+		model: call.model, system: SYSTEM, maxTokens: 900,
+		user: [
+			who, taskText(task), ...reading,
+			"This is the kickoff, before anything is written. Say how you understand the brief: what the plan must achieve, what is unclear, what it should leave out. Then, if you have any, messages for the table: questions, and proposals for decisions the table should take before the outline.",
+			[`${reading.length ? "When you hand in: answer" : "Answer"} in this form:`, "UNDERSTANDING", "<at most 150 words>", "MESSAGES", "question to M2: <a question to one model, by its name at the table>", "question: <a question to the whole table>", "question to person: <something only the person can decide; not what the brief or the sources answer>", "proposal: <a decision for the table, with its reason>", "note: <an observation the others should know>", `At most ${TALK_LIMITS.kickoff} messages, one a line; leave out MESSAGES if you have none. ${answerIn(call.lang)}`].join("\n"),
+		].join("\n\n"),
+	};
 	if (call.kind === "outline") return {
 		model: call.model, system: SYSTEM, maxTokens: 1200,
 		user: [
-			who, taskText(task), ...reading,
+			who, taskText(task), ...talk, ...reading,
 			task.outline.length
 				? `The person fixed the document's sections. Keep exactly these headings in this order:\n${task.outline.map((h) => `## ${h}`).join("\n")}`
 				: `Propose the sections of the plan document: between ${OUTLINE.min} and ${OUTLINE.max}, in the order a reader needs them.`,
@@ -151,7 +177,7 @@ export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextC
 	return {
 		model: call.model, system: SYSTEM, maxTokens: 3000,
 		user: [
-			who, taskText(task), ...reading,
+			who, taskText(task), ...talk, ...reading,
 			`The document so far (a section not yet written shows what it is to say):\n"""\n${sofar}\n"""`,
 			`Write the section "${mine.title}". What it is to say: ${mine.rev === 1 ? mine.text : "(revise what is there)"}`,
 			`Write the section's body only, as Markdown: no heading for the section itself (use ### inside it if needed), concrete enough to act on, nothing the other sections already say. At most ${Math.floor(DOC_LIMITS.sectionBytes / 1000)} kB. ${answerIn(call.lang)}`,

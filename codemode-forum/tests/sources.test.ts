@@ -181,8 +181,9 @@ test("a task with a repository and documents: the writer reads before it writes,
 	assert.equal((await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 50_000 }, ADMIN)).status, 200);
 	const s = await ended(srv.url, id);
 	assert.deepEqual(s.run!.doc, { table: "A", version: 4, sections: 3, written: 3 });
-	// 300 for the roll call; the outline asked once (200) and was written (400); each section asked once and was written
-	assert.equal(s.run!.usage.tokens, 300 + 200 + 400 + 3 * (200 + 1000));
+	// 300 for the roll call, 450 for the kickoff; the outline asked once (200) and was written (400); each section asked
+	// once and was written
+	assert.equal(s.run!.usage.tokens, 300 + 450 + 200 + 400 + 3 * (200 + 1000));
 	const steps = (await srv.stack.space.readAll({ type: "ReadStep", fields: { session: id } }, { limit: 20 })).map((e) => e.fields as unknown as ReadStep);
 	assert.equal(steps.length, 4);
 	const outline = steps.find((x) => x.requests.length === 3)!;
@@ -220,7 +221,7 @@ test("a writer that reads as long as it may hands in when it must", async (t) =>
 	assert.ok(steps[0]!.text.includes("> read nothing.md\nNo such file in the source: nothing.md"));
 	assert.equal(await srv.stack.space.count({ type: "FakeCall", fields: { session: id, kind: "outline" } }), 7);
 	assert.equal(await srv.stack.space.count({ type: "FakeCall", fields: { session: id, kind: "outline", must: true } }), 1);
-	assert.equal(s.run!.usage.tokens, 300 + 6 * 200 + 400 + 3 * 1000);
+	assert.equal(s.run!.usage.tokens, 300 + 450 + 6 * 200 + 400 + 3 * 1000);
 	assert.equal(s.run!.doc!.written, 3);
 });
 
@@ -257,7 +258,7 @@ test("an agent that dies between two steps of its reading: the next one goes on 
 	// the outline's reading is kept and booked, and its second answer is held at the gate
 	await until("the outline's second call", async () => (await stack.space.count({ type: "FakeCall", fields: { session: id, kind: "outline", read: true } })) === 1);
 	const before = (await snapshot(srv.url, id)).run!.usage.tokens;
-	assert.equal(before, 300 + 200);
+	assert.equal(before, 300 + 450 + 200);
 	await stack.kill(agents, "SIGKILL");
 	await stack.agents({ leaseMs: 2000 });
 	await stack.space.write({ type: "FakeGate", fields: { session: id } }, null, 60_000);
@@ -267,6 +268,6 @@ test("an agent that dies between two steps of its reading: the next one goes on 
 	assert.equal(await stack.space.count({ type: "FakeCall", fields: { session: id, kind: "outline" } }), 2);
 	const steps = (await stack.space.readAll({ type: "ReadStep", fields: { session: id } }, { limit: 20 })).map((e) => e.fields as unknown as ReadStep);
 	assert.equal(steps.length, 4);
-	assert.equal(s.run!.usage.tokens, 300 + 200 + 400 + 3 * (200 + 1000));
+	assert.equal(s.run!.usage.tokens, 300 + 450 + 200 + 400 + 3 * (200 + 1000));
 	for (const type of ["LlmResult", "SourceRequest", "SourceResult", "WorkItem"]) assert.equal(await stack.space.count({ type, fields: { session: id } }), 0, type);
 });

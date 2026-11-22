@@ -14,6 +14,12 @@ export const ipTokensPerDay = () => Math.floor(envNumber("FORUM_TOKENS_PER_IP_DA
 /** How long an agent waits for the answer of a model call (FORUM_MODEL_WAIT_S, default 600 s): longer than the
  *  model process's worst case (a full minute window, the queue of calls, the call itself). */
 export const modelWaitMs = () => Math.round(envNumber("FORUM_MODEL_WAIT_S", 600) * 1000);
+/** How long a model has to reply to what the table addressed to it before the run goes on without its reply
+ *  (FORUM_REPLY_WAIT_S, default 300 s). */
+export const replyWaitMs = () => Math.round(envNumber("FORUM_REPLY_WAIT_S", 300) * 1000);
+/** How long the kickoff waits for the person's answers to the questions addressed to them (FORUM_PERSON_WAIT_S,
+ *  default 120 s; 0: not at all). What is not answered by then becomes an assumption. */
+export const personWaitMs = () => Math.round(envNumber("FORUM_PERSON_WAIT_S", 120) * 1000);
 /** Errors of a model call after which no call of the run can succeed: the run ends as over budget. */
 export const FATAL_LLM = /daily model budget used up|model agents are off|model budget of today for your address/i;
 /** Today (UTC), as the key of the per-address allowance. */

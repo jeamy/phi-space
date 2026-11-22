@@ -12,6 +12,7 @@ import { fullDoc, headOf, renderMarkdown, versionsOf, type FullDoc, type PlanDoc
 import { planTask, type PlanTask } from "./plantask.ts";
 import { askSources, indexPages } from "./source-host.ts";
 import { checkDocs, docsPack, indexHash, type PlanSource } from "./sources.ts";
+import { decisionsOf, messagesOf, newMsgId, owed, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
 
@@ -31,7 +32,9 @@ type Session = { id: string; clients: Set<WsConnection>; buckets: Map<string, nu
 
 export type Line = { text: string; ts: number };
 /** A plan task of the room with the state of its document: the newest version's sections, without their texts. */
-export type Block = Omit<PlanTask, "session"> & { sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>; doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"] } | null };
+export type Block = Omit<PlanTask, "session"> & { sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>;
+	/** The table's discussion in numbers: messages, decisions, and the questions to the person still open. */
+	talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"] } | null };
 /** A version of a block's document with its texts, and the versions there are. */
 export type PlanView = { blockId: string; doc: Omit<FullDoc, "session" | "slot">; versions: Array<Pick<PlanDoc, "version" | "author" | "model" | "changed" | "ts">> };
 /** What the page shows of a room. `blocks`: oldest first; a run works on the block it names. */
@@ -209,7 +212,9 @@ export class ForumHub {
 			const versions = await versionsOf(this.host, { session: s.id, blockId: t.blockId, table: TABLE }), head = versions.at(-1);
 			const sources = (await this.host.readAll({ type: "PlanSource", fields: { session: s.id, blockId: t.blockId } }, { limit: 4 })).map((e) => e.fields as unknown as PlanSource).sort((a, b) => a.sourceId.localeCompare(b.sourceId))
 				.map(({ sourceId, kind, name, commit, ref, files, bytes }) => ({ sourceId, kind, name, ...(commit ? { commit } : {}), ...(ref ? { ref } : {}), files, bytes }));
-			return { ...t, sources, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections } : null };
+			const d = { session: s.id, blockId: t.blockId, table: TABLE }, messages = await messagesOf(this.host, d);
+			const talk = { messages: messages.length, decisions: (await decisionsOf(this.host, d)).length, forPerson: owed(messages, [], {}).person.length };
+			return { ...t, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections } : null };
 		}));
 		return { session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
 	}
@@ -268,6 +273,31 @@ export class ForumHub {
 		if (!doc) return null;
 		const { session: _s, slot: _k, ...full } = await fullDoc(this.host, doc);
 		return { blockId, doc: full, versions: versions.map(({ version, author, model, changed, ts }) => ({ version, author, model, changed, ts })) };
+	}
+
+	/** The discussion of a block: its messages, oldest first, and the decisions. */
+	async talk(id: string, blockId: string): Promise<{ messages: Array<Omit<PlanMessage, "session">>; decisions: Array<Omit<PlanDecision, "session">> }> {
+		const d = { session: id, blockId, table: TABLE };
+		return { messages: (await messagesOf(this.host, d)).map(({ session: _s, ...m }) => m), decisions: (await decisionsOf(this.host, d)).map(({ session: _s, ...x }) => x) };
+	}
+
+	/** What a person says to the table: an answer in a thread (`thread`: the id of the message it answers), or a note of
+	 *  its own. Every model call after it has it in its context, before the table's decisions. */
+	async say(id: string, o: { blockId?: unknown; thread?: unknown; text?: unknown; by?: unknown }): Promise<{ msgId: string }> {
+		const s = await this.session(id);
+		const text = String(o.text ?? "").replace(/\r\n/g, "\n").trim();
+		if (!text) throw new Error("Say something");
+		if (text.length > TALK_LIMITS.text) throw new Error(`A message has at most ${TALK_LIMITS.text} characters`);
+		const task = (await this.#tasks(s.id)).find((t) => t.blockId === String(o.blockId ?? ""));
+		if (!task) throw new Error("Unknown plan task");
+		if (!this.#allow(s, "message", 20)) throw new Error("Too many messages, slow down");
+		const d = { session: s.id, blockId: task.blockId, table: TABLE }, root = o.thread ? (await messagesOf(this.host, d)).find((m) => m.msgId === String(o.thread)) : undefined;
+		if (o.thread && !root) throw new Error("Unknown message to answer");
+		const msgId = newMsgId();
+		const m: PlanMessage = { ...d, msgId, thread: root?.thread ?? msgId, kind: root?.kind === "question" ? "answer" : "note", author: String(o.by ?? "").replace(/\s+/g, " ").trim().slice(0, 40) || "guest", model: "human", text, round: 0, ts: Date.now() };
+		await this.host.write({ type: "PlanMessage", fields: m as never }, null, this.#ttl);
+		this.push(s);
+		return { msgId };
 	}
 
 	/** The newest version of a block's document as Markdown, under the first line of its brief. */

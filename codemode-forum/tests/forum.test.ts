@@ -56,13 +56,14 @@ test("a run on a plan task: the roll call, then one model writes the outline and
 		assert.deepEqual(s.rollcall.map((a) => a.alias), ["M1", "M2", "M3"]);
 		assert.deepEqual(s.rollcall.map((a) => a.model).sort(), THREE);
 		for (const a of s.rollcall) assert.equal(a.text, `${a.model} is here.`);
-		// three roll call answers of 100 tokens, an outline of 400, three sections of 1000
-		assert.deepEqual([s.run!.usage.tokens, Math.round(s.run!.usage.costUsd * 100)], [3700, 37]);
-		assert.deepEqual([s.run!.items, s.run!.phase, s.run!.ended, s.run!.blockId], [{ open: 0, done: 7 }, "done", undefined, blockId]);
+		// three roll call answers of 100 tokens, three kickoff answers of 150, an outline of 400, three sections of 1000
+		assert.deepEqual([s.run!.usage.tokens, Math.round(s.run!.usage.costUsd * 1000)], [4150, 415]);
+		assert.deepEqual([s.run!.items, s.run!.phase, s.run!.ended, s.run!.blockId], [{ open: 0, done: 10 }, "done", undefined, blockId]);
+		assert.deepEqual([s.run!.present!.length, s.run!.talk], [3, { messages: 3, decisions: 0 }]);
 		const writer = s.rollcall[0]!.model; // M1
 		assert.equal(s.run!.writer, writer);
 		assert.deepEqual(s.run!.doc, { table: "A", version: 4, sections: 3, written: 3 });
-		assert.match(s.lines.at(-1)!.text, /^Run finished: 3 of 3 models answered the roll call; M1 wrote 3 of 3 sections of the first draft \(version 4\) \(3700 tokens, \$0\.3700\)$/);
+		assert.match(s.lines.at(-1)!.text, /^Run finished: 3 of 3 models answered the roll call; 3 messages, 0 decisions; M1 wrote 3 of 3 sections of the first draft \(version 4\) \(4150 tokens, \$0\.4150\)$/);
 		// the document: the outline was version 1, every section written since is one more
 		const block = s.blocks[0]!;
 		assert.deepEqual([block.blockId, block.brief, block.lang, block.criteria], [blockId, BRIEF, "en", ["Names the tests of every phase"]]);
@@ -77,19 +78,21 @@ test("a run on a plan task: the roll call, then one model writes the outline and
 		// what the models were told: their own name and the others' names, never which model is behind them; the writer
 		// gets the brief, all criteria, and for a section what it is to say
 		const calls = (await srv.stack.space.readAll({ type: "FakeCall", fields: { session: id } }, { limit: 20 })).map((e) => e.fields as unknown as { model: string; kind: string; prompt: string });
-		assert.deepEqual(calls.map((c) => c.kind).sort(), ["draft", "draft", "draft", "outline", "rollcall", "rollcall", "rollcall"]);
-		for (const c of calls) { assert.match(c.prompt, new RegExp(`You are ${s.run!.aliases[c.model]}\\.`)); if (c.kind !== "draft") assert.doesNotMatch(c.prompt, /fake\//); }
-		for (const c of calls.filter((x) => x.kind !== "rollcall")) { assert.equal(c.model, writer); assert.ok(c.prompt.includes(BRIEF)); for (const k of [...FIXED_CRITERIA, "Names the tests of every phase"]) assert.ok(c.prompt.includes(k), k); }
+		assert.deepEqual(calls.map((c) => c.kind).sort(), ["draft", "draft", "draft", "kickoff", "kickoff", "kickoff", "outline", "rollcall", "rollcall", "rollcall"]);
+		for (const c of calls) { assert.match(c.prompt, new RegExp(`You are ${s.run!.aliases[c.model]}\\.`)); if (c.kind === "rollcall" || c.kind === "kickoff") assert.doesNotMatch(c.prompt, /fake\//); }
+		// the writer is told how the others understand the brief, each under its name at the table
+		assert.ok(calls.find((c) => c.kind === "outline")!.prompt.includes(`How the others understand the brief:\n- M2: ${s.rollcall[1]!.model} understands the brief.\n- M3: ${s.rollcall[2]!.model} understands the brief.`));
+		for (const c of calls.filter((x) => x.kind === "outline" || x.kind === "draft")) { assert.equal(c.model, writer); assert.ok(c.prompt.includes(BRIEF)); for (const k of [...FIXED_CRITERIA, "Names the tests of every phase"]) assert.ok(c.prompt.includes(k), k); }
 		assert.ok(calls.some((c) => c.kind === "draft" && c.prompt.includes('Write the section "Steps". What it is to say: What steps must say.')));
 		// booked in the space: one Spend per paid call, a visitor's (this request came without an admin login)
 		const spends = (await srv.stack.space.readAll({ type: "Spend", fields: { session: id } }, { limit: 20 })).map((e) => e.fields as unknown as Spend);
-		assert.deepEqual(spends.map((x) => [x.kind, x.tokens, x.admin]).sort(), [["draft", 1000, false], ["draft", 1000, false], ["draft", 1000, false], ["outline", 400, false], ["rollcall", 100, false], ["rollcall", 100, false], ["rollcall", 100, false]]);
+		assert.deepEqual(spends.map((x) => [x.kind, x.tokens, x.admin]).sort(), [["draft", 1000, false], ["draft", 1000, false], ["draft", 1000, false], ["kickoff", 150, false], ["kickoff", 150, false], ["kickoff", 150, false], ["outline", 400, false], ["rollcall", 100, false], ["rollcall", 100, false], ["rollcall", 100, false]]);
 		const system = (await (await fetch(`${srv.url}/api/system`)).json()) as { hosts: Array<{ roles: string[] }>; today: { calls: number; tokens: number } };
 		assert.deepEqual(system.hosts.flatMap((h) => h.roles).sort(), ["agents", "model", "space", "web"]);
-		assert.deepEqual({ calls: system.today.calls, tokens: system.today.tokens }, { calls: 7, tokens: 3700 });
+		assert.deepEqual({ calls: system.today.calls, tokens: system.today.tokens }, { calls: 10, tokens: 4150 });
 		// nothing of the run is left behind
 		for (const type of ["ForumRun", "WorkItem", "AgentSlot", "LlmCall", "LlmResult", "ItemStart"]) assert.equal(await srv.stack.space.count({ type, fields: { session: id } }), 0, type);
-		// a second run on the block finds its document written: the roll call, and nothing more to do
+		// a second run on the block finds its document written: the roll call, no kickoff, and nothing more to do
 		assert.equal((await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 50_000 })).status, 200);
 		const again = await until("the second run to end", async () => { const x = await snapshot(srv.url, id); return x.run && !x.run.active && x.run.runId !== s.run!.runId ? x : null; });
 		assert.deepEqual([again.run!.phase, again.run!.doc, again.run!.usage.tokens], ["done", { table: "A", version: 4, sections: 3, written: 3 }, 300]);
@@ -214,10 +217,10 @@ test("a run goes on after the agents were killed and the space and the model pro
 		await stack.space.write({ type: "FakeGate", fields: { session: id } }, null, 60_000);
 		const s = await ended(srv.url, id, 60_000);
 		assert.deepEqual(s.rollcall.map((a) => a.model).sort(), THREE);
-		assert.equal(s.run!.usage.tokens, 3700); // every answer booked once
+		assert.equal(s.run!.usage.tokens, 4150); // every answer booked once
 		assert.deepEqual(s.run!.doc, { table: "A", version: 4, sections: 3, written: 3 });
 		assert.equal((await plan(srv.url, id, blockId)).doc.sections.length, 3);
-		assert.match(s.lines.at(-1)!.text, /^Run finished: 3 of 3 models answered the roll call; M1 wrote 3 of 3 sections/);
+		assert.match(s.lines.at(-1)!.text, /^Run finished: 3 of 3 models answered the roll call; 3 messages, 0 decisions; M1 wrote 3 of 3 sections/);
 	} finally { await srv.close(); await stack.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -229,8 +232,8 @@ test("an outline nobody can use is asked for again, and a section too long is cu
 		assert.equal((await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 50_000 })).status, 200);
 		const s = await ended(srv.url, id, 40_000);
 		assert.equal(await srv.stack.space.count({ type: "FakeCall", fields: { session: id, kind: "outline" } }), 2);
-		// the unusable outline was paid: 300 for the roll call, 300 and 400 for the outlines, 3000 for the sections
-		assert.deepEqual([s.run!.usage.tokens, s.run!.doc], [4000, { table: "A", version: 4, sections: 3, written: 3 }]);
+		// the unusable outline was paid: 300 for the roll call, 450 for the kickoff, 300 and 400 for the outlines, 3000 for the sections
+		assert.deepEqual([s.run!.usage.tokens, s.run!.doc], [4450, { table: "A", version: 4, sections: 3, written: 3 }]);
 		const risks = (await plan(srv.url, id, blockId)).doc.sections.find((x) => x.title === "Risks")!;
 		assert.ok(risks.bytes <= DOC_LIMITS.sectionBytes && risks.bytes > DOC_LIMITS.sectionBytes - 200, String(risks.bytes));
 		assert.match(risks.text, /^Risk 0: x+\n\nRisk 1: /);
@@ -257,7 +260,7 @@ test("a section someone else revised while the model wrote is not overwritten: t
 		const s = await ended(srv.url, id, 40_000);
 		// the model's first text for the section was refused and paid; its second one builds on the person's revision
 		assert.equal(await srv.stack.space.count({ type: "FakeCall", fields: { session: id, kind: "draft" } }), 4);
-		assert.equal(s.run!.usage.tokens, 300 + 400 + 4 * 1000);
+		assert.equal(s.run!.usage.tokens, 300 + 450 + 400 + 4 * 1000);
 		const view = await plan(srv.url, id, blockId);
 		assert.deepEqual(view.doc.sections.map((x) => [x.title, x.rev]), [["Goal", 3], ["Steps", 2], ["Risks", 2]]);
 		assert.deepEqual(view.versions.map((v) => v.model).filter((m) => m === "human").length, 1);
@@ -294,7 +297,7 @@ test("the admin logs in with the password, and only then chooses the models", as
 		const s = await ended(srv.url, id);
 		assert.deepEqual(s.run!.budget, { usd: 2 });
 		const spends = (await srv.stack.space.readAll({ type: "Spend", fields: { session: id } }, { limit: 20 })).map((e) => e.fields as unknown as Spend);
-		assert.deepEqual([spends.length, spends.every((x) => x.admin)], [7, true]);
+		assert.deepEqual([spends.length, spends.every((x) => x.admin)], [10, true]);
 		assert.equal((await post(srv.url, "/api/admin/logout", {}, { cookie })).status, 200);
 		assert.deepEqual(await session(cookie), { admin: false, available: true });
 	} finally { process.env.FORUM_ADMIN_PASSWORD = ""; await srv.close(); }

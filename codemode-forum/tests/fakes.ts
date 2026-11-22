@@ -26,7 +26,19 @@ export const OUTLINE = ["Goal", "Steps", "Risks"];
 const outline = (c: TextCall) => ({ text: OUTLINE.map((h) => `## ${h}\nWhat ${h.toLowerCase()} must say.`).join("\n\n"), model: c.model, usage: use(400, 0.04) });
 const sectionOf = (c: TextCall) => /Write the section "([^"]+)"/.exec(c.user)?.[1] ?? "?";
 const draft = (c: TextCall) => ({ text: `The ${sectionOf(c).toLowerCase()} of the plan, written by ${c.model}.`, model: c.model, usage: use(1000, 0.1) });
-const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "outline" ? outline(c) : draft(c));
+/** A kickoff without messages (150 tokens), and a reply that answers every question and agrees to every proposal it
+ *  is asked about (250 tokens). */
+const kickoff = (c: TextCall, messages: string[] = []) => ({ text: ["UNDERSTANDING", `${c.model} understands the brief.`, ...(messages.length ? ["MESSAGES", ...messages] : [])].join("\n"), model: c.model, usage: use(150, 0.015) });
+const owedIn = (c: TextCall) => [...(c.user.split("You owe the table a reply to these:")[1] ?? "").matchAll(/^#([0-9a-f]{4}) (question|proposal)/gm)].map((m) => ({ id: m[1]!, kind: m[2]! }));
+const reply = (c: TextCall, stance = "agree") => ({ text: owedIn(c).map((o) => (o.kind === "question" ? `answer #${o.id}: The answer of ${c.model}.` : `${stance} #${o.id}: Says ${c.model}.`)).join("\n"), model: c.model, usage: use(250, 0.025) });
+const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "kickoff" ? kickoff(c) : call.kind === "reply" ? reply(c) : call.kind === "outline" ? outline(c) : draft(c));
+/** What the three models say at the kickoff of the talking scenarios: a proposal, a question to the table, a question
+ *  to the person. */
+const TALK: Record<string, string[]> = {
+	"fake/alpha": ["proposal: Keep the tile size and scale the grid, because the art stays as it is."],
+	"fake/beta": ["question: Which files hold the resolution?", "note: The README names src/world.ts."],
+	"fake/gamma": ["question to person: May the save format change?"],
+};
 
 const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) => Team> = {
 	// every model answers the roll call (100 tokens and a cent each); the writer's outline has three sections (400
@@ -44,6 +56,17 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	} }),
 	// dear answers: 3000 tokens each
 	dear: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); return { ...answer(c, call), usage: use(3000, 0.3) }; } }),
+	// the table talks at the kickoff (TALK); gamma disagrees with what it is asked to vote on
+	talk: (_s, _space, log) => ({ text: async (c, call) => {
+		await log({ model: c.model, kind: call.kind, prompt: c.user });
+		return call.kind === "kickoff" ? kickoff(c, TALK[c.model]) : call.kind === "reply" ? reply(c, c.model === "fake/gamma" ? "disagree" : "agree") : answer(c, call);
+	} }),
+	// the same, and beta's reply never comes (it waits at a gate nobody opens)
+	late: (s, space, log) => ({ text: async (c, call) => {
+		await log({ model: c.model, kind: call.kind, prompt: c.user });
+		if (call.kind === "reply" && c.model === "fake/beta") await gate(space, s);
+		return call.kind === "kickoff" ? kickoff(c, TALK[c.model]) : answer(c, call);
+	} }),
 	// a task with sources: the writer reads before it writes. The outline's first answer asks for three reading calls,
 	// each section's for one (200 tokens an asking answer); with what was read in the prompt it hands in
 	read: (_s, _space, log) => ({ text: async (c, call) => {
@@ -57,7 +80,7 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	readhold: (s, space, log) => ({ text: async (c, call) => {
 		const read = c.user.includes("What you read so far");
 		await log({ model: c.model, kind: call.kind, callId: call.callId, read });
-		if (call.kind !== "rollcall" && !read) return { text: "READ\nread README.md", model: c.model, usage: use(200, 0.02) };
+		if ((call.kind === "outline" || call.kind === "draft") && !read) return { text: "READ\nread README.md", model: c.model, usage: use(200, 0.02) };
 		if (read) await gate(space, s);
 		return answer(c, call);
 	} }),

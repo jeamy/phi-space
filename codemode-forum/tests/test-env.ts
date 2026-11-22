@@ -16,3 +16,5 @@ process.env.FORUM_MODEL_WAIT_S = "";
 process.env.FORUM_REPOS = "";
 process.env.FORUM_SOURCE_LEASE_MS = "";
 process.env.FORUM_SOURCE_WAIT_S = "";
+process.env.FORUM_REPLY_WAIT_S = "";
+process.env.FORUM_PERSON_WAIT_S = "";

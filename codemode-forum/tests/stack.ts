@@ -33,7 +33,7 @@ export type Stack = {
 	/** Starts one more model process (`fakes`: the fake models of tests/fakes.ts, or the names of some of them). */
 	model(o?: { fakes?: boolean | string[] }): Promise<ChildProcess>;
 	/** Starts one more agents process. */
-	agents(o?: { leaseMs?: number }): Promise<ChildProcess>;
+	agents(o?: { leaseMs?: number; replyWaitS?: number; personWaitS?: number }): Promise<ChildProcess>;
 	/** Starts one more sources process (`repos`: FORUM_REPOS; `pause`: a marker file, see holdBeforeAnswer). */
 	sources(o?: { repos?: string; leaseMs?: number; pause?: string }): Promise<ChildProcess>;
 	/** Stops the space process and starts it again on the same socket (and the same file, if it has one). */
@@ -59,7 +59,7 @@ export async function startStack(o: { dbPath?: string; agents?: boolean; model?:
 			return c;
 		},
 		async agents(a = {}) {
-			const c = await run("server/agent-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", ...(a.leaseMs ? { FORUM_AGENT_LEASE_MS: String(a.leaseMs) } : {}) }, (l) => l.startsWith("[agents]"));
+			const c = await run("server/agent-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", ...(a.leaseMs ? { FORUM_AGENT_LEASE_MS: String(a.leaseMs) } : {}), ...(a.replyWaitS !== undefined ? { FORUM_REPLY_WAIT_S: String(a.replyWaitS) } : {}), FORUM_PERSON_WAIT_S: String(a.personWaitS ?? 0) }, (l) => l.startsWith("[agents]"));
 			others.push(c);
 			return c;
 		},

@@ -9,13 +9,16 @@ import { ThemeControls } from "./ThemeControls.tsx";
 import { renderSection } from "./lib/safe-markdown.ts";
 import { useTheme } from "./lib/theme.ts";
 
-type RunInfo = { active: boolean; runId: string; blockId: string; models: string[]; perModel: number; aliases: Record<string, string>; phase: "rollcall" | "outline" | "draft" | "done"; writer?: string; doc?: { table: string; version: number; sections: number; written: number }; items: { open: number; done: number }; usage: { tokens: number; costUsd: number }; budget: { tokens?: number; usd?: number }; note?: string; ended?: "budget" | "models" };
+type RunInfo = { active: boolean; runId: string; blockId: string; models: string[]; perModel: number; aliases: Record<string, string>; phase: "rollcall" | "kickoff" | "discuss" | "outline" | "draft" | "done"; writer?: string; talk?: { messages: number; decisions: number }; doc?: { table: string; version: number; sections: number; written: number }; items: { open: number; done: number }; usage: { tokens: number; costUsd: number }; budget: { tokens?: number; usd?: number }; note?: string; ended?: "budget" | "models" };
 type Answer = { runId: string; model: string; alias: string; agent: number; text: string; ts: number };
 type SectionRef = { sectionId: string; rev: number; title: string; bytes: number; author: string; model: string };
 type Source = { sourceId: string; kind: "docs" | "repo"; name: string; commit?: string; ref?: string; files: number; bytes: number };
-type Block = { blockId: string; brief: string; lang: "de" | "en"; outline: string[]; criteria: string[]; ts: number; sources: Source[]; doc: { table: string; version: number; versions: number; bytes: number; sections: SectionRef[] } | null };
+type Block = { blockId: string; brief: string; lang: "de" | "en"; outline: string[]; criteria: string[]; ts: number; sources: Source[]; talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: SectionRef[] } | null };
 type Snapshot = { session: string; blocks: Block[]; run: RunInfo | null; rollcall: Answer[]; lines: Array<{ text: string; ts: number }>; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
 type PlanView = { blockId: string; doc: { version: number; bytes: number; author: string; model: string; changed: string[]; ts: number; sections: Array<SectionRef & { text: string }> }; versions: Array<{ version: number; author: string; model: string; changed: string[]; ts: number }> };
+type Message = { msgId: string; thread: string; kind: "understanding" | "question" | "answer" | "proposal" | "vote" | "objection" | "note"; author: string; model: string; to?: string; stance?: "agree" | "disagree"; text: string; ts: number };
+type Decision = { thread: string; text: string; agreed: string[]; against: string[]; of: number };
+type Talk = { blockId: string; messages: Message[]; decisions: Decision[] };
 type Models = { enabled: boolean; on: boolean; models: Array<{ id: string; label: string }> };
 type System = { hosts: Array<{ name: string; roles: string[]; host: { cpu: string; cores: number; memGiB: number } }>; today: { calls: number; tokens: number; costUsd: number } };
 
@@ -30,7 +33,9 @@ const T = {
 		need: (n: number) => `Ein Lauf braucht mindestens ${n} verschiedene Modelle.`, noTask: "Lege zuerst eine Planaufgabe an.",
 		lead: "Mindestens drei KI-Modelle entwickeln hier gemeinsam einen Plan. Bisher: Nach dem Appell schreibt eines von ihnen die Gliederung und den ersten Entwurf jedes Abschnitts. Die gemeinsame Arbeit daran (Diskussion, Prüfung, Abstimmung) folgt.",
 		table: "Am Tisch", waiting: "noch keine Antwort", active: "läuft", ended: "beendet", budgetUsed: "Budget verbraucht", fewModels: "zu wenige Modelle", items: (d: number, o: number) => `${d} erledigt, ${o} offen`,
-		phase: { rollcall: "Appell", outline: "Gliederung", draft: "Entwurf", done: "Entwurf fertig" }, written: (w: number, n: number) => `${w} von ${n} Abschnitten geschrieben`, writer: "schreibt",
+		phase: { rollcall: "Appell", kickoff: "Auftakt", discuss: "Diskussion", outline: "Gliederung", draft: "Entwurf", done: "Entwurf fertig" },
+		talk: "Diskussion", noTalk: "Noch nichts gesagt. Die Modelle sprechen beim Auftakt eines Laufs; du kannst jederzeit etwas sagen.", decided: "Entschieden", agreed: (a: number, n: number) => `${a} von ${n} dafür`, understandings: "So verstehen die Modelle den Auftrag", forYou: "Frage an dich", answerPh: "Deine Antwort …", sayPh: "Dem Tisch etwas sagen (gilt vor jeder Entscheidung) …", send: "Senden", you: "Person",
+		kind: { understanding: "Verständnis", question: "Frage", answer: "Antwort", proposal: "Vorschlag", vote: "Stimme", objection: "Einwand", note: "Notiz" }, to: "an", all: "alle", person: "die Person", agree: "dafür", disagree: "dagegen", written: (w: number, n: number) => `${w} von ${n} Abschnitten geschrieben`, writer: "schreibt",
 		doc: "Dokument", noDoc: "Noch kein Dokument. Es beginnt mit dem ersten Lauf auf dieser Aufgabe.", version: "Fassung", newest: "neueste", by: "von", rev: "Rev.", changed: "geändert", markdown: "Markdown", intent: "noch nicht geschrieben; soll sagen:",
 		tasks: "Aufgaben", log: "Protokoll", empty: "Noch keine Planaufgabe in diesem Raum.", hosts: "Prozesse", today: (c: number, t: number) => `heute ${c} Modellaufrufe, ${t} Tokens`,
 	},
@@ -44,7 +49,9 @@ const T = {
 		need: (n: number) => `A run needs at least ${n} different models.`, noTask: "Create a plan task first.",
 		lead: "At least three AI models develop one plan together here. So far: after the roll call one of them writes the outline and the first draft of every section. The joint work on it (discussion, review, ballots) follows.",
 		table: "At the table", waiting: "no answer yet", active: "running", ended: "ended", budgetUsed: "budget used up", fewModels: "too few models", items: (d: number, o: number) => `${d} done, ${o} open`,
-		phase: { rollcall: "roll call", outline: "outline", draft: "draft", done: "draft written" }, written: (w: number, n: number) => `${w} of ${n} sections written`, writer: "writes",
+		phase: { rollcall: "roll call", kickoff: "kickoff", discuss: "discussion", outline: "outline", draft: "draft", done: "draft written" },
+		talk: "Discussion", noTalk: "Nothing said yet. The models speak at the kickoff of a run; you can say something at any time.", decided: "Decided", agreed: (a: number, n: number) => `${a} of ${n} agreed`, understandings: "How the models understand the brief", forYou: "Question to you", answerPh: "Your answer …", sayPh: "Say something to the table (it outranks any decision) …", send: "Send", you: "person",
+		kind: { understanding: "understanding", question: "question", answer: "answer", proposal: "proposal", vote: "vote", objection: "objection", note: "note" }, to: "to", all: "all", person: "the person", agree: "agrees", disagree: "disagrees", written: (w: number, n: number) => `${w} of ${n} sections written`, writer: "writes",
 		doc: "Document", noDoc: "No document yet. It begins with the first run on this task.", version: "Version", newest: "newest", by: "by", rev: "rev.", changed: "changed", markdown: "Markdown", intent: "not written yet; it is to say:",
 		tasks: "Tasks", log: "Log", empty: "No plan task in this room yet.", hosts: "Processes", today: (c: number, t: number) => `today ${c} model calls, ${t} tokens`,
 	},
@@ -83,6 +90,9 @@ export function CodemodeForum() {
 	const [focus, setFocus] = useState<string | null>(null); // the block shown; null: the newest
 	const [version, setVersion] = useState<number | null>(null); // the version shown; null: the newest
 	const [view, setView] = useState<PlanView | null>(null);
+	const [talk, setTalk] = useState<Talk | null>(null);
+	const [say, setSay] = useState("");
+	const [answers_, setAnswers_] = useState<Record<string, string>>({}); // drafts of answers, by the question's id
 	const rid = encodeURIComponent(room);
 
 	useEffect(() => {
@@ -139,6 +149,15 @@ export function CodemodeForum() {
 		return () => { dead = true; };
 	}, [rid, block?.blockId, headVersion, version]);
 
+	// the discussion is fetched when the block or the number of its messages or decisions changes
+	const talkKey = block ? `${block.blockId}:${block.talk.messages}:${block.talk.decisions}` : "";
+	useEffect(() => {
+		if (!block) { setTalk(null); return; }
+		let dead = false;
+		api<Omit<Talk, "blockId">>(`/rooms/${rid}/talk/${block.blockId}`).then((x) => { if (!dead) setTalk({ blockId: block.blockId, ...x }); }).catch(() => {});
+		return () => { dead = true; };
+	}, [rid, talkKey]);
+
 	const available = models?.enabled && models.on ? models.models : [];
 	const limits = snap?.limits ?? { minModels: 3, maxModels: 5, maxPerModel: 3, visitorTokens: 0 };
 	const picked = available.filter((m) => chosen.has(m.label)).map((m) => m.label);
@@ -154,6 +173,14 @@ export function CodemodeForum() {
 	const table = run ? [...run.models].sort((a, b) => (run.aliases[a] ?? "").localeCompare(run.aliases[b] ?? "")) : [];
 	const runHere = run && block && run.blockId === block.blockId ? run : null;
 	const html = useMemo(() => (view?.doc.sections ?? []).map((s) => ({ ...s, html: renderSection(s.text) })), [view]);
+	const speak = (thread?: string) => act(async () => {
+		const text = thread ? answers_[thread] ?? "" : say;
+		await api(`/rooms/${rid}/message`, { blockId: block?.blockId, text, ...(thread ? { thread } : {}) });
+		if (thread) setAnswers_((cur) => { const { [thread]: _sent, ...rest } = cur; return rest; }); else setSay("");
+	});
+	const said = talk && block && talk.blockId === block.blockId ? talk : null;
+	const who = (m: { model: string; author: string }) => (m.model === "human" ? `${t.you} (${m.author})` : name(m.model));
+	const threads = (said?.messages ?? []).filter((m) => m.thread === m.msgId && m.kind !== "understanding");
 	const name = (model: string) => (runHere?.aliases[model] ? `${runHere.aliases[model]} · ${model}` : model);
 
 	return (
@@ -276,6 +303,40 @@ export function CodemodeForum() {
 									</div>
 								</div>
 							) : null}
+							<div className="panel">
+								<h2>{t.talk}</h2>
+								{said && (said.messages.length || said.decisions.length) ? (
+									<div className="talk">
+										{said.decisions.map((x) => <div key={x.thread} className="talk__decision"><b>{t.decided}</b> {x.text} <span className="muted">({t.agreed(x.agreed.length, x.of)})</span></div>)}
+										{said.messages.some((m) => m.kind === "understanding") ? (
+											<details>
+												<summary>{t.understandings}</summary>
+												{said.messages.filter((m) => m.kind === "understanding").map((m) => <div key={m.msgId} className="msg"><b>{who(m)}</b>{m.text}</div>)}
+											</details>
+										) : null}
+										{threads.map((root) => {
+											const replies = said.messages.filter((m) => m.thread === root.thread && m.msgId !== root.msgId);
+											const open = root.kind === "question" && root.to === "person" && !replies.some((m) => m.model === "human");
+											return (
+												<div key={root.msgId} className={"talk__thread" + (open ? " is-open" : "")}>
+													<div className="msg"><b>{who(root)}</b><span className="chip">{open ? t.forYou : t.kind[root.kind]}{root.to && !open ? ` ${t.to} ${root.to === "all" ? t.all : root.to === "person" ? t.person : name(root.to)}` : ""}</span> {root.text}</div>
+													{replies.map((m) => <div key={m.msgId} className="msg talk__reply"><b>{who(m)}</b>{m.kind === "vote" ? <span className={"chip " + (m.stance === "agree" ? "chip--ok" : "chip--bad")}>{m.stance === "agree" ? t.agree : t.disagree}</span> : null} {m.text}</div>)}
+													{open ? (
+														<form className="row" onSubmit={(e) => { e.preventDefault(); void speak(root.msgId); }}>
+															<input className="wide" maxLength={2000} placeholder={t.answerPh} aria-label={t.answerPh} value={answers_[root.msgId] ?? ""} onChange={(e) => setAnswers_((cur) => ({ ...cur, [root.msgId]: e.target.value }))} />
+															<button type="submit" className="btn btn--primary" disabled={!(answers_[root.msgId] ?? "").trim()}>{t.send}</button>
+														</form>
+													) : null}
+												</div>
+											);
+										})}
+									</div>
+								) : <div className="empty">{t.noTalk}</div>}
+								<form className="row" onSubmit={(e) => { e.preventDefault(); void speak(); }}>
+									<input className="wide" maxLength={2000} placeholder={t.sayPh} aria-label={t.sayPh} value={say} onChange={(e) => setSay(e.target.value)} />
+									<button type="submit" className="btn" disabled={!say.trim()}>{t.send}</button>
+								</form>
+							</div>
 							<div className="panel">
 								<h2>{t.doc}</h2>
 								{block.doc && view && view.blockId === block.blockId ? (

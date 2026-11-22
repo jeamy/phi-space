@@ -4,11 +4,13 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 to 3 of that plan.** The application has its processes, its space, the run mechanics, the admin
-login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2), and
-read-only sources the writer reads in before it writes (phase 3). A run so far: the **roll call**, in which every
-model at the table says that it is there, then one of them writes the outline and the first draft of every section.
-The joint work (the discussion, review, the second table, the ballots) follows with phases 4 to 9.
+**Status: phases 1 to 4 of that plan.** The application has its processes, its space, the run mechanics, the admin
+login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2),
+read-only sources the models read in (phase 3), and the discussion of the table (phase 4). A run so far: the **roll
+call**, in which every model says that it is there; the **kickoff**, in which each says how it understands the brief
+and may ask and propose; the **replies**, in which questions are answered and proposals voted on; then one model
+writes the outline and the first draft of every section, bound by what the table decided and the person said.
+Review rounds, the second table and the ballots follow with phases 5 to 9.
 
 The application is a directory of its own. Its base is copied from `codemode-chat/` (the comments at the top of each
 file say so) and it imports nothing from there; it depends on the library as `"phi-spaces": "file:../spaces"`.
@@ -37,6 +39,29 @@ sections and 96 kB). A new version writes only the sections that changed. Two `u
 `GET /api/rooms/<room>/plan/<block>` returns a version with its texts (`?version=n`, else the newest) and the list of
 versions; `GET /api/rooms/<room>/plan/<block>.md` the newest version as Markdown. Text from a model is untrusted: the
 page escapes its HTML and keeps only http(s) and mailto links (`client/lib/safe-markdown.ts`).
+
+## The discussion
+
+The models talk through messages in the space (`server/talk.ts`, `PlanMessage`), written as lines in a fixed form
+every model can produce: `question to M2: …`, `question: …` (to the table), `question to person: …`, `proposal: …`,
+`note: …`, `answer #id: …`, `agree #id: …`, `disagree #id: …`.
+
+- **Kickoff.** Before anything is written, every model at the table says how it understands the brief and may add up
+  to four messages. It may read in the sources first.
+- **Replies.** A question to a model must be answered by it, a question to the table by the next model at the table,
+  and every other model votes on each proposal. Each model that owes something gets one `reply` item with a deadline
+  (`FORUM_REPLY_WAIT_S`, default 300 s); a reply that does not come by then is no longer waited for.
+- **Decisions.** A proposal more than half of the models at the table agree to (the proposer among them) becomes a
+  `PlanDecision`. Every later prompt has the decisions as binding.
+- **The person** can write to the table at any time (the page, or `POST /api/rooms/<room>/message`), also as an answer
+  in a thread. What the person said stands in every later prompt, before the decisions, and outranks them. A question
+  to the person holds the run until it is answered or `FORUM_PERSON_WAIT_S` (default 120 s) has passed; what is not
+  answered by then the writer treats as an assumption to make and to name.
+- **Limits.** A message has at most 2000 characters, a model keeps at most 12 messages a round, a thread at most 8;
+  a model has one vote a proposal and none on its own.
+
+A model learns the others only by their names at the table. `GET /api/rooms/<room>/talk/<block>` returns the messages
+and decisions. A block that already has a document skips the kickoff: a run on it goes on writing.
 
 ## Sources, read-only
 
@@ -80,14 +105,14 @@ transactions lapse, and its work comes back for another process of the same role
 The role `checker` (the mechanical checks of a document) follows with its phase. There is no judge and no sandbox: nothing here runs code from an entry.
 
 Entries in the space so far: `ForumRoom`, `RoomLock`, `PlanTask`, `PlanSource`, `SourceFile`, `SourceIndex`, `SourceInfo`, `SourceRequest`, `SourceResult`, `ReadStep`,
-`PlanDoc`, `PlanSection`, `ForumRun` (the run and its
+`PlanMessage`, `PlanDecision`, `PlanDoc`, `PlanSection`, `ForumRun` (the run and its
 lock, one per room), `AgentSlot`, `WorkItem`, `ItemStart`, `RollCall`, `ForumRunDone`, `ForumLine`, `LlmCall`, `LlmResult`, `Spend`, `ModelInfo`,
 `ForumAdmin`, `AdminSession`, `QuotaLock`, `QuotaUse`, `Process`.
 
 ## Runs
 
-- A run works on a plan task. After the roll call, the first model by its name at the table among those that answered
-  writes the outline (version 1: every section with what it is to say) and then every section, each one version more.
+- A run works on a plan task. After the roll call, the kickoff and the replies (above), the first model by its name
+  at the table among those that answered writes the outline (version 1: every section with what it is to say) and then every section, each one version more.
   With several agents for that model the sections are written side by side. If fewer than three models answer the
   roll call, the run ends there. A run on a task whose document exists writes the sections still open.
 - The models write in the task's language.
@@ -146,7 +171,10 @@ section, the task's checks and the links of a section. `tests/sources.test.ts` b
 a pack offers and refuses (a path that leads out, a symbolic link, keys, large and binary files, untracked files, a
 later commit), the limits of the three calls, a task with a repository and documents whose writer reads first, a
 writer that reads as long as it may, a sources process killed with a request taken, and an agent killed between two
-steps of its reading.
+steps of its reading. `tests/talk.test.ts` covers the reading of a model's lines, what the table keeps (the limits,
+one vote a model), who owes a reply and when a proposal is decided, a run whose table talks (kickoff, replies, a
+decision and the person's word in the writer's prompt), and the two deadlines (a reply that never comes, a question
+the person does not answer).
 
 ## Safety notes
 

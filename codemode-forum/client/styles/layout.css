@@ -134,3 +134,13 @@ input.wide { width: 100%; }
 .doc pre code { background: none; padding: 0; }
 .sources { margin: 10px 0 0; }
 .panel details input[type=file] { max-width: 100%; }
+/* the discussion */
+.talk { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.talk__decision { border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; background: var(--surface); }
+.talk__decision b { color: var(--accent); margin-right: 6px; }
+.talk__thread { display: flex; flex-direction: column; gap: 4px; }
+.talk__thread.is-open > .msg:first-child { border-left-color: var(--warning); }
+.talk__reply { margin-left: 18px; }
+.talk .msg { white-space: pre-wrap; }
+.talk .chip { margin-right: 6px; font-size: 11px; }
+.panel form.row input.wide { flex: 1 1 200px; width: auto; }

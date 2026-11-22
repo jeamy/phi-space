@@ -7,7 +7,9 @@
 //   AgentSlot    one per agent: an agents process takes it under a long transaction and works as that agent until the
 //                run is over (a process that dies lets the transaction lapse, and another takes the slot).
 //   WorkItem     work of the run. So far: `rollcall`, one per model, in which the model says that it is there (the
-//                opening every run has); `outline`, in which one model proposes the document's sections; `draft`, one
+//                opening every run has); `kickoff`, one per model at the table, in which it says how it understands
+//                the brief and may ask and propose (talk.ts); `reply`, one per model that owes the table an answer or
+//                a vote; `person`, which waits for the person's answers until its deadline; `outline`, in which one model proposes the document's sections; `draft`, one
 //                per section, in which that model writes it. The kinds of the joint work follow with their phases.
 //   ReadStep     a step of an item's reading in the task's sources: the calls its model asked for and what they
 //                returned (calls.ts). Kept per item, so an agent that takes the item over does not read again.
@@ -26,7 +28,8 @@ import { NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import type { Usage } from "./llm.ts";
 import { mayRead, parseOutline, parseReads, parseSection, READING, readSteps, ROLLCALL_CHARS, sourcesOf, type CallKind, type LlmCall, type LlmResultEntry, type ReadStep } from "./calls.ts";
 import { askSources } from "./source-host.ts";
-import { FATAL_LLM, MIN_MODELS, modelWaitMs } from "./limits.ts";
+import { FATAL_LLM, MIN_MODELS, modelWaitMs, personWaitMs, replyWaitMs } from "./limits.ts";
+import { decide, decisionsOf, keep, messagesOf, owed, parseKickoff, parseMessages } from "./talk.ts";
 import { DocRefused, headOf, writeVersion, type PlanDoc } from "./plandoc.ts";
 import type { PlanTask } from "./plantask.ts";
 import { keepAlive, readExisting, StillHeld, takeAll, takeExisting } from "./space.ts";
@@ -36,7 +39,9 @@ export const rid = () => randomBytes(4).toString("hex");
 /** What the page shows of a run. `aliases`: the name each model has at the table (M1, M2, …), drawn per run. */
 export type RunInfo = { active: boolean; runId: string; blockId: string; models: string[]; perModel: number; aliases: Record<string, string>;
 	/** Where the run is: the roll call, the outline, the drafts of the sections, or through with them. */
-	phase: "rollcall" | "outline" | "draft" | "done";
+	phase: "rollcall" | "kickoff" | "discuss" | "outline" | "draft" | "done";
+	/** The models that answered the roll call: the table. And what the table said: messages kept, decisions taken. */
+	present?: string[]; talk?: { messages: number; decisions: number };
 	/** The model that writes the first draft (the first by its name at the table among those that answered the roll
 	 *  call), and how far its document is: the table, the newest version, its sections and how many are written. */
 	writer?: string; doc?: { table: string; version: number; sections: number; written: number };
@@ -57,9 +62,10 @@ export type RunEntry = { session: string; runId: string; params: RunParams; info
 	/** The budget held by model calls in flight, per item (released when the item books its call), and the calls
 	 *  booked so far (their average is what the next call is expected to cost). */
 	reserved?: Record<string, { tokens: number; usd: number }>; booked?: number; ts: number };
-export type WorkKind = "rollcall" | "outline" | "draft";
-/** `onlyModel`: only an agent of that model may take it. `table`, `sectionId`: the document and section it works on. */
-export type WorkItem = { session: string; runId: string; itemId: string; kind: WorkKind; ts: number; onlyModel?: string; notBefore?: number; tries?: number; table?: string; sectionId?: string };
+export type WorkKind = "rollcall" | "kickoff" | "reply" | "person" | "outline" | "draft";
+/** `onlyModel`: only an agent of that model may take it, until its `deadline` has passed: then any agent takes it to
+ *  close it. `table`, `sectionId`: the document and section it works on. `threads`: what a reply is owed to. */
+export type WorkItem = { session: string; runId: string; itemId: string; kind: WorkKind; ts: number; onlyModel?: string; notBefore?: number; tries?: number; table?: string; sectionId?: string; threads?: string[]; deadline?: number };
 export type Slot = { session: string; runId: string; agent: number; model: string };
 /** A model's answer to the roll call. */
 export type RollCall = { session: string; runId: string; model: string; alias: string; agent: number; text: string; usage?: Usage; ts: number };
@@ -70,7 +76,7 @@ export const ITEM_LEASE_MS = Math.max(1000, Number(process.env.FORUM_AGENT_LEASE
 /** Failed tries of an item before it is given up (it then counts as done, with nothing handed in). */
 const MAX_TRIES = 3;
 /** A failure that trying again will not mend. */
-const FINAL = /is not allowed|has no |the run's budget is used up|stopped \d+ times while|is gone$/i;
+const FINAL = /is not allowed|has no |the run's budget is used up|stopped \d+ times while|is gone$|came too late/i;
 /** The table the first draft is written at. */
 const TABLE = "A";
 /** Hard deaths of an agents process during an item's model call after which the item is given up. */
@@ -158,8 +164,9 @@ async function closingLine(space: SpaceLike, r: RunEntry, how: "finished" | "sto
 	const why = r.info.ended === "budget" ? " (budget used up)" : r.info.ended === "models" ? ` (fewer than ${MIN_MODELS} models answered)` : "";
 	const cost = `${r.info.usage.tokens} tokens${r.info.usage.costUsd ? `, $${r.info.usage.costUsd.toFixed(4)}` : ""}`;
 	const doc = r.info.doc, writer = r.params.aliases[r.info.writer ?? ""];
-	const draft = doc ? `; ${writer} wrote ${doc.written} of ${doc.sections} sections of the first draft (version ${doc.version})` : "";
-	return `Run ${how}${why}: ${present} of ${r.params.models.length} models answered the roll call${draft} (${cost})`;
+	const talk = r.info.talk ? `; ${r.info.talk.messages} messages, ${r.info.talk.decisions} decision${r.info.talk.decisions === 1 ? "" : "s"}` : "";
+	const draft = doc ? `${talk}; ${writer} wrote ${doc.written} of ${doc.sections} sections of the first draft (version ${doc.version})` : "";
+	return `Run ${how}${why}: ${present} of ${r.params.models.length} models answered the roll call${draft || talk} (${cost})`;
 }
 
 /** Ends a run in `txn`: its ForumRun goes (taken: only one ender succeeds), its left-over items and slots go, a
@@ -194,19 +201,19 @@ async function inTxn<T>(space: SpaceLike, open: Set<string>, fn: (txn: string) =
 /** Asks the model process for a call and waits for its answer, in `txn`: the answer is taken in the item's
  *  transaction, so if the item is cut off it stays for the next try. The call's id belongs to the item (and its try),
  *  so a repeated item finds the answer from before (or the call still waiting: written `unique`) instead of paying for
- *  a second call. */
-export async function callModel(space: SpaceLike, txn: string, call: LlmCall): Promise<LlmResultEntry> {
+ *  a second call. `until`: a deadline of the caller's own, after which it waits no longer. */
+export async function callModel(space: SpaceLike, txn: string, call: LlmCall, until = Infinity): Promise<LlmResultEntry> {
 	const tmpl = { type: "LlmResult", fields: { callId: call.callId } };
 	let r = await space.take(tmpl, NO_WAIT, { txn });
 	if (!r) {
 		try { await space.write({ type: "LlmCall", fields: call as never }, null, modelWaitMs() + 60_000, { unique: ["callId"] }); }
 		catch (e) { if (!(e instanceof UniqueConflict)) throw e; } // asked before, the answer is still coming
-		const end = Date.now() + modelWaitMs();
+		const end = Math.min(until, Date.now() + modelWaitMs());
 		while (!r && Date.now() < end) r = await space.take(tmpl, Math.min(20_000, Math.max(1, end - Date.now())), { txn });
 		// given up: a call no model process has taken yet is withdrawn, so nobody pays for an answer nobody fetches
 		if (!r) await space.take({ type: "LlmCall", fields: { callId: call.callId } }, NO_WAIT).catch(() => null);
 	}
-	return (r?.fields as unknown as LlmResultEntry | undefined) ?? { callId: call.callId, session: call.session, ok: false, error: "the model process did not answer in time", ts: Date.now() };
+	return (r?.fields as unknown as LlmResultEntry | undefined) ?? { callId: call.callId, session: call.session, ok: false, error: Date.now() >= until ? "the reply came too late" : "the model process did not answer in time", ts: Date.now() };
 }
 
 export type AgentDeps = { space: SpaceLike; ttl: number; open: Set<string>; stopping: () => boolean };
@@ -225,8 +232,8 @@ export async function agentLoop(d: AgentDeps, slot: Slot): Promise<void> {
 	}
 }
 
-/** May this agent take this item now? An item for one model waits for an agent of that model. */
-const eligible = (it: WorkItem, model: string, now: number) => (it.notBefore ?? 0) <= now && (!it.onlyModel || it.onlyModel === model);
+/** May this agent take this item now? An item for one model waits for an agent of that model, until its deadline. */
+const eligible = (it: WorkItem, model: string, now: number) => (it.notBefore ?? 0) <= now && (!it.onlyModel || it.onlyModel === model || (!!it.deadline && now > it.deadline));
 
 /** Takes and does one item this agent may do; false when there was none (or the only ones are not due yet). */
 async function workOnce(d: AgentDeps, slot: Slot): Promise<boolean> {
@@ -287,13 +294,13 @@ async function failed(d: AgentDeps, it: WorkItem, txn: string, why: string, usag
 		book(r, usage, it.itemId);
 		if (FATAL_LLM.test(why)) r.info.ended ??= "budget";
 		const who = r.params.aliases[it.onlyModel ?? ""] ?? "a model", reason = why.slice(0, 120);
-		r.info.note = it.kind === "rollcall" ? `${who} did not answer the roll call (${reason})` : it.kind === "outline" ? `${who} wrote no outline (${reason}); the run ends without a document` : `${who} did not write a section (${reason}); it keeps what it is to say`;
+		r.info.note = it.kind === "rollcall" ? `${who} did not answer the roll call (${reason})` : it.kind === "kickoff" ? `${who} said nothing at the kickoff (${reason})` : it.kind === "reply" ? `${who} did not reply to the table (${reason}); the run goes on without its reply` : it.kind === "outline" ? `${who} wrote no outline (${reason}); the run ends without a document` : `${who} did not write a section (${reason}); it keeps what it is to say`;
 		await finish(d, txn, r, it);
 	});
 }
 
 /** A model call of an item; ModelFailed when it does not answer. The call id carries the item's try. */
-async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, n: number, kind: CallKind, more: Partial<LlmCall> = {}): Promise<Record<string, unknown>> {
+async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, n: number, kind: CallKind, more: Partial<LlmCall> = {}, until = Infinity): Promise<Record<string, unknown>> {
 	await admit(d, it);
 	// an agents process that dies hard during the call leaves its ItemStart behind: an item that took down MAX_DEATHS
 	// processes is given up instead of taking down the next one (a graceful stop cancels the marker)
@@ -302,7 +309,7 @@ async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: Run
 	if (deaths >= MAX_DEATHS) throw new ModelFailed(`the agents process stopped ${deaths} times while working on this item`);
 	const start = await d.space.write({ type: "ItemStart", fields: k }, null, modelWaitMs() + 120_000);
 	let res: LlmResultEntry;
-	try { res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, runId: it.runId, itemId: it.itemId, kind, agent: slot.agent, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now(), ...more }); }
+	try { res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, runId: it.runId, itemId: it.itemId, kind, agent: slot.agent, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now(), ...more }, until); }
 	finally { await d.space.cancel(start.id).catch(() => {}); }
 	if (!res.ok || !res.value) throw new ModelFailed(res.error ?? "the model call failed", res.usage);
 	paid.set(it, res.usage ?? (res.value.usage as Usage | undefined));
@@ -341,6 +348,26 @@ async function work(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: Ru
 	}
 }
 
+/** The items that begin the writing, in the run's update: the outline, or on a block that has a document from an
+ *  earlier run the sections that still only say what they are to say (their first revision). */
+async function writing(d: AgentDeps, r: RunEntry): Promise<WorkItem[]> {
+	const writer = r.info.writer!, head = await headOf(d.space, { session: r.session, blockId: r.params.blockId, table: TABLE });
+	if (!head) { r.info.phase = "outline"; return [newItem(r, "outline", { onlyModel: writer, table: TABLE })]; }
+	const open = head.sections.filter((x) => x.rev === 1);
+	r.info.doc = { table: TABLE, version: head.version, sections: head.sections.length, written: head.sections.length - open.length };
+	r.info.phase = open.length ? "draft" : "done";
+	return open.map((x) => newItem(r, "draft", { onlyModel: writer, table: TABLE, sectionId: x.sectionId }));
+}
+
+/** The table has talked, in the run's update: the proposals with a majority become decisions, and the writing begins. */
+async function afterTalk(d: AgentDeps, txn: string, r: RunEntry): Promise<WorkItem[]> {
+	const doc = { session: r.session, blockId: r.params.blockId, table: TABLE }, messages = await messagesOf(d.space, doc, txn);
+	const decisions = decide(messages, await decisionsOf(d.space, doc, txn), r.info.present ?? [], doc);
+	for (const x of decisions) await d.space.write({ type: "PlanDecision", fields: x as never }, txn, d.ttl);
+	r.info.talk = { messages: messages.filter((m) => m.runId === r.runId).length, decisions: decisions.length };
+	return writing(d, r);
+}
+
 /** An item is done, in the run's update (`r`): it no longer counts as open, and when it was the last one its phase
  *  waited for, the next phase begins in this same transaction. `spawn`: items the item itself sets off. */
 async function finish(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spawn: WorkItem[] = []): Promise<void> {
@@ -349,21 +376,25 @@ async function finish(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spaw
 	if (--r.phaseLeft <= 0 && !r.info.ended) {
 		if (it.kind === "rollcall") {
 			// whoever answered is at the table; the first of them by its name writes the outline and the first draft
-			const present = (await d.space.readAll({ type: "RollCall", fields: { session: r.session, runId: r.runId } }, { limit: 50, txn })).map((e) => e.fields as unknown as RollCall).sort((a, b) => a.alias.localeCompare(b.alias));
+			const present = (await d.space.readAll({ type: "RollCall", fields: { session: r.session, runId: r.runId } }, { limit: 50, txn })).map((e) => e.fields as unknown as RollCall).sort((a, b) => a.alias.localeCompare(b.alias)).map((x) => x.model);
 			if (present.length < MIN_MODELS) r.info.ended = "models";
 			else {
-				const writer = r.info.writer = present[0]!.model, head = await headOf(d.space, { session: r.session, blockId: r.params.blockId, table: TABLE });
-				if (!head) { r.info.phase = "outline"; items.push(newItem(r, "outline", { onlyModel: writer, table: TABLE })); }
-				else {
-					// the block has a document from an earlier run: the sections that still only say what they are to say
-					// (their first revision) are written now
-					const open = head.sections.filter((x) => x.rev === 1);
-					r.info.doc = { table: TABLE, version: head.version, sections: head.sections.length, written: head.sections.length - open.length };
-					r.info.phase = open.length ? "draft" : "done";
-					items.push(...open.map((x) => newItem(r, "draft", { onlyModel: writer, table: TABLE, sectionId: x.sectionId })));
-				}
+				r.info.present = present; r.info.writer = present[0]!;
+				// a block without a document begins with the kickoff: every model at the table says how it understands the
+				// brief; a block that has one goes on writing it
+				if (await headOf(d.space, { session: r.session, blockId: r.params.blockId, table: TABLE })) items.push(...(await writing(d, r)));
+				else { r.info.phase = "kickoff"; items.push(...present.map((model) => newItem(r, "kickoff", { onlyModel: model, table: TABLE }))); }
 			}
-		} else if (it.kind === "draft") r.info.phase = "done";
+		} else if (it.kind === "kickoff") {
+			// what the table owes itself now: answers to the questions, a vote of every other model on each proposal, and
+			// the person's answers, each with its deadline
+			const messages = (await messagesOf(d.space, { session: r.session, blockId: r.params.blockId, table: TABLE }, txn)).filter((m) => m.runId === r.runId);
+			const o = owed(messages, r.info.present ?? [], r.params.aliases), now = Date.now();
+			for (const [model, threads] of o.byModel) items.push(newItem(r, "reply", { onlyModel: model, table: TABLE, threads, deadline: now + replyWaitMs() }));
+			if (o.person.length && personWaitMs() > 0) items.push(newItem(r, "person", { table: TABLE, deadline: now + personWaitMs() }));
+			if (items.length) r.info.phase = "discuss"; else items.push(...(await afterTalk(d, txn, r)));
+		} else if (it.kind === "reply" || it.kind === "person") items.push(...(await afterTalk(d, txn, r)));
+		else if (it.kind === "draft") r.info.phase = "done";
 		// an outline that failed leaves no document: the run has nothing more to do
 	}
 	if (items.length) {
@@ -379,7 +410,7 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 	const run = await readRun(space, it.session, it.runId);
 	if (!run) throw new RunGone();
 	const who = { author: `agent-${slot.agent}`, model: slot.model }, doc = { session: it.session, blockId: run.params.blockId, table: it.table ?? TABLE };
-	let usage: Usage | undefined, spawn: WorkItem[] = [], version: PlanDoc | undefined;
+	let usage: Usage | undefined, spawn: WorkItem[] = [], version: PlanDoc | undefined, note: string | undefined;
 	/** A model's text that cannot be used was paid all the same: the failure carries the usage. */
 	const usable = <T>(fn: () => T): T => { try { return fn(); } catch (e) { throw new ModelFailed((e as Error).message, usage); } };
 	if (run.info.ended) { /* nothing more is asked of the models */ }
@@ -388,6 +419,24 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 		usage = v.usage;
 		const answer: RollCall = { session: it.session, runId: it.runId, model: slot.model, alias: run.params.aliases[slot.model] ?? "?", agent: slot.agent, text: String(v.text).trim().slice(0, ROLLCALL_CHARS), ...(usage ? { usage } : {}), ts: Date.now() };
 		await space.write({ type: "RollCall", fields: answer as never }, txn, d.ttl);
+	} else if (it.kind === "kickoff") {
+		const v = await work(d, txn, it, slot, run, "kickoff", { table: doc.table });
+		usage = v.usage;
+		const k = usable(() => parseKickoff(String(v.text)));
+		await keep(space, txn, d.ttl, doc, { ...who, runId: it.runId, round: 0, aliases: run.params.aliases }, [{ kind: "understanding", text: k.understanding }, ...k.messages]);
+	} else if (it.kind === "reply") {
+		// past its deadline another model's agent closes it: the table does not wait for this reply any longer
+		if (slot.model !== it.onlyModel) note = `${run.params.aliases[it.onlyModel ?? ""] ?? "a model"} did not reply to the table in time; the run goes on without its reply`;
+		else {
+			const v = await ask(d, txn, it, slot, run, 0, "reply", { table: doc.table, threads: it.threads ?? [] }, it.deadline) as { text: string; usage?: Usage };
+			usage = v.usage;
+			// only answers and votes, and only on what was asked of it
+			await keep(space, txn, d.ttl, doc, { ...who, runId: it.runId, round: 0, aliases: run.params.aliases }, parseMessages(String(v.text)).filter((m) => (m.kind === "answer" || m.kind === "vote") && (it.threads ?? []).includes(m.thread ?? "")));
+		}
+	} else if (it.kind === "person") {
+		// waits for the person's answers; what is not answered at the deadline becomes an assumption (talk.ts)
+		const messages = (await messagesOf(space, doc)).filter((m) => m.runId === it.runId || m.model === "human");
+		if (owed(messages, run.info.present ?? [], run.params.aliases).person.length && Date.now() < (it.deadline ?? 0)) throw new Wait();
 	} else if (it.kind === "outline") {
 		const task = (await readExisting(space, { type: "PlanTask", fields: { session: it.session, blockId: run.params.blockId } }))?.fields as unknown as PlanTask | undefined;
 		if (!task) throw new ModelFailed("the task is gone");
@@ -412,6 +461,7 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 	await takeAll(space, { type: "LlmResult", fields: { session: it.session, itemId: it.itemId } }, { txn });
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (r) => {
 		book(r, usage, it.itemId);
+		if (note) r.info.note = note;
 		if (version) r.info.doc = { table: doc.table, version: Math.max(version.version, r.info.doc?.version ?? 0), sections: version.sections.length, written: (r.info.doc?.written ?? 0) + (it.kind === "draft" ? 1 : 0) };
 		if (it.kind === "outline" && version) r.info.phase = "draft";
 		await finish(d, txn, r, it, spawn);
