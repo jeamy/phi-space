@@ -33,7 +33,7 @@ export type MapRendererProps = {
 	said?: Array<{ from: string; text: string; at: number }>;
 	/** The own row from jetty to jetty (App, rowing3d.ts): when it began, the place it left, and whether the page still
 	 *  shows that place (the boat rows out) or the new one (it rows in). */
-	rowing?: { at: number; from: string; out: boolean };
+	rowing?: { at: number; from: string; out: boolean; /** a rowing boat (the default) or a sailing boat (sailing3d.ts) */ boat?: "row" | "sail"; /** a sail's mode (sailing3d.ts): at leisure with its looks at the islands */ mode?: "freizeit" | "arbeit" };
 	/** The world's clock as last received (App), for the 3D view's day and night; absent: always day. */
 	worldTime?: { v: WorldTimeView; at: number } | null;
 };

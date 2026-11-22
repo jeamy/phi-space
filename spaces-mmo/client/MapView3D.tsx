@@ -10,6 +10,7 @@ import type { AtlasState, AtlasView, CharView, ObjView } from "../shared/frames.
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import { lighthouseLamp, lighthouseTick, type LighthouseLamp } from "./lighthouse3d.ts";
 import { ease, ROW_IN_MS, ROW_OUT_MS, rowboat, rowOars, rowPath, seatRower } from "./rowing3d.ts";
+import { lookShare, sailboat, sailPlan, sailShare, sailState, sailTick, seatSailor, shorePath, type Sailboat, type SailMode } from "./sailing3d.ts";
 import { onFpsParts, onFpsStart, sayFps } from "./fps.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
@@ -40,8 +41,9 @@ type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: {
 const bedSig = (o: ObjView) => (o.kind === "road" ? `${o.roadState}:${o.paved}:${(o.runs?.[0] ?? []).map((c) => `${c.x},${c.y}`).join(" ")}` : o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "tree" ? `${o.treeStage}|${o.ripe ? 1 : 0}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
 	/** The own figure's row from jetty to jetty (rowing3d.ts): what is asked for, and what is under way. */
-	rowWant?: { kind: "out" | "in"; from: string; since: number } | null; rowKey?: string;
-	row?: { group: O3; oars: import("three").Group[]; fig: Figure; from: import("three").Vector3; to: import("three").Vector3; start: number; dur: number; kind: "out" | "in" } | null; rowHideUntil?: number;
+	rowWant?: { kind: "out" | "in"; from: string; since: number; boat: "row" | "sail"; mode: SailMode } | null; rowKey?: string;
+	/** a rowing boat with its oars, or a sailing boat (sailing3d.ts) and what heels in it, with the mode it sails in */
+	row?: { group: O3; oars: import("three").Group[]; sail?: { boat: Sailboat; hull: O3; mode: SailMode }; fig: Figure; from: import("three").Vector3; to: import("three").Vector3; start: number; dur: number; kind: "out" | "in" } | null; rowHideUntil?: number;
 	t: T;
 	renderer: import("three").WebGLRenderer;
 	post: ReturnType<typeof import("./post3d.ts").createPost>;
@@ -300,8 +302,8 @@ export function MapView3D(props: MapRendererProps) {
 		const s = state.current, r = props.rowing;
 		if (!s || !ready || !r) return;
 		const kind = r.out ? "out" : "in", key = `${r.at}:${kind}`;
-		if (s.rowKey === key || (kind === "in" && Date.now() - r.at > 15_000)) return;
-		s.rowKey = key; s.rowWant = { kind, from: r.from, since: performance.now() };
+		if (s.rowKey === key || (kind === "in" && Date.now() - r.at > 25_000)) return;
+		s.rowKey = key; s.rowWant = { kind, from: r.from, since: performance.now(), boat: r.boat ?? "row", mode: r.mode ?? "arbeit" };
 	}, [ready, props.rowing]);
 	useEffect(() => { if (state.current) applyFog(state.current, props.fog); }, [props.fog, ready]);
 	// what was said: a bubble over the speaker for a few seconds, shown up close (zoom ≥ 1.6)
@@ -516,22 +518,39 @@ function rowTick(s: Scene3D, now: number, props: MapRendererProps): boolean {
 		if (now - want.since > 8_000) s.rowWant = null;
 		else if (here && s.ground && own) {
 			s.rowWant = null;
-			const c = props.chars.get(me);
+			const c = props.chars.get(me), sail = want.boat === "sail";
 			const jetty = c && [...props.objs.values()].filter((o) => o.location === s.room.roomId && o.kind === "building" && (o.plan === "steg" || /steg|jetty/i.test(o.name)))
 				.sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0];
-			const path = jetty && rowPath(s.room.ground, (key) => tile3d(key, !!s.world.tiles[key]?.walk).water, jetty);
+			const water = (key: string) => tile3d(key, !!s.world.tiles[key]?.walk).water;
+			// a sail ends in a bay, which may have no jetty near the figure: then it lands on the shore before it
+			const near = jetty && c && (!sail || want.kind === "out" || Math.hypot(jetty.x - c.x, jetty.y - c.y) <= 4) ? jetty : undefined;
+			const path = (near && rowPath(s.room.ground, water, near)) || (sail && c ? shorePath(s.room.ground, water, c) : null);
 			if (c && path) {
 				const { w, h } = dims(s.room), key = s.room.ground[Math.floor(path.moor.y)]?.[Math.floor(path.moor.x)] ?? "";
 				const sea = tile3d(key, !!s.world.tiles[key]?.walk).height;
 				const v = (p: { x: number; y: number }) => new s.t.Vector3(p.x - w / 2, sea, p.y - h / 2);
-				const [from, to] = want.kind === "out" ? [v(path.moor), v(path.out)] : [v(path.out), v(path.moor)];
-				const { group, oars } = rowboat(s.t);
 				const fig = makeFigure(s.t, { id: me, skin: c.skin, own: true, ai: false, ...(c.look ? { style: c.look } : {}) });
-				seatRower(fig); group.add(fig.group);
-				const turn = new s.t.Group(); turn.add(group); turn.position.copy(from);
-				group.rotation.y = -Math.atan2(to.z - from.z, to.x - from.x);
-				shade(turn, false); s.scene.add(turn);
-				s.row = { group: turn, oars, fig, from, to, start: now, dur: want.kind === "out" ? ROW_OUT_MS - 200 : ROW_IN_MS, kind: want.kind };
+				if (sail) {
+					// out past the jetty's way to the open sea; in from the sea to the jetty or the shore (sailPlan: how long, how far)
+					const plan = sailPlan(want.mode, want.kind);
+					const len = Math.hypot(path.out.x - path.moor.x, path.out.y - path.moor.y) || 1, dir = { x: (path.out.x - path.moor.x) / len, y: (path.out.y - path.moor.y) / len };
+					const far = (k: number) => v({ x: path.moor.x + dir.x * k, y: path.moor.y + dir.y * k });
+					const [from, to] = want.kind === "out" ? [v(path.moor), far(plan.far)] : [far(plan.far), v(path.moor)];
+					const boat = sailboat(s.t);
+					seatSailor(fig); boat.group.add(fig.group);
+					const turn = new s.t.Group(); turn.add(boat.group); turn.position.copy(from);
+					turn.rotation.y = -Math.atan2(to.z - from.z, to.x - from.x);
+					shade(turn, false); s.scene.add(turn);
+					s.row = { group: turn, oars: [], sail: { boat, hull: boat.group, mode: want.mode }, fig, from, to, start: now, dur: want.kind === "out" ? plan.ms - 200 : plan.ms, kind: want.kind };
+				} else {
+					const [from, to] = want.kind === "out" ? [v(path.moor), v(path.out)] : [v(path.out), v(path.moor)];
+					const { group, oars } = rowboat(s.t);
+					seatRower(fig); group.add(fig.group);
+					const turn = new s.t.Group(); turn.add(group); turn.position.copy(from);
+					group.rotation.y = -Math.atan2(to.z - from.z, to.x - from.x);
+					shade(turn, false); s.scene.add(turn);
+					s.row = { group: turn, oars, fig, from, to, start: now, dur: want.kind === "out" ? ROW_OUT_MS - 200 : ROW_IN_MS, kind: want.kind };
+				}
 			}
 		}
 	}
@@ -539,16 +558,49 @@ function rowTick(s: Scene3D, now: number, props: MapRendererProps): boolean {
 	if (own && (r || now < (s.rowHideUntil ?? 0))) own.obj.visible = false;
 	if (!r) return false;
 	const p = Math.min(1, (now - r.start) / r.dur);
-	r.group.position.lerpVectors(r.from, r.to, ease(p));
-	r.group.position.y = r.from.y + Math.sin(now / 420) * 0.025;
-	rowOars(r.oars, now / 1000, r.fig);
+	if (r.sail) {
+		r.group.position.lerpVectors(r.from, r.to, sailShare(r.kind, p));
+		r.group.position.y = r.from.y;
+		sailTick(r.sail.boat, r.sail.hull, now / 1000, sailState(r.kind, p), r.fig);
+		lookAtIsland(s, r.group.position, lookShare(r.sail.mode, r.kind, p));
+	} else {
+		r.group.position.lerpVectors(r.from, r.to, ease(p));
+		r.group.position.y = r.from.y + Math.sin(now / 420) * 0.025;
+		rowOars(r.oars, now / 1000, r.fig);
+	}
 	if (p >= 1) {
 		s.scene.remove(r.group); dispose(r.group); s.row = null;
+		if (r.sail) positionCamera(s); // the player's own view again
 		// out: the old place stays a moment longer (App), with the figure gone from its jetty
 		if (r.kind === "out") s.rowHideUntil = now + 3_000;
 		else { s.rowHideUntil = 0; if (own) own.obj.visible = true; }
 	}
 	return true;
+}
+
+/** At leisure the camera looks from the sea at the island (sailing3d.ts lookShare): it stands seaward of the boat, a little
+ *  above the water, and looks past the boat at the middle of the island, so the boat sails towards it away from the island
+ *  or away from it towards the island; `share` blends it with the player's own view (0: that view alone). The island
+ *  round the room shows meanwhile, as on the island level. */
+const look = { pos: null as import("three").Vector3 | null, quat: null as import("three").Quaternion | null, cam: null as import("three").PerspectiveCamera | null };
+function lookAtIsland(s: Scene3D, boat: import("three").Vector3, share: number): void {
+	if (share <= 0) return;
+	positionCamera(s);
+	const t = s.t, mid = s.islandMid.reach > 0 ? new t.Vector3(s.islandMid.x, 0, s.islandMid.z) : new t.Vector3(0, 0, 0);
+	const away = new t.Vector3(boat.x - mid.x, 0, boat.z - mid.z);
+	if (away.lengthSq() < 1e-6) away.set(1, 0, 0);
+	away.normalize();
+	look.cam ??= new t.PerspectiveCamera(); look.pos ??= new t.Vector3(); look.quat ??= new t.Quaternion();
+	// seaward of the boat and a little to its side, so the boat stands in the picture and not in front of the lens
+	const side = new t.Vector3(-away.z, 0, away.x);
+	const eye = boat.clone().addScaledVector(away, 6).addScaledVector(side, 2.2); eye.y = boat.y + 2.4;
+	const aim = boat.clone().lerp(mid, 0.45); aim.y = boat.y + 0.9;
+	look.cam.position.copy(eye); look.cam.lookAt(aim);
+	look.pos.copy(s.camera.position).lerp(eye, share);
+	look.quat.copy(s.camera.quaternion).slerp(look.cam.quaternion, share);
+	s.camera.position.copy(look.pos); s.camera.quaternion.copy(look.quat);
+	if (s.camera.far < 400) { s.camera.far = 400; s.camera.updateProjectionMatrix(); }
+	for (const o of s.island?.children ?? []) if (!o.userData.cards) o.visible = true;
 }
 
 function step(s: Scene3D, dt: number, time: number, me: string): boolean {

@@ -144,6 +144,8 @@ export const EN: Record<string, string> = {
 	"{0} verfüttern ({1})": "Feed {0} ({1})",
 	"{0} opfern": "Offer {0}",
 	"{0} schenken": "Give to {0} as a gift",
+	"Nach {0} segeln (Freizeit)": "Sail to {0} (leisure)",
+	"Nach {0} segeln (Arbeit)": "Sail to {0} (work)",
 	"{0} herstellen": "Make {0}",
 	"Am Markt verkaufen …": "Sell at the market …",
 	"Du fährst mit dem Kahn nach {0} …": "Taking the ferry to {0} …",

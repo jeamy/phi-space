@@ -23,6 +23,7 @@ export type CellInput = {
 	/** Which seeds go into which bed (ItemUses.beds); without it a bed offers every carried seed and the command answers. */ beds?: ItemUses["beds"];
 	/** The rooms of the world and where a boat, a train and a cart can go (the overview's state); without it the commands list their places. */ travel?: { rooms: Array<{ roomId: string; name: string; island: string }>; stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> }; /** each island's epoch above the first, and the epoch roads need: without them no road is offered */ epochs?: Record<string, number> | null; roadEpoch?: number };
 	/** The islands a sailing boat goes to from here (the others, with the large ship's routes). */ sail?: string[];
+	/** Sets off for an island in a mode (sailing3d.ts: at leisure with a look at the islands, at work only casting off and coming in): with it each island has an entry for each mode. */ sailWith?: (island: string, mode: "freizeit" | "arbeit") => void;
 	/** "Bauen …" was chosen: the caller shows the plans. */ onPlans: () => void;
 	/** "Aushang" of a site: the caller shows the bag's list of them; without it the command answers. */ onOrders?: () => void;
 	/** "<ding> entnehmen …" of a chest with more than one: the caller asks how many, of `count` (without it: all of them). */ onTake?: (name: string, count: number) => void;
@@ -193,7 +194,7 @@ export function cellEntries(input: CellInput): CellEntry[] {
 
 /** A span in hours as the server tells it (animals.ts hours): days from two days on, minutes under an hour. */
 function spanHours(ms: number): string { const h = Math.round(ms / 3600_000); return h >= 48 ? `${Math.round(h / 24)} Tage` : h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; }
-function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos, feed, fed, decay, account }: CellInput): CellEntry[] {
+function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, sailWith, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos, feed, fed, decay, account }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: CellEntry[] = [];
 	/** The recipes made at a building of `plan`: what one carries enough for, and the whole list (server: trade.ts "craft hier"). */
@@ -431,7 +432,11 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 				if (to.length) for (const r of to) entries.push({ label: `Nach ${r.name} rudern`, line: `rudere ${r.name}` });
 				else entries.push({ label: "Rudern: wohin?", line: "rudere" });
 			}
-			if (boats.has("Segelboot")) for (const island of sail ?? []) entries.push({ label: `Nach ${island} segeln`, line: `segle ${island}` });
+			// at leisure (a look back at the island and one at the next) or at work (only casting off and coming in): the page shows it so
+			if (boats.has("Segelboot")) for (const island of sail ?? []) {
+				if (!sailWith) { entries.push({ label: `Nach ${island} segeln`, line: `segle ${island}` }); continue; }
+				entries.push({ label: `Nach ${island} segeln (Freizeit)`, line: `segle ${island}`, run: () => sailWith(island, "freizeit") }, { label: `Nach ${island} segeln (Arbeit)`, line: `segle ${island} #arbeit`, run: () => sailWith(island, "arbeit") });
+			}
 			if (boats.has("Ruderboot") || boats.has("Segelboot")) entries.push({ label: "Was liegt in der Luke?", line: "luke" }, { label: "Luke leeren", line: "luke entlade alle" });
 		}
 		if (o.plan === "steinbruch") entries.push({ label: "Stein brechen", line: "breche" });

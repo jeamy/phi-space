@@ -193,6 +193,12 @@ test("a jetty, a station and an own cart offer what they are for", () => {
 	const jetty = obj({ id: "j", kind: "building", name: "Steg", plan: "steg", x: 6, y: 5, w: 2, h: 1 });
 	assert.ok(!at(jetty).includes("rudere"), "no boat, no rowing");
 	assert.deepEqual(at(jetty, item("Ruderboot"), item("Segelboot")).filter((l) => /^(rudere|segle|luke)/.test(l)), ["rudere", "segle Nord", "luke", "luke entlade alle"]);
+	// the page that knows how to sail offers each island at leisure and at work, and sets off in that mode
+	const went: string[] = [];
+	const modes = cellEntries({ ...input, at: { x: jetty.x, y: jetty.y }, objs: new Map<string, ObjView>([[jetty.id, jetty], item("Segelboot")]), sail: ["Nord"], sailWith: (i, m) => went.push(`${i}:${m}`) }).filter((e) => e.label.startsWith("Nach Nord"));
+	assert.deepEqual(modes.map((e) => e.label), ["Nach Nord segeln (Freizeit)", "Nach Nord segeln (Arbeit)"]);
+	for (const e of modes) e.run!();
+	assert.deepEqual(went, ["Nord:freizeit", "Nord:arbeit"]);
 	assert.ok(at(obj({ id: "b", kind: "building", name: "Bahnhof", plan: "bahnhof", x: 6, y: 5, w: 3, h: 2 })).includes("zug"));
 	const cart = obj({ id: "k", kind: "cart", name: "Karren von Mira", ownerId: "me", x: 6, y: 5 });
 	assert.deepEqual(at(cart, item("Tang")).filter((l) => l.startsWith("karren")), ["karren", "karren lade Tang", "karren entlade", "karren nimm"]);

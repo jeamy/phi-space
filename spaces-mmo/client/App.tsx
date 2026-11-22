@@ -19,6 +19,7 @@ import { appendLine, isComing, isForMe, newSince, todosByPlace } from "./log.ts"
 import { byArrival, loadArrivals, noteArrivals, saveArrivals, type Arrivals } from "./arrivals.ts";
 import { travelText, TRAVEL_GIVE_UP_MS, TRAVEL_NOTE_MS } from "./travel.ts";
 import { ROW_OUT_MS } from "./rowing3d.ts";
+import { sailPlan, type SailMode } from "./sailing3d.ts";
 import type { ChatState } from "../shared/frames.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
@@ -218,7 +219,7 @@ function useDismiss(close: () => void): () => void {
 
 /** The menu of a long press or a right click on a cell: what stands, lies or burns there, and what one can do with it.
  *  Every entry is a text command. */
-function CellMenu({ at, beachAt, admin, todos, feed, fed, decay, tired, account, chars, objs, self, room, me, plans, guest, wild, beds, recipes, grinds, sail, travel, send, close, offer, offersIn, chat, sheet = false, onHelp, onWalk, onOrders }: { beachAt?: CellInput["beachAt"]; admin?: boolean; todos?: CellInput["todos"]; feed?: CellInput["feed"]; fed?: CellInput["fed"]; decay?: number; tired?: boolean; account?: string; offersIn?: CellInput["offersIn"]; recipes?: CellInput["recipes"]; grinds?: string[]; wild?: boolean; beds?: CellInput["beds"]; sail?: string[]; travel?: CellInput["travel"]; at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void; sheet?: boolean; onHelp?: (article: string) => void; /** A phone walks there step by step, to the free cell nearest it. */ onWalk?: (at: { x: number; y: number }) => void; onOrders?: () => void;
+function CellMenu({ at, beachAt, admin, todos, feed, fed, decay, tired, account, chars, objs, self, room, me, plans, guest, wild, beds, recipes, grinds, sail, sailWith, travel, send, close, offer, offersIn, chat, sheet = false, onHelp, onWalk, onOrders }: { /** sets off for an island in a mode (a sail at leisure or at work, sailing3d.ts) */ sailWith?: CellInput["sailWith"]; beachAt?: CellInput["beachAt"]; admin?: boolean; todos?: CellInput["todos"]; feed?: CellInput["feed"]; fed?: CellInput["fed"]; decay?: number; tired?: boolean; account?: string; offersIn?: CellInput["offersIn"]; recipes?: CellInput["recipes"]; grinds?: string[]; wild?: boolean; beds?: CellInput["beds"]; sail?: string[]; travel?: CellInput["travel"]; at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void; sheet?: boolean; onHelp?: (article: string) => void; /** A phone walks there step by step, to the free cell nearest it. */ onWalk?: (at: { x: number; y: number }) => void; onOrders?: () => void;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] } }) {
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
@@ -231,7 +232,7 @@ function CellMenu({ at, beachAt, admin, todos, feed, fed, decay, tired, account,
 	const [takeN, setTakeN] = useState("");
 	useEffect(() => setStep(null), [at]);
 	const fuel = fuelIn(objs, me);
-	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, recipes, grinds, beachAt, admin, todos, feed, fed, decay, tired, account, onPlans: () => setStep("plans"), onOrders, onTake: (take, count) => { setTakeN(""); setStep({ take, count }); } });
+	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, sailWith, travel, recipes, grinds, beachAt, admin, todos, feed, fed, decay, tired, account, onPlans: () => setStep("plans"), onOrders, onTake: (take, count) => { setTakeN(""); setStep({ take, count }); } });
 	const taking = step && typeof step === "object" && "take" in step ? step : null;
 	if (taking) {
 		entries.length = 0;
@@ -628,8 +629,10 @@ function SiteOrders({ objs, self, room, me, send, walk }: { objs: Map<string, Ob
 
 function Game({ account, onAccount, controls, startView }: { account: Account; onAccount: (a: Account | null, fresh?: boolean) => void; controls: ReactNode; startView: number }) {
 	const [hello, setHello] = useState<Hello | null>(null);
-	/** The own row (rowing3d.ts): sent from which place, and the place the page still shows while the boat rows out. */
-	const rowSent = useRef<{ at: number; from: string } | null>(null), roomNow = useRef("");
+	/** The own row or sail (rowing3d.ts, sailing3d.ts): sent from which place, with which boat. */
+	const rowSent = useRef<{ at: number; from: string; boat: "row" | "sail"; mode: SailMode } | null>(null), roomNow = useRef("");
+	/** How the player sails (sailing3d.ts): chosen in the menu as it sets off, kept for a typed „segle“ too. */
+	const sailMode = useRef<SailMode>((() => { try { return localStorage.getItem("mmo.sail.mode") === "arbeit" ? "arbeit" : "freizeit"; } catch { return "freizeit"; } })());
 	roomNow.current = hello?.room.roomId ?? "";
 	const [chars, setChars] = useState<Map<string, CharView>>(new Map());
 	const [objs, setObjs] = useState<Map<string, ObjView>>(new Map());
@@ -894,7 +897,9 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		s.send(JSON.stringify({ t: "cmd", line: text, ...(language() === "en" ? { lang: "en" } : {}) } satisfies ClientFrame));
 		{ const t = travelText(text, travelExits.current); if (t) startTravel(t); }
 		// a row to another jetty: the 3D view shows the boat when the new place comes (rowing below)
-		if (/^\s*(?:rudere|rudern|row)\s+\S/i.test(text) && roomNow.current) rowSent.current = { at: Date.now(), from: roomNow.current };
+		if (/^\s*(?:rudere|rudern|row)\s+\S/i.test(text) && roomNow.current) rowSent.current = { at: Date.now(), from: roomNow.current, boat: "row", mode: "arbeit" };
+		// a sail to another island: the same, out to sea and in at the other island's bay (into another region it takes longer)
+		if (/^\s*(?:segle|segeln|sail)\s+\S/i.test(text) && roomNow.current) rowSent.current = { at: Date.now(), from: roomNow.current, boat: "sail", mode: sailMode.current };
 		if (echo) append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() });
 		awaited.current = opensLog ? Date.now() : 0;
 	}, [append, startTravel]);
@@ -1094,24 +1099,25 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	}, [objs, track, trainStands, stationHere, shipLies, berthAt, hello, place?.phase, place?.away, shipWay]);
 
 	// the row: when the new place comes after „rudere“, the 3D view keeps the old one for ROW_OUT_MS, the boat rowing out
-	// from its jetty, then shows the new one, the boat rowing in (MapView3D rowTick)
+	// from its jetty, then shows the new one, the boat rowing in (MapView3D rowTick); after „segle“ it keeps it as long as the
+	// sail's part there lasts (sailPlan: at leisure with the look back at the island), then the boat comes in
 	const lastMap = useRef<{ room: Hello["room"]; chars: typeof mapChars; objs: typeof shownObjs } | null>(null);
-	const [rowing, setRowing] = useState<{ at: number; from: string; until: number; held: NonNullable<typeof lastMap.current> } | null>(null);
+	const [rowing, setRowing] = useState<{ at: number; from: string; until: number; boat: "row" | "sail"; mode: SailMode; held: NonNullable<typeof lastMap.current> } | null>(null);
 	const [, setRowTick] = useState(0);
 	useEffect(() => {
 		const sent = rowSent.current, prev = lastMap.current;
-		if (!hello || !sent || !prev || mapMode !== "3d" || prev.room.roomId !== sent.from || hello.room.roomId === sent.from || Date.now() - sent.at > 15_000) return;
+		if (!hello || !sent || !prev || mapMode !== "3d" || prev.room.roomId !== sent.from || hello.room.roomId === sent.from || Date.now() - sent.at > (sent.boat === "sail" ? 30_000 : 15_000)) return;
 		rowSent.current = null;
-		const now = Date.now();
-		setRowing({ at: now, from: sent.from, until: now + ROW_OUT_MS, held: prev });
-		const id = setTimeout(() => setRowTick((n) => n + 1), ROW_OUT_MS + 20);
+		const now = Date.now(), hold = sent.boat === "sail" ? sailPlan(sent.mode, "out").ms : ROW_OUT_MS;
+		setRowing({ at: now, from: sent.from, until: now + hold, boat: sent.boat, mode: sent.mode, held: prev });
+		const id = setTimeout(() => setRowTick((n) => n + 1), hold + 20);
 		return () => clearTimeout(id);
 	}, [hello?.room.roomId]); // eslint-disable-line react-hooks/exhaustive-deps
 	const holding = !!rowing && Date.now() < rowing.until;
 	useEffect(() => { if (!holding) lastMap.current = hello ? { room: hello.room, chars: mapChars, objs: shownObjs } : null; });
 	const mapRoom = holding ? rowing!.held.room : hello?.room, mapCharsShown = holding ? rowing!.held.chars : mapChars, mapObjsShown = useMemo(() => movedView(holding ? rowing!.held.objs : shownObjs, shifting), [holding, rowing, shownObjs, shifting]);
 	const movingObj = shifting ? mapObjsShown.get(shifting.id) : undefined;
-	const rowView = rowing ? { at: rowing.at, from: rowing.from, out: holding } : undefined;
+	const rowView = rowing ? { at: rowing.at, from: rowing.from, out: holding, boat: rowing.boat, mode: rowing.mode } : undefined;
 
 	/** In the edit mode a click picks what covers the cell and stands on cells of its own; elsewhere it says so. */
 	const pickToMove = useCallback((x: number, y: number) => {
@@ -1299,7 +1305,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const epochHere = islandHere && atlasState?.epochs ? atlasState.epochs[islandHere] ?? 1 : null;
 	const seasonWind = (() => { const i = worldTime ? seasonIndex(shownWorldMs(worldTime.v, worldTime.at, Date.now()), worldTime.v.yearDays ?? 0) : null; return [i === null ? "" : tr(SEASONS[i]!), wind ? tr(wind) : ""].filter(Boolean).join(" · "); })();
 	const menus = <>
-		{menu && hello && <CellMenu at={menu} admin={!!account.admin} {...barState} beachAt={hello.world.uses.sandTile ? (x: number, y: number) => hello.room.ground[y]?.[x] === hello.world.uses.sandTile : undefined} recipes={hello.world.uses.recipes} grinds={hello.world.uses.grinds} beds={hello.world.uses.beds} wild={wildNow(hello.world.decor, hello.room.decor)} travel={atlas && atlasState ? { rooms: atlas.rooms, stops: atlasState.stops, epochs: atlasState.epochs, ...(hello.world.uses.roadEpoch ? { roadEpoch: hello.world.uses.roadEpoch } : {}) } : undefined} sail={[...new Set((hello.world.liner?.routes ?? []).map((r) => r.island))].filter((i) => i !== hello.world.liner?.island)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={shownObjs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offersIn={trade?.offersIn} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
+		{menu && hello && <CellMenu at={menu} admin={!!account.admin} {...barState} beachAt={hello.world.uses.sandTile ? (x: number, y: number) => hello.room.ground[y]?.[x] === hello.world.uses.sandTile : undefined} recipes={hello.world.uses.recipes} grinds={hello.world.uses.grinds} beds={hello.world.uses.beds} wild={wildNow(hello.world.decor, hello.room.decor)} travel={atlas && atlasState ? { rooms: atlas.rooms, stops: atlasState.stops, epochs: atlasState.epochs, ...(hello.world.uses.roadEpoch ? { roadEpoch: hello.world.uses.roadEpoch } : {}) } : undefined} sail={[...new Set((hello.world.liner?.routes ?? []).map((r) => r.island))].filter((i) => i !== hello.world.liner?.island)} sheet onWalk={walkTo} sailWith={(island, mode) => { sailMode.current = mode; try { localStorage.setItem("mmo.sail.mode", mode); } catch { /* private window */ } send(`segle ${island}`); }} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={shownObjs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offersIn={trade?.offersIn} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
 			chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
 		{nameMenu && <NameMenu at={nameMenu} sheet name={nameMenu.name} groups={account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? [])} close={() => setNameMenu(null)}
 			talk={() => send(`chat ${nameMenu.name}`, false)} invite={(g) => send(`gruppe lade ${nameMenu.name} in ${g}`)} ignore={() => send(`ignoriere ${nameMenu.name}`)} />}
