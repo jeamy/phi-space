@@ -36,28 +36,28 @@ async function give(space: SpaceLike, location: string, proto: string, count: nu
 const tree = (id: string, room: string, accountId: string, x: number): TreeFields => ({ treeId: id, sort: "birke", room, x, y: 1, w: 1, h: 1, owner: "o", ownerName: "O", accountId, beaconId: "feuer-bucht", points: 1, stage: 0, dueWorldMs: FOREVER, at: 0 });
 const building = (id: string, plan: string, room: string, over: Partial<BuildingFields> = {}): BuildingFields => ({ buildId: id, plan, name: plan, room, x: 1, y: 14, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0, ...over } as BuildingFields);
 
-test("trees count towards the island's stock, eight an account on each island; a road that is over counts no more", { timeout: 240_000 }, async () => {
+test("trees count towards the island's stock, eight an account in each place; a road that is over counts no more", { timeout: 240_000 }, async () => {
 	const srv = await startServer();
 	try {
 		const s = srv.stack.space, p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Försterin", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
 		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields & { accountId: string };
-		const here = w.rooms.find((r) => r.roomId === c.room)!, elsewhere = w.rooms.find((r) => r.island && r.island !== here.island)!;
+		const here = w.rooms.find((r) => r.roomId === c.room)!, elsewhere = w.rooms.find((r) => r.island === here.island && r.roomId !== here.roomId)!;
 		await lightFire(s, 600_000, "feuer-bucht");
 		await give(s, me, "spaten", 1);
 		await give(s, me, "samen-birke", 2);
-		// eight trees on another island do not stand in the way here
+		// eight trees in another place of the same island do not stand in the way here
 		for (let i = 0; i < w.trees!.maxTrees; i++) await s.write({ type: "Tree", fields: tree(`far-${i}`, elsewhere.roomId, c.accountId, i) as never }, null, FOREVER);
 		assert.match(await does(p, "pflanze birkensamen", /pflanzt|passt kein/), /pflanzt Birkensamen ein/);
 		const now = await decayNowOf(s);
 		const stock = (await islandPoints(s, w, now)).get(here.island!)!;
-		assert.equal(stock.trees, 1, "the planted tree counts");
+		assert.equal(stock.trees, w.trees!.maxTrees + 1, "the planted tree counts, with those in the other place");
 		assert.ok(stock.points >= 1);
-		assert.match(await does(p, "epoche", "Punkte"), /Bäume 1\)/);
+		assert.match(await does(p, "epoche", "Punkte"), new RegExp(`Bäume ${w.trees!.maxTrees + 1}\\)`));
 		// eight here are the limit here
 		for (let i = 0; i < w.trees!.maxTrees - 1; i++) await s.write({ type: "Tree", fields: tree(`near-${i}`, c.room, c.accountId, i) as never }, null, FOREVER);
-		assert.match(await does(p, "pflanze birkensamen", "Mehr als"), /Mehr als 8 Bäume pflanzt niemand auf einer Insel; fälle hier erst einen\./);
+		assert.match(await does(p, "pflanze birkensamen", "Mehr als"), /Mehr als 8 Bäume pflanzt niemand an einem Ort; fälle hier erst einen\./);
 
 		// a finished road counts while it stands
 		const road = (id: string, until: number): RouteFields => ({ routeId: id, pair: id, island: here.island!, rooms: [c.room, c.room], names: ["A", "B"], cells: [], state: "built", planner: "o", plannerName: "O", accountId: "o", voters: [], yes: [], no: [], voteUntil: 0, needs: [], work: 3, workNeed: 3, by: {}, untilWorldMs: until, at: 0, points: 2 });

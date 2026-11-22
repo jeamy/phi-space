@@ -346,7 +346,7 @@ Bäume stehen auf je einer Zelle und bleiben stehen (`server/engine/commands/tre
 Sorten: Birke, Kopfweide, Apfelbaum, Birnbaum und Eiche.
 
 - **Pflanzen**: `pflanze <Samen> [x y]` mit einem Spaten, im Licht eines Feuers, auf einer freien Zelle; höchstens
-  `maxTrees` (8) je Konto auf jeder Insel (seit 2026-11-20; ein Baum zählt mit seinem Lichtpunkt zum Bestand seiner
+  `maxTrees` (8) je Konto an jedem Ort (seit 2026-11-22; ab 2026-11-20 galt es je Insel; ein Baum zählt mit seinem Lichtpunkt zum Bestand seiner
   Insel, wie ein Beet). Die Samen sind Birkensamen, Weidenstecklinge, Apfel- und Birnenkerne und Eicheln.
   `sammle samen` findet sie, wo die Deko Bäume zeigt (T, A), jede Sorte auf ihren eigenen Inseln. Ein Gartensamen
   gleichen Namens geht vor: Der Baumsamen wird nur genommen, wenn er unter dem Mitgetragenen am besten passt.

@@ -1304,14 +1304,15 @@ fn trees() {
 	w.call("treeTick", None);
 	w.call("treeTick", None);
 	for (who, line) in [(&a, "baum"), (&a, "ernte birnbaum")] { run(&mut w, who, line, 0.0); }
-	// the trees count towards the island's stock, and eight of an account are the limit on an island
+	// the trees count towards the island's stock, and eight of an account are the limit in a place: eight in another place
+	// of the island do not stand in the way, eight here do
 	run(&mut w, &a, "epoche", 0.0);
 	w.call("epochTick", None);
-	for i in 0..8 { w.write(obj! { "type" => "Tree", "fields" => obj! { "treeId" => format!("far-{i}"), "sort" => "birke", "room" => "kupferhafen-markt", "x" => i as f64, "y" => 1.0, "w" => 1.0, "h" => 1.0, "owner" => a.as_str(), "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-kai", "points" => 1.0, "stage" => 0.0, "dueWorldMs" => 9e15, "at" => 0.0 } }); }
-	for i in 0..8 { w.write(obj! { "type" => "Tree", "fields" => obj! { "treeId" => format!("near-{i}"), "sort" => "birke", "room" => "klippenpfad", "x" => i as f64, "y" => 1.0, "w" => 1.0, "h" => 1.0, "owner" => a.as_str(), "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "stage" => 0.0, "dueWorldMs" => 9e15, "at" => 0.0 } }); }
+	for i in 0..8 { w.write(obj! { "type" => "Tree", "fields" => obj! { "treeId" => format!("far-{i}"), "sort" => "birke", "room" => "klippenpfad", "x" => i as f64, "y" => 1.0, "w" => 1.0, "h" => 1.0, "owner" => a.as_str(), "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "stage" => 0.0, "dueWorldMs" => 9e15, "at" => 0.0 } }); }
+	for i in 0..8 { w.write(obj! { "type" => "Tree", "fields" => obj! { "treeId" => format!("near-{i}"), "sort" => "birke", "room" => "graue-bucht", "x" => i as f64, "y" => 1.0, "w" => 1.0, "h" => 1.0, "owner" => a.as_str(), "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "stage" => 0.0, "dueWorldMs" => 9e15, "at" => 0.0 } }); }
 	w.write(thing(&world, "t-limit", "samen-birke", &a));
 	for line in ["pflanze birkensamen", "epoche"] { run(&mut w, &a, line, 0.0); }
-	assert!(said[said.len() - 2].contains("Bäume pflanzt niemand auf einer Insel"), "{:?}", said[said.len() - 2]);
+	assert!(said[said.len() - 2].contains("Bäume pflanzt niemand an einem Ort"), "{:?}", said[said.len() - 2]);
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 15, "{said:?}");
 	assert!(w.entries_with(r#""Tree""#) >= 2, "no trees");
 }

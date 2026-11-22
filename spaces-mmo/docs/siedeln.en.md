@@ -391,7 +391,7 @@ Trees stand on one cell each and for good (`server/engine/commands/trees.ts`, th
 birch, pollard willow, apple tree, pear tree and oak.
 
 - **Planting**: `pflanze <seed> [x y]` with a spade, in a fire's light, on a free cell, at most `maxTrees` (8) per
-  account on each island (since 2026-11-20; a tree counts towards its island's stock by its light point, like a bed). The seeds are birch seeds, willow cuttings, apple and pear pips and acorns. `sammle samen` finds them where
+  account in each place (since 2026-11-22; from 2026-11-20 it was per island; a tree counts towards its island's stock by its light point, like a bed). The seeds are birch seeds, willow cuttings, apple and pear pips and acorns. `sammle samen` finds them where
   the decor shows trees (T, A), each sort on its own islands. A garden seed of the same name wins: the tree seed is taken
   only when it is the best match among what one carries.
 - **Growing**: a seedling, then a young tree, then grown. Each stage takes world days (birch 1+2, willow 1+1, apple and

@@ -189,7 +189,7 @@ export type GardenDef = { /** A bed this near a building of this plan grows thro
 export type TreeSortDef = { key: string; name: string; /** "eine Birke", "ein Apfelbaum" */ a: string; /** "die Birke", "den Apfelbaum" (as one fells it) */ the: string; aliases: string[]; /** Its form on the 3D map (client/props3d.ts: a sort's own, else the plain tree or conifer). */ model: "tree" | "conifer" | "birch" | "willow" | "apple" | "pear" | "oak"; seed: string; grow: [number, number];
 	fell: Array<{ proto: string; count: number }>; sprouts?: boolean; crop?: { yields: Array<{ proto: string; count: number }>; everyWorldMs: number; seedChance?: number; /** what one does to take it: picks fruit, cuts the rods */ cut?: boolean }; color: string; fruit?: string;
 	wild?: { islands?: string[] } };
-/** `points`: the light a tree takes, `maxTrees` per account; `spade` plants, `axe` fells (a tool that wears); `decor`:
+/** `points`: the light a tree takes, `maxTrees` per account in each place; `spade` plants, `axe` fells (a tool that wears); `decor`:
  *  the decor cells where wild trees stand (their seeds are found there). */
 export type TreesDef = { points: number; maxTrees: number; spade: string; axe: string; decor: string[]; sorts: TreeSortDef[]; /** How many lots each wild tree has in „sammle samen“ against one of each flower, herb or crop (default 1). */ seedWeight?: number };
 /** The wild from the fog (docs/siedeln.en.md "Wild im Nebel"), first the hares in the beds: every `checkWorldMs` a room

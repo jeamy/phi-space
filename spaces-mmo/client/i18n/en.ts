@@ -1527,7 +1527,7 @@ export const EN: Record<string, string> = {
 	"Hier steht kein gepflanzter Baum. Mit einem {0} pflanzt „pflanze {1}“ einen (im Licht eines Feuers).": "No planted tree stands here. With a {0}, „plant {1}“ plants one (in a fire's light).",
 	"In dieser Welt pflanzt niemand Bäume.": "Nobody plants trees in this world.",
 	"Mehr als {0} Bäume pflanzt niemand; fälle erst einen.": "Nobody plants more than {0} trees; fell one first.",
-	"Mehr als {0} Bäume pflanzt niemand auf einer Insel; fälle hier erst einen.": "Nobody plants more than {0} trees on an island; fell one here first.",
+	"Mehr als {0} Bäume pflanzt niemand an einem Ort; fälle hier erst einen.": "Nobody plants more than {0} trees in one place; fell one here first.",
 	"Setzling": "seedling",
 	"junger Baum": "young tree",
 	"Zum Fällen brauchst du eine {0} („craft {1}“).": "To fell a tree you need an {0} („craft {1}“).",
