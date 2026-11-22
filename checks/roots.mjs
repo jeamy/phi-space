@@ -11,4 +11,4 @@ export const PACKAGE = join(REPO, "spaces");
 export const PACKAGE_PREFIX = relative(REPO, PACKAGE) ? `${relative(REPO, PACKAGE)}/` : "";
 /** The applications built on phi-spaces. Every check that walks them fails when one of them is not found, so a move
  *  cannot leave one unchecked without a word. */
-export const APPS = ["codemode-chat", "help-site", "spaces-mmo"];
+export const APPS = ["codemode-chat", "codemode-forum", "help-site", "spaces-mmo"];

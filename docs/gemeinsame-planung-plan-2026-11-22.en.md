@@ -1,0 +1,368 @@
+# codemode-forum: several models develop one plan together (plan, 2026-11-22)
+
+Status: phase 1 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 2 to 12 open. Second version,
+after the decisions of 2026-11-22 (section 2).
+Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
+
+## 1. Goal
+
+A person gives a brief and sources. At least three AI models develop a plan together and write it as one document.
+They talk to each other while they do it: they ask, answer, propose, object and decide. They change the document
+until a majority of the models agrees that the plan can be carried out sensibly. Two ways of working, taking turns
+and working at the same time, run side by side, and the better one supplies the base of the result.
+
+Two briefs the first version must handle:
+
+- "Plan how the 3D world of spaces-mmo gets four times the resolution, and how to carry that out." Sources: a git
+  repository at a commit.
+- "Plan a website with these requirements." Sources: an uploaded document with the list of requirements.
+
+The result is a Markdown document of the kind this repository keeps in `docs/` (the plan
+`spaces-mmo/docs/3d-welt-und-raster-plan-2026-11-21.en.md` has 59 kB). Carrying the plan out is not part of this
+work (section 14).
+
+## 2. Decisions taken (2026-11-22)
+
+| Decision | Consequence in this plan |
+|---|---|
+| At least three models take part. | A run with fewer than three distinct models is refused. One vote per model. |
+| The plan is developed jointly; the agents communicate and work out the best document. | A discussion in the Space that every work item reads and writes (section 6). The two ways of working are not sealed off from each other: they exchange after every round, and the result is completed jointly (section 7). |
+| Agents reach the sources they need, read-only. | A role `sources` with three reading calls and nothing else (section 8). |
+| A new application `codemode-forum/` in a directory of its own with all sources it needs. codemode-chat and spaces are the starting point. | Section 3. codemode-chat is not changed and not imported. |
+
+## 3. The new application
+
+`codemode-forum/` sits beside `codemode-chat/`, `spaces-mmo/` and `help-site/`. It depends on the library as
+`"phi-spaces": "file:../spaces"` and imports only `phi-spaces` and its exported subpaths. It copies what it needs
+from codemode-chat and imports nothing from that directory; codemode-chat stays as it is.
+
+**The name.** The application is called codemode-forum: a forum in which the models discuss a plan and vote on it. Its
+variables carry the prefix `FORUM_` (codemode-chat owns `CODEMODE_*`), its socket is
+`/tmp/codemode-forum-space.sock`, and it has ports of its own (web 4100, space 4180; the local Docker test bed
+4110 and 4190).
+
+**Processes.** As in codemode-chat, every role is a process and they talk only through one Space.
+
+| Process | File | Job |
+|---|---|---|
+| space | `server/space-host.ts` | owns the Space (own SQLite store) and serves it on `FORUM_LISTEN` |
+| web | `server/index.ts`, `server/hub.ts` | Next.js page, REST, WebSocket; creates plan tasks, starts and stops runs, follows the change stream |
+| agents | `server/agent-host.ts`, `server/run.ts` | takes the agent slots of runs and works off their work items |
+| model | `server/model-host.ts`, `server/llm.ts`, `server/context.ts` | the only process that calls models and holds credentials |
+| sources | `server/source-host.ts` | the only process that sees repositories and files; answers reading calls |
+| checker | `server/check-host.ts` | runs the mechanical checks of a document version, without a model |
+
+There is no judge and no sandbox: nothing here runs code from an entry.
+
+**Taken over from codemode-chat (copied, then cut down):**
+
+| From | What stays |
+|---|---|
+| `server/space-host.ts`, `space-server.ts`, `space.ts`, `launch.ts`, `env.ts`, `limits.ts` | as they are, with the new prefix |
+| `server/quota.ts`, `backup.ts`, `restore.ts` | as they are |
+| `server/model-host.ts`, `server/llm.ts` | the guarded call, quotas, model list, admin choice, spend; the prompts are new |
+| `server/agent-host.ts`, `server/run.ts` | slots, leases, work items, `pending`, three attempts, budget admission; the board's kinds are new |
+| `server/hub.ts`, `server/index.ts`, `server/room.ts` | rooms, blocks, room lock, admin session, snapshots, request limits |
+| `client/` | theme controls, palettes, Markdown renderer, help reader, admin panel; the page itself is new |
+| `tests/stack.ts`, `tests/fakes.ts`, `tests/test-env.ts` | the process stack and the fake models |
+| `docker/` | one image, one container per role, the local test bed |
+
+**Not taken over:** judge, ▶, sandbox and pi-codemode; code, tool, data, bot and harness tasks; Jev; islands and
+experiments; the durable code agent and with it pi-durable (section 8 says how reading survives a crash without it);
+web search (a later step).
+
+**Dependencies:** next, react, react-dom, phi-spaces, and pi-ai for the model process, all in the versions
+codemode-chat pins. No package the repository does not already use.
+
+**What the repository must learn about the new application** (each of these fails `npm test` otherwise):
+
+- `checks/roots.mjs`: `APPS` gets `codemode-forum`;
+- `checks/durable-imports.mjs`: its directories are scanned, pi-ai is allowed there, pi-durable and chord are not;
+- `checks/shared-copies.test.mjs`: its copies of `client/lib/palettes.ts`, `client/lib/markdown.ts`, `server/env.ts`;
+- `checks/package-imports.mjs`: covers it (no relative imports into `spaces/src`);
+- root `package.json`: `codemode-forum`, `codemode-forum:dev`, `test:codemode-forum` (`checks/root-scripts.mjs`);
+- `dashboard.apps.json`: its Space with the addresses above;
+- `AGENTS.md`: commands and layout.
+
+**Space server.** Locally and in the tests the Space is `server/space-host.ts` (TypeScript). big and nano run only
+the Rust implementation (R-D12), so before any deployment the application gets a binary of its own,
+`codemode-forum/rust/forum-space`, as codemode-chat has `codemode-space` (phase 11).
+
+## 4. The task and the document
+
+A **plan task** is the application's only task kind: a brief (up to 8000 characters), a list of sources, the
+document's language, and optionally an outline to keep and criteria of the person's own.
+
+The document is kept in the Space as versions of sections, never as one text: an entry holds at most 64 KiB and a
+commit 192 KiB.
+
+| Entry | Content |
+|---|---|
+| `PlanTask` | brief, language, criteria, limits; one per block |
+| `PlanSource` | one source pack of the block: kind, origin, commit, number of files, bytes, hash of the index |
+| `PlanDoc` | one version of a table's document: table, version, author, model, ordered section ids with the hash of each |
+| `PlanSection` | one section's text (at most 24 kB), its base version, author, model, the sources it cites |
+| `PlanMessage` | one contribution to the discussion (section 6) |
+| `PlanDecision` | what a thread ended with, and who agreed |
+| `PlanCheck` | the result of the mechanical checks of one `PlanDoc` version (section 9) |
+| `PlanObjection` | section, quote, defect, what would resolve it, who, state (open, resolved, withdrawn, declined with reason) |
+| `PlanBallot` | one model's vote on one `PlanDoc` version: approve or reject, the criteria with evidence |
+| `PlanAccept` | the accepted version of the block, by majority or by a person |
+
+A new version writes only the sections that changed. A section revision names the version it builds on, and
+`unique` on (table, section, base version) lets only the first one in: a second writer of the same section gets its
+work item back with the newer text. The whole document stays below 96 kB so that a reviewer reads it in one call.
+
+## 5. Who takes part
+
+- A run names three to five models. Each gets the same number of agents (default one, at most three).
+- Everything that counts is counted per model: votes, turns, the limit of messages. More agents of a model make it
+  faster, not stronger.
+- An agent sees its own model's name and the names of the others as `M1`, `M2`, …; the mapping is drawn per run, so
+  no model is treated by its reputation. The appendix of the result names them.
+
+## 6. Communication
+
+The agents talk through `PlanMessage` entries. A message has a thread, a kind, an author (agent and model), an
+addressee (one model or all), optionally a section and a quote, and at most 2000 characters of text.
+
+| Kind | Meaning | What must follow |
+|---|---|---|
+| `question` | to a model, to all, or to the person | an answer by the addressee before it may write its next ballot |
+| `answer` | closes a question | nothing |
+| `proposal` | a change of approach, outline or a section, with its reason | every other model answers with agree, disagree with reason, or a counter-proposal |
+| `objection` | a defect; creates a `PlanObjection` | resolved, withdrawn, or declined with a reason |
+| `note` | an observation, a source worth reading | nothing |
+
+How it enters the work:
+
+- **Kickoff.** Before any outline, every model posts how it understands the brief, what it found in the sources,
+  and its questions. Questions to the person appear on the page; what the person does not answer within the
+  kickoff's time is written into the document as an assumption.
+- **In every work item.** The context of a draft, a revision or a review contains the open threads that concern
+  its section or are addressed to its model. One model call may return the work and several messages; talking
+  costs no call of its own unless a `reply` item is due.
+- **Reply items.** A question or proposal addressed to a model becomes a `reply` work item only that model's agents
+  take, with a deadline. Without a reply by then the thread is marked unanswered and no longer blocks.
+- **Decisions.** A proposal with agreement of more than half of the models becomes a `PlanDecision`. Decisions are
+  binding for later work items (they are in every context) until a new proposal overturns them the same way. The
+  decisions and their reasons go into the appendix of the document.
+- **The person** can write into any thread. Such a message is in every later context and outranks a decision.
+- **Limits.** At most 12 messages per model and round, and a thread closes after 8 messages with a vote on the last
+  proposal, so that talking cannot use up the budget.
+
+The page shows the discussion beside the document, per section and per thread.
+
+## 7. The two ways of working
+
+Every run sets up two **tables**. Each table has all models, its own document and its own discussion, and half of
+the run's budget.
+
+**Table A, taking turns.** One writer at a time.
+
+1. After the kickoff the first model (drawn at the run's start) writes the outline and the first draft.
+2. The next model reviews. If it approves, it writes its ballot. If not, it writes its objections, revises the
+   sections they concern in the same turn and takes the open objections of others.
+3. The turn passes on. After each full cycle, every model writes a ballot on the current version.
+
+The turn is a work item only one model takes. If nobody takes it before its deadline, it passes to the next model
+and the run's note says so.
+
+**Table B, at the same time.** Several writers at once.
+
+1. After the kickoff every model proposes an outline; the table decides one by the rule for proposals.
+2. The sections are dealt out among the models and drafted in parallel.
+3. Rounds: all models review the whole version at once; every open objection becomes a `revise` item for its
+   section, taken by an agent whose model did not raise it; then the next ballots.
+
+**Exchange between the tables.** The tables are not sealed off. After each round:
+
+- each table gets the other's current version, its decisions and its open objections as reading material;
+- a model may post a `proposal` at its own table to take over a section or a decision of the other, with the
+  origin named; it is decided like any proposal;
+- messages do not cross tables, so each discussion stays readable.
+
+**Which way of working wins, and the joint result.**
+
+1. The table whose version is accepted first (section 9) is the base. The other finishes the round it is in.
+2. If both are accepted, every model compares the two documents pairwise and blind (no table, no author), with a
+   reason per criterion; the majority decides, a tie goes to the table that spent less. If neither is accepted when
+   rounds or budget run out, the same comparison picks the base.
+3. **Joint final round.** All models work at one table on the base: the comparison's reasons name what the other
+   document does better, each such point becomes a proposal, the agreed ones are worked in, and a last ballot
+   follows. If that ballot fails, the base as it was accepted stays the result.
+4. Every run writes a `PlanStrategyStat` (tables, rounds, cost, approvals, sections taken over, winner, models).
+   The page shows the standings over all runs. Shifting the budget towards the way that wins more often is a later
+   step and needs at least 20 runs.
+
+A run can be started with one table only (about half the cost; no comparison, no final round).
+
+## 8. Sources, read-only
+
+A source pack is fixed when the task is created and does not change during the run.
+
+| Kind | How it arrives | Limits |
+|---|---|---|
+| Uploaded documents | Markdown, text, CSV, JSON through the page | 10 files, 800 kB together; stored as pages of the block |
+| Local repository | a name from `FORUM_REPOS` (name=path pairs, set by the operator) and a commit or branch | tracked files only (`git archive` of the commit), text files up to 200 kB each, 20 000 files |
+| Remote repository | an https URL whose host is in `FORUM_GIT_HOSTS`; shallow fetch of one commit | admin only; no submodules, no LFS, no hooks, 200 MB, 60 s |
+
+A repository is not copied into the Space (this one has 2171 tracked files with 42 MB). The sources process unpacks
+the commit into a directory of its own, builds the index and answers `SourceRequest` entries with `SourceResult`
+entries:
+
+- `list({ dir })`: names and sizes, at most 200;
+- `read({ path, from, lines })`: at most 400 lines or 16 kB;
+- `search({ query, glob })`: fixed strings or a bounded regex, at most 40 hits with one line of context.
+
+There is no fourth call. The process has no write call, starts no program from the pack and opens no network
+connection after the fetch. The directory can be rebuilt from repository and commit, so it is a process-local
+resource; the index (paths, sizes, hashes) lies in the Space as pages, for the checks of section 9.
+
+**How a model reads.** A work item is a sequence of steps. In each step the model either asks for up to four
+reading calls, written as text in a fixed form, or hands in its work. The agents process writes the requests,
+takes the results and stores both as `ReadStep` entries of the work item before the next model call. This needs no
+tool support of the provider, works with every model, and an agent that takes the work item over after a crash
+finds the steps and goes on without reading again. At most 8 steps and 24 reading calls per work item; each model
+call is admitted against the budget.
+
+**Safety.**
+
+- Source text is untrusted data in every prompt and never an instruction.
+- Excerpts of the sources go to the model providers. The page says so where a pack is chosen.
+- Only tracked files are read, so an untracked `.env` never is; a deny list (`*.pem`, `*.key`, `.env*`,
+  `auth.json`) is applied on top.
+- Paths are resolved inside the unpacked directory; symbolic links are not followed.
+- Only the sources process gets the repository paths, as only the model process gets credentials.
+- Runs with a repository need the admin login in the first version.
+
+## 9. When a plan counts as agreed
+
+**Mechanical checks first.** The checker runs them for every new `PlanDoc` version, without a model:
+
+- every path and file name the plan names exists in the pack, or the plan marks it as new;
+- every quoted line is in the file it is quoted from;
+- the outline's required sections are there and none is empty;
+- every phase names how it is verified;
+- no section contradicts a `PlanDecision` by its wording where the decision names a path or a number;
+- links between sections resolve, sizes are within the limits.
+
+A version that fails gets no ballots. The failures go back to the table as objections of the checker, which nobody
+can decline.
+
+**Criteria.** Fixed for every plan task, plus those of the person:
+
+1. The plan answers the brief and names what it leaves out.
+2. Every step says what changes, where (files, modules, formats), and in which order.
+3. Dependencies between steps are named, and no step needs a later one.
+4. Every phase ends runnable and has a check that can fail.
+5. Risks and the way back are named for the steps that change stored data or shared servers.
+6. Open decisions are listed with a recommendation each, not hidden in the text.
+7. Effort and cost are estimated where the sources allow it, and marked as a guess where they do not.
+
+**Ballots.** One vote per model. A ballot rates every criterion and backs each "met" with a quote from the plan
+and each "not met" with an objection. An objection names the section, the defect and what would resolve it; "could
+be more detailed" is not one. The reviewer does not see who wrote which section.
+
+**Accepted** means:
+
+- more than half of the participating models approve the same version (three models: two; four: three; five: three);
+- at least one approving model wrote none of the sections changed in that version;
+- the mechanical checks of that version pass and no objection of the checker is open;
+- no question addressed to an approving model is unanswered.
+
+A person's 👍 accepts a version at any time, 👎 with a reason becomes an objection nobody can decline, ■ ends the
+run.
+
+**Against moving targets.** From the third round on, a model may raise a new blocking objection only against a
+section that changed since its last ballot, or with a source quote that contradicts the plan. Everything else is a
+note; notes are appended to the document and do not block. Who raised an objection confirms in its next ballot
+whether it is resolved. An author may decline an objection with a reason; it then stays open and counts against
+approval only for the model that raised it.
+
+## 10. Run, budget and end
+
+The run is a `PlanRun` (the lock of the run, as `CodeRun` in codemode-chat) with a state per table: round, turn,
+version, open items, spent. Work items: `kickoff`, `outline`, `draft`, `review`, `revise`, `reply`, `check`,
+`ballot`, `compare`, `final`. Slots, leases, three attempts, `pending` and the admission before each model call are
+the ones taken over.
+
+- **Budget.** Required for every run, in dollars and tokens. Each table reserves against its share (45 % each, 10 %
+  held back for comparison and final round). Output limit per call: 3000 tokens for a section, 1500 for a review
+  with its messages, 600 for a ballot or a reply.
+- **Rounds.** At most `rounds` per table (default 5, at most 8).
+- **Stall.** If two rounds in a row end with the same open objections and no more approvals, the table stops and
+  asks the person: the page lists the open points, and the answer goes into the discussion.
+- **End.** Accepted, compared and completed; or rounds, budget or Stop. The run's end entry names which.
+
+A rough cost of one run with three models, both tables, twelve sections and three rounds: 200 to 250 model calls,
+most of them with 20 to 40 thousand input tokens (document, discussion, source excerpts). This is an estimate
+before any measurement; phase 0 replaces it with a measured number.
+
+## 11. The result
+
+- The page shows per table the document with its outline, its versions with a diff, the discussion and the
+  objections beside their sections, and the ballots per model; after the end, the comparison and the final round.
+- `GET /api/plan/<room>/<block>.md` returns the result as Markdown.
+- The document ends with a generated appendix: brief, sources with commit, models, the way of working that won and
+  why, sections taken over from the other table, decisions with their reasons, assumptions, rounds, ballots, notes,
+  objections still open and who holds them, cost.
+- `node --experimental-strip-types server/export-plan.ts --room <room> --block <id> --out <file>` writes it to a
+  file, for example into `docs/`. No process of the application writes into a repository.
+
+## 12. Phases
+
+Each phase is tested with fake models, keeps the application runnable and is one commit. Checks after each:
+`npm --prefix codemode-forum run typecheck`, `npm run test:codemode-forum`, and in the root `npm run typecheck`,
+`npm test`.
+
+| Phase | Content | Tests |
+|---|---|---|
+| 0 | Baseline in codemode-chat as it is: both example briefs as text tasks with three models, by hand; record where it breaks, calls and cost. | none (live, costs tokens: ask first) |
+| 1 ✓ | The directory `codemode-forum/` with the copied base: space, web, agents and model processes, launcher, admin, quotas, the run mechanics with the roll call as a run's opening, the refusal of runs with fewer than three models, a page for it; the registrations of section 3. | the stack starts and restarts; the repository's checks pass; a fake model call is booked |
+| 2 | Plan task, the entries of section 4, sectioned document, snapshot and a read-only document view. One table, one model, no sources. | versions share unchanged sections; a second writer of a section is refused; sizes at their limits |
+| 3 | Uploaded documents as a pack; the sources process with local repositories; reading in steps. | path escape, symbolic link, deny list, limits; a killed sources process; a killed agent goes on from its `ReadStep`s |
+| 4 | Discussion: messages, threads, reply items, decisions, the person's messages, limits; kickoff. | an unanswered question blocks a ballot until its deadline; a decision reaches the next context; the message limit |
+| 5 | The checker and the criteria. | each check with a plan that fails exactly it |
+| 6 | Table B: outline by proposal, parallel drafts, rounds of review and revise. | restart of all processes in a round; an objection becomes one item |
+| 7 | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
+| 8 | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
+| 9 | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
+| 10 | Page: diff, discussion, ballots, standings, export; help articles in German and English; README; Docker with the local test bed. | help links and both languages; the export equals the result |
+| 11 | `codemode-forum/rust/forum-space` and its compose files; remote repositories (admin, host allowlist). | the suite against the Rust server; refused hosts, size and time limits with a local git server |
+| 12 | Live runs of both example briefs, three models, both tables, three times each; report in `codemode-forum/docs/`. | live, costs tokens: ask first |
+
+Phases 6 and 8 are independent after phase 5. Everything up to phase 12 runs on this machine; big and nano follow
+only after the local release.
+
+## 13. Risks
+
+| Risk | What is done about it |
+|---|---|
+| Models approve each other's text without checking | blind ballots, evidence per criterion, checks before any ballot, a non-author among the approvers, the person's 👎 |
+| Talking replaces working, or eats the budget | messages travel with work calls, limits per model and thread, decisions close threads |
+| Agreement never comes | rounds, budget, the rule against moving targets, stall with a question to the person |
+| The plan names things that do not exist | the checks against the pack's index and the quoted lines |
+| Cost | budget required, one-table runs, phase 0 measures before anything is built |
+| Source text steers the models | untrusted data in every prompt; the calls only read |
+| Private code reaches a provider | the operator's allowlist, admin login, the notice on the page |
+| The copied base drifts from codemode-chat | accepted: the applications are separate; only the three shared copies are held equal by the repository's check |
+| The standings say little after few runs | they show counts, not a verdict; no budget shift before 20 runs |
+
+## 14. Open and not part of this plan
+
+Open, with a recommendation each:
+
+| Question | Recommendation |
+|---|---|
+| Prefix `FORUM_` and the ports 4100/4180 | as proposed; `CODEMODE_*` belongs to codemode-chat |
+| Does the application get the durable agent later? | only if reading in steps proves too weak in phase 12 |
+| Where does the sources process run in operation? | on big, beside agents and model; a local repository there is a checkout the operator updates |
+| Web research beside the source pack | after phase 12, taken from codemode-chat's `server/search.ts` |
+
+Not part of this plan:
+
+- carrying a plan out; a later step can turn the phases of a result into tasks;
+- writing into a repository, opening pull requests, or any call that changes something;
+- any change to codemode-chat;
+- deploying to big or nano.

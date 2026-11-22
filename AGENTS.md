@@ -4,8 +4,8 @@ phi-spaces: a space library with its own store; the optional `agent/` package co
 `node --experimental-strip-types` (no build step for tests or examples).
 
 The package (`src/`, `test/`, `examples/`, `agent/`, `scripts/`, its `package.json` with the exports, the Rust core in
-`rust/`) lives in `spaces/`; the applications (`spaces-mmo/`, `codemode-chat/`, `help-site/`) sit beside it, each with
-its own Rust workspace in `<app>/rust/`, and `docs/`, `de-docs/`, `checks/` and the `.env` stay at the repository root
+`rust/`) lives in `spaces/`; the applications (`spaces-mmo/`, `codemode-chat/`, `codemode-forum/`, `help-site/`) sit beside it, each with
+its own Rust workspace in `<app>/rust/` (codemode-forum has none yet), and `docs/`, `de-docs/`, `checks/` and the `.env` stay at the repository root
 (docs/umstellung-verzeichnisse.en.md). Paths of the package below are from `spaces/`, paths of an application from
 the repository root. The root `package.json` is thin: it runs `checks/` and forwards every command of the package
 (`npm run typecheck`, `npm test`, …) to `spaces/`; the commands that take a path run the package's file from the root,
@@ -58,6 +58,13 @@ so a relative path still means the repository root (`checks/root-scripts.mjs` ke
   Docker `npm --prefix codemode-chat run docker:*` (one container per role; `docker:local:up` runs big and nano together on
   this machine as a test bed, port 3710)
   (changes containers on this machine; never on a shared server without asking).
+- Codemode forum (`codemode-forum/`: Next.js; at least three models develop one plan together; plan and phases in
+  `docs/gemeinsame-planung-plan-2026-11-22.en.md`, state in `codemode-forum/README.md`; roles space, agents, model, web around one
+  space; its base is copied from codemode-chat, it imports nothing from there; variables `FORUM_*`, port 4100):
+  `npm --prefix codemode-forum run dev`, `npm run codemode-forum` (after `npm --prefix codemode-forum run build`), tests
+  `npm run test:codemode-forum` (they start the processes, with the fake models of `tests/fakes.ts`), typecheck
+  `npm --prefix codemode-forum run typecheck` (own tsconfig, not part of the root `tsc`). No Docker and no Rust space server
+  yet (phases 10 and 11): it runs on this machine only.
 - spaces-mmo (`spaces-mmo/`: MMORPG engine, first world Leuchtfeuer; processes space, world, web; PixiJS map; docs in
   `spaces-mmo/docs/`, plan and phases in `spaces-mmo/docs/phasen.en.md`): `npm --prefix spaces-mmo run build` (the page as static files in `spaces-mmo/out/` with `out/BUILD_ID`, which the web process serves, `server/pages.ts`; `--dev` keeps Next's dev server), then
   `npm --prefix spaces-mmo start` (port 3900; `SPACES_MMO_MEM=1` in memory; model calls only with `SPACES_MMO_LLM=1`, they cost tokens), tests `npm --prefix spaces-mmo test` (`npm --prefix spaces-mmo run test:durable`: the same suites with the durable NPC dialogues on, `tests/test-env-durable.ts`, `tests/durable-deviations.ts`; they start the

@@ -41,6 +41,9 @@
     "codemode-chat": "npm --prefix codemode-chat start",
     "codemode-chat:dev": "npm --prefix codemode-chat run dev",
     "test:codemode-chat": "npm --prefix codemode-chat test",
+    "codemode-forum": "npm --prefix codemode-forum start",
+    "codemode-forum:dev": "npm --prefix codemode-forum run dev",
+    "test:codemode-forum": "npm --prefix codemode-forum test",
     "example:space-chat": "node --experimental-strip-types help-site/examples/v1-local-memory/run.ts",
     "help": "npm --prefix help-site run dev"
   }
