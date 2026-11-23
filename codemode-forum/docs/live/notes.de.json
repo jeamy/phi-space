@@ -1,0 +1,50 @@
+{
+  "title": "Forum-Planungsläufe",
+  "lead": "Drei KI-Modelle schreiben gemeinsam einen Plan und überarbeiten ihn, bis eine Mehrheit zustimmt, dass er sich so umsetzen lässt. Zwei Arbeitsweisen laufen gleichzeitig: an Tisch A schreiben die Modelle reihum, an Tisch B alle zugleich. Danach vergleichen die Modelle beide Dokumente blind, das bessere wird die Basis und übernimmt in einer Schlussrunde, was das andere besser macht. Diese Seite zeigt jeden Lauf Schritt für Schritt: was die Modelle verstanden, vorgeschlagen, beanstandet, geändert und abgestimmt haben.",
+  "models": [
+    { "match": "gpt", "name": "GPT", "label": "gpt-6.1-terra (über OpenRouter)" },
+    { "match": "codestral", "name": "Codestral", "label": "codestral-2508 (über OpenRouter)" },
+    { "match": "sonnet", "name": "Sonnet", "label": "claude-sonnet-5-5 (über den pi-Login)" }
+  ],
+  "brief": {
+    "title": "Der Auftrag",
+    "text": "Bisher lief nur der Website-Auftrag. Der Auftrag ist auf Englisch gestellt, deshalb sind auch die Pläne englisch. Die Anforderungsliste der Tischlerei Lindenhof ist erfunden: Ich habe sie für diese Läufe geschrieben, damit der Auftrag aus dem Plan (»Plane eine Website mit diesen Anforderungen«) eine konkrete Liste hat. Sie ist absichtlich knapp bemessen: 18 000 € Bau, 60 € im Monat, zehn Wochen, und sie enthält Zielkonflikte (40 Projekte zum Start, aber 15 genügen; zweisprachig, aber Englisch darf später kommen).",
+    "second": "Der zweite Auftrag, »Plane, wie die 3D-Welt von spaces-mmo die vierfache Auflösung bekommt«, mit diesem Repository als Quelle, ist noch nicht gelaufen."
+  },
+  "negotiated": [
+    ["Verständnis", "Zu Beginn schreibt jedes Modell, wie es den Auftrag versteht, und stellt Fragen an die anderen oder an die Person."],
+    ["Gliederung", "An Tisch B schlägt jedes Modell eine Gliederung vor, und jedes wählt eine fremde. An Tisch A schreibt das erste Modell Gliederung und Entwurf allein."],
+    ["Abschnitte", "Jeder Abschnitt hat einen Autor. Der Text ist der eigentliche Verhandlungsgegenstand: Jede Überarbeitung ist eine neue Fassung des Dokuments."],
+    ["Einwände", "Ein Einwand nennt einen Abschnitt, einen konkreten Mangel und was ihn beheben würde. Der Überarbeiter behebt ihn oder lässt den Text stehen. Danach sagt der Einwender, ob er behoben ist."],
+    ["Vorschläge und Beschlüsse", "In der Diskussion schlägt ein Modell etwas vor, etwa »die Galerie startet mit 15 Projekten«. Stimmt die Mehrheit zu, ist es ein Beschluss, an den sich alle weiteren Texte halten."],
+    ["Stimmzettel", "Nach jeder Runde stimmt jedes Modell ab und bewertet dabei jedes der sieben Kriterien. Eine Zustimmung zählt nur, wenn jedes Kriterium mit wörtlichen Stellen aus dem Plan belegt ist und kein eigener Einwand mehr offen ist."]
+  ],
+  "rules": "Angenommen ist eine Fassung, wenn mehr als die Hälfte der Modelle mit gültiger Zustimmung dafür ist, nicht nur die Autoren der geänderten Abschnitte zustimmen, das Prüfprogramm nichts findet (Dateinamen, Zitate, Phasen, Links) und nichts offen ist, was die Person beanstandet hat.",
+  "runNotes": {
+    "website-1": "Stand nach Phase 11, ohne Korrekturen.",
+    "website-2": "Mit zwei Korrekturen: Dateinamen werden nur bei einem Repository als Quelle geprüft, und ein Abschnitt, den die Mehrheit der anderen beanstandet, darf nicht unverändert zurückkommen.",
+    "website-3": "Zusätzlich gilt ein Beleg auf dem Stimmzettel schon, wenn ein Zitat von mindestens drei Wörtern im Plan steht. In Runde 3 von Tisch A fiel Sonnet aus, weil das Anthropic-Guthaben aufgebraucht war: Der Lauf ist deshalb nicht voll vergleichbar."
+  },
+  "baseline": {
+    "title": "Vergleich: derselbe Auftrag in codemode-chat (Phase 0)",
+    "text": "In codemode-chat lief derselbe Auftrag als Textaufgabe mit denselben drei Modellen und denselben sieben Kriterien. Ergebnis: sieben einseitige Einzelantworten nach 1,8 Minuten für 0,21 $, keine erfüllt alle Kriterien (die beste vier von sieben). Die Frage ist dort auf 2000 Zeichen begrenzt, deshalb passte die Anforderungsliste nur in Stichworten hinein. Ein gemeinsames Dokument gibt es dort nicht."
+  },
+  "findings": [
+    "Kein Lauf endete mit einer angenommenen Fassung. GPT und Sonnet lehnten in jeder Runde ab und fanden jedes Mal neue Mängel: 27 bis 36 Einwände je Tisch und Lauf.",
+    "Die Zustimmungen von Codestral zählten nie. Es stimmte fast immer zu, zitierte aber meist die Kriterien selbst statt den Plan. Eine Mehrheit muss deshalb von GPT und Sonnet gemeinsam kommen.",
+    "Im Blindvergleich gewann jedes Mal das Dokument von Tisch A (reihum). Tisch A kostete aber etwa doppelt so viel wie Tisch B.",
+    "Die Ergebnisse decken alle 24 Anforderungen richtig ab. Einzelne frühe Entwürfe hatten Anforderungen erfunden, weil ein Modell die Datei unter einem falschen Pfad (docs/…) suchte; die Einwände der anderen haben das korrigiert.",
+    "Ein Lauf kostet 3,90 $ bis 4,80 $ und dauert 11 bis 21 Minuten."
+  ],
+  "proposal": {
+    "title": "Vorschlag für die nächsten Läufe",
+    "items": [
+      "Fünf Runden statt drei, wie im Plan vorgesehen. Gemessen wird, ob die Zahl der Einwände von Runde zu Runde sinkt und in welcher Runde eine Mehrheit zustimmt.",
+      "Kleine hochgeladene Dokumente (bis etwa 16 kB) stehen in jedem Aufruf direkt im Text, statt dass jedes Modell sie erst lesen muss. Pfade mit führendem / oder docs/ werden toleriert.",
+      "Vor jedem Lauf beantwortet jedes Modell einen kurzen Probeaufruf. Fällt ein Modell während des Laufs aus, ist der Lauf als nicht vergleichbar markiert.",
+      "Der Auftrag kann auf Deutsch gestellt werden; dann sind Pläne und Anhang deutsch.",
+      "Die Anforderungsliste: diese erfundene oder eine eigene von dir.",
+      "Nach jedem Lauf wird diese Seite neu erzeugt (tests/live/collect.ts, dann tests/live/report.ts)."
+    ]
+  }
+}

@@ -1,0 +1,550 @@
+<title>Forum-Planungsläufe</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a minutes book of a negotiation. A run is read top to bottom as its steps; each model keeps one colour
+   everywhere (chips, ballots, authors); the documents are shown as plain text with their changes marked. */
+:root {
+	--bg: #f5f6f8; --surface: #ffffff; --sunk: #eceef2; --line: #d7dbe3; --fg: #1b2230; --muted: #5d6677; --faint: #8a93a3;
+	--accent: #1f5d8f; --accent-soft: #dce8f3;
+	--m-gpt: #23805a; --m-gpt-soft: #dcefe6; --m-cod: #b8571f; --m-cod-soft: #f6e3d6; --m-son: #6748b5; --m-son-soft: #e8e1f6; --m-x: #6b7280; --m-x-soft: #e5e7eb;
+	--ok: #1f7a4a; --ok-soft: #dcf0e4; --bad: #b3322b; --bad-soft: #f7dfdc; --warn: #9a6a00; --warn-soft: #f6ecd2;
+	--add: #e3f3e8; --add-mark: #b6e0c3; --del: #f9e3e1; --del-mark: #f0b9b3;
+	--display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif; --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+	--bg: #12161d; --surface: #1a1f28; --sunk: #222834; --line: #313848; --fg: #e3e7ee; --muted: #a0a9b8; --faint: #747e8f;
+	--accent: #79b1e0; --accent-soft: #1d3247;
+	--m-gpt: #5cc595; --m-gpt-soft: #183528; --m-cod: #ee9a63; --m-cod-soft: #3b2517; --m-son: #a98ff0; --m-son-soft: #2a2244; --m-x: #9ca3af; --m-x-soft: #2a2f38;
+	--ok: #63c58e; --ok-soft: #173426; --bad: #f08a80; --bad-soft: #3d1d1a; --warn: #e0b54d; --warn-soft: #362c12;
+	--add: #17321f; --add-mark: #24563a; --del: #3a1c1a; --del-mark: #6b2e28; color-scheme: dark } }
+:root[data-theme="dark"] {
+	--bg: #12161d; --surface: #1a1f28; --sunk: #222834; --line: #313848; --fg: #e3e7ee; --muted: #a0a9b8; --faint: #747e8f;
+	--accent: #79b1e0; --accent-soft: #1d3247;
+	--m-gpt: #5cc595; --m-gpt-soft: #183528; --m-cod: #ee9a63; --m-cod-soft: #3b2517; --m-son: #a98ff0; --m-son-soft: #2a2244; --m-x: #9ca3af; --m-x-soft: #2a2f38;
+	--ok: #63c58e; --ok-soft: #173426; --bad: #f08a80; --bad-soft: #3d1d1a; --warn: #e0b54d; --warn-soft: #362c12;
+	--add: #17321f; --add-mark: #24563a; --del: #3a1c1a; --del-mark: #6b2e28; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body); margin: 0 }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface) }
+a { color: var(--accent) }
+h1, h2, h3, h4 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.2 }
+h1 { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em }
+h2 { font-size: 1.35rem; font-weight: 700 }
+h3 { font-size: 1.08rem; font-weight: 700 }
+h4 { font-size: 0.95rem; font-weight: 700 }
+p { margin: 0 }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line) }
+header.top .wrap { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; padding-block: 10px }
+.brand { font-family: var(--display); font-weight: 800; font-size: 1.02rem; margin-right: auto }
+.brand small { font-family: var(--body); font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-left: 8px }
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap }
+nav.tabs a { text-decoration: none; color: var(--muted); padding: 5px 11px; border-radius: 6px; font-weight: 500; font-size: 0.92rem }
+nav.tabs a[aria-current="page"] { background: var(--accent-soft); color: var(--accent) }
+nav.tabs a:focus-visible, button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+main { padding-block: 26px 60px }
+.stack { display: flex; flex-direction: column; gap: 22px }
+.lead { font-size: 1.06rem; max-width: 70ch; color: var(--fg) }
+.muted { color: var(--muted) }
+.small { font-size: 0.86rem }
+.label { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 600 }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; min-width: 0 }
+.panel > * + * { margin-top: 12px }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px }
+.figures { display: flex; flex-wrap: wrap; gap: 10px 28px }
+.figure { display: flex; flex-direction: column }
+.figure b { font-family: var(--display); font-size: 1.35rem; font-variant-numeric: tabular-nums }
+.figure span { font-size: 0.8rem; color: var(--muted) }
+.scroll { overflow-x: auto; max-width: 100% }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 0.9rem }
+th { font-weight: 600; color: var(--muted); font-size: 0.8rem; white-space: nowrap }
+td.num, th.num { text-align: right; white-space: nowrap }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 6px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; background: var(--mc-soft, var(--m-x-soft)); color: var(--mc, var(--m-x)) }
+.chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor }
+.m-gpt { --mc: var(--m-gpt); --mc-soft: var(--m-gpt-soft) } .m-cod { --mc: var(--m-cod); --mc-soft: var(--m-cod-soft) } .m-son { --mc: var(--m-son); --mc-soft: var(--m-son-soft) }
+.tag { display: inline-block; padding: 0 7px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: var(--sunk); color: var(--muted); white-space: nowrap }
+.tag.ok { background: var(--ok-soft); color: var(--ok) } .tag.bad { background: var(--bad-soft); color: var(--bad) } .tag.warn { background: var(--warn-soft); color: var(--warn) } .tag.acc { background: var(--accent-soft); color: var(--accent) }
+ol.plain, ul.plain { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px }
+dl.pairs { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 }
+dl.pairs dt { font-weight: 600 } dl.pairs dd { margin: 0; color: var(--muted) }
+details { border: 1px solid var(--line); border-radius: 6px; background: var(--surface) }
+details > summary { cursor: pointer; padding: 8px 12px; list-style: none; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap }
+details > summary::-webkit-details-marker { display: none }
+details > summary::before { content: "▸"; color: var(--faint); width: 1em }
+details[open] > summary::before { content: "▾" }
+details > .body { padding: 4px 14px 14px; min-width: 0 }
+.quote { border-left: 3px solid var(--line); padding-left: 10px; color: var(--muted); white-space: pre-wrap }
+.md { font-size: 0.93rem; line-height: 1.6; min-width: 0; overflow-wrap: anywhere }
+.md h1, .md h2, .md h3, .md h4 { font-size: 1rem; margin: 14px 0 6px }
+.md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0 0 9px }
+.md table { display: block; overflow-x: auto }
+.md code { font-family: var(--mono); font-size: 0.85em; background: var(--sunk); padding: 0 3px; border-radius: 3px }
+.md pre { background: var(--sunk); padding: 10px; border-radius: 6px; overflow-x: auto }
+.md pre code { background: none; padding: 0 }
+.md blockquote { border-left: 3px solid var(--line); margin-left: 0; padding-left: 10px; color: var(--muted) }
+.section-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; padding-top: 14px; border-top: 1px solid var(--line); margin-top: 14px }
+.section-head:first-child { border-top: 0; padding-top: 0; margin-top: 0 }
+/* run page */
+.runhead { display: flex; flex-direction: column; gap: 10px }
+.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 28px; align-items: start }
+.steps { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px); display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem }
+.steps a { text-decoration: none; color: var(--muted); padding: 4px 8px; border-radius: 5px; display: flex; gap: 8px }
+.steps a span { color: var(--faint); font-variant-numeric: tabular-nums; width: 1.4em }
+.steps a:hover { background: var(--sunk); color: var(--fg) }
+.step { scroll-margin-top: 80px; display: flex; flex-direction: column; gap: 14px }
+.step > h2 { display: flex; gap: 10px; align-items: baseline }
+.step > h2 .n { font-family: var(--mono); font-size: 0.9rem; color: var(--faint); font-weight: 500 }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--surface) }
+.seg button { border: 0; background: none; color: var(--muted); padding: 5px 12px; font: 500 0.88rem var(--body); cursor: pointer }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent) }
+.round { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden }
+.round > header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; padding: 12px 16px; background: var(--sunk); border-bottom: 1px solid var(--line) }
+.round > .body { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+.obj { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; padding: 9px 0; border-bottom: 1px dashed var(--line) }
+.obj:last-child { border-bottom: 0 }
+.obj .what { font-size: 0.9rem } .obj .fix { font-size: 0.85rem; color: var(--muted) }
+.ballots { display: grid; gap: 6px }
+.ballot { display: grid; grid-template-columns: minmax(110px, max-content) auto minmax(0, 1fr); gap: 6px 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line) }
+.ballot:last-child { border-bottom: 0 }
+.crit { display: flex; gap: 3px; flex-wrap: wrap }
+.crit i { font-style: normal; width: 22px; height: 22px; border-radius: 4px; font: 600 0.72rem/22px var(--mono); text-align: center; background: var(--sunk); color: var(--faint) }
+.crit i.met { background: var(--ok-soft); color: var(--ok) } .crit i.unbacked { background: var(--warn-soft); color: var(--warn) } .crit i.not { background: var(--bad-soft); color: var(--bad) }
+.diff { font: 0.82rem/1.5 var(--mono); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; background: var(--surface) }
+.diff div { white-space: pre-wrap; padding: 0 10px; overflow-wrap: anywhere }
+.diff .add { background: var(--add) } .diff .del { background: var(--del) } .diff .gap { color: var(--faint); background: var(--sunk); font-style: italic }
+.diff .add mark { background: var(--add-mark); color: inherit } .diff .del mark { background: var(--del-mark); color: inherit; text-decoration: line-through }
+.msg { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; padding: 8px 0; border-bottom: 1px solid var(--line) }
+.msg:last-child { border-bottom: 0 }
+.msg .text { white-space: pre-wrap; font-size: 0.9rem; overflow-wrap: anywhere }
+.thread { border-left: 2px solid var(--line); padding-left: 12px }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+select { font: 0.9rem var(--body); padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); max-width: 100% }
+.strip { display: grid; grid-template-columns: max-content repeat(var(--cols), minmax(64px, 1fr)); gap: 6px 8px; align-items: end }
+.strip .h { font-size: 0.75rem; color: var(--faint); text-align: center }
+.strip .rl { font-size: 0.85rem; font-weight: 600; align-self: center; white-space: nowrap }
+.cell { display: flex; flex-direction: column; align-items: center; gap: 4px }
+.bar { width: 26px; background: var(--accent); border-radius: 3px 3px 0 0; opacity: 0.8 }
+.barbox { height: 64px; display: flex; align-items: flex-end }
+.bn { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums }
+.dots { display: flex; gap: 3px }
+.dot { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--mc, var(--m-x)) }
+.dot.counted { background: var(--mc, var(--m-x)) } .dot.reject { border-radius: 2px; border-color: var(--line); background: var(--sunk) }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--muted); align-items: center }
+.legend .dot { display: inline-block; vertical-align: middle; margin-right: 4px }
+.msg > .chip, .obj > .chip, .ballot > .chip { align-self: start; justify-self: start }
+.empty { color: var(--faint); font-style: italic; font-size: 0.9rem }
+.loading { padding: 40px 0; color: var(--muted) }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr) } .steps { position: static; flex-direction: row; flex-wrap: wrap } .ballot { grid-template-columns: minmax(0, 1fr) } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth } }
+</style>
+
+<header class="top"><div class="wrap">
+	<div class="brand" id="brand">Forum-Planungsläufe<small id="made"></small></div>
+	<nav class="tabs" id="tabs" aria-label="Läufe"></nav>
+</div></header>
+<main class="wrap" id="main"><p class="loading">Die Läufe werden geladen …</p></main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script>
+"use strict";
+// ---- helpers ----
+const $ = (sel, el = document) => el.querySelector(sel);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const fmtUsd = (n) => (n == null ? "–" : `${n.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`);
+const fmtTok = (n) => (n == null ? "–" : n >= 1e6 ? `${(n / 1e6).toLocaleString("de-AT", { maximumFractionDigits: 2 })} Mio.` : `${Math.round(n / 1000).toLocaleString("de-AT")} Tsd.`);
+const fmtMin = (ms) => (ms == null ? "–" : `${(ms / 60000).toLocaleString("de-AT", { maximumFractionDigits: 1 })} min`);
+const fmtTime = (ts) => new Date(ts).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+/** Markdown of a model, made safe; plain text when the libraries did not load. */
+function md(text) {
+	try { if (window.marked && window.DOMPurify) return `<div class="md">${DOMPurify.sanitize(marked.parse(String(text ?? ""), { gfm: true, breaks: false }))}</div>`; } catch {}
+	return `<div class="md" style="white-space:pre-wrap">${esc(text)}</div>`;
+}
+let NOTES = {};
+/** A model's short name and colour class (by the notes' table, else its id). */
+function modelOf(id) {
+	const m = (NOTES.models ?? []).find((x) => String(id ?? "").toLowerCase().includes(x.match));
+	if (id === "human") return { name: "Person", cls: "" };
+	if (id === "table") return { name: "Tisch", cls: "" };
+	const name = m?.name ?? String(id ?? "?").split("/").pop();
+	const cls = /gpt/i.test(id) ? "m-gpt" : /codestral|mistral/i.test(id) ? "m-cod" : /sonnet|claude/i.test(id) ? "m-son" : "";
+	return { name, cls };
+}
+const chip = (id, alias) => { const m = modelOf(id); return `<span class="chip ${m.cls}" title="${esc(id)}">${esc(m.name)}${alias ? ` <span style="opacity:.7;font-weight:500">${esc(alias)}</span>` : ""}</span>`; };
+
+// ---- diff (as client/lib/diff.ts of the forum) ----
+const LIMIT = 4000000;
+function diffTokens(a, b) {
+	let start = 0, endA = a.length, endB = b.length;
+	while (start < endA && start < endB && a[start] === b[start]) start++;
+	while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) { endA--; endB--; }
+	const x = a.slice(start, endA), y = b.slice(start, endB), n = x.length, m = y.length, mid = [];
+	if (n * m > LIMIT) mid.push(...x.map((text) => ({ op: "del", text })), ...y.map((text) => ({ op: "add", text })));
+	else if (n || m) {
+		const w = m + 1, t = new Uint32Array((n + 1) * w);
+		for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) t[i * w + j] = x[i] === y[j] ? t[(i + 1) * w + j + 1] + 1 : Math.max(t[(i + 1) * w + j], t[i * w + j + 1]);
+		for (let i = 0, j = 0; i < n || j < m; ) {
+			if (i < n && j < m && x[i] === y[j]) { mid.push({ op: "same", text: x[i] }); i++; j++; }
+			else if (j >= m || (i < n && t[(i + 1) * w + j] >= t[i * w + j + 1])) mid.push({ op: "del", text: x[i++] });
+			else mid.push({ op: "add", text: y[j++] });
+		}
+	}
+	return [...a.slice(0, start).map((text) => ({ op: "same", text })), ...mid, ...a.slice(endA).map((text) => ({ op: "same", text }))];
+}
+const words = (l) => l.match(/\s+|[^\s\w]|\w+/gu) ?? [];
+const joined = (parts) => { const o = []; for (const p of parts) { const l = o.at(-1); if (l && l.op === p.op) l.text += p.text; else o.push({ ...p }); } return o; };
+function diffText(before, after) {
+	const steps = diffTokens(before.split("\n"), after.split("\n")), out = [];
+	for (let i = 0; i < steps.length; ) {
+		if (steps[i].op === "same") { out.push({ op: "same", text: steps[i++].text }); continue; }
+		const dels = [], adds = [];
+		while (i < steps.length && steps[i].op === "del") dels.push(steps[i++].text);
+		while (i < steps.length && steps[i].op === "add") adds.push(steps[i++].text);
+		const pairs = Math.min(dels.length, adds.length);
+		for (let k = 0; k < pairs; k++) {
+			const parts = joined(diffTokens(words(dels[k]), words(adds[k])));
+			const shared = parts.filter((p) => p.op === "same").reduce((n, p) => n + p.text.trim().length, 0);
+			const paired = shared * 3 >= Math.min(dels[k].trim().length, adds[k].trim().length);
+			out.push({ op: "del", text: dels[k], ...(paired ? { words: parts.filter((p) => p.op !== "add") } : {}) }, { op: "add", text: adds[k], ...(paired ? { words: parts.filter((p) => p.op !== "del") } : {}) });
+		}
+		for (const text of dels.slice(pairs)) out.push({ op: "del", text });
+		for (const text of adds.slice(pairs)) out.push({ op: "add", text });
+	}
+	return out;
+}
+function withContext(lines, c = 2) {
+	const keep = lines.map(() => false);
+	lines.forEach((l, i) => { if (l.op !== "same") for (let k = Math.max(0, i - c); k <= Math.min(lines.length - 1, i + c); k++) keep[k] = true; });
+	const out = [];
+	for (let i = 0; i < lines.length; ) { if (keep[i]) { out.push(lines[i++]); continue; } let n = 0; while (i < lines.length && !keep[i]) { n++; i++; } out.push({ op: "gap", count: n }); }
+	return out;
+}
+function diffHtml(before, after) {
+	const lines = withContext(diffText(before ?? "", after ?? ""));
+	if (!lines.some((l) => l.op === "add" || l.op === "del")) return `<p class="empty">Keine Änderung.</p>`;
+	return `<div class="diff">${lines.map((l) => {
+		if (l.op === "gap") return `<div class="gap">… ${l.count} unveränderte Zeile${l.count === 1 ? "" : "n"} …</div>`;
+		const body = l.words ? l.words.map((p) => (p.op === "same" ? esc(p.text) : `<mark>${esc(p.text)}</mark>`)).join("") : esc(l.text);
+		return `<div class="${l.op}">${l.op === "add" ? "+ " : l.op === "del" ? "− " : "  "}${body || " "}</div>`;
+	}).join("")}</div>`;
+}
+
+// ---- data ----
+let INDEX = null;
+const RUNS = new Map();
+async function loadRun(file) {
+	if (!RUNS.has(file)) RUNS.set(file, fetch(file).then((r) => { if (!r.ok) throw new Error(`${file}: ${r.status}`); return r.json(); }).then(prepare));
+	return RUNS.get(file);
+}
+/** What the page needs of a run, worked out once: the versions per table, the rounds and their boundaries. */
+function prepare(run) {
+	const T = ["A", "B"], base = run.runId;
+	run.vers = { A: run.versions.filter((v) => v.table === "A"), B: run.versions.filter((v) => v.table === "B") };
+	run.ver = (t, n) => run.vers[t].find((v) => v.version === n);
+	run.text = (hash) => run.texts[hash]?.text ?? "";
+	run.alias = run.info.aliases ?? {};
+	run.final = { runId: `${base}-F`, table: run.stat?.base ?? run.result?.table ?? null };
+	run.rounds = {};
+	// the final round's work on the base table begins with its first entry: the rounds of that table end before it
+	const finalStart = Math.min(...[...run.objections, ...run.messages, ...run.ballots].filter((x) => x.runId === run.final.runId).map((x) => x.ts));
+	const until = (t) => (t === run.final.table ? finalStart : Infinity);
+	for (const t of T) {
+		const rid = `${base}-${t}`, ballots = run.ballots.filter((b) => b.runId === rid), checks = run.checks.filter((c) => c.table === t).sort((a, b) => a.version - b.version);
+		const n = Math.max(0, ...ballots.map((b) => b.round), ...run.objections.filter((o) => o.runId === rid).map((o) => o.round));
+		// the first draft: the version of the first check of this table
+		const first = checks[0]?.version ?? run.vers[t][0]?.version ?? 0;
+		const list = [];
+		let from = first;
+		for (let r = 1; r <= n; r++) {
+			const bs = ballots.filter((b) => b.round === r), to = bs.length ? Math.max(...bs.map((b) => b.version)) : (run.vers[t].filter((v) => v.ts < until(t)).at(-1)?.version ?? from);
+			list.push({ r, from, to, ballots: bs, objections: run.objections.filter((o) => o.runId === rid && o.round === r), messages: run.messages.filter((m) => m.runId === rid && m.round === r), checks: checks.filter((c) => c.version > from && c.version <= to) });
+			from = to;
+		}
+		run.rounds[t] = { first, list, checks, last: from };
+	}
+	return run;
+}
+/** The sections a version holds, with their texts. */
+const sectionsOf = (run, v) => (v?.sections ?? []).map(([sectionId, title, hash, rev]) => ({ sectionId, title, hash, rev, text: run.text(hash), by: run.texts[hash]?.model, origin: run.texts[hash]?.origin }));
+/** Section by section between two versions of one table: the ones that differ. */
+function changedBetween(run, t, a, b) {
+	const va = sectionsOf(run, run.ver(t, a)), vb = sectionsOf(run, run.ver(t, b));
+	const byId = new Map(va.map((s) => [s.sectionId, s]));
+	const out = vb.filter((s) => byId.get(s.sectionId)?.hash !== s.hash).map((s) => ({ ...s, before: byId.get(s.sectionId) }));
+	for (const s of va) if (!vb.some((x) => x.sectionId === s.sectionId)) out.push({ ...s, removed: true, before: s });
+	return out;
+}
+
+// ---- views ----
+const STATES = { open: ["offen", "bad"], resolved: ["behoben", "acc"], confirmed: ["bestätigt behoben", "ok"], declined: ["vom Überarbeiter abgelehnt", "warn"], withdrawn: ["zurückgezogen", ""], note: ["nur Notiz", ""] };
+const KINDS = { understanding: "Verständnis", question: "Frage", answer: "Antwort", proposal: "Vorschlag", vote: "Stimme", note: "Notiz", decision: "Beschluss" };
+const ENDED = { rounds: "keine Mehrheit in den Runden", checks: "Prüfprogramm nicht bestanden", models: "zu wenige Modelle", budget: "Budget aufgebraucht", stalled: "festgefahren", other: "anderer Tisch zuerst einig", accepted: "angenommen" };
+const tableName = (t) => (t === "A" ? "Tisch A (reihum)" : t === "B" ? "Tisch B (gleichzeitig)" : t);
+
+function setTabs(current) {
+	const runs = INDEX.runs.map((r, i) => `<a href="#run-${i + 1}" ${current === `run-${i + 1}` ? 'aria-current="page"' : ""}>Lauf ${i + 1}</a>`);
+	$("#tabs").innerHTML = `<a href="#overview" ${current === "overview" ? 'aria-current="page"' : ""}>Überblick</a>${runs.join("")}`;
+}
+
+async function overview() {
+	const n = NOTES, runs = await Promise.all(INDEX.runs.map((r) => loadRun(r.file)));
+	const one = runs[0];
+	const doc = one?.documents?.length ? one.documents.map((d) => d.text).join("") : "";
+	const rows = runs.map((r, i) => {
+		const s = r.stat, tb = r.info.tables ?? {}, dur = (r.info.endedAt ?? 0) - (r.info.startedAt ?? 0);
+		const t = (x) => tb[x] ? `${tb[x].round ?? 0} Runde${tb[x].round === 1 ? "" : "n"}, ${fmtUsd(tb[x].usage?.costUsd)}<br><span class="muted small">${esc(ENDED[tb[x].ended] ?? tb[x].ended ?? "")}</span>` : "–";
+		const pref = s?.prefer ? `A ${s.prefer.A ?? 0} : B ${s.prefer.B ?? 0}` : "–";
+		const fin = s?.final ? `${s.final.agreed} von ${s.final.points} Punkten übernommen, ${s.final.accepted ? "angenommen" : "nicht angenommen"}` : "–";
+		return `<tr><td><a href="#run-${i + 1}">Lauf ${i + 1}</a><br><span class="muted small">${esc(n.runNotes?.[r.name] ?? "")}</span></td><td class="num">${fmtMin(dur)}</td><td class="num">${fmtUsd(r.info.usage?.costUsd)}<br><span class="muted small">${fmtTok(r.info.usage?.tokens)} Tokens</span></td><td>${t("A")}</td><td>${t("B")}</td><td>${pref}</td><td class="small">${fin}</td><td>${r.result ? `Tisch ${r.result.table}, Fassung ${r.result.version}` : "–"}<br>${r.accepted?.length ? '<span class="tag ok">angenommen</span>' : '<span class="tag bad">nicht angenommen</span>'}</td></tr>`;
+	}).join("");
+	// the strip: objections raised per round, and every ballot as a mark
+	const cols = Math.max(1, ...runs.flatMap((r) => ["A", "B"].map((t) => r.rounds[t].list.length))) + 1;
+	const maxObj = Math.max(1, ...runs.flatMap((r) => ["A", "B"].flatMap((t) => r.rounds[t].list.map((x) => x.objections.length))), ...runs.map((r) => r.objections.filter((o) => o.runId === r.final.runId).length));
+	const cell = (objs, ballots) => `<div class="cell"><div class="barbox"><div class="bar" style="height:${Math.round((objs / maxObj) * 64)}px" title="${objs} Einwände"></div></div><span class="bn">${objs}</span><div class="dots">${ballots.map((b) => `<span class="dot ${modelOf(b.model).cls} ${b.vote === "approve" ? (b.counts ? "counted" : "") : "reject"}" title="${esc(modelOf(b.model).name)}: ${b.vote === "approve" ? (b.counts ? "Zustimmung, zählt" : `Zustimmung, zählt nicht (${b.why ?? ""})`) : "Ablehnung"}"></span>`).join("")}</div></div>`;
+	const strip = runs.map((r, i) => {
+		const head = `<div class="rl"></div>${Array.from({ length: cols - 1 }, (_, k) => `<div class="h">Runde ${k + 1}</div>`).join("")}<div class="h">Schluss</div>`;
+		const line = (t) => `<div class="rl">${t}</div>${Array.from({ length: cols - 1 }, (_, k) => { const x = r.rounds[t].list[k]; return x ? cell(x.objections.length, x.ballots) : "<div></div>"; }).join("")}${r.final.table === t ? cell(r.objections.filter((o) => o.runId === r.final.runId).length, r.ballots.filter((b) => b.runId === r.final.runId)) : "<div></div>"}`;
+		return `<div><h4 style="margin-bottom:6px"><a href="#run-${i + 1}">Lauf ${i + 1}</a></h4><div class="scroll"><div class="strip" style="--cols:${cols}">${head}${line("A")}${line("B")}</div></div></div>`;
+	}).join("");
+	$("#main").innerHTML = `<div class="stack">
+		<div class="stack" style="gap:12px"><h1>${esc(n.title ?? "Forum-Planungsläufe")}</h1><p class="lead">${esc(n.lead ?? "")}</p>
+			<div class="legend">${(n.models ?? []).map((m) => `${chip(m.match)} <span>${esc(m.label)}</span>`).join("")}</div></div>
+		<div class="grid2">
+			<section class="panel"><h2>${esc(n.brief?.title ?? "Der Auftrag")}</h2>
+				<div><div class="label">Auftrag an die Modelle (wörtlich)</div><p class="quote">${esc(one?.task.brief)}</p></div>
+				<p class="small">${esc(n.brief?.text ?? "")}</p><p class="small muted">${esc(n.brief?.second ?? "")}</p>
+				${doc ? `<details><summary><b>Hochgeladenes Dokument</b> <span class="muted small">${esc(one.documents[0].path)}, ${doc.length.toLocaleString("de-AT")} Zeichen</span></summary><div class="body">${md(doc)}</div></details>` : ""}
+			</section>
+			<section class="panel"><h2>Was verhandelt wird</h2>
+				<dl class="pairs">${(n.negotiated ?? []).map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl>
+			</section>
+		</div>
+		<section class="panel"><h2>Wann ein Plan angenommen ist</h2><p>${esc(n.rules ?? "")}</p>
+			<div><div class="label">Die sieben Kriterien jedes Stimmzettels</div><ol class="plain">${(one?.task.criteria ?? []).map((c) => `<li>${esc(c)}</li>`).join("")}</ol></div></section>
+		<section class="panel"><h2>Die Läufe im Vergleich</h2>
+			<div class="scroll"><table><thead><tr><th>Lauf</th><th class="num">Dauer</th><th class="num">Kosten</th><th>Tisch A (reihum)</th><th>Tisch B (gleichzeitig)</th><th>Blindvergleich</th><th>Schlussrunde</th><th>Ergebnis</th></tr></thead><tbody>${rows}</tbody></table></div>
+		</section>
+		<section class="panel"><h2>Einwände und Stimmen je Runde</h2>
+			<p class="small muted">Balken: Einwände, die in der Runde erhoben wurden. Darunter ein Zeichen je Stimmzettel.</p>
+			<div class="legend"><span><span class="dot counted m-son"></span>Zustimmung, zählt</span><span><span class="dot m-son"></span>Zustimmung, zählt nicht</span><span><span class="dot reject"></span>Ablehnung</span><span>Farbe: das Modell</span></div>
+			<div class="grid3">${strip}</div>
+		</section>
+		<div class="grid2">
+			<section class="panel"><h2>Was die Läufe gezeigt haben</h2><ul class="plain">${(n.findings ?? []).map((f) => `<li>${esc(f)}</li>`).join("")}</ul></section>
+			<section class="panel"><h2>${esc(n.proposal?.title ?? "")}</h2><ul class="plain">${(n.proposal?.items ?? []).map((f) => `<li>${esc(f)}</li>`).join("")}</ul></section>
+		</div>
+		${n.baseline ? `<section class="panel"><h2>${esc(n.baseline.title)}</h2><p>${esc(n.baseline.text)}</p></section>` : ""}
+	</div>`;
+}
+
+const STEPS = [["kickoff", "Auftakt"], ["outline", "Gliederung"], ["draft", "Erster Entwurf"], ["rounds", "Runden"], ["compare", "Blindvergleich"], ["final", "Schlussrunde"], ["result", "Ergebnis"], ["docs", "Alle Fassungen"], ["talk", "Diskussion"], ["cost", "Kosten"], ["log", "Verlauf"]];
+const view = { table: "A" };
+
+async function runPage(i) {
+	const meta = INDEX.runs[i], run = await loadRun(meta.file), n = NOTES;
+	const dur = (run.info.endedAt ?? 0) - (run.info.startedAt ?? 0);
+	const res = run.result;
+	$("#main").innerHTML = `<div class="stack">
+		<div class="runhead"><div class="label">Lauf ${i + 1} · ${new Date(run.info.startedAt).toLocaleString("de-AT", { dateStyle: "medium", timeStyle: "short" })}</div>
+			<h1>${res ? `Ergebnis: Tisch ${res.table}, Fassung ${res.version}` : "Kein Ergebnis"} ${run.accepted?.length ? '<span class="tag ok">angenommen</span>' : '<span class="tag bad">von keiner Mehrheit angenommen</span>'}</h1>
+			<p class="muted">${esc(n.runNotes?.[run.name] ?? "")}</p>
+			<div class="figures"><div class="figure"><b>${fmtMin(dur)}</b><span>Dauer</span></div><div class="figure"><b>${fmtUsd(run.info.usage?.costUsd)}</b><span>Kosten (Listenpreis)</span></div><div class="figure"><b>${fmtTok(run.info.usage?.tokens)}</b><span>Tokens</span></div><div class="figure"><b>${run.versions.length}</b><span>Fassungen</span></div><div class="figure"><b>${run.objections.length}</b><span>Einwände</span></div><div class="figure"><b>${run.ballots.length}</b><span>Stimmzettel</span></div><div class="figure"><b>${run.messages.length}</b><span>Nachrichten</span></div></div>
+			<div class="legend">${Object.entries(run.alias).sort((a, b) => a[1].localeCompare(b[1])).map(([m, a]) => chip(m, a)).join("")}<span class="small">M1 bis M3: die Namen am Tisch, die die Modelle untereinander sehen</span></div>
+		</div>
+		<div class="layout"><nav class="steps" aria-label="Schritte">${STEPS.map(([id, label], k) => `<a href="#run-${i + 1}" data-step="${id}"><span>${k + 1}</span>${label}</a>`).join("")}</nav>
+		<div class="stack" id="steps"></div></div></div>`;
+	for (const a of document.querySelectorAll(".steps a")) a.addEventListener("click", (e) => { e.preventDefault(); document.getElementById(`step-${a.dataset.step}`)?.scrollIntoView(); });
+	const box = $("#steps");
+	const step = (id, k, title, body) => `<section class="step" id="step-${id}"><h2><span class="n">${String(k).padStart(2, "0")}</span>${title}</h2>${body}</section>`;
+	box.innerHTML = [
+		step("kickoff", 1, "Auftakt: wie jedes Modell den Auftrag versteht", kickoff(run)),
+		step("outline", 2, "Gliederung", outline(run)),
+		step("draft", 3, "Erster Entwurf und erste Prüfung", draft(run)),
+		step("rounds", 4, "Die Runden", `<div class="toolbar"><div class="seg" id="seg-rounds">${["A", "B"].map((t) => `<button type="button" data-t="${t}" aria-pressed="${view.table === t}">${tableName(t)}</button>`).join("")}</div><span class="small muted" id="round-sum"></span></div><div id="rounds" class="stack" style="gap:14px"></div>`),
+		step("compare", 5, "Blindvergleich der beiden Dokumente", compare(run)),
+		step("final", 6, "Schlussrunde", finalRound(run)),
+		step("result", 7, "Ergebnis", `<div class="panel" id="result-doc"></div>`),
+		step("docs", 8, "Alle Fassungen", `<div class="panel"><div class="toolbar"><label class="small" for="d-table">Tisch</label><select id="d-table">${["A", "B"].map((t) => `<option value="${t}">${tableName(t)}</option>`).join("")}</select><label class="small" for="d-ver">Fassung</label><select id="d-ver"></select><label class="small" for="d-cmp">verglichen mit</label><select id="d-cmp"></select></div><div id="d-out"></div></div>`),
+		step("talk", 9, "Diskussion: Fragen, Vorschläge, Beschlüsse", talk(run)),
+		step("cost", 10, "Kosten nach Modell und Art des Aufrufs", cost(run)),
+		step("log", 11, "Verlauf", `<div class="panel"><table><tbody>${run.lines.map((l) => `<tr><td class="num muted small">${fmtTime(l.ts)}</td><td class="small">${esc(l.text)}</td></tr>`).join("")}</tbody></table></div>`),
+	].join("");
+	const drawRounds = () => { $("#rounds").innerHTML = rounds(run, view.table); for (const b of document.querySelectorAll("#seg-rounds button")) b.setAttribute("aria-pressed", String(b.dataset.t === view.table)); const tb = run.info.tables?.[view.table]; $("#round-sum").textContent = tb ? `${tb.round} Runde${tb.round === 1 ? "" : "n"}, ${fmtUsd(tb.usage?.costUsd)}, Ende: ${ENDED[tb.ended] ?? tb.ended}` : ""; };
+	for (const b of document.querySelectorAll("#seg-rounds button")) b.addEventListener("click", () => { view.table = b.dataset.t; drawRounds(); });
+	drawRounds();
+	if (res) $("#result-doc").innerHTML = docHtml(run, res.table, res.version, `Tisch ${res.table}, Fassung ${res.version}${run.stat?.how ? `, gewählt durch ${run.stat.how === "compared" ? "den Blindvergleich" : run.stat.how}` : ""}`);
+	else $("#result-doc").innerHTML = `<p class="empty">Kein Ergebnis.</p>`;
+	versionBrowser(run);
+}
+
+function kickoff(run) {
+	return `<div class="grid2">${["A", "B"].map((t) => {
+		const ms = run.messages.filter((m) => m.table === t && m.round === 0);
+		const und = ms.filter((m) => m.kind === "understanding"), rest = ms.filter((m) => m.kind !== "understanding");
+		return `<div class="panel"><h3>${tableName(t)}</h3>${und.map((m) => `<div class="msg">${chip(m.model, run.alias[m.model])}<div class="text">${esc(m.text)}</div></div>`).join("") || '<p class="empty">Keine.</p>'}
+			${rest.length ? `<details><summary>${rest.length} Fragen und Vorschläge beim Auftakt</summary><div class="body">${rest.map((m) => msgHtml(run, m)).join("")}</div></details>` : ""}</div>`;
+	}).join("")}</div>`;
+}
+
+function outline(run) {
+	const outs = run.outlines, picks = run.picks;
+	const votes = (m) => picks.filter((p) => p.choice === m);
+	const chosen = [...outs].sort((a, b) => votes(b.model).length - votes(a.model).length)[0];
+	const b = outs.length ? `<div class="panel"><h3>${tableName("B")}: jedes Modell schlägt vor, jedes wählt eine fremde</h3><div class="grid3">${outs.map((o) => `<div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${chip(o.model, run.alias[o.model])}${o === chosen ? '<span class="tag ok">gewählt</span>' : ""}<span class="small muted">gewählt von ${votes(o.model).map((p) => esc(modelOf(p.model).name)).join(", ") || "niemandem"}</span></div><ol class="plain small" style="margin-top:8px">${o.sections.map((s) => `<li><b>${esc(s.title)}</b><br><span class="muted">${esc(s.intent)}</span></li>`).join("")}</ol></div>`).join("")}</div></div>` : "";
+	const v1 = run.vers.A[0];
+	const a = v1 ? `<div class="panel"><h3>${tableName("A")}: das erste Modell schreibt die Gliederung allein</h3><div>${chip(v1.model, run.alias[v1.model])}</div><ol class="plain small">${sectionsOf(run, v1).map((s) => `<li><b>${esc(s.title)}</b><br><span class="muted">${esc(s.text)}</span></li>`).join("")}</ol></div>` : "";
+	return `<div class="stack" style="gap:16px">${a}${b}</div>`;
+}
+
+function checkHtml(run, c) {
+	return `<div><span class="tag ${c.ok ? "ok" : "bad"}">Fassung ${c.version}: ${c.ok ? "bestanden" : `${c.failures.length} Befund${c.failures.length === 1 ? "" : "e"}`}</span>${c.failures.length ? `<ul class="plain small" style="margin-top:6px">${c.failures.map((f) => `<li><span class="tag">${esc(f.check)}</span> ${esc(f.text)}</li>`).join("")}</ul>` : ""}</div>`;
+}
+
+function draft(run) {
+	return `<div class="grid2">${["A", "B"].map((t) => {
+		const R = run.rounds[t], v = run.ver(t, R.first);
+		if (!v) return `<div class="panel"><h3>${tableName(t)}</h3><p class="empty">Kein Entwurf.</p></div>`;
+		const secs = sectionsOf(run, v), pre = R.checks.filter((c) => c.version <= R.first);
+		return `<div class="panel"><h3>${tableName(t)}: Fassung ${v.version}</h3>
+			<p class="small muted">${secs.length} Abschnitte, ${v.bytes.toLocaleString("de-AT")} Bytes. Autoren: ${[...new Set(secs.map((s) => s.by))].map((m) => chip(m, run.alias[m])).join(" ")}</p>
+			${pre.map((c) => checkHtml(run, c)).join("")}
+			<details><summary>Den Entwurf lesen</summary><div class="body">${docBody(run, secs)}</div></details></div>`;
+	}).join("")}</div>`;
+}
+
+function objHtml(run, o, t) {
+	const v = run.ver(t, o.revisedIn) ?? null;
+	const sec = (run.vers[t].find((x) => x.sections.some((s) => s[0] === o.sectionId))?.sections.find((s) => s[0] === o.sectionId) ?? [])[1] ?? o.sectionId;
+	const [label, cls] = STATES[o.state] ?? [o.state, ""];
+	return `<div class="obj">${chip(o.model, run.alias[o.model])}<div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:baseline"><b class="small">${esc(sec)}</b><span class="tag ${cls}">${esc(label)}</span>${o.revisedIn ? `<span class="small muted">überarbeitet in Fassung ${o.revisedIn}</span>` : ""}${o.origin ? `<span class="tag acc">Übernahme aus Tisch ${esc(o.origin.table)}</span>` : ""}</div><div class="what">${esc(o.defect)}</div><div class="fix">Behebung: ${esc(o.fix)}</div>${o.quote ? `<div class="fix">zu: „${esc(o.quote)}“</div>` : ""}</div></div>`;
+}
+
+function ballotHtml(run, b, criteria) {
+	const tip = (c) => esc(`${c.n}. ${criteria[c.n - 1] ?? ""}\n${c.met ? (c.backed === false ? "erfüllt, Beleg nicht im Plan" : "erfüllt") : "nicht erfüllt"}: ${c.text}`);
+	const cells = criteria.map((_, k) => { const c = b.criteria.find((x) => x.n === k + 1); return c ? `<i class="${c.met ? (c.backed === false ? "unbacked" : "met") : "not"}" title="${tip(c)}">${k + 1}</i>` : `<i title="nicht bewertet">${k + 1}</i>`; }).join("");
+	return `<div class="ballot">${chip(b.model, run.alias[b.model])}<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="tag ${b.vote === "approve" ? (b.counts ? "ok" : "warn") : "bad"}">${b.vote === "approve" ? (b.counts ? "Zustimmung, zählt" : "Zustimmung, zählt nicht") : "Ablehnung"}</span><span class="crit">${cells}</span></div><div class="small muted">${esc(b.why ?? "")}</div>
+		<details style="grid-column:1/-1"><summary class="small">Begründung je Kriterium</summary><div class="body"><ol class="plain small">${b.criteria.map((c) => `<li><b>${c.met ? (c.backed === false ? "erfüllt, Beleg nicht im Plan" : "erfüllt") : "nicht erfüllt"}:</b> ${esc(c.text)}</li>`).join("")}</ol></div></details></div>`;
+}
+
+function revisions(run, t, from, to) {
+	const ch = changedBetween(run, t, from, to);
+	if (!ch.length) return `<p class="empty">Kein Abschnitt geändert.</p>`;
+	return ch.map((s) => `<details><summary><b>${esc(s.title)}</b>${s.removed ? '<span class="tag bad">entfernt</span>' : s.before ? "" : '<span class="tag acc">neu</span>'}${s.by ? chip(s.by, run.alias[s.by]) : ""}${s.origin ? `<span class="small muted">Herkunft: ${esc(s.origin)}</span>` : ""}</summary><div class="body">${diffHtml(s.before?.text ?? "", s.removed ? "" : s.text)}</div></details>`).join("");
+}
+
+function rounds(run, t) {
+	const R = run.rounds[t];
+	if (!R.list.length) return `<p class="empty">An diesem Tisch gab es keine Runde.</p>`;
+	return R.list.map((x) => {
+		const appr = x.ballots.filter((b) => b.vote === "approve"), counted = appr.filter((b) => b.counts);
+		const turns = run.messages.filter((m) => m.runId === `${run.runId}-${t}` && m.round === x.r && m.kind !== "vote");
+		return `<article class="round"><header><h3>Runde ${x.r}</h3><span class="small muted">Fassung ${x.from} → ${x.to}</span><span class="tag">${x.objections.length} Einwände</span><span class="tag ${counted.length * 2 > x.ballots.length ? "ok" : "bad"}">${counted.length} von ${x.ballots.length} gültige Zustimmungen</span>${appr.length > counted.length ? `<span class="tag warn">${appr.length - counted.length} Zustimmung${appr.length - counted.length === 1 ? "" : "en"} ohne Gültigkeit</span>` : ""}</header>
+		<div class="body">
+			<div><h4>Einwände dieser Runde</h4>${x.objections.length ? x.objections.map((o) => objHtml(run, o, t)).join("") : '<p class="empty">Keine.</p>'}</div>
+			<div class="stack" style="gap:6px"><h4>Was überarbeitet wurde</h4>${revisions(run, t, x.from, x.to)}</div>
+			${x.checks.length ? `<div class="stack" style="gap:6px"><h4>Prüfprogramm</h4>${x.checks.map((c) => checkHtml(run, c)).join("")}</div>` : ""}
+			<div><h4>Stimmzettel über Fassung ${x.to}</h4><p class="small muted">Je Kriterium: grün erfüllt und belegt, gelb erfüllt aber der Beleg steht nicht im Plan, rot nicht erfüllt. Mit der Maus auf ein Feld zeigen, um die Begründung zu sehen.</p><div class="ballots">${x.ballots.map((b) => ballotHtml(run, b, run.task.criteria)).join("") || '<p class="empty">Keine Stimmzettel.</p>'}</div></div>
+			${turns.length ? `<details><summary>${turns.length} Nachrichten in dieser Runde</summary><div class="body">${turns.map((m) => msgHtml(run, m)).join("")}</div></details>` : ""}
+		</div></article>`;
+	}).join("");
+}
+
+function compare(run) {
+	const cs = run.compares, s = run.stat;
+	if (!cs.length) return `<p class="empty">Kein Vergleich.</p>`;
+	const why = { compared: "die Mehrheit im Blindvergleich", agreed: "der einzige Tisch, der sich einig war", cheaper: "der billigere Tisch" };
+	return `<div class="panel"><p>Jedes Modell sieht die beiden Dokumente als X und Y, ohne Tisch und Autoren. Basis wurde <b>${tableName(s?.base)}</b> (${esc(why[s?.how] ?? s?.how ?? "")}; Stimmen A ${s?.prefer?.A ?? 0} : B ${s?.prefer?.B ?? 0}).</p></div>
+	<div class="grid3">${cs.map((c) => `<div class="panel">${chip(c.model, run.alias[c.model])} <span class="tag acc">bevorzugt ${tableName(c.prefer)}</span><ol class="plain small">${c.criteria.map((k) => `<li><b>${k.prefer}</b>: ${esc(k.text)}</li>`).join("")}</ol>${c.points?.length ? `<details><summary class="small">${c.points.length} Punkte, die das andere Dokument besser macht</summary><div class="body"><ul class="plain small">${c.points.map((p) => `<li>${esc(p.text)} <span class="muted">(aus „${esc(p.fromTitle)}“ nach „${esc(p.intoTitle)}“)</span></li>`).join("")}</ul></div></details>` : ""}</div>`).join("")}</div>`;
+}
+
+function finalRound(run) {
+	const f = run.final, t = f.table;
+	if (!t) return `<p class="empty">Keine Schlussrunde.</p>`;
+	const objs = run.objections.filter((o) => o.runId === f.runId), ballots = run.ballots.filter((b) => b.runId === f.runId), msgs = run.messages.filter((m) => m.runId === f.runId);
+	const from = run.rounds[t].last, to = run.vers[t].at(-1)?.version ?? from;
+	const s = run.stat?.final;
+	return `<div class="panel"><p>Die Basis (${tableName(t)}, Fassung ${from}) übernimmt, was das andere Dokument besser macht: ${s ? `${s.points} Punkte, davon ${s.agreed} von der Mehrheit beschlossen. Danach eine Abstimmung: ${s.accepted ? "angenommen" : "nicht angenommen, deshalb bleibt die Basis das Ergebnis"}.` : ""}</p></div>
+	<div class="round"><header><h3>Übernahmen und Einwände</h3><span class="small muted">Fassung ${from} → ${to}</span></header><div class="body">
+		<div>${objs.map((o) => objHtml(run, o, t)).join("") || '<p class="empty">Keine.</p>'}</div>
+		<div class="stack" style="gap:6px"><h4>Was überarbeitet wurde</h4>${revisions(run, t, from, to)}</div>
+		<div><h4>Stimmzettel</h4><div class="ballots">${ballots.map((b) => ballotHtml(run, b, run.task.criteria)).join("") || '<p class="empty">Keine.</p>'}</div></div>
+		${msgs.length ? `<details><summary>${msgs.length} Nachrichten</summary><div class="body">${msgs.map((m) => msgHtml(run, m)).join("")}</div></details>` : ""}
+	</div></div>`;
+}
+
+function docBody(run, secs) {
+	return secs.map((s) => `<div class="section-head"><h3>${esc(s.title)}</h3>${s.by ? chip(s.by, run.alias[s.by]) : ""}<span class="small muted">Überarbeitung ${s.rev}</span>${s.origin ? `<span class="small muted">Herkunft: ${esc(s.origin)}</span>` : ""}</div>${md(s.text)}`).join("");
+}
+function docHtml(run, t, n, caption) {
+	const v = run.ver(t, n);
+	return v ? `<p class="small muted">${esc(caption)}. ${v.sections.length} Abschnitte, ${v.bytes.toLocaleString("de-AT")} Bytes.</p>${docBody(run, sectionsOf(run, v))}` : `<p class="empty">Fassung nicht gefunden.</p>`;
+}
+function versionBrowser(run) {
+	const tSel = $("#d-table"), vSel = $("#d-ver"), cSel = $("#d-cmp"), out = $("#d-out");
+	const fill = () => {
+		const vs = run.vers[tSel.value];
+		const label = (v) => `${v.version}: ${modelOf(v.model).name}, ${v.changed.length} Abschnitt${v.changed.length === 1 ? "" : "e"}`;
+		vSel.innerHTML = vs.map((v) => `<option value="${v.version}">${esc(label(v))}</option>`).join("");
+		vSel.value = String(vs.at(-1)?.version ?? "");
+		cSel.innerHTML = `<option value="">(keine: ganzes Dokument)</option>` + vs.map((v) => `<option value="${v.version}">${esc(label(v))}</option>`).join("");
+		draw();
+	};
+	const draw = () => {
+		const t = tSel.value, n = Number(vSel.value), c = cSel.value ? Number(cSel.value) : null;
+		if (!n) { out.innerHTML = `<p class="empty">Keine Fassung.</p>`; return; }
+		if (c == null) { out.innerHTML = docHtml(run, t, n, `${tableName(t)}, Fassung ${n}`); return; }
+		const [a, b] = c < n ? [c, n] : [n, c];
+		const ch = changedBetween(run, t, a, b);
+		out.innerHTML = `<p class="small muted">Von Fassung ${a} zu Fassung ${b}: ${ch.length} Abschnitt${ch.length === 1 ? "" : "e"} geändert.</p>${ch.map((s) => `<div class="section-head"><h3>${esc(s.title)}</h3>${s.by ? chip(s.by, run.alias[s.by]) : ""}</div>${diffHtml(s.before?.text ?? "", s.removed ? "" : s.text)}`).join("") || ""}`;
+	};
+	tSel.value = run.result?.table ?? "A";
+	tSel.addEventListener("change", fill); vSel.addEventListener("change", draw); cSel.addEventListener("change", draw);
+	fill();
+}
+
+function msgHtml(run, m) {
+	return `<div class="msg">${chip(m.model, run.alias[m.model])}<div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:baseline"><span class="tag">${esc(KINDS[m.kind] ?? m.kind)}</span>${m.to ? `<span class="small muted">an ${esc(m.to === "person" ? "die Person" : m.to)}</span>` : ""}${m.stance ? `<span class="tag ${m.stance === "agree" ? "ok" : "bad"}">${m.stance === "agree" ? "dafür" : "dagegen"}</span>` : ""}<span class="small muted">Runde ${m.round}</span></div><div class="text">${esc(m.text)}</div></div></div>`;
+}
+function talk(run) {
+	return `<div class="grid2">${["A", "B"].map((t) => {
+		const ds = run.decisions.filter((d) => d.table === t);
+		const threads = new Map();
+		for (const m of run.messages.filter((m) => m.table === t && m.kind !== "understanding")) { if (!threads.has(m.thread)) threads.set(m.thread, []); threads.get(m.thread).push(m); }
+		const dec = ds.map((d) => `<li>${esc(d.text)} <span class="small muted">(vorgeschlagen von ${esc(modelOf(d.proposer).name)}, ${d.agreed.length} von ${d.of} dafür)</span></li>`).join("");
+		return `<div class="panel"><h3>${tableName(t)}</h3><div><h4>${ds.length} Beschlüsse</h4>${dec ? `<ol class="plain small">${dec}</ol>` : '<p class="empty">Keine.</p>'}</div>
+			<details><summary>${threads.size} Gesprächsfäden, ${[...threads.values()].flat().length} Nachrichten</summary><div class="body stack" style="gap:12px">${[...threads.values()].map((ms) => `<div class="thread">${ms.map((m) => msgHtml(run, m)).join("")}</div>`).join("")}</div></details></div>`;
+	}).join("")}</div>`;
+}
+function cost(run) {
+	const KIND = { rollcall: "Anwesenheit", kickoff: "Auftakt", outline: "Gliederung", pick: "Wahl", draft: "Entwurf", review: "Prüfung und Stimmzettel", turn: "Zug (Tisch A)", revise: "Überarbeitung", reply: "Antwort", compare: "Vergleich" };
+	const kinds = [...new Set(Object.values(run.cost).flatMap((m) => Object.keys(m)))];
+	const models = Object.keys(run.cost);
+	const tot = (m) => Object.values(run.cost[m]).reduce((a, k) => ({ calls: a.calls + k.calls, usd: a.usd + k.usd, tokens: a.tokens + k.tokens }), { calls: 0, usd: 0, tokens: 0 });
+	return `<div class="panel scroll"><table><thead><tr><th>Art</th>${models.map((m) => `<th class="num">${chip(m)}</th>`).join("")}</tr></thead><tbody>${kinds.map((k) => `<tr><td>${esc(KIND[k] ?? k)}</td>${models.map((m) => { const c = run.cost[m][k]; return `<td class="num">${c ? `${fmtUsd(c.usd)}<br><span class="muted small">${c.calls} Aufrufe</span>` : "–"}</td>`; }).join("")}</tr>`).join("")}<tr><th>Zusammen</th>${models.map((m) => { const c = tot(m); return `<th class="num">${fmtUsd(c.usd)}<br><span class="muted small">${c.calls} Aufrufe, ${fmtTok(c.tokens)} Tokens</span></th>`; }).join("")}</tr></tbody></table></div>`;
+}
+
+// ---- routing ----
+async function route() {
+	const h = location.hash.replace(/^#/, "") || "overview";
+	const m = /^run-(\d+)$/.exec(h);
+	setTabs(m ? h : "overview");
+	try {
+		if (m && INDEX.runs[Number(m[1]) - 1]) await runPage(Number(m[1]) - 1);
+		else await overview();
+	} catch (e) { $("#main").innerHTML = `<p class="loading">Die Daten konnten nicht geladen werden: ${esc(e.message)}</p>`; }
+	window.scrollTo(0, 0);
+}
+(async () => {
+	try {
+		INDEX = await (await fetch("data/index.json")).json();
+		NOTES = INDEX.notes ?? {};
+		$("#made").textContent = `erzeugt ${new Date(INDEX.made).toLocaleString("de-AT", { dateStyle: "medium", timeStyle: "short" })}`;
+	} catch (e) { $("#main").innerHTML = `<p class="loading">Das Verzeichnis der Läufe fehlt (data/index.json): ${esc(e.message)}</p>`; return; }
+	window.addEventListener("hashchange", route);
+	route();
+})();
+</script>
