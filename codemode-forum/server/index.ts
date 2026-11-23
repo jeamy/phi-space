@@ -104,7 +104,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			if (p === "/api/system") return json(res, 200, await hub.systemInfo());
 			if (p === "/api/models" && req.method === "GET") return json(res, 200, (await hub.modelInfo()).info);
 			// the repositories a task may name as a source: only an admin may, so only an admin learns their names
-			if (p === "/api/sources" && req.method === "GET") return json(res, 200, { repos: (await isAdmin(req)) ? await hub.repos() : [] });
+			if (p === "/api/sources" && req.method === "GET") { const admin = await isAdmin(req); return json(res, 200, { repos: admin ? await hub.repos() : [], hosts: admin ? await hub.gitHosts() : [] }); }
 			// ---- admin panel: login with the password from .env, then the choice of models ----
 			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: (await isAdmin(req)), available: !!adminSecret() });
 			if (p === "/api/admin/login" && req.method === "POST") {

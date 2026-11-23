@@ -1,13 +1,15 @@
 # Multi-stage Dockerfile for PHI-SPACES / CODEMODE FORUM (Next.js 16 + React 19 + phi-spaces), taken over from
-# codemode-chat/docker/Dockerfile and cut down: no sandbox, no Rust space server yet (phase 11 of
-# docs/gemeinsame-planung-plan-2026-11-22.en.md).
+# codemode-chat/docker/Dockerfile and cut down: no sandbox (plan:
+# docs/gemeinsame-planung-plan-2026-11-22.en.md, phases 10 and 11).
 # Build context: repository root.
 # Targets:
 #   - dev-test:   the test runner in Docker
+#   - production-rust: the same with the Rust space server (rust/forum-space), which docker-compose.rust.yml runs
 #   - production: every role of the forum (space, sources, checker, agents, model, web) from one image: by default all
 #                 of them in one container (server/launch.ts); docker/docker-compose.yml runs one container per role
 
 ARG NODE_IMAGE=node:22-bookworm-slim
+ARG RUST_IMAGE=rust:1.99-bookworm
 
 # ---- Stage 1: dependencies (phi-spaces in spaces/ + codemode-forum Next.js/React) ----
 FROM ${NODE_IMAGE} AS deps
@@ -65,10 +67,25 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/.next ./cod
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/app ./codemode-forum/app
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/client ./codemode-forum/client
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/server ./codemode-forum/server
-RUN mkdir -p /data /repos && chown -R node:node /data
+RUN mkdir -p /data /repos /cache && chown -R node:node /data /cache
 USER node
 EXPOSE 4100 4180
 WORKDIR /opt/phi-spaces/codemode-forum
 # all roles in this one container; a role container runs its own server/<role>-host.ts (health checks: per service in
 # docker-compose.yml, since a role container has no web page)
 CMD ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts"]
+
+# ---- Stage 5: production-rust: the production image with the Rust space server (phase 11) ----
+# docker-compose.rust.yml gives it to the space container; the other roles and every other command stay as they are.
+# The builder is Debian bookworm like the Node image, so the binary finds the same libc.
+FROM ${RUST_IMAGE} AS rust-builder
+# The application's own workspace (codemode-forum/rust) takes the core crates as path dependencies from spaces/rust:
+# both are copied with the layout of the checkout (docs/umstellung-verzeichnisse.en.md, D1).
+WORKDIR /opt/phi-spaces
+COPY spaces/rust ./spaces/rust
+COPY codemode-forum/rust ./codemode-forum/rust
+WORKDIR /opt/phi-spaces/codemode-forum/rust
+RUN cargo build --release --locked -p forum-space
+
+FROM production AS production-rust
+COPY --from=rust-builder /opt/phi-spaces/codemode-forum/rust/target/release/forum-space /usr/local/bin/forum-space

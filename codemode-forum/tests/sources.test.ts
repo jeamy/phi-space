@@ -160,7 +160,7 @@ test("a task with a repository and documents: the writer reads before it writes,
 	const id = room("read"), docs = [{ name: "requirements.md", text: "# Requirements\nThe resolution must be 256.\nNothing else changes." }];
 	await until("the repository to be offered", async () => (await (await fetch(`${srv.url}/api/sources`, { headers: ADMIN })).json() as { repos: string[] }).repos.includes("demo"));
 	// only an admin learns the repositories and may name one; a visitor may bring documents
-	assert.deepEqual(await (await fetch(`${srv.url}/api/sources`)).json(), { repos: [] });
+	assert.deepEqual(await (await fetch(`${srv.url}/api/sources`)).json(), { repos: [], hosts: [] });
 	const refused = async (body: Record<string, unknown>, why: RegExp, headers: Record<string, string> = ADMIN) => { const r = await post(srv.url, `/api/rooms/${id}/task`, { brief: BRIEF, ...body }, headers); assert.equal(r.status, 400); assert.match(r.body.error, why); };
 	await refused({ repo: { name: "demo", ref: "main" } }, /needs the admin login/, {});
 	await refused({ repo: { name: "other", ref: "main" } }, /No such repository: other/);

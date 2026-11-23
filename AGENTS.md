@@ -5,7 +5,7 @@ phi-spaces: a space library with its own store; the optional `agent/` package co
 
 The package (`src/`, `test/`, `examples/`, `agent/`, `scripts/`, its `package.json` with the exports, the Rust core in
 `rust/`) lives in `spaces/`; the applications (`spaces-mmo/`, `codemode-chat/`, `codemode-forum/`, `help-site/`) sit beside it, each with
-its own Rust workspace in `<app>/rust/` (codemode-forum has none yet), and `docs/`, `de-docs/`, `checks/` and the `.env` stay at the repository root
+its own Rust workspace in `<app>/rust/`, and `docs/`, `de-docs/`, `checks/` and the `.env` stay at the repository root
 (docs/umstellung-verzeichnisse.en.md). Paths of the package below are from `spaces/`, paths of an application from
 the repository root. The root `package.json` is thin: it runs `checks/` and forwards every command of the package
 (`npm run typecheck`, `npm test`, …) to `spaces/`; the commands that take a path run the package's file from the root,
@@ -66,8 +66,13 @@ so a relative path still means the repository root (`checks/root-scripts.mjs` ke
   `npm --prefix codemode-forum run typecheck` (own tsconfig, not part of the root `tsc`); the result of a plan task as Markdown with
   its generated appendix: `node --experimental-strip-types codemode-forum/server/export-plan.ts --room <room> --block <id> --out <file>`;
   Docker `npm --prefix codemode-forum run docker:image`, then `docker:local:up|down|logs` (one container per role on this
-  machine, compose project `phi-spaces-forum-local`, port 4110, space 4190; changes containers on this machine). No Rust
-  space server yet (phase 11): it runs on this machine only, never on big or nano.
+  machine, compose project `phi-spaces-forum-local`, port 4110, space 4190; changes containers on this machine); the Rust space
+  server `codemode-forum/rust/forum-space` (`cd codemode-forum/rust && cargo build --release && cargo test && cargo clippy --all-targets`;
+  `FORUM_SPACE_SERVER=rust/target/release/forum-space` runs launch and tests on it, relative values are read from the
+  application's directory; `docker:image:rust` and `docker:rust:up|down|logs` the local test bed with it, project
+  `phi-spaces-forum-rust`; `docker:nano:rust:up` and `docker:big:up` exist for the servers, where the forum has not been
+  deployed: never there without asking); remote repositories as a source are fetched by the sources process over https from
+  the hosts of `FORUM_GIT_HOSTS` (`server/remote.ts`, `tests/remote.test.ts` with a git server on this machine).
 - spaces-mmo (`spaces-mmo/`: MMORPG engine, first world Leuchtfeuer; processes space, world, web; PixiJS map; docs in
   `spaces-mmo/docs/`, plan and phases in `spaces-mmo/docs/phasen.en.md`): `npm --prefix spaces-mmo run build` (the page as static files in `spaces-mmo/out/` with `out/BUILD_ID`, which the web process serves, `server/pages.ts`; `--dev` keeps Next's dev server), then
   `npm --prefix spaces-mmo start` (port 3900; `SPACES_MMO_MEM=1` in memory; model calls only with `SPACES_MMO_LLM=1`, they cost tokens), tests `npm --prefix spaces-mmo test` (`npm --prefix spaces-mmo run test:durable`: the same suites with the durable NPC dialogues on, `tests/test-env-durable.ts`, `tests/durable-deviations.ts`; they start the

@@ -12,7 +12,8 @@ import { fullDoc, headOf, versionsOf, type FullDoc, type PlanDoc } from "./pland
 import { planTask, type PlanTask } from "./plantask.ts";
 import { checkOf } from "./check-host.ts";
 import type { Failure } from "./checks.ts";
-import { askSources, indexPages } from "./source-host.ts";
+import { askSources, indexPages, sourceWaitMs } from "./source-host.ts";
+import { remoteLimits } from "./remote.ts";
 import { checkDocs, docsPack, indexHash, type PlanSource } from "./sources.ts";
 import { decisionsOf, messagesOf, newMsgId, owed, PERSON_TABLE, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
 import { objectionsOf, type PlanObjection } from "./review.ts";
@@ -48,7 +49,7 @@ export type Block = Omit<PlanTask, "session"> & {
 	/** The result of the newest run with both tables on this block: a table and a version of its document. */
 	result: { table: Table; version: number } | null;
 	/** The version the table (or the person) accepted; null: none yet. */
-	accepted: Pick<PlanAccept, "version" | "by" | "who" | "approvals" | "of" | "round"> | null; sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>;
+	accepted: Pick<PlanAccept, "version" | "by" | "who" | "approvals" | "of" | "round"> | null; sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "url" | "commit" | "ref" | "files" | "bytes">>;
 	/** The table's discussion in numbers: messages, decisions, and the questions to the person still open. */
 	talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"];
 		/** The mechanical check of the newest version (checks.ts); null: not checked yet. */
@@ -242,7 +243,7 @@ export class ForumHub {
 			const TABLE = await this.#tableOf(s.id, t.blockId, run);
 			const versions = await versionsOf(this.host, { session: s.id, blockId: t.blockId, table: TABLE }), head = versions.at(-1);
 			const sources = (await this.host.readAll({ type: "PlanSource", fields: { session: s.id, blockId: t.blockId } }, { limit: 4 })).map((e) => e.fields as unknown as PlanSource).sort((a, b) => a.sourceId.localeCompare(b.sourceId))
-				.map(({ sourceId, kind, name, commit, ref, files, bytes }) => ({ sourceId, kind, name, ...(commit ? { commit } : {}), ...(ref ? { ref } : {}), files, bytes }));
+				.map(({ sourceId, kind, name, url, commit, ref, files, bytes }) => ({ sourceId, kind, name, ...(url ? { url } : {}), ...(commit ? { commit } : {}), ...(ref ? { ref } : {}), files, bytes }));
 			const d = { session: s.id, blockId: t.blockId, table: TABLE }, messages = await messagesOf(this.host, d);
 			const talk = { messages: messages.length, decisions: (await decisionsOf(this.host, d)).length, forPerson: owed(messages, [], {}).person.length };
 			const check = head ? await checkOf(this.host, d, head.version) : null;
@@ -273,15 +274,23 @@ export class ForumHub {
 		return [...new Set((await this.host.readAll({ type: "SourceInfo" }, { limit: 20 })).flatMap((e) => (e.fields as { repos?: unknown }).repos as string[] ?? []))].sort();
 	}
 
+	/** The hosts a remote repository may be fetched from, as the sources processes say (FORUM_GIT_HOSTS there). */
+	async gitHosts(): Promise<string[]> {
+		return [...new Set((await this.host.readAll({ type: "SourceInfo" }, { limit: 20 })).flatMap((e) => (e.fields as { hosts?: unknown }).hosts as string[] ?? []))].sort();
+	}
+
 	/** A new plan task: a block of the room, with its sources fixed now: uploaded documents (`docs`: name and text
-	 *  each), kept in the space, and a repository of the sources process at a branch, tag or commit (`repo`; the server
-	 *  lets only an admin name one: `admin`). Its document begins with the first run on it. */
+	 *  each), kept in the space, and a repository at a branch, tag or commit (`repo`: one of the sources process by its
+	 *  `name`, or a remote one by its https `url`, which the sources process fetches now if its host is allowed; the
+	 *  server lets only an admin name one: `admin`). Its document begins with the first run on it. */
 	async createTask(id: string, o: { brief?: unknown; lang?: unknown; outline?: unknown; criteria?: unknown; docs?: unknown; repo?: unknown; admin?: boolean }): Promise<{ blockId: string }> {
 		const s = await this.session(id);
 		const task = planTask(o), docs = checkDocs(o.docs), blockId = `b${Date.now().toString(36)}${rid()}`;
-		const repo = o.repo && typeof o.repo === "object" ? { name: String((o.repo as { name?: unknown }).name ?? ""), ref: String((o.repo as { ref?: unknown }).ref ?? "").trim() || "HEAD" } : null;
+		const repo = o.repo && typeof o.repo === "object" ? { name: String((o.repo as { name?: unknown }).name ?? ""), url: String((o.repo as { url?: unknown }).url ?? "").trim(), ref: String((o.repo as { ref?: unknown }).ref ?? "").trim() || "HEAD" } : null;
 		if (repo && o.admin === false) throw new Error("A repository as a source needs the admin login");
-		if (repo && !(await this.repos()).includes(repo.name)) throw new Error(`No such repository: ${repo.name.slice(0, 60)}`);
+		if (repo?.url && repo.name) throw new Error("Name a repository of the sources process or a remote one, not both");
+		if (repo?.url && !/^https?:\/\//i.test(repo.url)) throw new Error("A remote repository is named by its https address");
+		if (repo && !repo.url && !(await this.repos()).includes(repo.name)) throw new Error(`No such repository: ${repo.name.slice(0, 60)}`);
 		if (!this.#allow(s, "task", 6)) throw new Error("Too many tasks, slow down");
 		await this.#trimLines(s);
 		await this.#exclusive(s, async () => {
@@ -289,7 +298,10 @@ export class ForumHub {
 			const sources: PlanSource[] = [], key = { session: s.id, blockId };
 			// the repository first: its sources process resolves the commit and writes the pack's index, or says why not
 			if (repo) {
-				const { opened } = await askSources(this.host, { requestId: `open-${blockId}`, ...key, op: "open", repo: repo.name, ref: repo.ref, ttl: this.#ttl, ts: Date.now() });
+				// a remote repository is fetched while this waits: as long as a fetch may take, and the usual wait on top
+				const { opened } = repo.url
+					? await askSources(this.host, { requestId: `open-${blockId}`, ...key, op: "open", url: repo.url, ref: repo.ref, ttl: this.#ttl, ts: Date.now() }, sourceWaitMs() + remoteLimits().ms)
+					: await askSources(this.host, { requestId: `open-${blockId}`, ...key, op: "open", repo: repo.name, ref: repo.ref, ttl: this.#ttl, ts: Date.now() });
 				sources.push({ ...key, sourceId: "repo", kind: "repo", ...opened!, ts: Date.now() });
 			}
 			if (docs.length) {

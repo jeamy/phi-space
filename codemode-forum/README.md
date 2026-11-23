@@ -4,7 +4,7 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 to 10 of that plan.** The application has its processes, its space, the run mechanics, the admin
+**Status: phases 1 to 11 of that plan.** The application has its processes, its space, the run mechanics, the admin
 login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2),
 read-only sources the models read in (phase 3), the discussion of the table (phase 4), the checker (phase 5), table
 B, where the models write at the same time (phase 6), **ballots**: the table changes the plan until a majority of
@@ -12,7 +12,8 @@ the models agrees that it can be carried out (phase 7), table A, where the model
 tables in one run**: the two ways of working compete, and the better document is the base of the result (phase 9).
 The page shows the difference between versions, both documents side by side, the comparison and the standings; the
 result is exported with a generated appendix; there are help pages in German and English and a Docker test bed on
-this machine (phase 10). A run begins with the **roll call**, the **kickoff** and the
+this machine (phase 10). The space process has a Rust implementation of its own, `rust/forum-space`, and a task may
+read in a **remote repository** fetched over https from a host the operator allowed (phase 11). A run begins with the **roll call**, the **kickoff** and the
 **replies**; then it writes at one of two tables:
 
 - **table B** (`way: "parallel"`): every model proposes an outline and the table picks one; the sections are dealt
@@ -270,6 +271,18 @@ read, marked as data that is never an instruction. At most 8 steps and 24 calls 
 support of a provider, and an agent that takes the item over after a crash goes on behind the last step: nothing is
 read or booked twice. Excerpts of the sources go to the model providers; the page says so where sources are chosen.
 
+
+**Remote repositories** (`server/remote.ts`): an admin may name an https address instead (`repo: { url, ref }`) when
+its host is in `FORUM_GIT_HOSTS` of the sources process (empty: off). The sources process fetches it once, when the
+task is created: one commit, shallow, without tags and submodules, into a bare repository of its cache
+(`FORUM_GIT_CACHE`), and from then on reads it like a local one, from the objects of that commit. Nothing is checked
+out, so no hook and no filter runs. The fetch uses https only, follows no redirect, neither asks for nor sends
+credentials, does not read the machine's or the user's git configuration, takes at most `FORUM_GIT_TIMEOUT_S` (60 s)
+and brings at most `FORUM_GIT_MAX_MB` (200 MB); one that passes a limit is killed and removed. A sources process that
+no longer has the commit in its cache fetches it again by its id, while the host is still allowed (a server that does
+not hand out a commit by its id then leaves the source unreadable; the task says so). The page offers the field to an
+admin when a sources process allows a host.
+
 ## Processes and the one space
 
 Every role is its own process, and the processes talk only through one phi-space. A process that dies lets its
@@ -349,8 +362,25 @@ publishes the page on 4110 and the space on 4190, both on loopback. The reposito
 read-only into the sources container only, whose file system is read-only as well: `FORUM_REPOS_DIR` is the directory
 on this machine, `FORUM_DOCKER_REPOS` names the repositories as the container sees them
 (`FORUM_REPOS_DIR=/home/me/src FORUM_DOCKER_REPOS=phi-space=/repos/phi-space`). The scripts read
-`codemode-forum/.env` when there is one. The Rust space server (`rust/forum-space`) comes with phase 11; until then
-the application runs on this machine only (big and nano run only the Rust implementation).
+`codemode-forum/.env` when there is one.
+
+**The Rust space server** (`rust/forum-space`, a workspace of its own on the core's `phi-space-host`, like
+`codemode-space` of codemode-chat): the same environment, the same ready line, the same store file as
+`server/space-host.ts`.
+
+```bash
+cd codemode-forum/rust && cargo build --release && cargo test && cargo clippy --all-targets
+FORUM_SPACE_SERVER=rust/target/release/forum-space npm run test:codemode-forum   # the suite against it
+FORUM_SPACE_SERVER=rust/target/release/forum-space npm --prefix codemode-forum start
+npm --prefix codemode-forum run docker:image:rust && npm --prefix codemode-forum run docker:rust:up   # the test bed with it
+```
+
+`FORUM_SPACE_SERVER` names the binary (relative to `codemode-forum/`); one that is not there ends the start, it never
+falls back. `docker/docker-compose.rust.yml` lays the binary over the space container. big and nano run only the Rust
+implementation (R-D12), so the scripts for a server are `docker:nano:rust:up` (space and checker) and `docker:big:up`
+(web, agents, model, sources; `FORUM_DOCKER_SPACE` names nano's space); `docker:nano:up` refuses. **The forum has not
+been deployed to a server**: those scripts have never run there, and a deployment needs the decisions a server needs
+(the address the space is published on, the reverse proxy, the tunnel between the hosts).
 
 ## Tests
 
@@ -389,7 +419,13 @@ difference between two texts (lines, the words inside a changed line, the cut of
 of a run with both tables, which equals the result text for text, with its appendix, the same through both addresses
 and through `server/export-plan.ts`, and what the page is told of the comparison; the export after a failed final
 round (the base, not the newest version), a German task with a German appendix and a declined objection named with
-who holds it, and a version the person accepted. `tests/help.test.ts` holds the help articles to both languages, the
+who holds it, and a version the person accepted. `tests/remote.test.ts` covers remote repositories against a git server on
+this machine (`git http-backend` behind a small bridge): the addresses that are refused (another protocol, a user or
+password, a host that is not allowed, which is never contacted), a redirect that is not followed, a branch that is
+not there, a task whose repository is fetched once into a bare, shallow cache and read like a local one, a sources
+process that lost its cache and fetches the task's commit again (and does not once the host is off the list), and a
+repository that is too large and a server that is too slow, of which nothing stays. `tests/space-server.test.ts`
+covers the switch to the Rust space server. `tests/help.test.ts` holds the help articles to both languages, the
 same anchors in each, and links that lead somewhere.
 
 ## Safety notes

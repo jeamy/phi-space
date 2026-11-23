@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 to 7 implemented on 2026-11-22, phases 8 to 10 on 2026-11-23 (`codemode-forum/`, see its README); phases 0, 11 and 12 open. Second version,
+Status: phases 1 to 7 implemented on 2026-11-22, phases 8 to 11 on 2026-11-23 (`codemode-forum/`, see its README); phases 0 and 12 (live runs) open. Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -259,6 +259,24 @@ call is admitted against the budget.
 - Only the sources process gets the repository paths, as only the model process gets credentials.
 - Runs with a repository need the admin login in the first version.
 
+As built (phase 11), remote repositories (`server/remote.ts`):
+
+- The fetch is the one moment at which the sources process opens a connection: when the task is created, and again
+  only when its cache lost the task's commit (then by the commit's id, while the host is still on the list; a server
+  that hands out no commit by its id leaves the source unreadable, and the reading call says so).
+- One commit, `--depth=1`, no tags, no submodules, into a bare repository of the cache; nothing is checked out, so
+  hooks and LFS filters never run. https only, no redirect, no credentials asked or sent, the machine's and the
+  user's git configuration not read; the address carries no user, password, query or fragment.
+- The 200 MB are measured on the disk while the fetch runs (the cache's repository of that address), the 60 s on
+  the clock; a fetch that passes either is killed with its helper and what it wrote is removed. Both are settings
+  (`FORUM_GIT_MAX_MB`, `FORUM_GIT_TIMEOUT_S`).
+- The tests serve repositories from this machine over plain http, which the sources process accepts for 127.0.0.1
+  with `FORUM_TEST=1` only; https itself was tried once by hand against a public repository.
+
+As built (phase 11), the Rust space server: `codemode-forum/rust/forum-space` is the counterpart of codemode-chat's
+`codemode-space` on `phi-space-host`; `FORUM_SPACE_SERVER` switches launch and tests to it, and
+`docker/docker-compose.rust.yml` the space container. Scripts for nano and big exist; the forum has not been deployed.
+
 ## 9. When a plan counts as agreed
 
 **Mechanical checks first.** The checker runs them for every new `PlanDoc` version, without a model:
@@ -380,7 +398,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 | 8 ✓ | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
 | 9 ✓ | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
 | 10 ✓ | Page: diff, discussion, ballots, standings, export; help articles in German and English; README; Docker with the local test bed. | help links and both languages; the export equals the result |
-| 11 | `codemode-forum/rust/forum-space` and its compose files; remote repositories (admin, host allowlist). | the suite against the Rust server; refused hosts, size and time limits with a local git server |
+| 11 ✓ | `codemode-forum/rust/forum-space` and its compose files; remote repositories (admin, host allowlist). | the suite against the Rust server; refused hosts, size and time limits with a local git server |
 | 12 | Live runs of both example briefs, three models, both tables, three times each; report in `codemode-forum/docs/`. | live, costs tokens: ask first |
 
 Phases 6 and 8 are independent after phase 5. Everything up to phase 12 runs on this machine; big and nano follow

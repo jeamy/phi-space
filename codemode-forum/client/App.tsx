@@ -16,7 +16,7 @@ type Answer = { runId: string; model: string; alias: string; agent: number; text
 type SectionRef = { sectionId: string; rev: number; title: string; hash: string; bytes: number; author: string; model: string; origin?: string };
 type Table = "A" | "B";
 type Outcome = { chosen: { table: Table; version: number; how: "person" | "result" | "majority" | "draft" } | null; stat: { base: Table; how: "accepted" | "compared" | "only"; prefer?: Record<Table, number>; tables: Partial<Record<Table, { rounds: number; tokens: number; costUsd: number; accepted: boolean; approvals: number }>>; final?: { points: number; agreed: number; accepted: boolean }; result: { table: Table; version: number } } | null; compares: Array<{ model: string; prefer: Table; criteria: Array<{ n: number; prefer: Table; text: string }>; points: Array<{ table: Table; fromTitle: string; intoTitle: string; text: string }> }> };
-type Source = { sourceId: string; kind: "docs" | "repo"; name: string; commit?: string; ref?: string; files: number; bytes: number };
+type Source = { sourceId: string; kind: "docs" | "repo"; name: string; url?: string; commit?: string; ref?: string; files: number; bytes: number };
 type Check = { ok: boolean; failures: Array<{ check: string; sectionId?: string; text: string }> } | null;
 type Block = { result: { table: "A" | "B"; version: number } | null; blockId: string; table: "A" | "B"; heads: Partial<Record<Table, number>>; accepted: { version: number; by: "majority" | "person"; who?: string; approvals: string[]; of: number; round?: number } | null; brief: string; lang: "de" | "en"; outline: string[]; criteria: string[]; ts: number; sources: Source[]; talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: SectionRef[]; check: Check } | null };
 type Snapshot = { standings?: { runs: number; A: number; B: number; tokens: Record<Table, number> }; session: string; blocks: Block[]; run: RunInfo | null; rollcall: Answer[]; lines: Array<{ text: string; ts: number }>; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
@@ -33,7 +33,7 @@ const T = {
 	de: {
 		room: "Raum", live: "live", offline: "getrennt", off: "Modelle aus", models: "Modelle",
 		task: "Planaufgabe", brief: "Auftrag: wofür ist der Plan, was muss er leisten?", docLang: "Sprache des Dokuments", outline: "Gliederung vorgeben (optional, eine Überschrift je Zeile)", criteria: "Eigene Kriterien (optional, eines je Zeile)", create: "Aufgabe anlegen",
-		sources: "Quellen (optional, nur lesend)", docs: "Dokumente (.md, .txt, .csv, .json, .yaml; bis 10, zusammen 800 kB)", repo: "Repository", noRepo: "kein Repository", ref: "Branch, Tag oder Commit (leer: HEAD)", sourceNote: "Die Modelle lesen in diesen Quellen. Auszüge daraus gehen an die Anbieter der gewählten Modelle.", drop: "entfernen",
+		sources: "Quellen (optional, nur lesend)", docs: "Dokumente (.md, .txt, .csv, .json, .yaml; bis 10, zusammen 800 kB)", repo: "Repository", remote: (h: string) => `Entferntes Repository (https-Adresse; erlaubte Hosts: ${h})`, noRepo: "kein Repository", ref: "Branch, Tag oder Commit (leer: HEAD)", sourceNote: "Die Modelle lesen in diesen Quellen. Auszüge daraus gehen an die Anbieter der gewählten Modelle.", drop: "entfernen",
 		srcDocs: (n: number) => `${n} Dokument${n === 1 ? "" : "e"}`, srcRepo: (name: string, commit: string, n: number) => `Repository ${name} bei ${commit} (${n} Dateien)`,
 		run: "Lauf", on: "Aufgabe", pick: (min: number, max: number) => `Modelle am Tisch (${min} bis ${max})`, perModel: "Agenten je Modell", tokens: "Budget Tokens", usd: "Budget $",
 		start: "Lauf starten", stop: "Stopp", none: "Keine Modelle verfügbar. Ein Admin schaltet sie frei (FORUM_LLM=1 und Zugangsdaten beim Modell-Prozess).",
@@ -60,7 +60,7 @@ const T = {
 	en: {
 		room: "room", live: "live", offline: "offline", off: "models off", models: "models",
 		task: "Plan task", brief: "Brief: what is the plan for, what must it achieve?", docLang: "Language of the document", outline: "Fix the outline (optional, one heading a line)", criteria: "Criteria of your own (optional, one a line)", create: "Create task",
-		sources: "Sources (optional, read-only)", docs: "Documents (.md, .txt, .csv, .json, .yaml; up to 10, 800 kB together)", repo: "Repository", noRepo: "no repository", ref: "Branch, tag or commit (empty: HEAD)", sourceNote: "The models read in these sources. Excerpts of them go to the providers of the chosen models.", drop: "remove",
+		sources: "Sources (optional, read-only)", docs: "Documents (.md, .txt, .csv, .json, .yaml; up to 10, 800 kB together)", repo: "Repository", remote: (h: string) => `Remote repository (https address; allowed hosts: ${h})`, noRepo: "no repository", ref: "Branch, tag or commit (empty: HEAD)", sourceNote: "The models read in these sources. Excerpts of them go to the providers of the chosen models.", drop: "remove",
 		srcDocs: (n: number) => `${n} document${n === 1 ? "" : "s"}`, srcRepo: (name: string, commit: string, n: number) => `repository ${name} at ${commit} (${n} files)`,
 		run: "Run", on: "Task", pick: (min: number, max: number) => `Models at the table (${min} to ${max})`, perModel: "Agents per model", tokens: "Budget tokens", usd: "Budget $",
 		start: "Start run", stop: "Stop", none: "No models available. An admin allows them (FORUM_LLM=1 and credentials at the model process).",
@@ -117,6 +117,8 @@ export function CodemodeForum() {
 	const [docs, setDocs] = useState<Array<{ name: string; text: string }>>([]);
 	const [repos, setRepos] = useState<string[]>([]);
 	const [repo, setRepo] = useState("");
+	const [hosts, setHosts] = useState<string[]>([]);
+	const [remote, setRemote] = useState("");
 	const [ref, setRef] = useState("");
 	const [focus, setFocus] = useState<string | null>(null); // the block shown; null: the newest
 	const [tableSel, setTableSel] = useState<Table | "side" | null>(null); // the table shown; null: the block's; "side": both
@@ -161,8 +163,8 @@ export function CodemodeForum() {
 
 	// the repositories a task may read in: only an admin is told them
 	useEffect(() => {
-		if (!admin) { setRepos([]); setRepo(""); return; }
-		api<{ repos: string[] }>("/sources").then((x) => setRepos(x.repos)).catch(() => {});
+		if (!admin) { setRepos([]); setRepo(""); setHosts([]); setRemote(""); return; }
+		api<{ repos: string[]; hosts?: string[] }>("/sources").then((x) => { setRepos(x.repos); setHosts(x.hosts ?? []); }).catch(() => {});
 	}, [admin]);
 	const addDocs = async (files: FileList | null) => {
 		const read = await Promise.all([...(files ?? [])].map(async (f) => ({ name: f.name, text: await f.text() })));
@@ -204,8 +206,8 @@ export function CodemodeForum() {
 	const run = snap?.run ?? null;
 	const act = async (fn: () => Promise<unknown>) => { setMsg(""); try { await fn(); } catch (e) { setMsg((e as Error).message); } };
 	const create = () => act(async () => {
-		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang || lang, outline, criteria, ...(docs.length ? { docs } : {}), ...(repo ? { repo: { name: repo, ref } } : {}) });
-		setBrief(""); setOutline(""); setCriteria(""); setDocs([]); setRepo(""); setRef(""); setFocus(r.blockId); setTableSel(null);
+		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang || lang, outline, criteria, ...(docs.length ? { docs } : {}), ...(remote.trim() ? { repo: { url: remote.trim(), ref } } : repo ? { repo: { name: repo, ref } } : {}) });
+		setBrief(""); setOutline(""); setCriteria(""); setDocs([]); setRepo(""); setRemote(""); setRef(""); setFocus(r.blockId); setTableSel(null);
 	});
 	const start = () => act(() => api(`/rooms/${rid}/run`, { blockId: block?.blockId, way, rounds, models: picked, perModel, budgetTokens: budgetTokens || undefined, budgetUsd: budgetUsd || undefined }));
 	const toggle = (label: string, add: boolean) => setChosen((cur) => { const n = new Set(cur); if (add) n.add(label); else n.delete(label); return n; });
@@ -254,7 +256,7 @@ export function CodemodeForum() {
 							<summary>{t.criteria}</summary>
 							<textarea rows={3} aria-label={t.criteria} value={criteria} onChange={(e) => setCriteria(e.target.value)} />
 						</details>
-						<details open={docs.length > 0 || !!repo}>
+						<details open={docs.length > 0 || !!repo || !!remote}>
 							<summary>{t.sources}</summary>
 							<label className="fieldlabel" htmlFor="docs">{t.docs}</label>
 							<input id="docs" type="file" multiple accept=".md,.markdown,.txt,.csv,.json,.yaml,.yml" onChange={(e) => { void addDocs(e.target.files); e.target.value = ""; }} />
@@ -263,10 +265,16 @@ export function CodemodeForum() {
 								<div className="row">
 									<label htmlFor="repo">{t.repo}</label>
 									<select id="repo" value={repo} onChange={(e) => setRepo(e.target.value)}><option value="">{t.noRepo}</option>{repos.map((r) => <option key={r} value={r}>{r}</option>)}</select>
-									{repo ? <input aria-label={t.ref} placeholder={t.ref} value={ref} onChange={(e) => setRef(e.target.value)} /> : null}
 								</div>
 							) : null}
-							{docs.length || repo ? <div className="notice">{t.sourceNote}</div> : null}
+							{admin && hosts.length ? (
+								<>
+									<label className="fieldlabel" htmlFor="remote">{t.remote(hosts.join(", "))}</label>
+									<input id="remote" className="wide" type="url" maxLength={300} placeholder="https://…" value={remote} onChange={(e) => setRemote(e.target.value)} />
+								</>
+							) : null}
+							{repo || remote ? <div className="row"><input className="wide" aria-label={t.ref} placeholder={t.ref} value={ref} onChange={(e) => setRef(e.target.value)} /></div> : null}
+							{docs.length || repo || remote ? <div className="notice">{t.sourceNote}</div> : null}
 						</details>
 						<div className="row"><button type="button" className="btn btn--primary" disabled={brief.trim().length < 20} onClick={() => void create()}>{t.create}</button></div>
 					</div>

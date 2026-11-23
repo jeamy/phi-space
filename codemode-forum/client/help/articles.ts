@@ -124,9 +124,12 @@ Beschreibe, wofür der Plan ist und was er leisten muss, in mindestens 20 und h�
 | Quelle | Wer darf sie angeben | Grenzen |
 |---|---|---|
 | Dokumente (.md, .txt, .csv, .json, .yaml) | jeder | bis 10 Dateien, zusammen 800 kB |
-| Git-Repository | nur ein Admin | eines der Repositories, die der Betreiber freigegeben hat; ein Branch, Tag oder Commit |
+| Git-Repository auf dem Rechner | nur ein Admin | eines der Repositories, die der Betreiber freigegeben hat; ein Branch, Tag oder Commit |
+| Entferntes Git-Repository | nur ein Admin | eine https-Adresse auf einem Host, den der Betreiber erlaubt hat; ein Commit, höchstens 200 MB und 60 Sekunden |
 
 Ein Repository wird beim Anlegen auf einen **Commit** festgelegt. Die Modelle lesen aus den Objekten dieses Commits, nicht aus dem Arbeitsverzeichnis: Was später im Repository geschieht, ändert die Aufgabe nicht. Den Commit nennt der Anhang des Ergebnisses.
+
+Ein **entferntes Repository** wird beim Anlegen der Aufgabe einmal abgerufen: nur der eine Commit, ohne Vorgeschichte, in einen Zwischenspeicher des Quellen-Prozesses. Dort liegt es als reine Objektablage; es wird nie ausgecheckt. Danach wird es gelesen wie ein Repository auf dem Rechner. Was abgelehnt wird, steht in [Sicherheit und Grenzen](help.topic.safety_and_limits#remote).
 
 Die Modelle lesen in Schritten: ein Verzeichnis auflisten, einen Ausschnitt einer Datei lesen (höchstens 400 Zeilen oder 16 kB je Schritt), nach Text suchen (höchstens 40 Treffer). Dateien mit Schlüsseln und lokalen Einstellungen bekommt kein Modell, siehe [Sicherheit und Grenzen](help.topic.safety_and_limits#deny).
 
@@ -151,9 +154,12 @@ Describe what the plan is for and what it must achieve, in at least 20 and at mo
 | Source | Who may name it | Limits |
 |---|---|---|
 | Documents (.md, .txt, .csv, .json, .yaml) | anybody | up to 10 files, 800 kB together |
-| Git repository | an admin only | one of the repositories the operator offers; a branch, tag or commit |
+| Git repository on the machine | an admin only | one of the repositories the operator offers; a branch, tag or commit |
+| Remote git repository | an admin only | an https address on a host the operator allowed; one commit, at most 200 MB and 60 seconds |
 
 A repository is fixed to a **commit** when the task is created. The models read from the objects of that commit, not from the working directory: what happens in the repository later does not change the task. The appendix of the result names the commit.
+
+A **remote repository** is fetched once when the task is created: only the one commit, without its history, into a cache of the sources process. There it lies as a bare object store; it is never checked out. From then on it is read like a repository on the machine. What is refused is in [Safety and limits](help.topic.safety_and_limits#remote).
 
 The models read in steps: list a directory, read a part of a file (at most 400 lines or 16 kB a step), search for text (at most 40 hits). Files with keys and local settings no model gets, see [Safety and limits](help.topic.safety_and_limits#deny).
 
@@ -626,6 +632,8 @@ npm run codemode-forum                   # alle Rollen, aus dem Build
 | \`FORUM_MODELS\` | Teile von Modell-IDs, die teilnehmen dürfen, bis ein Admin wählt |
 | \`FORUM_ADMIN_PASSWORD\` | Das Admin-Login |
 | \`FORUM_REPOS\` | \`name=/pfad,…\`: die Repositories, die eine Aufgabe als Quelle nennen darf |
+| \`FORUM_GIT_HOSTS\` | Hosts, von denen ein entferntes Repository abgerufen werden darf; leer: aus |
+| \`FORUM_SPACE_SERVER\` | Der Rust-Space-Server \`rust/target/release/forum-space\` statt \`server/space-host.ts\` |
 | \`FORUM_SPACE\` / \`FORUM_LISTEN\` | Wo die Prozesse den Space finden, und wo er lauscht |
 | \`FORUM_RUN_BUDGET_TOKENS\` | Budget eines Besucher-Laufs |
 | \`FORUM_TURN_WAIT_S\`, \`FORUM_REPLY_WAIT_S\`, \`FORUM_PERSON_WAIT_S\` | Fristen für einen Zug, eine Antwort eines Modells, deine Antworten beim Auftakt |
@@ -641,7 +649,7 @@ npm --prefix codemode-forum run docker:local:logs
 npm --prefix codemode-forum run docker:local:down
 \`\`\`
 
-Das lokale Testbett startet einen Container je Rolle; sie sprechen über TCP mit dem Space (Port 4190 auf diesem Rechner). Die Repositories aus \`FORUM_REPOS_DIR\` sind im Quellen-Container nur lesend eingehängt. Das Forum läuft bisher nur auf diesem Rechner.
+Das lokale Testbett startet einen Container je Rolle; sie sprechen über TCP mit dem Space (Port 4190 auf diesem Rechner). Die Repositories aus \`FORUM_REPOS_DIR\` sind im Quellen-Container nur lesend eingehängt. \`docker:image:rust\` und \`docker:rust:up\` starten dasselbe Testbett mit dem Rust-Space-Server. Auf einem Server ist das Forum noch nicht eingerichtet.
 
 ## Sicherung {#backup}
 
@@ -687,6 +695,8 @@ npm run codemode-forum                   # all roles, from the build
 | \`FORUM_MODELS\` | Parts of model ids that may take part until an admin chooses |
 | \`FORUM_ADMIN_PASSWORD\` | The admin login |
 | \`FORUM_REPOS\` | \`name=/path,…\`: the repositories a task may name as a source |
+| \`FORUM_GIT_HOSTS\` | Hosts a remote repository may be fetched from; empty: off |
+| \`FORUM_SPACE_SERVER\` | The Rust space server \`rust/target/release/forum-space\` instead of \`server/space-host.ts\` |
 | \`FORUM_SPACE\` / \`FORUM_LISTEN\` | Where the processes find the space, and where it listens |
 | \`FORUM_RUN_BUDGET_TOKENS\` | Budget of a visitor's run |
 | \`FORUM_TURN_WAIT_S\`, \`FORUM_REPLY_WAIT_S\`, \`FORUM_PERSON_WAIT_S\` | Deadlines for a turn, a model's reply, your answers at the kickoff |
@@ -702,7 +712,7 @@ npm --prefix codemode-forum run docker:local:logs
 npm --prefix codemode-forum run docker:local:down
 \`\`\`
 
-The local test bed starts one container per role; they talk to the space over TCP (port 4190 on this machine). The repositories of \`FORUM_REPOS_DIR\` are mounted read-only into the sources container. The forum runs on this machine only so far.
+The local test bed starts one container per role; they talk to the space over TCP (port 4190 on this machine). The repositories of \`FORUM_REPOS_DIR\` are mounted read-only into the sources container. \`docker:image:rust\` and \`docker:rust:up\` start the same test bed with the Rust space server. The forum is not set up on a server yet.
 
 ## Backup {#backup}
 
@@ -736,6 +746,18 @@ Das Forum führt keinen Code aus einem Eintrag aus: Es gibt keine Sandbox, weil 
 - Ein Repository wird aus den Objekten eines festen Commits gelesen. Es gibt keinen Aufruf, der schreibt, auscheckt oder einen Befehl ausführt.
 - Ein Pfad, der nach oben oder aus der Quelle hinaus führt, wird abgewiesen. Symbolische Verweise und Submodule eines Repositorys sind für die Modelle nicht vorhanden.
 - Welche Repositories es gibt, legt der Betreiber fest (\`FORUM_REPOS\`); nur ein Admin darf eines als Quelle nennen.
+
+## Entfernte Repositories {#remote}
+
+Ein entferntes Repository ist die einzige Stelle, an der der Quellen-Prozess eine Verbindung nach außen öffnet, und nur beim Anlegen einer Aufgabe. Dabei gilt:
+
+- Nur \`https\`, und nur zu einem Host aus \`FORUM_GIT_HOSTS\`. Ist die Liste leer, sind entfernte Repositories aus.
+- Eine Adresse mit Benutzer, Passwort, Abfrage oder Fragment wird abgewiesen. Zugangsdaten werden weder gefragt noch gesendet.
+- Einer Umleitung wird nicht gefolgt; sie könnte zu einem Host führen, der nicht erlaubt ist.
+- Abgerufen wird ein einziger Commit ohne Vorgeschichte, ohne Tags und ohne Submodule, in eine reine Objektablage. Nichts wird ausgecheckt, also läuft kein Hook und kein Filter (LFS).
+- Die Git-Einstellungen des Rechners und des Benutzers werden nicht gelesen.
+- Ein Abruf dauert höchstens \`FORUM_GIT_TIMEOUT_S\` (60 Sekunden) und bringt höchstens \`FORUM_GIT_MAX_MB\` (200 MB). Wird eine Grenze überschritten, wird er abgebrochen und nichts davon bleibt.
+- Nur ein Admin darf ein entferntes Repository nennen.
 
 ## Dateien, die kein Modell bekommt {#deny}
 
@@ -782,6 +804,18 @@ The forum runs no code from an entry: there is no sandbox because there is nothi
 - A repository is read from the objects of one fixed commit. There is no call that writes, checks out or runs a command.
 - A path that leads up or out of the source is refused. Symbolic links and submodules of a repository do not exist for the models.
 - Which repositories there are is set by the operator (\`FORUM_REPOS\`); only an admin may name one as a source.
+
+## Remote repositories {#remote}
+
+A remote repository is the only place where the sources process opens a connection to the outside, and only when a task is created. The rules:
+
+- Only \`https\`, and only to a host of \`FORUM_GIT_HOSTS\`. With an empty list remote repositories are off.
+- An address with a user, a password, a query or a fragment is refused. Credentials are neither asked for nor sent.
+- A redirect is not followed; it could lead to a host that is not allowed.
+- One single commit is fetched, without its history, without tags and without submodules, into a bare object store. Nothing is checked out, so no hook and no filter (LFS) runs.
+- The git settings of the machine and of the user are not read.
+- A fetch takes \`FORUM_GIT_TIMEOUT_S\` at most (60 seconds) and brings \`FORUM_GIT_MAX_MB\` at most (200 MB). When a limit is passed it is cut off and nothing of it stays.
+- Only an admin may name a remote repository.
 
 ## Files no model gets {#deny}
 

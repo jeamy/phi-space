@@ -7,15 +7,17 @@
 #                  as between two hosts, host names "nano" and "big" in the system bar
 #   profile test:  the test suite
 #
-# So far the forum runs on this machine only: big and nano run only the Rust space server (R-D12), which the forum gets
-# with phase 11 (docs/gemeinsame-planung-plan-2026-11-22.en.md). The profiles are split already so that nothing moves
-# then. The space socket has no TLS and treats every connection as a process of the forum: never publish it on a public
+# big and nano run only the Rust space server (R-D12): docker-compose.rust.yml lays rust/forum-space over the space
+# container (`docker:rust:up` locally, `docker:nano:rust:up` on nano). The forum has not been deployed to a server yet
+# (docs/gemeinsame-planung-plan-2026-11-22.en.md). The space socket has no TLS and treats every connection as a process of the forum: never publish it on a public
 # interface.
 # Ports: 4100 (web), 4180 (space); the local test bed publishes them as 4110 and 4190.
 #
 # Sources: the repositories a task may read in are mounted read-only into the sources container at /repos, from
 # FORUM_REPOS_DIR on this machine (default: an empty directory), and named by FORUM_DOCKER_REPOS as the container sees
 # them, e.g. FORUM_REPOS_DIR=/home/me/src FORUM_DOCKER_REPOS=phi-space=/repos/phi-space. No other container sees them.
+# Remote repositories (FORUM_GIT_HOSTS) are fetched by the same container into a volume of its own; it is the only
+# container besides the model one that opens connections to the outside.
 
 name: phi-spaces-forum
 
@@ -142,10 +144,17 @@ services:
       FORUM_HOST_NAME: "${BIG_HOST_NAME:-big}"
       # the repositories as this container sees them (the .env's FORUM_REPOS names paths of the machine, not of here)
       FORUM_REPOS: "${FORUM_DOCKER_REPOS:-}"
-    # the only container that sees repositories, and it cannot write them
+      # remote repositories (server/remote.ts): the hosts they may be fetched from (none: off), fetched into /cache
+      FORUM_GIT_HOSTS: "${FORUM_GIT_HOSTS:-}"
+      FORUM_GIT_MAX_MB: "${FORUM_GIT_MAX_MB:-200}"
+      FORUM_GIT_TIMEOUT_S: "${FORUM_GIT_TIMEOUT_S:-60}"
+      FORUM_GIT_CACHE: /cache
+    # the only container that sees repositories, and it cannot write them: its file system is read-only but for the
+    # cache of fetched remote repositories (bare, never checked out) and /tmp
     read_only: true
     volumes:
       - "${FORUM_REPOS_DIR:-./no-repos}:/repos:ro"
+      - forum-git-cache:/cache
 
   # ---- tests in Docker ----
   codemode-forum-test:
@@ -173,3 +182,4 @@ networks:
 
 volumes:
   forum-space-data: {}
+  forum-git-cache: {}

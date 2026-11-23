@@ -23,7 +23,18 @@
     "docker:local:up": "NANO_CPUS=${NANO_CPUS:-2} PORT=${PORT:-4110} FORUM_SPACE_BIND=127.0.0.1 FORUM_SPACE_PORT=4190 docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -p phi-spaces-forum-local --profile nano --profile big up -d --no-build",
     "docker:local:down": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -p phi-spaces-forum-local --profile nano --profile big down",
     "docker:local:logs": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -p phi-spaces-forum-local --profile nano --profile big logs -f",
-    "docker:local:backup": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -p phi-spaces-forum-local --profile nano exec space node --no-warnings --experimental-strip-types server/backup.ts"
+    "docker:local:backup": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -p phi-spaces-forum-local --profile nano exec space node --no-warnings --experimental-strip-types server/backup.ts",
+    "docker:image:rust": "npm run docker:image && docker build --network host -f docker/Dockerfile --target production-rust -t phi-spaces-forum:rust ..",
+    "docker:rust:up": "NANO_CPUS=${NANO_CPUS:-2} PORT=${PORT:-4110} FORUM_SPACE_BIND=127.0.0.1 FORUM_SPACE_PORT=4190 docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.rust.yml -p phi-spaces-forum-rust --profile nano --profile big up -d --no-build",
+    "docker:rust:down": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.rust.yml -p phi-spaces-forum-rust --profile nano --profile big down",
+    "docker:rust:logs": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.rust.yml -p phi-spaces-forum-rust --profile nano --profile big logs -f",
+    "docker:nano:up": "echo 'big and nano run only the Rust implementation (R-D12): npm run docker:nano:rust:up' && exit 1",
+    "docker:nano:rust:up": "npm run docker:image:rust && docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano up -d --no-build",
+    "docker:nano:rust:down": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano down",
+    "docker:nano:rust:logs": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano logs -f",
+    "docker:big:up": "npm run docker:image && docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml --profile big up -d --no-build",
+    "docker:big:down": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml --profile big down",
+    "docker:big:logs": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml --profile big logs -f"
   },
   "dependencies": {
     "next": "16.4.6",

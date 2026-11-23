@@ -35,7 +35,7 @@ export type Stack = {
 	/** Starts one more agents process. */
 	agents(o?: { leaseMs?: number; replyWaitS?: number; turnWaitS?: number; personWaitS?: number }): Promise<ChildProcess>;
 	/** Starts one more sources process (`repos`: FORUM_REPOS; `pause`: a marker file, see holdBeforeAnswer). */
-	sources(o?: { repos?: string; leaseMs?: number; pause?: string }): Promise<ChildProcess>;
+	sources(o?: { repos?: string; leaseMs?: number; pause?: string; env?: Record<string, string> }): Promise<ChildProcess>;
 	/** Starts one more checker process. */
 	checker(): Promise<ChildProcess>;
 	/** Stops the space process and starts it again on the same socket (and the same file, if it has one). */
@@ -66,7 +66,7 @@ export async function startStack(o: { dbPath?: string; agents?: boolean; model?:
 			return c;
 		},
 		async sources(x = {}) {
-			const c = await run("server/source-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", FORUM_REPOS: x.repos ?? "", ...(x.leaseMs ? { FORUM_SOURCE_LEASE_MS: String(x.leaseMs) } : {}), ...(x.pause ? { FORUM_TEST: "1", FORUM_TEST_SOURCE_PAUSE: x.pause } : {}) }, (l) => l.startsWith("[sources]"));
+			const c = await run("server/source-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", FORUM_REPOS: x.repos ?? "", FORUM_GIT_HOSTS: "", FORUM_GIT_CACHE: "", FORUM_GIT_MAX_MB: "", FORUM_GIT_TIMEOUT_S: "", ...(x.env ?? {}), ...(x.leaseMs ? { FORUM_SOURCE_LEASE_MS: String(x.leaseMs) } : {}), ...(x.pause ? { FORUM_TEST: "1", FORUM_TEST_SOURCE_PAUSE: x.pause } : {}) }, (l) => l.startsWith("[sources]"));
 			others.push(c);
 			return c;
 		},
