@@ -49,7 +49,10 @@ const review = (c: TextCall, objections: string[] = [], o: { confirm?: "resolved
 	return { text: [`BALLOT: ${approve ? "APPROVE" : "REJECT"}`, "CRITERIA", ...Array.from({ length: n }, (_, i) => (approve || i > 0 ? `${i + 1} met: "${o.quote ?? QUOTE}"` : `${i + 1} not met: see my objection`)), ...(own.length && confirm ? ["CONFIRM", ...own.map((id) => `#${id} ${confirm}`)] : []), ...(objections.length ? ["OBJECTIONS", ...objections] : []), ...(o.messages ? ["MESSAGES", ...o.messages] : [])].join("\n"), model: c.model, usage: use(600, 0.06) };
 };
 const revised = (c: TextCall) => { const d = draft(c); return { ...d, text: `${d.text}\n\nRevised by ${c.model}: the target is 256.` }; };
-const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "kickoff" ? kickoff(c) : call.kind === "reply" ? reply(c) : call.kind === "outline" ? outline(c) : call.kind === "pick" ? pick(c) : call.kind === "review" ? review(c) : call.kind === "revise" ? revised(c) : draft(c));
+/** Table A: a turn (500 tokens) with these objections, or none. */
+const turn = (c: TextCall, objections: string[] = [], messages: string[] = []) => ({ text: [...(objections.length ? objections : ["NO OBJECTIONS"]), ...(messages.length ? ["MESSAGES", ...messages] : [])].join("\n"), model: c.model, usage: use(500, 0.05) });
+const turnRound = (c: TextCall) => Number(/It is your turn at the table \(round (\d+)\)/.exec(c.user)?.[1] ?? 1);
+const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "turn" ? turn(c) : call.kind === "kickoff" ? kickoff(c) : call.kind === "reply" ? reply(c) : call.kind === "outline" ? outline(c) : call.kind === "pick" ? pick(c) : call.kind === "review" ? review(c) : call.kind === "revise" ? revised(c) : draft(c));
 /** Table B: the outline each model proposes, and the one all of them prefer (alpha's). */
 const OUTLINES: Record<string, string[]> = { "fake/alpha": OUTLINE, "fake/beta": ["Aim", "Way", "Dangers"], "fake/gamma": ["First", "Second", "Third"] };
 const proposal = (c: TextCall) => ({ text: (OUTLINES[c.model] ?? OUTLINE).map((h) => `## ${h}\nWhat ${h.toLowerCase()} must say.`).join("\n\n"), model: c.model, usage: use(400, 0.04) });
@@ -64,6 +67,17 @@ const tableB = (ballot: BallotOf, o: { hold?: boolean; revise?: (c: TextCall) =>
 	if (o.hold && call.kind === "revise") await gate(space, s);
 	if (call.kind === "review") return ballot(c.model, roundOf(c), c) ?? review(c);
 	return call.kind === "outline" ? proposal(c) : call.kind === "pick" ? pickGoal(c) : call.kind === "revise" && o.revise ? o.revise(c) : answer(c, call);
+} });
+/** The table-A scenarios, by the models' names at the table (the order of the turns; drawn anew for every run):
+ *  `objects` says what a model objects to in its turn of a round (null: nothing), `ballot` what it answers in the
+ *  ballots (null: it approves). `hold`: that model's turn waits at the gate; `holdRevise`: the revisions do. */
+const seatOf = (c: TextCall) => /^You are (M\d+)\./.exec(c.user)?.[1] ?? "?";
+const tableA = (objects: (seat: string, round: number) => string[] | null, o: { ballot?: BallotOf; hold?: string; holdRevise?: boolean } = {}) => (s: string, space: SpaceLike, log: Log): Team => ({ text: async (c, call) => {
+	await log({ model: c.model, kind: call.kind, callId: call.callId, prompt: c.user, ...(call.kind === "review" ? { round: roundOf(c) } : call.kind === "turn" ? { round: turnRound(c) } : {}) });
+	if ((call.kind === "turn" && o.hold === seatOf(c)) || (call.kind === "revise" && o.holdRevise)) await gate(space, s);
+	if (call.kind === "turn") return turn(c, objects(seatOf(c), turnRound(c)) ?? []);
+	if (call.kind === "review") return o.ballot?.(seatOf(c), roundOf(c), c) ?? review(c);
+	return answer(c, call);
 } });
 /** In the first round beta and gamma each object to the goal; alpha approves. */
 const twoObject: BallotOf = (model, round, c) => (round === 1 && model !== "fake/alpha" ? review(c, [model === "fake/beta" ? OBJECT_GOAL : OBJECT_WHY], model === "fake/beta" ? { messages: ["note: The target value belongs in the goal."] } : {}) : null);
@@ -92,6 +106,15 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	} }),
 	// dear answers: 3000 tokens each
 	dear: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); return { ...answer(c, call), usage: use(3000, 0.3) }; } }),
+	// table A: nobody objects in its turn, everybody approves
+	turns: tableA(() => null),
+	// table A: M2, the first to have the turn, objects to the goal and revises it itself; M1 and M3 object to the
+	// steps in their ballots of the first round, which the first turn of the second round takes up
+	around: tableA((seat, round) => (round === 1 && seat === "M2" ? [OBJECT_GOAL] : null), { ballot: (seat, round, c) => (round === 1 && seat !== "M2" ? review(c, ['objection on "Steps": Phase 1 is too coarse. | fix: Split it in two.']) : null) }),
+	// table A: M2's turn never comes (it waits at a gate nobody opens)
+	absent: tableA(() => null, { hold: "M2" }),
+	// table A: M2 objects in its turn, and its revision waits at the gate
+	ahold: tableA((seat, round) => (round === 1 && seat === "M2" ? [OBJECT_GOAL] : null), { holdRevise: true }),
 	// table B: everybody approves the first version
 	agree: tableB(() => null),
 	// table B: beta and gamma object to the goal in the first round (beta says something to the table with it); it is

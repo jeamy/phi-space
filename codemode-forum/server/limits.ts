@@ -17,6 +17,9 @@ export const modelWaitMs = () => Math.round(envNumber("FORUM_MODEL_WAIT_S", 600)
 /** How long a model has to reply to what the table addressed to it before the run goes on without its reply
  *  (FORUM_REPLY_WAIT_S, default 300 s). */
 export const replyWaitMs = () => Math.round(envNumber("FORUM_REPLY_WAIT_S", 300) * 1000);
+/** How long a model has for its turn at table A, and then for each section it revises in it, before the turn passes
+ *  on without it (FORUM_TURN_WAIT_S, default 600 s). */
+export const turnWaitMs = () => Math.round(envNumber("FORUM_TURN_WAIT_S", 600) * 1000);
 /** How long the kickoff waits for the person's answers to the questions addressed to them (FORUM_PERSON_WAIT_S,
  *  default 120 s; 0: not at all). What is not answered by then becomes an assumption. */
 export const personWaitMs = () => Math.round(envNumber("FORUM_PERSON_WAIT_S", 120) * 1000);

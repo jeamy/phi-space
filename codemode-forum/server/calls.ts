@@ -14,7 +14,8 @@
 //   pick      table B: a model names the outline it prefers among those the others proposed.
 //   review    table B: a model reads the whole document and writes its ballot: approve or reject, every criterion
 //             rated, what became of its earlier objections, and new objections section by section (ballots.ts).
-// The kinds of the joint work (kickoff, review, revise, ballot, …) follow with their phases.
+//   turn      table A: the model that has the turn reads the whole document and says what it objects to; the sections
+//             concerned, and those the others objected to, it then revises itself (revise), before the turn passes on.
 //
 // Reading: when the task has sources, an outline or draft is worked out in steps. In each step the model either asks
 // for up to four reading calls, in a fixed form (parseReads), or hands in its work. The agent has the calls answered
@@ -32,7 +33,7 @@ import { objectionsOf, outlinesOf, REVIEW_LIMITS } from "./review.ts";
 import { ballotsOf, SETTLED_FROM_ROUND } from "./ballots.ts";
 import { readExisting } from "./space.ts";
 
-export type CallKind = "rollcall" | "kickoff" | "reply" | "outline" | "pick" | "draft" | "revise" | "review";
+export type CallKind = "rollcall" | "kickoff" | "reply" | "outline" | "pick" | "draft" | "revise" | "review" | "turn";
 /** A request for a model call, as an agent writes it (and the model process takes it). */
 export type LlmCall = {
 	callId: string; session: string; runId?: string; kind: CallKind;
@@ -184,6 +185,30 @@ export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextC
 		};
 	}
 	const head = await headOf(space, d);
+	if (call.kind === "turn") {
+		if (!head) throw new Error("the document is gone");
+		const whole = await fullDoc(space, head), all = await objectionsOf(space, d), title = (id: string) => whole.sections.find((x) => x.sectionId === id)?.title ?? "?";
+		const open = all.filter((o) => o.state === "open"), round = run.info.round ?? 1;
+		const last = (await ballotsOf(space, d)).filter((x) => x.model === call.model && x.runId === run.runId).at(-1);
+		const before = last ? await headOf(space, d, last.version) : null;
+		const changed = before ? whole.sections.filter((x) => before.sections.find((y) => y.sectionId === x.sectionId)?.rev !== x.rev).map((x) => x.title) : [];
+		return {
+			model: call.model, system: SYSTEM, maxTokens: 1200,
+			user: [
+				who, taskText(task), ...talk, ...reading,
+				`The plan document as it is now (version ${head.version}):\n"""\n${whole.sections.map((x) => `## ${x.title}\n${x.text}`).join("\n\n")}\n"""`,
+				...(open.length ? [`Objections that are open already (do not raise them again). They are yours to take up in this turn: after your answer you revise each of these sections.\n${open.map((o) => `- on "${title(o.sectionId)}" by ${o.model === call.model ? "you" : aliases[o.model] ?? (o.model === "human" ? "the person" : "an earlier participant")}: ${o.defect}`).join("\n")}`] : []),
+				`It is your turn at the table (round ${round}): only you change the document now, then the turn passes to the next model. Can this plan be carried out as it stands? If a section has a defect that stands in the way, raise an objection: it names the section, a concrete defect and what would resolve it; "could be more detailed" is none. At most ${REVIEW_LIMITS.objections}. You will then revise each section you objected to yourself, one after the other, so object only to what you can mend. If you find nothing, say so: after the turns of all, everybody votes.${round >= SETTLED_FROM_ROUND ? ` From this round on a new objection counts only against a section that changed since your last ballot (${changed.length ? changed.map((x) => `"${x}"`).join(", ") : "none did"}); against any other section it is kept as a note.` : ""}`,
+				[
+					`${reading.length ? "When you hand in: answer" : "Answer"} in this form:`,
+					"NO OBJECTIONS   (if you have none; else one line for each:)",
+					'objection on "<the section\'s heading>": <the defect> | fix: <what would resolve it> | quote: "<the words of the plan it is about>"',
+					"MESSAGES   (leave out if you have none: question to M2: …, question: …, proposal: …, note: …)",
+					answerIn(call.lang),
+				].join("\n"),
+			].join("\n\n"),
+		};
+	}
 	if (call.kind === "review") {
 		if (!head) throw new Error("the document is gone");
 		const whole = await fullDoc(space, head), all = await objectionsOf(space, d), title = (id: string) => whole.sections.find((x) => x.sectionId === id)?.title ?? "?";

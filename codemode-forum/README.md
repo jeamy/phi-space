@@ -4,19 +4,21 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 to 7 of that plan.** The application has its processes, its space, the run mechanics, the admin
+**Status: phases 1 to 8 of that plan.** The application has its processes, its space, the run mechanics, the admin
 login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2),
 read-only sources the models read in (phase 3), the discussion of the table (phase 4), the checker (phase 5), table
-B, where the models write at the same time (phase 6), and **ballots**: the table changes the plan until a majority of
-the models agrees that it can be carried out (phase 7). A run begins with the **roll call**, the **kickoff** and the
+B, where the models write at the same time (phase 6), **ballots**: the table changes the plan until a majority of
+the models agrees that it can be carried out (phase 7), and table A, where the models take turns (phase 8). A run begins with the **roll call**, the **kickoff** and the
 **replies**; then it writes at one of two tables:
 
 - **table B** (`way: "parallel"`): every model proposes an outline and the table picks one; the sections are dealt
   out and drafted side by side; the checker checks; then rounds of **ballots**: every model votes on the version and
   raises its objections, each section with objections is revised by a model that did not raise them, until a majority
   approves, the rounds are used up, or the table is stuck and asks the person;
-- **table A**: one model writes the outline and every section, and mends what the checker finds. Its turns and
-  ballots follow with phase 8.
+- **table A** (`way: "turns"`): one model writes the outline and every section; then the **turn** goes round the
+  table: whoever has it reads the whole document, objects, and revises the sections concerned itself, with what the
+  others objected to; after the turns of a round every model writes its ballot. Without a `way` a run writes the
+  first draft only (no turns, no ballots).
 
 Both tables in one run and their comparison (phase 9) are still to come.
 
@@ -92,6 +94,30 @@ and decisions. A block that already has a document skips the kickoff: a run on i
    (with the version that took it up) or declined. Then the check, then the next round.
 
 The rounds end when the table has agreed, when they are used up, or when the table is stuck.
+
+## Table A: taking turns
+
+(`way: "turns"`; the flow in `server/run.ts`.)
+
+1. **First draft.** The first model at the table writes the outline and every section; the checker checks, and what
+   it finds goes back to that model.
+2. **The turn** (`turn`, a work item only the agents of one model take). In the first round it goes to the others in
+   their order at the table (the first draft was the writer's turn), in later rounds to everybody. The model that has
+   it reads the whole document, may read in the sources, and answers with objections in the form of table B or
+   `NO OBJECTIONS`; it may add messages for the table. For every section with an open objection, its own new ones
+   and those the others raised in their ballots, it gets a `revise` item of its own: it mends the section, or leaves
+   it where an objection of another model is wrong (declined; an objection of its own it leaves unmended counts as
+   withdrawn). Then the checker checks, what it finds goes to the model that revised the section, and the turn
+   passes on.
+3. **A turn nobody takes** passes on: a turn and each of its revisions has `FORUM_TURN_WAIT_S` (default 600 s). After
+   that, or when its model fails three times, the run's note says so and the next model has the turn; objections
+   left unrevised stay open for it.
+4. **Ballots.** When every model had the turn, all of them vote on the version as at table B (next section). What a
+   ballot objects to is not dealt out: it waits for the turns of the next round. From the second round on a model
+   whose last ballot counts as an approval is passed over while no objection is open.
+
+The rounds (`rounds`, default 2, at most 8) end as at table B: the table has agreed, the rounds are used up, the
+version fails the checks, or the table is stuck and asks the person.
 
 ## When a plan counts as agreed
 
@@ -270,7 +296,10 @@ section, and a round across a restart of every process. `tests/ballots.test.ts` 
 when it counts, the tally (a majority of the models, not of the authors alone, nothing of the person open) and the
 stall rule, and runs in which everybody approves (three agents a model, three ballots), approvals come without
 evidence, an objection is declined, an objection comes too late against an unchanged section, the table is stuck and
-goes on with the person's answer, and the person objects and accepts.
+goes on with the person's answer, and the person objects and accepts. `tests/table-a.test.ts` covers table A: the
+turn going round the table before the ballots, a model that revises what it objects to in its turn and takes up what
+the others objected to (and one that is passed over), a turn nobody takes in time, and an agents process killed in
+the middle of a turn.
 
 ## Safety notes
 

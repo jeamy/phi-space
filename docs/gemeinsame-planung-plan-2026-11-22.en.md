@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 to 7 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 8 to 12 open. Second version,
+Status: phases 1 to 7 implemented on 2026-11-22, phase 8 on 2026-11-23 (`codemode-forum/`, see its README); phases 0 and 9 to 12 open. Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -168,6 +168,12 @@ the run's budget.
 The turn is a work item only one model takes. If nobody takes it before its deadline, it passes to the next model
 and the run's note says so.
 
+As built (phase 8): a model does not write its ballot inside its turn. In its turn it objects and revises, each
+section in a work item of its own (so a section stays one model call, as everywhere else); the ballots of all follow
+after the turns of the round, and what a ballot objects to waits for the turns of the next round. In the first round
+the writer has no turn (the first draft was it); from the second round on a model whose ballot counts as an approval
+is passed over while no objection is open, so a round costs no call that has nothing to do.
+
 **Table B, at the same time.** Several writers at once.
 
 1. After the kickoff every model proposes an outline; the table decides one by the rule for proposals.
@@ -332,7 +338,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 | 5 ✓ | The checker process and its six checks; the conventions told to the writer; check after the drafts, revision of the sections with findings, at most three checks a run. | each check with a plan that fails exactly it |
 | 6 ✓ | Table B: an outline proposed by every model and one picked, sections dealt out and drafted in parallel, rounds of review and revise with objections kept as entries; messages travel with a review. A run chooses its table (`way`). | restart of all processes in a round; an objection becomes one item |
 | 7 ✓ | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall; the person's yes and no. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
-| 8 | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
+| 8 ✓ | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
 | 9 | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
 | 10 | Page: diff, discussion, ballots, standings, export; help articles in German and English; README; Docker with the local test bed. | help links and both languages; the export equals the result |
 | 11 | `codemode-forum/rust/forum-space` and its compose files; remote repositories (admin, host allowlist). | the suite against the Rust server; refused hosts, size and time limits with a local git server |

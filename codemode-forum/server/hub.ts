@@ -425,7 +425,9 @@ export class ForumHub {
 	 *  agents for each, a budget. A run so far: the roll call, in which every model says that it is there, then the
 	 *  outline and the first draft of every section by one of them. The joint work follows with its phases.
 	 *  The models write in the task's language. `way`: "parallel" for table B, where every model proposes an outline,
-	 *  the sections are dealt out and the models review each other in `rounds` rounds; else table A, one writer.
+	 *  the sections are dealt out and the models review each other in `rounds` rounds; "turns" for table A, where one
+	 *  model writes the first draft and the turn then goes round the table, `rounds` times at most, with ballots after
+	 *  each round; without a way table A writes a first draft only (`rounds` 0 unless named).
 	 *  `client` is set by the server, never from the request body: a visitor's run gets the default budget at most and
 	 *  counts against the day's allowance of the address. Without it (tests, scripts in-process) it counts as admin. */
 	async startRun(id: string, o: { blockId?: unknown; way?: unknown; rounds?: unknown; models?: unknown; perModel?: unknown; budgetTokens?: unknown; budgetUsd?: unknown; client?: { ip: string; admin: boolean } }): Promise<{ runId: string }> {
@@ -446,9 +448,9 @@ export class ForumHub {
 		const budget = { ...(budgetTokens ? { tokens: budgetTokens } : {}), ...(positive(o.budgetUsd) ? { usd: positive(o.budgetUsd)! } : {}) };
 		if (!Object.keys(budget).length) throw new Error("A run needs a budget in tokens or dollars");
 		if (visitor && ipTokensPerDay() && (await spentToday(this.host, visitor.ip)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (FORUM_TOKENS_PER_IP_DAY); try again tomorrow");
-		// the way of working: one model writes (table A), or all write at the same time and review each other (table B),
-		// in at most `rounds` review rounds
-		const table: Table = o.way === "parallel" ? "B" : "A", rounds = Math.min(MAX_ROUNDS, Math.max(0, Math.floor(Number(o.rounds ?? 2)) || 0));
+		// the way of working: the models take turns (table A), or all write at the same time and review each other
+		// (table B), in at most `rounds` rounds
+		const table: Table = o.way === "parallel" ? "B" : "A", rounds = Math.min(MAX_ROUNDS, Math.max(0, Math.floor(Number(o.rounds ?? (o.way === "parallel" || o.way === "turns" ? 2 : 0))) || 0));
 		const tasks = await this.#tasks(s.id), task = o.blockId ? tasks.find((t) => t.blockId === String(o.blockId)) : tasks.at(-1);
 		if (!task) throw new Error(o.blockId ? "Unknown plan task" : "No plan task yet: create one first");
 		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, blockId: task.blockId, table, rounds, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: task.lang, budget, ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
@@ -463,7 +465,7 @@ export class ForumHub {
 			const t = await this.host.createTransaction(30_000);
 			try {
 				await startSpaceRun(this.host, t.id, this.#ttl, { session: s.id, params });
-				await systemLine(this.host, t.id, this.#ttl, s.id, `Run started at table ${table} (${table === "B" ? `all write, ${rounds} review round${rounds === 1 ? "" : "s"}` : "one model writes"}): ${models.length} models, ${perModel} agent${perModel === 1 ? "" : "s"} each, budget ${limits}`);
+				await systemLine(this.host, t.id, this.#ttl, s.id, `Run started at table ${table} (${table === "B" ? `all write, ${rounds} review round${rounds === 1 ? "" : "s"}` : rounds ? `the models take turns, ${rounds} round${rounds === 1 ? "" : "s"}` : "one model writes"}): ${models.length} models, ${perModel} agent${perModel === 1 ? "" : "s"} each, budget ${limits}`);
 				await this.host.commit(t.id);
 			} catch (e) {
 				await this.host.abort(t.id).catch(() => {});

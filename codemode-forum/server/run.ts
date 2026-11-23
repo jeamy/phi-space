@@ -17,6 +17,11 @@
 //                Table B (review.ts): `outline` is one per model, `pick` lets each name the outline it prefers, the
 //                sections are dealt out and drafted side by side, and `review`, one per model and round, has each
 //                read the whole document and raise objections, which the revisions of the round take up.
+//                Table A (section 7 of the plan): one model writes the outline and the first draft; then the turn
+//                goes round the table. `turn`, for one model with a deadline: it reads the whole document and
+//                objects, and the sections it objected to and those with open objections of the others it revises
+//                itself (`revise` items of its own) before the turn passes on. A turn nobody takes in time, or that
+//                fails, passes on. After the turns of a round every model writes its ballot (`review`).
 //   ReadStep     a step of an item's reading in the task's sources: the calls its model asked for and what they
 //                returned (calls.ts). Kept per item, so an agent that takes the item over does not read again.
 //   RollCall     a model's answer to the roll call.
@@ -40,8 +45,8 @@ import { ballotsOf, counts, parseBallot, quoted, SETTLED_FROM_ROUND, stalled, st
 import { criteriaOf } from "./plantask.ts";
 import { fullDoc } from "./plandoc.ts";
 import { newMsgId, type PlanMessage } from "./talk.ts";
-import { deal, objectionsOf, outlinesOf, parsePick, pickedOutline, type OutlinePick, type PlanObjection, type PlanOutline } from "./review.ts";
-import { FATAL_LLM, MIN_MODELS, modelWaitMs, personWaitMs, replyWaitMs } from "./limits.ts";
+import { deal, objectionsOf, outlinesOf, parsePick, parseReview, pickedOutline, type OutlinePick, type PlanObjection, type PlanOutline } from "./review.ts";
+import { FATAL_LLM, MIN_MODELS, modelWaitMs, personWaitMs, replyWaitMs, turnWaitMs } from "./limits.ts";
 import { decide, decisionsOf, keep, messagesOf, owed, parseKickoff, parseMessages } from "./talk.ts";
 import { DocRefused, headOf, writeVersion, type PlanDoc } from "./plandoc.ts";
 import type { PlanTask } from "./plantask.ts";
@@ -55,7 +60,9 @@ export type RunInfo = { active: boolean; runId: string; blockId: string;
 	 *  review each other. At B: the review round the run is in, of how many, and the objections so far. */
 	table: "A" | "B"; round?: number; rounds?: number; objections?: { raised: number; open: number }; models: string[]; perModel: number; aliases: Record<string, string>;
 	/** Where the run is: the roll call, the outline, the drafts of the sections, or through with them. */
-	phase: "rollcall" | "kickoff" | "discuss" | "outline" | "pick" | "draft" | "check" | "review" | "revise" | "stalled" | "accepted" | "done";
+	phase: "rollcall" | "kickoff" | "discuss" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise" | "stalled" | "accepted" | "done";
+	/** Table A: the model that has the turn. */
+	turn?: string;
 	/** Table B: the ballots of the newest round (how many of the table approve), and the version the table accepted. */
 	ballots?: { round: number; approve: number; of: number }; accepted?: { version: number; round: number; approvals: number; of: number };
 	/** The newest mechanical check of the document in this run: the version, whether it passed, how many failures, and
@@ -84,10 +91,12 @@ export type RunEntry = { session: string; runId: string; params: RunParams; info
 	owners?: Record<string, string>; checks?: number;
 	/** Table B: how the rounds of ballots ended so far (to see when the table is stuck), and the version of the last. */
 	history?: RoundMark[]; balloted?: number;
+	/** Table A: the models whose turn is still to come in this round, in their order. */
+	turns?: string[];
 	/** The budget held by model calls in flight, per item (released when the item books its call), and the calls
 	 *  booked so far (their average is what the next call is expected to cost). */
 	reserved?: Record<string, { tokens: number; usd: number }>; booked?: number; ts: number };
-export type WorkKind = "rollcall" | "kickoff" | "reply" | "person" | "outline" | "pick" | "draft" | "check" | "review" | "revise";
+export type WorkKind = "rollcall" | "kickoff" | "reply" | "person" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise";
 /** `onlyModel`: only an agent of that model may take it, until its `deadline` has passed: then any agent takes it to
  *  close it. `table`, `sectionId`: the document and section it works on. `threads`: what a reply is owed to. */
 export type WorkItem = { session: string; runId: string; itemId: string; kind: WorkKind; ts: number; onlyModel?: string; notBefore?: number; tries?: number; table?: string; sectionId?: string; threads?: string[]; deadline?: number;
@@ -196,8 +205,8 @@ async function closingLine(space: SpaceLike, r: RunEntry, how: "finished" | "sto
 	const talk = r.info.talk ? `; ${r.info.talk.messages} messages, ${r.info.talk.decisions} decision${r.info.talk.decisions === 1 ? "" : "s"}` : "";
 	const check = r.info.check ? (r.info.check.ok ? ", checks passed" : `, ${r.info.check.failures} check failure${r.info.check.failures === 1 ? "" : "s"} left`) : "";
 	const acc = r.info.accepted, agreed = acc ? `; accepted in round ${acc.round} by ${acc.approvals} of ${acc.of} models` : "";
-	const o = r.info.objections, rounds = r.info.round ? `; ${r.info.round} review round${r.info.round === 1 ? "" : "s"}, ${o?.raised ?? 0} objection${o?.raised === 1 ? "" : "s"}${o?.open ? `, ${o.open} open` : ""}` : "";
-	const draft = !doc ? "" : r.params.table === "B" ? `${talk}; the table wrote ${doc.written} of ${doc.sections} sections (version ${doc.version}${check})${rounds}${agreed}` : `${talk}; ${writer} wrote ${doc.written} of ${doc.sections} sections of the first draft (version ${doc.version}${check})`;
+	const o = r.info.objections, rounds = r.info.round ? `; ${r.info.round} ${r.params.table === "A" ? "round" : "review round"}${r.info.round === 1 ? "" : "s"}${r.params.table === "A" ? " of turns" : ""}, ${o?.raised ?? 0} objection${o?.raised === 1 ? "" : "s"}${o?.open ? `, ${o.open} open` : ""}` : "";
+	const draft = !doc ? "" : r.params.table === "B" ? `${talk}; the table wrote ${doc.written} of ${doc.sections} sections (version ${doc.version}${check})${rounds}${agreed}` : `${talk}; ${writer} wrote ${doc.written} of ${doc.sections} sections of the first draft (version ${doc.version}${check})${rounds}${agreed}`;
 	return `Run ${how}${why}: ${present} of ${r.params.models.length} models answered the roll call${draft || talk} (${cost})`;
 }
 
@@ -330,7 +339,7 @@ async function failed(d: AgentDeps, it: WorkItem, txn: string, why: string, usag
 		book(r, usage, it.itemId);
 		if (FATAL_LLM.test(why)) r.info.ended ??= "budget";
 		const who = r.params.aliases[it.onlyModel ?? ""] ?? "a model", reason = why.slice(0, 120);
-		r.info.note = it.kind === "rollcall" ? `${who} did not answer the roll call (${reason})` : it.kind === "kickoff" ? `${who} said nothing at the kickoff (${reason})` : it.kind === "reply" ? `${who} did not reply to the table (${reason}); the run goes on without its reply` : it.kind === "outline" ? `${who} wrote no outline (${reason}); the run ends without a document` : it.kind === "check" ? `the document could not be checked (${reason})` : `${who} did not write a section (${reason}); it keeps what it is to say`;
+		r.info.note = it.kind === "rollcall" ? `${who} did not answer the roll call (${reason})` : it.kind === "kickoff" ? `${who} said nothing at the kickoff (${reason})` : it.kind === "reply" ? `${who} did not reply to the table (${reason}); the run goes on without its reply` : it.kind === "outline" ? `${who} wrote no outline (${reason}); the run ends without a document` : it.kind === "check" ? `the document could not be checked (${reason})` : it.kind === "turn" ? `${who} did not take its turn (${reason}); the turn passes on` : `${who} did not write a section (${reason}); it keeps what it is to say`;
 		await finish(d, txn, r, it);
 	});
 }
@@ -356,13 +365,13 @@ async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: Run
  *  request for reading calls, which the sources process answers and a ReadStep keeps, or the work itself, which is
  *  returned. A step is kept and its call booked in one commit, so after a crash the next agent goes on behind the
  *  last kept step: nothing is read or booked twice. Without sources it is one call. */
-async function work(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, kind: CallKind, more: Partial<LlmCall>): Promise<{ text: string; usage?: Usage }> {
+async function work(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, kind: CallKind, more: Partial<LlmCall>, until = Infinity): Promise<{ text: string; usage?: Usage }> {
 	const { space } = d, sources = await sourcesOf(space, it.session, run.params.blockId);
 	for (;;) {
 		const steps = sources.length ? await readSteps(space, it.session, it.itemId) : [];
 		// the steps before were booked as they were kept: the budget may be gone by now
 		if (steps.length) { const now = await readRun(space, it.session, it.runId); if (!now) throw new RunGone(); if (now.info.ended || overBudget(now)) throw new ModelFailed("the run's budget is used up"); }
-		const v = await ask(d, txn, it, slot, run, steps.length, kind, more) as { text: string; usage?: Usage };
+		const v = await ask(d, txn, it, slot, run, steps.length, kind, more, until) as { text: string; usage?: Usage };
 		const reads = sources.length ? parseReads(String(v.text), sources.map((x) => x.sourceId)) : null;
 		if (!reads) return v;
 		if (!mayRead(steps)) throw new ModelFailed("the model asked to read when it had to hand in its work", v.usage);
@@ -447,15 +456,35 @@ async function adopt(d: AgentDeps, txn: string, r: RunEntry): Promise<WorkItem[]
 	return draftsFor(r, ids);
 }
 
-/** The document is checked and its findings are dealt with: at table B the next round of ballots begins, on a version
- *  that passes the checks and while the run has rounds left; else the run has nothing more to do. */
-function afterCheck(r: RunEntry): WorkItem[] {
+/** Table A: the turn passes on, to the next model of the round, or, when every model had it, to the ballots of all.
+ *  From the second round on a model whose ballot of the round before counts as an approval is passed over while no
+ *  objection is open: it has nothing to take up. */
+async function passOn(d: AgentDeps, txn: string, r: RunEntry): Promise<WorkItem[]> {
+	const table = r.params.table, round = r.info.round ?? 1, left = [...(r.turns ?? [])];
+	const idle = round > 1 && !(await objectionsOf(d.space, docOf(r), txn)).some((o) => o.state === "open");
+	const approved = idle ? new Set((await ballotsOf(d.space, docOf(r), txn)).filter((b) => b.runId === r.runId && b.round === round - 1 && b.counts).map((b) => b.model)) : new Set<string>();
+	let next = left.shift();
+	while (next && approved.has(next)) next = left.shift();
+	r.turns = left; r.checks = 0;
+	if (next) { r.info.turn = next; r.info.phase = "turn"; return [newItem(r, "turn", { onlyModel: next, table, deadline: Date.now() + turnWaitMs() })]; }
+	delete r.info.turn;
+	r.info.phase = "review";
+	return (r.info.present ?? []).map((model) => newItem(r, "review", { onlyModel: model, table }));
+}
+
+/** The document is checked and its findings are dealt with. While the run has rounds left and the version passes the
+ *  checks, the next round begins: at table B with the ballots of all, at table A with the turn, which goes round the
+ *  table before the ballots (in the first round past the writer, whose turn the first draft was). At table A a check
+ *  inside a round passes the turn on. Else the run has nothing more to do. */
+async function afterCheck(d: AgentDeps, txn: string, r: RunEntry): Promise<WorkItem[]> {
 	r.info.phase = "done";
-	if (r.params.table !== "B" || r.params.rounds === 0) return [];
+	if (r.params.rounds === 0) return [];
 	// a version that fails the checks gets no ballots
 	if (r.info.check && !r.info.check.ok) { r.info.ended = "checks"; return []; }
+	if (r.params.table === "A" && r.info.turn) return passOn(d, txn, r);
 	if ((r.info.round ?? 0) >= r.params.rounds) { r.info.ended = "rounds"; return []; }
 	r.info.round = (r.info.round ?? 0) + 1; r.checks = 0;
+	if (r.params.table === "A") { const present = r.info.present ?? []; r.turns = r.info.round === 1 ? present.filter((m) => m !== r.info.writer) : [...present]; return passOn(d, txn, r); }
 	r.info.phase = "review";
 	return (r.info.present ?? []).map((model) => newItem(r, "review", { onlyModel: model, table: r.params.table }));
 }
@@ -490,9 +519,13 @@ async function afterReview(d: AgentDeps, txn: string, r: RunEntry): Promise<Work
 		return [];
 	}
 	r.history = [...(r.history ?? []), { round, standing: all.filter(stands).map((o) => o.objId).sort(), approvals: t.approvals.length }];
-	const items = revisions(r, all);
+	// table B: the open objections go to their revisions. Table A: they wait for the turns of the next round
+	const items = table === "B" ? revisions(r, all) : [];
 	for (const [model, threads] of owing) items.push(newItem(r, "reply", { onlyModel: model, table, threads, deadline: Date.now() + replyWaitMs() }));
-	if (items.length && !stalled(r.history)) { r.info.phase = "revise"; return items; }
+	if (!stalled(r.history)) {
+		if (items.length) { r.info.phase = "revise"; return items; }
+		if (table === "A" && all.some((o) => o.state === "open")) return afterCheck(d, txn, r);
+	}
 	// stuck: the same objections stand as a round ago and nobody more approves, or nobody approves and nothing is left
 	// to revise. The table asks the person, and goes on with their answer.
 	const standing = all.filter(stands), aliases = r.params.aliases;
@@ -511,9 +544,9 @@ async function afterStall(d: AgentDeps, txn: string, r: RunEntry): Promise<WorkI
 	const messages = (await messagesOf(d.space, docOf(r), txn)).filter((m) => m.runId === r.runId || m.model === "human");
 	if (owed(messages, r.info.present ?? [], r.params.aliases).person.length) { r.info.ended = "stalled"; r.info.phase = "done"; return []; }
 	r.history = [];
-	const items = revisions(r, await objectionsOf(d.space, docOf(r), txn));
+	const items = r.params.table === "B" ? revisions(r, await objectionsOf(d.space, docOf(r), txn)) : [];
 	if (items.length) { r.info.phase = "revise"; return items; }
-	return afterCheck(r);
+	return afterCheck(d, txn, r);
 }
 
 /** An item is done, in the run's update (`r`): it no longer counts as open, and when it was the last one its phase
@@ -549,7 +582,9 @@ async function finish(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spaw
 		// after the drafts and after every round of revisions (with the replies of a review round) the document is checked
 		else if (it.kind === "draft" || it.kind === "revise" || it.kind === "reply") { if (r.info.round) await settleTalk(d, txn, r); r.info.phase = "check"; items.push(newItem(r, "check", { table })); }
 		// a check sets off the revisions of what it found (spawn), or the next review round, or was the last thing to do
-		else if (it.kind === "check") { if (spawn.length) r.info.phase = "revise"; else items.push(...afterCheck(r)); }
+		else if (it.kind === "check") { if (spawn.length) r.info.phase = "revise"; else items.push(...(await afterCheck(d, txn, r))); }
+		// table A: a turn with nothing to revise (or one nobody took) passes on; else its revisions come first (spawn)
+		else if (it.kind === "turn") { if (spawn.length) r.info.phase = "revise"; else items.push(...(await passOn(d, txn, r))); }
 		else if (it.kind === "review") items.push(...(await afterReview(d, txn, r)));
 	}
 	if (items.length) {
@@ -649,13 +684,38 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 		await space.write({ type: "PlanBallot", fields: ballot as never }, txn, d.ttl, { unique: ["slot"] });
 		// what it says to the table beside its ballot: questions, proposals, notes
 		await keep(space, txn, d.ttl, doc, { ...who, runId: it.runId, round, aliases: run.params.aliases }, parseMessages(b.messages).filter((m) => m.kind === "question" || m.kind === "proposal" || m.kind === "note"));
+	} else if (it.kind === "turn") {
+		// past its deadline another model's agent closes it: the turn passes on
+		if (slot.model !== it.onlyModel) note = `${run.params.aliases[it.onlyModel ?? ""] ?? "a model"} did not take its turn in time; the turn passes on`;
+		else {
+			const head = await headOf(space, doc);
+			if (!head) throw new ModelFailed("the document is gone");
+			const v = await work(d, txn, it, slot, run, "turn", { table: doc.table }, it.deadline);
+			usage = v.usage;
+			const said = parseReview(String(v.text), head.sections);
+			const last = (await ballotsOf(space, doc, txn)).filter((x) => x.model === slot.model && x.runId === it.runId).at(-1), before = last ? await headOf(space, doc, last.version) : null;
+			const unchanged = new Set(before ? head.sections.filter((x) => before.sections.find((y) => y.sectionId === x.sectionId)?.rev === x.rev).map((x) => x.sectionId) : []);
+			const open = (await objectionsOf(space, doc, txn)).filter((o) => o.state === "open");
+			for (const [n, o] of said.objections.entries()) {
+				const objection: PlanObjection = { ...doc, runId: it.runId, objId: `o${rid()}`, ...o, ...who, round, state: round >= SETTLED_FROM_ROUND && unchanged.has(o.sectionId) ? "note" : "open", ts: Date.now() + n };
+				await space.write({ type: "PlanObjection", fields: objection as never }, txn, d.ttl);
+				if (objection.state === "open") open.push(objection);
+			}
+			await keep(space, txn, d.ttl, doc, { ...who, runId: it.runId, round, aliases: run.params.aliases }, parseMessages(said.messages).filter((m) => m.kind === "question" || m.kind === "proposal" || m.kind === "note"));
+			// in the same turn it revises the sections it objected to and takes up what the others objected to
+			spawn = head.sections.map((x) => x.sectionId).filter((id) => open.some((o) => o.sectionId === id))
+				.map((sectionId) => newItem(run, "revise", { onlyModel: slot.model, table: doc.table, sectionId, objections: open.filter((o) => o.sectionId === sectionId).map((o) => o.objId), deadline: Date.now() + turnWaitMs() }));
+		}
+	} else if (it.kind === "revise" && it.onlyModel && slot.model !== it.onlyModel) {
+		// a revision of a turn, past its deadline: its objections stay open for the next turn
+		note = `${run.params.aliases[it.onlyModel] ?? "a model"} did not revise a section in its turn in time; its objections stay open`;
 	} else if (it.kind === "check") {
 		// no model: the checker process reads the newest version and says what a program can tell about it
 		checked = await askChecker(space, { requestId: `${it.itemId}-t${it.tries ?? 0}-${rid()}`, ...doc, ttl: d.ttl, ts: Date.now() });
 	} else {
 		const ref = (await headOf(space, doc))?.sections.find((s) => s.sectionId === it.sectionId);
 		if (!ref) throw new ModelFailed("the section is gone");
-		const v = await work(d, txn, it, slot, run, it.kind === "revise" ? "revise" : "draft", { table: doc.table, sectionId: ref.sectionId, ...(it.objections ? { objections: it.objections } : {}) });
+		const v = await work(d, txn, it, slot, run, it.kind === "revise" ? "revise" : "draft", { table: doc.table, sectionId: ref.sectionId, ...(it.objections ? { objections: it.objections } : {}) }, it.deadline);
 		usage = v.usage;
 		const text = usable(() => parseSection(String(v.text), ref.title));
 		// against the revision the model saw: a section revised meanwhile throws StaleSection, and the item is tried anew
@@ -673,7 +733,7 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 		// the objections the revision took up are no longer open
 		for (const objId of it.objections ?? []) {
 			const e = await space.take({ type: "PlanObjection", fields: { ...doc, objId } }, NO_WAIT, { txn });
-			if (e) await space.write({ type: "PlanObjection", fields: { ...(e.fields as object), state: declined ? "declined" : "resolved", ...(version ? { revisedIn: version.version } : {}) } as never }, txn, d.ttl);
+			if (e) await space.write({ type: "PlanObjection", fields: { ...(e.fields as object), state: !declined ? "resolved" : (e.fields as unknown as PlanObjection).model === slot.model ? "withdrawn" : "declined", ...(version ? { revisedIn: version.version } : {}) } as never }, txn, d.ttl);
 		}
 	}
 	// answers of tries that were cut off (they came back with their transactions) go with the item
@@ -689,6 +749,8 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 			const sections = [...new Set(checked.failures.map((f) => f.sectionId).filter((x): x is string => !!x))];
 			if (!checked.ok && n < CHECK_ROUNDS && !r.info.ended) spawn = sections.map((sectionId) => newItem(r, "revise", { onlyModel: r.owners?.[sectionId] ?? r.info.writer!, table: doc.table, sectionId }));
 		}
+		// table A: whoever revised a section in its turn is the one the checker's findings in it go to
+		if (it.kind === "revise" && version && doc.table === "A" && it.sectionId) r.owners = { ...r.owners, [it.sectionId]: slot.model };
 		if (it.kind === "outline" && version) { const ids = version.sections.map((x) => x.sectionId); r.owners = ownersFor(r, ids); spawn = draftsFor(r, ids); r.info.phase = "draft"; }
 		if (it.kind === "revise" && it.objections?.length) { const all = await objectionsOf(space, doc, txn); r.info.objections = { raised: all.filter((o) => o.runId === r.runId).length, open: all.filter(stands).length }; }
 		await finish(d, txn, r, it, spawn);
@@ -723,7 +785,7 @@ export function drawAliases(models: string[], random: () => number = Math.random
 export async function startSpaceRun(space: SpaceLike, txn: string, ttl: number, run: { session: string; params: RunParams }): Promise<RunInfo> {
 	const p = run.params, key = { session: run.session, runId: p.runId };
 	const items = p.models.map((model) => newItem(key, "rollcall", { onlyModel: model }));
-	const info: RunInfo = { active: true, runId: p.runId, blockId: p.blockId, table: p.table, ...(p.table === "B" ? { rounds: p.rounds } : {}), models: p.models, perModel: p.perModel, aliases: p.aliases, phase: "rollcall", items: { open: items.length, done: 0 }, usage: { tokens: 0, costUsd: 0 }, budget: p.budget };
+	const info: RunInfo = { active: true, runId: p.runId, blockId: p.blockId, table: p.table, ...(p.table === "B" || p.rounds ? { rounds: p.rounds } : {}), models: p.models, perModel: p.perModel, aliases: p.aliases, phase: "rollcall", items: { open: items.length, done: 0 }, usage: { tokens: 0, costUsd: 0 }, budget: p.budget };
 	await space.write({ type: "ForumRun", fields: { ...key, params: p, info, pending: items.length, phaseLeft: items.length, ts: Date.now() } as never }, txn, ttl, { unique: ["session"] });
 	let agent = 0;
 	for (const model of p.models) for (let i = 0; i < p.perModel; i++) await space.write({ type: "AgentSlot", fields: { ...key, agent: agent++, model } }, txn, ttl);
