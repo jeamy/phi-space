@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 to 7 implemented on 2026-11-22, phase 8 on 2026-11-23 (`codemode-forum/`, see its README); phases 0 and 9 to 12 open. Second version,
+Status: phases 1 to 7 implemented on 2026-11-22, phases 8 and 9 on 2026-11-23 (`codemode-forum/`, see its README); phases 0 and 10 to 12 open. Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -203,6 +203,23 @@ is passed over while no objection is open, so a round costs no call that has not
 
 A run can be started with one table only (about half the cost; no comparison, no final round).
 
+As built (phase 9), where it differs from the above:
+
+- Each table gets 45 % of the budget; the comparison and the final round have what is left of the whole.
+- Each table is a run of its own beside the other, with its own roll call and kickoff.
+- A table is shown the other's document as it stood after that table's last round. Taking over is a proposal in a
+  fixed form that names a section there and a section here; once decided the section is revised with the other as
+  material and names its origin. A decision of the other table is reading material only; it is not taken over by a
+  form of its own.
+- A table whose rival agreed first still has its first round: a document nobody voted on is not compared.
+- The models compare whenever there are two documents, also when only one table agreed: that table is the base
+  then, and the comparison supplies the points for the final round.
+- The final round works at the base's table, on its document (no third document), with one round of ballots.
+- `PlanStrategyStat` counts the points of the final round and how many were agreed, not sections taken over during
+  the tables' rounds.
+- The page shows each table's state, the base, the final round, the result and the standings. Both documents side
+  by side, and the diff, come with phase 10.
+
 ## 8. Sources, read-only
 
 A source pack is fixed when the task is created and does not change during the run.
@@ -339,7 +356,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 | 6 ✓ | Table B: an outline proposed by every model and one picked, sections dealt out and drafted in parallel, rounds of review and revise with objections kept as entries; messages travel with a review. A run chooses its table (`way`). | restart of all processes in a round; an objection becomes one item |
 | 7 ✓ | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall; the person's yes and no. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
 | 8 ✓ | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
-| 9 | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
+| 9 ✓ | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
 | 10 | Page: diff, discussion, ballots, standings, export; help articles in German and English; README; Docker with the local test bed. | help links and both languages; the export equals the result |
 | 11 | `codemode-forum/rust/forum-space` and its compose files; remote repositories (admin, host allowlist). | the suite against the Rust server; refused hosts, size and time limits with a local git server |
 | 12 | Live runs of both example briefs, three models, both tables, three times each; report in `codemode-forum/docs/`. | live, costs tokens: ask first |

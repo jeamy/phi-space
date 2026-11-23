@@ -9,13 +9,14 @@ import { ThemeControls } from "./ThemeControls.tsx";
 import { renderSection } from "./lib/safe-markdown.ts";
 import { useTheme } from "./lib/theme.ts";
 
-type RunInfo = { active: boolean; runId: string; blockId: string; table: "A" | "B"; round?: number; rounds?: number; objections?: { raised: number; open: number }; models: string[]; perModel: number; aliases: Record<string, string>; phase: "rollcall" | "kickoff" | "discuss" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise" | "stalled" | "accepted" | "done"; turn?: string; ballots?: { round: number; approve: number; of: number }; accepted?: { version: number; round: number; approvals: number; of: number }; writer?: string; check?: { version: number; ok: boolean; failures: number; round: number }; talk?: { messages: number; decisions: number }; doc?: { table: string; version: number; sections: number; written: number }; items: { open: number; done: number }; usage: { tokens: number; costUsd: number }; budget: { tokens?: number; usd?: number }; note?: string; ended?: "budget" | "models" | "checks" | "rounds" | "stalled" };
+type RunInfo = { active: boolean; runId: string; blockId: string; table: "A" | "B"; round?: number; rounds?: number; objections?: { raised: number; open: number }; models: string[]; perModel: number; aliases: Record<string, string>; phase: "rollcall" | "kickoff" | "discuss" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise" | "stalled" | "accepted" | "done" | "tables" | "compare" | "final"; both?: boolean; tables?: Partial<Record<"A" | "B", TableInfo>>; base?: { table: "A" | "B"; how: "accepted" | "compared" | "only"; version: number; prefer?: { A: number; B: number } }; final?: { points: number; agreed?: number; accepted?: boolean; active?: TableInfo }; result?: { table: "A" | "B"; version: number }; turn?: string; ballots?: { round: number; approve: number; of: number }; accepted?: { version: number; round: number; approvals: number; of: number }; writer?: string; check?: { version: number; ok: boolean; failures: number; round: number }; talk?: { messages: number; decisions: number }; doc?: { table: string; version: number; sections: number; written: number }; items: { open: number; done: number }; usage: { tokens: number; costUsd: number }; budget: { tokens?: number; usd?: number }; note?: string; ended?: "budget" | "models" | "checks" | "rounds" | "stalled" };
+type TableInfo = { active: boolean; phase: RunInfo["phase"]; round?: number; rounds?: number; accepted?: { version: number; round: number; approvals: number; of: number }; ended?: string; usage: { tokens: number; costUsd: number }; doc?: { version: number; sections: number; written: number }; turn?: string };
 type Answer = { runId: string; model: string; alias: string; agent: number; text: string; ts: number };
 type SectionRef = { sectionId: string; rev: number; title: string; bytes: number; author: string; model: string };
 type Source = { sourceId: string; kind: "docs" | "repo"; name: string; commit?: string; ref?: string; files: number; bytes: number };
 type Check = { ok: boolean; failures: Array<{ check: string; sectionId?: string; text: string }> } | null;
-type Block = { blockId: string; table: "A" | "B"; accepted: { version: number; by: "majority" | "person"; who?: string; approvals: string[]; of: number; round?: number } | null; brief: string; lang: "de" | "en"; outline: string[]; criteria: string[]; ts: number; sources: Source[]; talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: SectionRef[]; check: Check } | null };
-type Snapshot = { session: string; blocks: Block[]; run: RunInfo | null; rollcall: Answer[]; lines: Array<{ text: string; ts: number }>; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
+type Block = { result: { table: "A" | "B"; version: number } | null; blockId: string; table: "A" | "B"; accepted: { version: number; by: "majority" | "person"; who?: string; approvals: string[]; of: number; round?: number } | null; brief: string; lang: "de" | "en"; outline: string[]; criteria: string[]; ts: number; sources: Source[]; talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: SectionRef[]; check: Check } | null };
+type Snapshot = { standings?: { runs: number; A: number; B: number }; session: string; blocks: Block[]; run: RunInfo | null; rollcall: Answer[]; lines: Array<{ text: string; ts: number }>; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
 type PlanView = { blockId: string; check: Check; doc: { version: number; bytes: number; author: string; model: string; changed: string[]; ts: number; sections: Array<SectionRef & { text: string }> }; versions: Array<{ version: number; author: string; model: string; changed: string[]; ts: number }> };
 type Message = { msgId: string; thread: string; kind: "understanding" | "question" | "answer" | "proposal" | "vote" | "objection" | "note"; author: string; model: string; to?: string; stance?: "agree" | "disagree"; text: string; ts: number };
 type Decision = { thread: string; text: string; agreed: string[]; against: string[]; of: number };
@@ -36,7 +37,8 @@ const T = {
 		need: (n: number) => `Ein Lauf braucht mindestens ${n} verschiedene Modelle.`, noTask: "Lege zuerst eine Planaufgabe an.",
 		lead: "Mindestens drei KI-Modelle entwickeln hier gemeinsam einen Plan. Bisher: Nach dem Appell schreibt eines von ihnen die Gliederung und den ersten Entwurf jedes Abschnitts. Die gemeinsame Arbeit daran (Diskussion, Prüfung, Abstimmung) folgt.",
 		table: "Am Tisch", waiting: "noch keine Antwort", active: "läuft", ended: "beendet", budgetUsed: "Budget verbraucht", fewModels: "zu wenige Modelle", items: (d: number, o: number) => `${d} erledigt, ${o} offen`,
-		phase: { rollcall: "Appell", kickoff: "Auftakt", discuss: "Diskussion", outline: "Gliederung", pick: "Gliederung wählen", draft: "Entwurf", check: "Prüfung", turn: "am Zug", review: "Abstimmung", revise: "Überarbeitung", stalled: "festgefahren: Frage an dich", accepted: "angenommen", done: "fertig" },
+		phase: { rollcall: "Appell", kickoff: "Auftakt", discuss: "Diskussion", outline: "Gliederung", pick: "Gliederung wählen", draft: "Entwurf", check: "Prüfung", turn: "am Zug", review: "Abstimmung", revise: "Überarbeitung", stalled: "festgefahren: Frage an dich", accepted: "angenommen", done: "fertig", tables: "beide Tische arbeiten", compare: "Blindvergleich", final: "gemeinsame Schlussrunde" },
+		wayBoth: "Beide Tische im Wettbewerb, dann Vergleich und gemeinsame Schlussrunde", baseIs: (x: string, how: string) => `Basis: Tisch ${x} (${how})`, howAccepted: "als einziger einig", howCompared: (a: number, n: number) => `von ${a} von ${n} Modellen bevorzugt`, howOnly: "einziges Dokument", finalIs: (a: number, n: number, ok?: boolean) => `Schlussrunde: ${a} von ${n} Punkten übernommen${ok === undefined ? "" : ok ? ", angenommen" : ", nicht angenommen: die Basis bleibt"}`, resultIs: (x: string, v: number) => `Ergebnis: Tisch ${x}, Fassung ${v}`, otherFirst: "der andere Tisch war zuerst einig", standings: (r: number, a: number, b: number) => `Bisher ${r} Läufe mit beiden Tischen: Tisch A ${a}-mal Basis, Tisch B ${b}-mal`,
 		ballots: "Abstimmungen", roundN: (n: number) => `Runde ${n}`, approve: "stimmt zu", reject: "lehnt ab", notCounted: "zählt nicht", acceptedBy: (v: number, how: string) => `Fassung ${v} angenommen (${how})`, byMajority: (a: number, n: number) => `${a} von ${n} Modellen`, byPerson: (w: string) => `von ${w}`,
 		acceptIt: "👍 Diese Fassung annehmen", objectTo: "👎 Einwand gegen einen Abschnitt", objectPh: "Was stimmt nicht? (kann kein Modell ablehnen)", noMajority: "keine Mehrheit in den Runden", failsChecks: "besteht die Prüfung nicht", stuckEnd: "festgefahren",
 		objStates: { open: "offen", resolved: "aufgegriffen", confirmed: "bestätigt", declined: "abgelehnt", withdrawn: "zurückgezogen", note: "Notiz" },
@@ -58,7 +60,8 @@ const T = {
 		need: (n: number) => `A run needs at least ${n} different models.`, noTask: "Create a plan task first.",
 		lead: "At least three AI models develop one plan together here. So far: after the roll call one of them writes the outline and the first draft of every section. The joint work on it (discussion, review, ballots) follows.",
 		table: "At the table", waiting: "no answer yet", active: "running", ended: "ended", budgetUsed: "budget used up", fewModels: "too few models", items: (d: number, o: number) => `${d} done, ${o} open`,
-		phase: { rollcall: "roll call", kickoff: "kickoff", discuss: "discussion", outline: "outline", pick: "picking the outline", draft: "draft", check: "check", turn: "turn", review: "ballots", revise: "revision", stalled: "stuck: a question to you", accepted: "accepted", done: "done" },
+		phase: { rollcall: "roll call", kickoff: "kickoff", discuss: "discussion", outline: "outline", pick: "picking the outline", draft: "draft", check: "check", turn: "turn", review: "ballots", revise: "revision", stalled: "stuck: a question to you", accepted: "accepted", done: "done", tables: "both tables at work", compare: "blind comparison", final: "joint final round" },
+		wayBoth: "Both tables in competition, then the comparison and a joint final round", baseIs: (x: string, how: string) => `base: table ${x} (${how})`, howAccepted: "the only one that agreed", howCompared: (a: number, n: number) => `preferred by ${a} of ${n} models`, howOnly: "the only document", finalIs: (a: number, n: number, ok?: boolean) => `final round: ${a} of ${n} points taken over${ok === undefined ? "" : ok ? ", accepted" : ", not accepted: the base stays"}`, resultIs: (x: string, v: number) => `result: table ${x}, version ${v}`, otherFirst: "the other table agreed first", standings: (r: number, a: number, b: number) => `${r} runs with both tables so far: table A the base ${a} times, table B ${b} times`,
 		ballots: "Ballots", roundN: (n: number) => `round ${n}`, approve: "approves", reject: "rejects", notCounted: "does not count", acceptedBy: (v: number, how: string) => `version ${v} accepted (${how})`, byMajority: (a: number, n: number) => `${a} of ${n} models`, byPerson: (w: string) => `by ${w}`,
 		acceptIt: "👍 Accept this version", objectTo: "👎 Object to a section", objectPh: "What is wrong? (no model can decline it)", noMajority: "no majority within the rounds", failsChecks: "does not pass the checks", stuckEnd: "stuck",
 		objStates: { open: "open", resolved: "taken up", confirmed: "confirmed", declined: "declined", withdrawn: "withdrawn", note: "note" },
@@ -90,7 +93,7 @@ export function CodemodeForum() {
 	const [system, setSystem] = useState<System | null>(null);
 	const [chosen, setChosen] = useState<Set<string>>(new Set());
 	const [perModel, setPerModel] = useState(1);
-	const [way, setWay] = useState<"parallel" | "turns">("parallel");
+	const [way, setWay] = useState<"both" | "parallel" | "turns">("both");
 	const [rounds, setRounds] = useState(2);
 	const [budgetTokens, setBudgetTokens] = useState("100000");
 	const [budgetUsd, setBudgetUsd] = useState("");
@@ -160,13 +163,15 @@ export function CodemodeForum() {
 	const blocks = snap?.blocks ?? [];
 	const block = blocks.find((b) => b.blockId === focus) ?? blocks.at(-1) ?? null;
 	const headVersion = block?.doc?.version ?? 0;
+	// a run with both tables may end with an older version as its result (a final round that did not agree)
+	const resultVersion = block?.result && block.result.table === block.table && !snap?.run?.active ? block.result.version : 0;
 	// the document's texts are fetched when the block, the chosen version or the newest version changes
 	useEffect(() => {
 		if (!block || !headVersion) { setView(null); return; }
 		let dead = false;
-		api<PlanView>(`/rooms/${rid}/plan/${block.blockId}${version ? `?version=${version}` : ""}`).then((x) => { if (!dead) setView(x); }).catch(() => {});
+		api<PlanView>(`/rooms/${rid}/plan/${block.blockId}${version || resultVersion ? `?version=${version || resultVersion}` : ""}`).then((x) => { if (!dead) setView(x); }).catch(() => {});
 		return () => { dead = true; };
-	}, [rid, block?.blockId, headVersion, version, block?.doc?.check?.ok, block?.doc?.check?.failures.length]);
+	}, [rid, block?.blockId, headVersion, version, resultVersion, block?.doc?.check?.ok, block?.doc?.check?.failures.length]);
 
 	// the discussion is fetched when the block or the number of its messages or decisions changes
 	const talkKey = block ? `${block.blockId}:${block.table}:${block.talk.messages}:${block.talk.decisions}:${block.doc?.version ?? 0}:${snap?.run?.objections?.raised ?? 0}:${snap?.run?.objections?.open ?? 0}:${snap?.run?.ballots?.round ?? 0}:${snap?.run?.phase ?? ""}:${block.accepted?.version ?? 0}` : "";
@@ -263,7 +268,7 @@ export function CodemodeForum() {
 								</fieldset>
 								<div className="row">
 									<label htmlFor="way">{t.way}</label>
-									<select id="way" value={way} onChange={(e) => setWay(e.target.value as "parallel" | "turns")}><option value="parallel">{t.wayB}</option><option value="turns">{t.wayA}</option></select>
+									<select id="way" value={way} onChange={(e) => setWay(e.target.value as "both" | "parallel" | "turns")}><option value="both">{t.wayBoth}</option><option value="parallel">{t.wayB}</option><option value="turns">{t.wayA}</option></select>
 								</div>
 								<div className="row"><label htmlFor="rounds">{t.rounds}</label><input id="rounds" type="number" min={0} max={8} value={rounds} onChange={(e) => setRounds(Math.min(8, Math.max(0, Number(e.target.value) || 0)))} /></div>
 								<div className="row">
@@ -308,7 +313,7 @@ export function CodemodeForum() {
 									<h2>{t.run}</h2>
 									<div className="runline">
 										<span className={"pill" + (runHere.active ? " pill--accent" : "")}>{runHere.active ? t.active : t.ended}</span>
-										<span className="pill">{t.tableName(runHere.table)}</span>
+										{runHere.both ? null : <span className="pill">{t.tableName(runHere.table)}</span>}
 										<span className="pill">{t.phase[runHere.phase]}{runHere.round ? ` · ${t.round(runHere.round, runHere.rounds ?? runHere.round)}` : ""}</span>
 										{runHere.turn ? <span className="pill">{runHere.aliases[runHere.turn] ?? "?"} {t.hasTurn}</span> : null}
 										{runHere.doc ? <span className="pill">{t.written(runHere.doc.written, runHere.doc.sections)}</span> : null}
@@ -317,6 +322,15 @@ export function CodemodeForum() {
 										{runHere.ballots ? <span className="pill">{t.byMajority(runHere.ballots.approve, runHere.ballots.of)} {t.approve}</span> : null}
 										{runHere.ended ? <span className="pill">{runHere.ended === "budget" ? t.budgetUsed : runHere.ended === "models" ? t.fewModels : runHere.ended === "rounds" ? t.noMajority : runHere.ended === "checks" ? t.failsChecks : t.stuckEnd}</span> : null}
 									</div>
+									{runHere.both ? (
+										<div className="runline">
+											{(["A", "B"] as const).map((x) => { const i = runHere.tables?.[x]; return i ? <span key={x} className={"pill" + (i.active ? " pill--accent" : "")}>{t.tableName(x)}: {i.accepted ? t.acceptedBy(i.accepted.version, t.byMajority(i.accepted.approvals, i.accepted.of)) : i.ended === "other" ? t.otherFirst : t.phase[i.phase]}{i.round && !i.accepted ? ` · ${t.round(i.round, i.rounds ?? i.round)}` : ""}{i.turn ? ` · ${runHere.aliases[i.turn] ?? "?"} ${t.hasTurn}` : ""} · {i.usage.tokens.toLocaleString(locale)} Tokens</span> : null; })}
+											{runHere.base ? <span className="pill">{t.baseIs(runHere.base.table, runHere.base.how === "accepted" ? t.howAccepted : runHere.base.how === "only" ? t.howOnly : t.howCompared(runHere.base.prefer?.[runHere.base.table] ?? 0, (runHere.base.prefer?.A ?? 0) + (runHere.base.prefer?.B ?? 0)))}</span> : null}
+											{runHere.final ? <span className="pill">{t.finalIs(runHere.final.agreed ?? 0, runHere.final.points, runHere.final.accepted)}</span> : null}
+											{runHere.result ? <span className="pill pill--accent">{t.resultIs(runHere.result.table, runHere.result.version)}</span> : null}
+										</div>
+									) : null}
+									{snap?.standings?.runs ? <div className="fieldlabel">{t.standings(snap.standings.runs, snap.standings.A, snap.standings.B)}</div> : null}
 									{runHere.note ? <div className="notice">{runHere.note}</div> : null}
 									<div className="fieldlabel">{t.table}</div>
 									<div className="answers">

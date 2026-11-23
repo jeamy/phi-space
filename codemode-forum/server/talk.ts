@@ -15,10 +15,19 @@ export const TALK_LIMITS = { text: 2000, perModelRound: 12, thread: 8, kickoff: 
 export type MessageKind = "understanding" | "question" | "answer" | "proposal" | "vote" | "objection" | "note";
 /** `to`: a model's label, "all" or "person" (questions). `thread`: the id of the message it refers to (its own id for a
  *  first message). `stance`: a vote's. `model` is "human" for a person, whose name is `author`. */
-export type PlanMessage = { session: string; blockId: string; table: string; runId?: string; msgId: string; thread: string; kind: MessageKind; author: string; model: string; to?: string; stance?: "agree" | "disagree"; sectionId?: string; text: string; round: number; ts: number };
+export type PlanMessage = { session: string; blockId: string; table: string; runId?: string; msgId: string; thread: string; kind: MessageKind; author: string; model: string; to?: string; stance?: "agree" | "disagree"; sectionId?: string; text: string; round: number; ts: number;
+	/** A proposal to take over a section of the other table's document (`table`, `version`, `sectionId`, `title`) into
+	 *  the section `into` of this one. Once decided, that section is revised with it and names its origin. */
+	takeover?: { table: string; version: number; sectionId: string; title: string; into: string } };
 export type PlanDecision = { session: string; blockId: string; table: string; thread: string; text: string; proposer: string; agreed: string[]; against: string[]; of: number; ts: number };
 /** A message as a model wrote it, before it is kept: whom it addresses is still a name at the table. */
-export type Said = { kind: Exclude<MessageKind, "understanding">; to?: string; thread?: string; stance?: "agree" | "disagree"; text: string };
+export type Said = { kind: Exclude<MessageKind, "understanding">; to?: string; thread?: string; stance?: "agree" | "disagree"; text: string; takeover?: PlanMessage["takeover"] };
+
+/** A proposal to take over a section of the other table: `take over "<heading there>" into "<heading here>": why`. */
+export const takeoverOf = (text: string): { from: string; into: string } | null => {
+	const m = /^take\s*over\s+["“]([^"”]+)["”]\s+into\s+["“]([^"”]+)["”]/i.exec(text.trim());
+	return m ? { from: m[1]!.trim(), into: m[2]!.trim() } : null;
+};
 
 /** The table a person's messages are kept under: they belong to the block, and every table reads them. */
 export const PERSON_TABLE = "*";
@@ -78,7 +87,7 @@ export async function keep(space: SpaceLike, txn: string, ttl: number, d: { sess
 		let to: string | undefined;
 		if (s.kind === "question") { to = s.to === "person" || s.to === "all" || !s.to ? s.to ?? "all" : modelOf(s.to); if (!to || to === who.model) continue; }
 		const msgId = newMsgId();
-		const m: PlanMessage = { ...key(d), runId: who.runId, msgId, thread: root?.thread ?? msgId, kind: s.kind, author: who.author, model: who.model, ...(to ? { to } : {}), ...("stance" in s && s.stance ? { stance: s.stance } : {}), ...(who.sectionId ? { sectionId: who.sectionId } : {}), text: s.text, round: who.round, ts: Date.now() + kept.length };
+		const m: PlanMessage = { ...key(d), runId: who.runId, msgId, thread: root?.thread ?? msgId, kind: s.kind, author: who.author, model: who.model, ...(to ? { to } : {}), ...("stance" in s && s.stance ? { stance: s.stance } : {}), ...(who.sectionId ? { sectionId: who.sectionId } : {}), ...("takeover" in s && s.takeover ? { takeover: s.takeover } : {}), text: s.text, round: who.round, ts: Date.now() + kept.length };
 		await space.write({ type: "PlanMessage", fields: m as never }, txn, ttl);
 		kept.push(m); byId.set(msgId, m); mine++;
 	}
@@ -111,13 +120,14 @@ export function owed(messages: PlanMessage[], present: string[], aliases: Record
 }
 
 /** The proposals that have a majority and no decision yet: more than half of the `present` models agree, the
- *  proposer among them. */
+ *  proposer among them. A proposal the table makes to itself (model "table": a point of the comparison in the final
+ *  round) needs that majority among the models alone. */
 export function decide(messages: PlanMessage[], decided: PlanDecision[], present: string[], d: { session: string; blockId: string; table: string }): PlanDecision[] {
 	const out: PlanDecision[] = [];
-	for (const p of messages.filter((m) => m.kind === "proposal" && present.includes(m.model))) {
+	for (const p of messages.filter((m) => m.kind === "proposal" && (present.includes(m.model) || m.model === "table"))) {
 		if (decided.some((x) => x.thread === p.thread)) continue;
 		const votes = messages.filter((m) => m.kind === "vote" && m.thread === p.thread && present.includes(m.model));
-		const agreed = [p.model, ...votes.filter((v) => v.stance === "agree").map((v) => v.model)], against = votes.filter((v) => v.stance === "disagree").map((v) => v.model);
+		const agreed = [...(p.model === "table" ? [] : [p.model]), ...votes.filter((v) => v.stance === "agree").map((v) => v.model)], against = votes.filter((v) => v.stance === "disagree").map((v) => v.model);
 		if (agreed.length * 2 > present.length) out.push({ ...key(d), thread: p.thread, text: p.text, proposer: p.model, agreed, against, of: present.length, ts: Date.now() + out.length });
 	}
 	return out;
@@ -125,7 +135,7 @@ export function decide(messages: PlanMessage[], decided: PlanDecision[], present
 
 /** How a message's author is called in a prompt: its name at the table of this run, the person, or someone who is not
  *  at the table any more. */
-export const nameOf = (m: { model: string; author: string }, aliases: Record<string, string>) => (m.model === "human" ? "the person" : aliases[m.model] ?? "an earlier participant");
+export const nameOf = (m: { model: string; author: string }, aliases: Record<string, string>) => (m.model === "human" ? "the person" : m.model === "table" ? "the comparison of the two documents" : aliases[m.model] ?? "an earlier participant");
 
 /** The discussion for a prompt: the decisions (binding), what the person said (it outranks them), the questions to the
  *  person nobody answered (assumptions to make and to name), what the others understood, and the open threads. */

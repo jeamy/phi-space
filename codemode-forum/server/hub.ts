@@ -17,7 +17,8 @@ import { checkDocs, docsPack, indexHash, type PlanSource } from "./sources.ts";
 import { decisionsOf, messagesOf, newMsgId, owed, PERSON_TABLE, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
 import { objectionsOf, type PlanObjection } from "./review.ts";
 import { acceptOf, ballotsOf, type PlanAccept, type PlanBallot } from "./ballots.ts";
-import { MAX_ROUNDS } from "./run.ts";
+import { MAX_ROUNDS, runType, TABLE_SHARE, tableInfo } from "./run.ts";
+import { resultOf, standings } from "./compare.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
 
@@ -41,6 +42,8 @@ export type Block = Omit<PlanTask, "session"> & {
 	/** The table whose document and discussion the block shows: the one of the newest run on it, else one that has a
 	 *  document. */
 	table: Table;
+	/** The result of the newest run with both tables on this block: a table and a version of its document. */
+	result: { table: Table; version: number } | null;
 	/** The version the table (or the person) accepted; null: none yet. */
 	accepted: Pick<PlanAccept, "version" | "by" | "who" | "approvals" | "of" | "round"> | null; sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "commit" | "ref" | "files" | "bytes">>;
 	/** The table's discussion in numbers: messages, decisions, and the questions to the person still open. */
@@ -50,7 +53,8 @@ export type Block = Omit<PlanTask, "session"> & {
 /** A version of a block's document with its texts, and the versions there are. */
 export type PlanView = { blockId: string; doc: Omit<FullDoc, "session" | "slot">; check: { ok: boolean; failures: Failure[] } | null; versions: Array<Pick<PlanDoc, "version" | "author" | "model" | "changed" | "ts">> };
 /** What the page shows of a room. `blocks`: oldest first; a run works on the block it names. */
-export type Snapshot = { session: string; blocks: Block[]; run: RunInfo | null; rollcall: Array<Omit<RollCall, "session">>; lines: Line[]; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
+export type Snapshot = { /** Over all runs with both tables: how often each table's document was the base of the result. */
+	standings: { runs: number; A: number; B: number; tokens: Record<Table, number> }; session: string; blocks: Block[]; run: RunInfo | null; rollcall: Array<Omit<RollCall, "session">>; lines: Line[]; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
 
 export class ForumHub {
 	/** The shared space of all processes (a RemoteSpace on the space host's socket). */
@@ -167,7 +171,7 @@ export class ForumHub {
 		const gone = new Map<string, boolean>();
 		for (const e of await this.host.readAll({ type: "WorkItem", fields: { session: s.id } }, { limit: 2000 })) {
 			const runId = String((e.fields as { runId?: unknown }).runId);
-			if (!gone.has(runId)) gone.set(runId, !(await readExisting(this.host, { type: "ForumRun", fields: { session: s.id, runId } }).catch(() => true))); // held for long: not gone
+			if (!gone.has(runId)) gone.set(runId, !(await readExisting(this.host, { type: runType(runId), fields: { session: s.id, runId } }).catch(() => true))); // held for long: not gone
 			if (gone.get(runId)) await this.host.take({ id: e.id }, NO_WAIT);
 		}
 	}
@@ -200,8 +204,17 @@ export class ForumHub {
 		const r = (await readExisting(this.host, { type: "ForumRun", fields: { session: s.id } }))?.fields as unknown as RunEntry | undefined;
 		if (!r) return null;
 		// slots no agents process took up: those agents' work waits, which the page says
-		const waiting = await this.host.count({ type: "AgentSlot", fields: { session: s.id, runId: r.runId } });
+		const waiting = await this.host.count({ type: "AgentSlot", fields: { session: s.id, ...(r.params.both ? {} : { runId: r.runId }) } });
 		const late = waiting > 0 && Date.now() - r.params.startedAt > SLOT_GRACE_MS;
+		// a run with both tables: the tables that still work are shown as they are now, and what they used so far counts
+		// (read one by one: a table's entry an agent holds for a moment is waited for, not taken for gone)
+		if (r.params.both) for (const t of ["A", "B", "F"]) {
+			const k = (await readExisting(this.host, { type: "TableRun", fields: { session: s.id, runId: `${r.runId}-${t}` } }).catch(() => null))?.fields as unknown as RunEntry | undefined;
+			if (!k) continue;
+			if (k.params.final) r.info.final = { ...(r.info.final ?? { points: 0 }), active: tableInfo(k.info, true) };
+			else r.info.tables = { ...r.info.tables, [k.params.table]: tableInfo(k.info, true) };
+			r.info.usage = { tokens: r.info.usage.tokens + k.info.usage.tokens, costUsd: r.info.usage.costUsd + k.info.usage.costUsd };
+		}
 		return { ...r.info, active: true, ...(late ? { note: `${waiting} of ${r.params.models.length * r.params.perModel} agents wait for a free slot in an agents process (FORUM_AGENT_SLOTS); their work waits meanwhile` } : {}) };
 	}
 
@@ -217,7 +230,9 @@ export class ForumHub {
 		const s = await this.session(id);
 		// the run first: its end is then never shown without the lines and answers written with it
 		const run = await this.#runShown(s);
-		const rollcall = run ? (await this.host.readAll({ type: "RollCall", fields: { session: s.id, runId: run.runId } }, { limit: 50 })).map((e) => { const { session: _s, ...rest } = e.fields as unknown as RollCall; return rest; }).sort((a, b) => a.alias.localeCompare(b.alias)) : [];
+		// (a run with both tables has a roll call at each: the one of table A is shown, else B's)
+		const calls = run ? await this.host.readAll({ type: "RollCall", fields: { session: s.id } }, { limit: 200 }) : [];
+		const rollcall = run ? (run.both ? ["A", "B"].map((t) => calls.filter((e) => (e.fields as { runId?: string }).runId === `${run.runId}-${t}`)).find((x) => x.length) ?? [] : calls.filter((e) => (e.fields as { runId?: string }).runId === run.runId)).map((e) => { const { session: _s, ...rest } = e.fields as unknown as RollCall; return rest; }).sort((a, b) => a.alias.localeCompare(b.alias)) : [];
 		const lines = (await this.host.readAll({ type: "ForumLine", fields: { session: s.id } }, { limit: LIMITS.lines + 50 })).map((e) => e.fields as unknown as Line & { session: string }).sort((a, b) => a.ts - b.ts).slice(-LIMITS.lines).map(({ text, ts }) => ({ text, ts }));
 		const tasks = (await this.#tasks(s.id));
 		const blocks = await Promise.all(tasks.map(async ({ session: _s, ...t }): Promise<Block> => {
@@ -229,9 +244,10 @@ export class ForumHub {
 			const talk = { messages: messages.length, decisions: (await decisionsOf(this.host, d)).length, forPerson: owed(messages, [], {}).person.length };
 			const check = head ? await checkOf(this.host, d, head.version) : null;
 			const acc = await acceptOf(this.host, d);
-			return { ...t, table: TABLE, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
+			const res = await resultOf(this.host, s.id, t.blockId);
+			return { ...t, table: TABLE, result: res ? { table: res.table, version: res.version } : null, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
 		}));
-		return { session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
+		return { standings: await standings(this.host), session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
 	}
 
 	/** The table of a block that is shown when none is asked for: the one the room's run (active or last) works at on
@@ -427,7 +443,9 @@ export class ForumHub {
 	 *  The models write in the task's language. `way`: "parallel" for table B, where every model proposes an outline,
 	 *  the sections are dealt out and the models review each other in `rounds` rounds; "turns" for table A, where one
 	 *  model writes the first draft and the turn then goes round the table, `rounds` times at most, with ballots after
-	 *  each round; without a way table A writes a first draft only (`rounds` 0 unless named).
+	 *  each round; "both" for a run with both tables at the same time, each on 45 % of the budget, after which the
+	 *  models compare the two documents blind and a joint final round works what the other does better into the base
+	 *  (compare.ts); without a way table A writes a first draft only (`rounds` 0 unless named).
 	 *  `client` is set by the server, never from the request body: a visitor's run gets the default budget at most and
 	 *  counts against the day's allowance of the address. Without it (tests, scripts in-process) it counts as admin. */
 	async startRun(id: string, o: { blockId?: unknown; way?: unknown; rounds?: unknown; models?: unknown; perModel?: unknown; budgetTokens?: unknown; budgetUsd?: unknown; client?: { ip: string; admin: boolean } }): Promise<{ runId: string }> {
@@ -450,10 +468,10 @@ export class ForumHub {
 		if (visitor && ipTokensPerDay() && (await spentToday(this.host, visitor.ip)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (FORUM_TOKENS_PER_IP_DAY); try again tomorrow");
 		// the way of working: the models take turns (table A), or all write at the same time and review each other
 		// (table B), in at most `rounds` rounds
-		const table: Table = o.way === "parallel" ? "B" : "A", rounds = Math.min(MAX_ROUNDS, Math.max(0, Math.floor(Number(o.rounds ?? (o.way === "parallel" || o.way === "turns" ? 2 : 0))) || 0));
+		const table: Table = o.way === "parallel" ? "B" : "A", rounds = Math.min(MAX_ROUNDS, Math.max(0, Math.floor(Number(o.rounds ?? (o.way === "parallel" || o.way === "turns" || o.way === "both" ? 2 : 0))) || 0)), both = o.way === "both";
 		const tasks = await this.#tasks(s.id), task = o.blockId ? tasks.find((t) => t.blockId === String(o.blockId)) : tasks.at(-1);
 		if (!task) throw new Error(o.blockId ? "Unknown plan task" : "No plan task yet: create one first");
-		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, blockId: task.blockId, table, rounds, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: task.lang, budget, ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
+		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, blockId: task.blockId, table, rounds, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: task.lang, budget, ...(both ? { both } : {}), ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
 		// a request that was refused above started nothing and does not count
 		if (!this.#allow(s, "run", 6)) throw new Error("Too many runs, slow down");
 		await this.#trimLines(s);
@@ -465,7 +483,7 @@ export class ForumHub {
 			const t = await this.host.createTransaction(30_000);
 			try {
 				await startSpaceRun(this.host, t.id, this.#ttl, { session: s.id, params });
-				await systemLine(this.host, t.id, this.#ttl, s.id, `Run started at table ${table} (${table === "B" ? `all write, ${rounds} review round${rounds === 1 ? "" : "s"}` : rounds ? `the models take turns, ${rounds} round${rounds === 1 ? "" : "s"}` : "one model writes"}): ${models.length} models, ${perModel} agent${perModel === 1 ? "" : "s"} each, budget ${limits}`);
+				await systemLine(this.host, t.id, this.#ttl, s.id, both ? `Run started at both tables (A: the models take turns, B: all write; ${rounds} round${rounds === 1 ? "" : "s"} each, ${Math.round(TABLE_SHARE * 100)} % of the budget each, then the comparison and the final round): ${models.length} models, ${perModel} agent${perModel === 1 ? "" : "s"} each, budget ${limits}` : `Run started at table ${table} (${table === "B" ? `all write, ${rounds} review round${rounds === 1 ? "" : "s"}` : rounds ? `the models take turns, ${rounds} round${rounds === 1 ? "" : "s"}` : "one model writes"}): ${models.length} models, ${perModel} agent${perModel === 1 ? "" : "s"} each, budget ${limits}`);
 				await this.host.commit(t.id);
 			} catch (e) {
 				await this.host.abort(t.id).catch(() => {});

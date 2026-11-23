@@ -52,7 +52,13 @@ const revised = (c: TextCall) => { const d = draft(c); return { ...d, text: `${d
 /** Table A: a turn (500 tokens) with these objections, or none. */
 const turn = (c: TextCall, objections: string[] = [], messages: string[] = []) => ({ text: [...(objections.length ? objections : ["NO OBJECTIONS"]), ...(messages.length ? ["MESSAGES", ...messages] : [])].join("\n"), model: c.model, usage: use(500, 0.05) });
 const turnRound = (c: TextCall) => Number(/It is your turn at the table \(round (\d+)\)/.exec(c.user)?.[1] ?? 1);
-const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "turn" ? turn(c) : call.kind === "kickoff" ? kickoff(c) : call.kind === "reply" ? reply(c) : call.kind === "outline" ? outline(c) : call.kind === "pick" ? pick(c) : call.kind === "review" ? review(c) : call.kind === "revise" ? revised(c) : draft(c));
+/** A run with both tables: a blind comparison (700 tokens) that prefers `prefer` on every criterion and names one
+ *  thing each document does better. */
+const compare = (c: TextCall, prefer: "X" | "Y" = "X") => {
+	const n = (c.user.match(/^\d+ X: <why>/gm) ?? []).length;
+	return { text: [`PREFER: ${prefer}`, "CRITERIA", ...Array.from({ length: n }, (_, i) => `${i + 1} ${prefer}: It is the clearer one.`), "BETTER", 'better Y: It names the phase and how it is verified. | from: "Steps" | into: "Steps"', 'better X: It says what is left out. | from: "Goal" | into: "Goal"', 'better X: no such section | from: "Nowhere" | into: "Goal"'].join("\n"), model: c.model, usage: use(700, 0.07) };
+};
+const answer = (c: TextCall, call: LlmCall) => (call.kind === "rollcall" ? here(c) : call.kind === "compare" ? compare(c) : call.kind === "turn" ? turn(c) : call.kind === "kickoff" ? kickoff(c) : call.kind === "reply" ? reply(c) : call.kind === "outline" ? outline(c) : call.kind === "pick" ? pick(c) : call.kind === "review" ? review(c) : call.kind === "revise" ? revised(c) : draft(c));
 /** Table B: the outline each model proposes, and the one all of them prefer (alpha's). */
 const OUTLINES: Record<string, string[]> = { "fake/alpha": OUTLINE, "fake/beta": ["Aim", "Way", "Dangers"], "fake/gamma": ["First", "Second", "Third"] };
 const proposal = (c: TextCall) => ({ text: (OUTLINES[c.model] ?? OUTLINE).map((h) => `## ${h}\nWhat ${h.toLowerCase()} must say.`).join("\n\n"), model: c.model, usage: use(400, 0.04) });
@@ -77,6 +83,15 @@ const tableA = (objects: (seat: string, round: number) => string[] | null, o: { 
 	if ((call.kind === "turn" && o.hold === seatOf(c)) || (call.kind === "revise" && o.holdRevise)) await gate(space, s);
 	if (call.kind === "turn") return turn(c, objects(seatOf(c), turnRound(c)) ?? []);
 	if (call.kind === "review") return o.ballot?.(seatOf(c), roundOf(c), c) ?? review(c);
+	return answer(c, call);
+} });
+/** The scenarios with both tables: every call is logged with its table. */
+type Hook = (c: TextCall, call: LlmCall, space: SpaceLike, s: string) => Promise<ReturnType<typeof review> | null | void>;
+const bothTables = (o: { ballot?: Hook; hold?: Hook; turn?: (c: TextCall) => ReturnType<typeof turn> | null } = {}) => (s: string, space: SpaceLike, log: Log): Team => ({ text: async (c, call) => {
+	await log({ model: c.model, kind: call.kind, table: call.table ?? "", runId: call.runId ?? "", callId: call.callId, prompt: c.user });
+	await o.hold?.(c, call, space, s);
+	if (call.kind === "review") return (await o.ballot?.(c, call, space, s)) || review(c);
+	if (call.kind === "turn") return o.turn?.(c) ?? turn(c);
 	return answer(c, call);
 } });
 /** In the first round beta and gamma each object to the goal; alpha approves. */
@@ -106,6 +121,14 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	} }),
 	// dear answers: 3000 tokens each
 	dear: (_s, _space, log) => ({ text: async (c, call) => { await log({ model: c.model, kind: call.kind }); return { ...answer(c, call), usage: use(3000, 0.3) }; } }),
+	// both tables: everybody approves at both, the comparison prefers X (so two of three models table A), and the final
+	// round takes over what the other document does better
+	both: bothTables(),
+	// the same, and after the final round's revision nobody approves any more
+	keep: bothTables({ ballot: async (c) => (c.user.includes("Revised by") ? review(c, ['objection on "Risks": It names no risk of what was taken over. | fix: Name one.']) : null) }),
+	// table A's drafts wait until table B has agreed; then M2 proposes in its turn to take over a section of table B
+	swap: bothTables({ hold: async (c, call, space, s) => { if (call.kind === "draft" && call.table === "A") while (!(await space.count({ type: "PlanAccept", fields: { session: s, table: "B" } }))) await new Promise((r) => setTimeout(r, 100)); },
+		turn: (c) => (seatOf(c) === "M2" ? turn(c, [], ['proposal: take over "Steps" into "Steps": It names the phase and how it is verified.']) : null) }),
 	// table A: nobody objects in its turn, everybody approves
 	turns: tableA(() => null),
 	// table A: M2, the first to have the turn, objects to the goal and revises it itself; M1 and M3 object to the

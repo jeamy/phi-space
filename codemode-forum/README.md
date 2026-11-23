@@ -4,11 +4,12 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 to 8 of that plan.** The application has its processes, its space, the run mechanics, the admin
+**Status: phases 1 to 9 of that plan.** The application has its processes, its space, the run mechanics, the admin
 login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2),
 read-only sources the models read in (phase 3), the discussion of the table (phase 4), the checker (phase 5), table
 B, where the models write at the same time (phase 6), **ballots**: the table changes the plan until a majority of
-the models agrees that it can be carried out (phase 7), and table A, where the models take turns (phase 8). A run begins with the **roll call**, the **kickoff** and the
+the models agrees that it can be carried out (phase 7), table A, where the models take turns (phase 8), and **both
+tables in one run**: the two ways of working compete, and the better document is the base of the result (phase 9). A run begins with the **roll call**, the **kickoff** and the
 **replies**; then it writes at one of two tables:
 
 - **table B** (`way: "parallel"`): every model proposes an outline and the table picks one; the sections are dealt
@@ -20,7 +21,7 @@ the models agrees that it can be carried out (phase 7), and table A, where the m
   others objected to; after the turns of a round every model writes its ballot. Without a `way` a run writes the
   first draft only (no turns, no ballots).
 
-Both tables in one run and their comparison (phase 9) are still to come.
+A run with `way: "both"` (the page's default) sets up both tables at the same time; see "Both tables in one run".
 
 The application is a directory of its own. Its base is copied from `codemode-chat/` (the comments at the top of each
 file say so) and it imports nothing from there; it depends on the library as `"phi-spaces": "file:../spaces"`.
@@ -118,6 +119,35 @@ The rounds end when the table has agreed, when they are used up, or when the tab
 
 The rounds (`rounds`, default 2, at most 8) end as at table B: the table has agreed, the rounds are used up, the
 version fails the checks, or the table is stuck and asks the person.
+
+## Both tables in one run
+
+(`way: "both"`; `server/compare.ts`, and the flow in `server/run.ts`.) The run itself waits; each table is a run of
+its own (`TableRun`, run id `<run>-A` and `<run>-B`) with all models, its own roll call, kickoff, discussion,
+document and agents, on **45 % of the budget** each. They work at the same time.
+
+1. **Exchange.** A review (table B) and a turn (table A) show the other table's document as it stood after its last
+   round, with that table's decisions and open objections, as reading material. A model may propose to its own table
+   `proposal: take over "<heading there>" into "<heading here>": why`. It is decided like any proposal; once decided,
+   the section is revised with the other section as material, no reviser can decline it, and the new revision names
+   its origin (`origin`: table, version, section). Messages do not cross tables.
+2. **Who is first.** When one table has agreed, the other finishes the round it is in and begins no other (its first
+   round it has in any case).
+3. **Blind comparison.** When both are through and there are two documents, every model compares them as "X" and
+   "Y", without table or author (which table is X changes from model to model): `PREFER: X`, a reason per criterion,
+   and what each does better than the other, `better Y: what | from: "<heading in Y>" | into: "<heading in X>"`
+   (`PlanCompare`). The **base** is the only table that agreed; if both or neither did, the document more models
+   prefer; among equals the table that spent less.
+4. **Joint final round** (`<run>-F`). What the other document does better (at most six points, one per pair of
+   sections) becomes proposals at the base's table; every model votes; the agreed ones are worked into the base, each
+   revision naming its origin; the checker checks; then one round of ballots. If it agrees, that version is the
+   **result** (`PlanResult`); if not, the base as it was stays the result, and the later versions stay in the
+   document's history.
+5. Every such run leaves a `PlanStrategyStat` (rounds, cost and approvals per table, the base and why, the final
+   round, the result). The page shows the standings over all runs: how often each table was the base.
+
+With one document only, that one is the result; without budget for the comparison, the table that agreed, else the
+cheaper one. Stopping the run stops its tables.
 
 ## When a plan counts as agreed
 
@@ -299,7 +329,11 @@ evidence, an objection is declined, an objection comes too late against an uncha
 goes on with the person's answer, and the person objects and accepts. `tests/table-a.test.ts` covers table A: the
 turn going round the table before the ballots, a model that revises what it objects to in its turn and takes up what
 the others objected to (and one that is passed over), a turn nobody takes in time, and an agents process killed in
-the middle of a turn.
+the middle of a turn. `tests/both.test.ts` covers runs with both tables: the reading of a comparison, the base and
+the points for the final round; a run in which both tables agree, the models compare blind and the final round takes
+over two sections that name their origin; a final round that does not agree, which leaves the base as the result; a
+table that takes over a section of the other, which agreed first, and then begins no further round; the tables'
+shares of the budget; and a stopped run, which takes its tables with it.
 
 ## Safety notes
 
