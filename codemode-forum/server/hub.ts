@@ -8,7 +8,7 @@ import { FOREVER, NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import type { WsConnection } from "phi-spaces/ws";
 import { ipTokensPerDay, MAX_AGENTS_PER_MODEL, MAX_MODELS, MIN_MODELS, runBudgetTokens, today } from "./limits.ts";
 import { modelInfoOf, spentToday, type ModelInfoView, type Spend } from "./models.ts";
-import { fullDoc, headOf, renderMarkdown, versionsOf, type FullDoc, type PlanDoc } from "./plandoc.ts";
+import { fullDoc, headOf, versionsOf, type FullDoc, type PlanDoc } from "./plandoc.ts";
 import { planTask, type PlanTask } from "./plantask.ts";
 import { checkOf } from "./check-host.ts";
 import type { Failure } from "./checks.ts";
@@ -18,7 +18,8 @@ import { decisionsOf, messagesOf, newMsgId, owed, PERSON_TABLE, TALK_LIMITS, typ
 import { objectionsOf, type PlanObjection } from "./review.ts";
 import { acceptOf, ballotsOf, type PlanAccept, type PlanBallot } from "./ballots.ts";
 import { MAX_ROUNDS, runType, TABLE_SHARE, tableInfo } from "./run.ts";
-import { resultOf, standings } from "./compare.ts";
+import { comparesOf, resultOf, standings, type PlanCompare, type PlanStrategyStat } from "./compare.ts";
+import { chosenOf, exportPlan, type Chosen } from "./export.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
 
@@ -42,6 +43,8 @@ export type Block = Omit<PlanTask, "session"> & {
 	/** The table whose document and discussion the block shows: the one of the newest run on it, else one that has a
 	 *  document. */
 	table: Table;
+	/** The newest version of each table's document on this block (a table without a document is missing). */
+	heads: Partial<Record<Table, number>>;
 	/** The result of the newest run with both tables on this block: a table and a version of its document. */
 	result: { table: Table; version: number } | null;
 	/** The version the table (or the person) accepted; null: none yet. */
@@ -245,7 +248,9 @@ export class ForumHub {
 			const check = head ? await checkOf(this.host, d, head.version) : null;
 			const acc = await acceptOf(this.host, d);
 			const res = await resultOf(this.host, s.id, t.blockId);
-			return { ...t, table: TABLE, result: res ? { table: res.table, version: res.version } : null, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
+			const heads: Block["heads"] = {};
+			for (const x of ["A", "B"] as const) { const h = x === TABLE ? head : await headOf(this.host, { ...d, table: x }); if (h) heads[x] = h.version; }
+			return { ...t, table: TABLE, heads, result: res ? { table: res.table, version: res.version } : null, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
 		}));
 		return { standings: await standings(this.host), session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
 	}
@@ -378,11 +383,26 @@ export class ForumHub {
 		return { objId: objection.objId };
 	}
 
-	/** The newest version of a block's document as Markdown, under the first line of its brief. */
-	async planMarkdown(id: string, blockId: string, table?: unknown): Promise<string | null> {
-		const task = (await this.#tasks(id)).find((t) => t.blockId === blockId), head = await headOf(this.host, { session: id, blockId, table: asTable(table) ?? (await this.#tableOf(id, blockId)) });
-		if (!task || !head) return null;
-		return renderMarkdown(await fullDoc(this.host, head), task.brief.split("\n")[0]!.slice(0, 120));
+	/** A block's result as Markdown (export.ts): the plan and, unless `plain`, the generated appendix. Without `table`
+	 *  and `version` the result: what a person accepted, else what the run with both tables ended with, else what a
+	 *  table accepted, else the newest draft of the table shown. null: no document. */
+	async planMarkdown(id: string, blockId: string, o: { table?: unknown; version?: number; plain?: boolean } = {}): Promise<string | null> {
+		const table = asTable(o.table);
+		const x = await exportPlan(this.host, id, blockId, { ...(table ? { table } : {}), ...(o.version !== undefined ? { version: o.version } : {}), shown: await this.#tableOf(id, blockId) });
+		return x ? (o.plain ? x.plan : x.markdown) : null;
+	}
+
+	/** How the newest run with both tables on a block went: which version is the block's result and why, the run's
+	 *  numbers, and every model's blind comparison (which document it preferred, why per criterion, what each does
+	 *  better). `stat` is missing for a block no such run finished on; the comparisons of a run still at its final
+	 *  round are there already. */
+	async outcome(id: string, blockId: string): Promise<{ chosen: Chosen | null; stat: Omit<PlanStrategyStat, "session"> | null; compares: Array<Omit<PlanCompare, "session">> }> {
+		const stat = (await this.host.readAll({ type: "PlanStrategyStat", fields: { session: id, blockId } }, { limit: 50 })).map((e) => e.fields as unknown as PlanStrategyStat).sort((a, b) => b.ts - a.ts)[0];
+		const newest = (await this.host.readAll({ type: "PlanCompare", fields: { session: id, blockId } }, { limit: 200 })).map((e) => e.fields as unknown as PlanCompare).sort((a, b) => b.ts - a.ts)[0];
+		const compares = newest ? await comparesOf(this.host, id, newest.runId) : [];
+		const chosen = await chosenOf(this.host, id, blockId, await this.#tableOf(id, blockId));
+		const strip = <T extends { session: string }>({ session: _s, ...rest }: T) => rest;
+		return { chosen, stat: stat ? strip(stat) : null, compares: compares.map(strip) };
 	}
 
 	/** Push a fresh snapshot to every client of the room (debounced, so a burst of writes sends one frame). One snapshot

@@ -1,27 +1,30 @@
 "use client";
-// The forum's page. A room holds plan tasks; each is a block with its document. A run works on one block: the roll
-// call (the models at the table, each under the name it has in this run), then the outline and the first draft of
-// every section by one of them. The page shows the run and the document, version by version. The discussion, the
-// second table and the ballots come with their phases (docs/gemeinsame-planung-plan-2026-11-22.en.md).
+// The forum's page. A room holds plan tasks; each is a block with its documents (one per table). The page shows the
+// run, the discussion with its ballots and objections, each table's document version by version (also as the
+// difference between two versions, and both tables side by side), the comparison of the two tables and the standings
+// (docs/gemeinsame-planung-plan-2026-11-22.en.md, section 11).
 import { useEffect, useMemo, useState } from "react";
 import { AdminPanel } from "./AdminPanel.tsx";
 import { ThemeControls } from "./ThemeControls.tsx";
+import { diffCount, diffText, withContext, type Line } from "./lib/diff.ts";
 import { renderSection } from "./lib/safe-markdown.ts";
 import { useTheme } from "./lib/theme.ts";
 
 type RunInfo = { active: boolean; runId: string; blockId: string; table: "A" | "B"; round?: number; rounds?: number; objections?: { raised: number; open: number }; models: string[]; perModel: number; aliases: Record<string, string>; phase: "rollcall" | "kickoff" | "discuss" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise" | "stalled" | "accepted" | "done" | "tables" | "compare" | "final"; both?: boolean; tables?: Partial<Record<"A" | "B", TableInfo>>; base?: { table: "A" | "B"; how: "accepted" | "compared" | "only"; version: number; prefer?: { A: number; B: number } }; final?: { points: number; agreed?: number; accepted?: boolean; active?: TableInfo }; result?: { table: "A" | "B"; version: number }; turn?: string; ballots?: { round: number; approve: number; of: number }; accepted?: { version: number; round: number; approvals: number; of: number }; writer?: string; check?: { version: number; ok: boolean; failures: number; round: number }; talk?: { messages: number; decisions: number }; doc?: { table: string; version: number; sections: number; written: number }; items: { open: number; done: number }; usage: { tokens: number; costUsd: number }; budget: { tokens?: number; usd?: number }; note?: string; ended?: "budget" | "models" | "checks" | "rounds" | "stalled" };
 type TableInfo = { active: boolean; phase: RunInfo["phase"]; round?: number; rounds?: number; accepted?: { version: number; round: number; approvals: number; of: number }; ended?: string; usage: { tokens: number; costUsd: number }; doc?: { version: number; sections: number; written: number }; turn?: string };
 type Answer = { runId: string; model: string; alias: string; agent: number; text: string; ts: number };
-type SectionRef = { sectionId: string; rev: number; title: string; bytes: number; author: string; model: string };
+type SectionRef = { sectionId: string; rev: number; title: string; hash: string; bytes: number; author: string; model: string; origin?: string };
+type Table = "A" | "B";
+type Outcome = { chosen: { table: Table; version: number; how: "person" | "result" | "majority" | "draft" } | null; stat: { base: Table; how: "accepted" | "compared" | "only"; prefer?: Record<Table, number>; tables: Partial<Record<Table, { rounds: number; tokens: number; costUsd: number; accepted: boolean; approvals: number }>>; final?: { points: number; agreed: number; accepted: boolean }; result: { table: Table; version: number } } | null; compares: Array<{ model: string; prefer: Table; criteria: Array<{ n: number; prefer: Table; text: string }>; points: Array<{ table: Table; fromTitle: string; intoTitle: string; text: string }> }> };
 type Source = { sourceId: string; kind: "docs" | "repo"; name: string; commit?: string; ref?: string; files: number; bytes: number };
 type Check = { ok: boolean; failures: Array<{ check: string; sectionId?: string; text: string }> } | null;
-type Block = { result: { table: "A" | "B"; version: number } | null; blockId: string; table: "A" | "B"; accepted: { version: number; by: "majority" | "person"; who?: string; approvals: string[]; of: number; round?: number } | null; brief: string; lang: "de" | "en"; outline: string[]; criteria: string[]; ts: number; sources: Source[]; talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: SectionRef[]; check: Check } | null };
-type Snapshot = { standings?: { runs: number; A: number; B: number }; session: string; blocks: Block[]; run: RunInfo | null; rollcall: Answer[]; lines: Array<{ text: string; ts: number }>; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
+type Block = { result: { table: "A" | "B"; version: number } | null; blockId: string; table: "A" | "B"; heads: Partial<Record<Table, number>>; accepted: { version: number; by: "majority" | "person"; who?: string; approvals: string[]; of: number; round?: number } | null; brief: string; lang: "de" | "en"; outline: string[]; criteria: string[]; ts: number; sources: Source[]; talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: SectionRef[]; check: Check } | null };
+type Snapshot = { standings?: { runs: number; A: number; B: number; tokens: Record<Table, number> }; session: string; blocks: Block[]; run: RunInfo | null; rollcall: Answer[]; lines: Array<{ text: string; ts: number }>; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
 type PlanView = { blockId: string; check: Check; doc: { version: number; bytes: number; author: string; model: string; changed: string[]; ts: number; sections: Array<SectionRef & { text: string }> }; versions: Array<{ version: number; author: string; model: string; changed: string[]; ts: number }> };
 type Message = { msgId: string; thread: string; kind: "understanding" | "question" | "answer" | "proposal" | "vote" | "objection" | "note"; author: string; model: string; to?: string; stance?: "agree" | "disagree"; text: string; ts: number };
 type Decision = { thread: string; text: string; agreed: string[]; against: string[]; of: number };
 type Objection = { objId: string; sectionId: string; defect: string; fix: string; quote?: string; model: string; round: number; state: "open" | "resolved" | "confirmed" | "declined" | "withdrawn" | "note"; revisedIn?: number };
-type Ballot = { round: number; version: number; model: string; vote: "approve" | "reject"; counts: boolean; why?: string };
+type Ballot = { round: number; version: number; model: string; vote: "approve" | "reject"; counts: boolean; why?: string; criteria: Array<{ n: number; met: boolean; text: string; backed?: boolean }> };
 type Talk = { blockId: string; messages: Message[]; decisions: Decision[]; objections: Objection[]; ballots: Ballot[] };
 type Models = { enabled: boolean; on: boolean; models: Array<{ id: string; label: string }> };
 type System = { hosts: Array<{ name: string; roles: string[]; host: { cpu: string; cores: number; memGiB: number } }>; today: { calls: number; tokens: number; costUsd: number } };
@@ -35,7 +38,11 @@ const T = {
 		run: "Lauf", on: "Aufgabe", pick: (min: number, max: number) => `Modelle am Tisch (${min} bis ${max})`, perModel: "Agenten je Modell", tokens: "Budget Tokens", usd: "Budget $",
 		start: "Lauf starten", stop: "Stopp", none: "Keine Modelle verfügbar. Ein Admin schaltet sie frei (FORUM_LLM=1 und Zugangsdaten beim Modell-Prozess).",
 		need: (n: number) => `Ein Lauf braucht mindestens ${n} verschiedene Modelle.`, noTask: "Lege zuerst eine Planaufgabe an.",
-		lead: "Mindestens drei KI-Modelle entwickeln hier gemeinsam einen Plan. Bisher: Nach dem Appell schreibt eines von ihnen die Gliederung und den ersten Entwurf jedes Abschnitts. Die gemeinsame Arbeit daran (Diskussion, Prüfung, Abstimmung) folgt.",
+		lead: "Mindestens drei KI-Modelle entwickeln hier gemeinsam einen Plan: Sie schreiben, diskutieren, prüfen einander und stimmen ab, bis eine Mehrheit zustimmt. Zwei Arbeitsweisen treten gegeneinander an; die bessere liefert das Ergebnis.",
+		helpLink: "Hilfe", theTable: "der Tisch", side: "nebeneinander", compareWith: "vergleichen mit", noCompare: "kein Vergleich", previous: "vorheriger Fassung", unchanged: "unverändert", newSection: "neuer Abschnitt", removedSection: "entfernt", linesChanged: (d: number, a: number) => `−${d} +${a} Zeilen`, gap: (n: number) => `… ${n} unveränderte Zeile${n === 1 ? "" : "n"} …`, origin: "übernommen aus", settled: (n: number) => `${n} erledigte${n === 1 ? "r Einwand" : " Einwände"}`, exportIt: "Ergebnis mit Anhang (.md)", thisVersion: "diese Fassung (.md)", isResult: "Ergebnis",
+		outcome: "Vergleich der beiden Tische", prefers: (x: string) => `zieht Tisch ${x} vor`, better: (x: string) => `Tisch ${x} macht besser`, statTable: "Tisch", statRounds: "Runden", statTokens: "Tokens", statCost: "Kosten", statAgreed: "einig", statApprovals: "Zustimmungen", statBase: "Basis", yes: "ja", no: "nein",
+		standingsTitle: "Stand der Arbeitsweisen", standingsLead: (r: number) => `${r} ${r === 1 ? "Lauf" : "Läufe"} mit beiden Tischen bisher`, timesBase: "als Basis des Ergebnisses", tokensAll: "Tokens insgesamt", ballotDetails: (n: number) => `Kriterien je Stimme (Runde ${n})`, met: "erfüllt", notMet: "nicht erfüllt", unbacked: "ohne Beleg im Plan",
+		chosenHow: { person: "von einer Person angenommen", result: "Ergebnis des Laufs mit beiden Tischen", majority: "von der Mehrheit angenommen", draft: "neuester Entwurf, nicht angenommen" },
 		table: "Am Tisch", waiting: "noch keine Antwort", active: "läuft", ended: "beendet", budgetUsed: "Budget verbraucht", fewModels: "zu wenige Modelle", items: (d: number, o: number) => `${d} erledigt, ${o} offen`,
 		phase: { rollcall: "Appell", kickoff: "Auftakt", discuss: "Diskussion", outline: "Gliederung", pick: "Gliederung wählen", draft: "Entwurf", check: "Prüfung", turn: "am Zug", review: "Abstimmung", revise: "Überarbeitung", stalled: "festgefahren: Frage an dich", accepted: "angenommen", done: "fertig", tables: "beide Tische arbeiten", compare: "Blindvergleich", final: "gemeinsame Schlussrunde" },
 		wayBoth: "Beide Tische im Wettbewerb, dann Vergleich und gemeinsame Schlussrunde", baseIs: (x: string, how: string) => `Basis: Tisch ${x} (${how})`, howAccepted: "als einziger einig", howCompared: (a: number, n: number) => `von ${a} von ${n} Modellen bevorzugt`, howOnly: "einziges Dokument", finalIs: (a: number, n: number, ok?: boolean) => `Schlussrunde: ${a} von ${n} Punkten übernommen${ok === undefined ? "" : ok ? ", angenommen" : ", nicht angenommen: die Basis bleibt"}`, resultIs: (x: string, v: number) => `Ergebnis: Tisch ${x}, Fassung ${v}`, otherFirst: "der andere Tisch war zuerst einig", standings: (r: number, a: number, b: number) => `Bisher ${r} Läufe mit beiden Tischen: Tisch A ${a}-mal Basis, Tisch B ${b}-mal`,
@@ -58,7 +65,11 @@ const T = {
 		run: "Run", on: "Task", pick: (min: number, max: number) => `Models at the table (${min} to ${max})`, perModel: "Agents per model", tokens: "Budget tokens", usd: "Budget $",
 		start: "Start run", stop: "Stop", none: "No models available. An admin allows them (FORUM_LLM=1 and credentials at the model process).",
 		need: (n: number) => `A run needs at least ${n} different models.`, noTask: "Create a plan task first.",
-		lead: "At least three AI models develop one plan together here. So far: after the roll call one of them writes the outline and the first draft of every section. The joint work on it (discussion, review, ballots) follows.",
+		lead: "At least three AI models develop one plan together here: they write, discuss, review each other and vote until a majority agrees. Two ways of working compete; the better one supplies the result.",
+		helpLink: "Help", theTable: "the table", side: "side by side", compareWith: "compare with", noCompare: "no comparison", previous: "the version before", unchanged: "unchanged", newSection: "new section", removedSection: "removed", linesChanged: (d: number, a: number) => `−${d} +${a} lines`, gap: (n: number) => `… ${n} unchanged line${n === 1 ? "" : "s"} …`, origin: "taken over from", settled: (n: number) => `${n} settled objection${n === 1 ? "" : "s"}`, exportIt: "Result with appendix (.md)", thisVersion: "this version (.md)", isResult: "result",
+		outcome: "Comparison of the two tables", prefers: (x: string) => `prefers table ${x}`, better: (x: string) => `table ${x} does better`, statTable: "Table", statRounds: "Rounds", statTokens: "Tokens", statCost: "Cost", statAgreed: "agreed", statApprovals: "Approvals", statBase: "Base", yes: "yes", no: "no",
+		standingsTitle: "Standings of the ways of working", standingsLead: (r: number) => `${r} run${r === 1 ? "" : "s"} with both tables so far`, timesBase: "times the base of the result", tokensAll: "tokens in all", ballotDetails: (n: number) => `Criteria per ballot (round ${n})`, met: "met", notMet: "not met", unbacked: "no words of the plan",
+		chosenHow: { person: "accepted by a person", result: "result of the run with both tables", majority: "accepted by the majority", draft: "newest draft, not accepted" },
 		table: "At the table", waiting: "no answer yet", active: "running", ended: "ended", budgetUsed: "budget used up", fewModels: "too few models", items: (d: number, o: number) => `${d} done, ${o} open`,
 		phase: { rollcall: "roll call", kickoff: "kickoff", discuss: "discussion", outline: "outline", pick: "picking the outline", draft: "draft", check: "check", turn: "turn", review: "ballots", revise: "revision", stalled: "stuck: a question to you", accepted: "accepted", done: "done", tables: "both tables at work", compare: "blind comparison", final: "joint final round" },
 		wayBoth: "Both tables in competition, then the comparison and a joint final round", baseIs: (x: string, how: string) => `base: table ${x} (${how})`, howAccepted: "the only one that agreed", howCompared: (a: number, n: number) => `preferred by ${a} of ${n} models`, howOnly: "the only document", finalIs: (a: number, n: number, ok?: boolean) => `final round: ${a} of ${n} points taken over${ok === undefined ? "" : ok ? ", accepted" : ", not accepted: the base stays"}`, resultIs: (x: string, v: number) => `result: table ${x}, version ${v}`, otherFirst: "the other table agreed first", standings: (r: number, a: number, b: number) => `${r} runs with both tables so far: table A the base ${a} times, table B ${b} times`,
@@ -108,12 +119,10 @@ export function CodemodeForum() {
 	const [repo, setRepo] = useState("");
 	const [ref, setRef] = useState("");
 	const [focus, setFocus] = useState<string | null>(null); // the block shown; null: the newest
-	const [version, setVersion] = useState<number | null>(null); // the version shown; null: the newest
-	const [view, setView] = useState<PlanView | null>(null);
-	const [talk, setTalk] = useState<Talk | null>(null);
+	const [tableSel, setTableSel] = useState<Table | "side" | null>(null); // the table shown; null: the block's; "side": both
+	const [talks, setTalks] = useState<{ blockId: string; by: Partial<Record<Table, Talk>> } | null>(null);
+	const [outcome, setOutcome] = useState<(Outcome & { blockId: string }) | null>(null);
 	const [say, setSay] = useState("");
-	const [objSection, setObjSection] = useState("");
-	const [objText, setObjText] = useState("");
 	const [answers_, setAnswers_] = useState<Record<string, string>>({}); // drafts of answers, by the question's id
 	const rid = encodeURIComponent(room);
 
@@ -126,7 +135,7 @@ export function CodemodeForum() {
 
 	useEffect(() => {
 		let dead = false, ws: WebSocket | null = null, retry = 0, timer: ReturnType<typeof setTimeout> | undefined;
-		setSnap(null); setFocus(null); setVersion(null); setView(null);
+		setSnap(null); setFocus(null); setTableSel(null);
 		const connect = () => {
 			ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/" + rid);
 			ws.onopen = () => setLive(true);
@@ -162,25 +171,32 @@ export function CodemodeForum() {
 
 	const blocks = snap?.blocks ?? [];
 	const block = blocks.find((b) => b.blockId === focus) ?? blocks.at(-1) ?? null;
-	const headVersion = block?.doc?.version ?? 0;
-	// a run with both tables may end with an older version as its result (a final round that did not agree)
-	const resultVersion = block?.result && block.result.table === block.table && !snap?.run?.active ? block.result.version : 0;
-	// the document's texts are fetched when the block, the chosen version or the newest version changes
+	// the tables that have a document on this block, and the one shown (both: side by side)
+	const docTables = (["A", "B"] as const).filter((x) => block?.heads[x]);
+	const sideBySide = tableSel === "side" && docTables.length === 2;
+	const shown: Table = tableSel && tableSel !== "side" && block?.heads[tableSel] ? tableSel : block?.table ?? "A";
+	// what changes whenever the work on the block goes on: the discussion, the documents and the outcome follow it
+	const r_ = snap?.run;
+	const bump = block ? `${block.blockId}:${block.table}:${block.talk.messages}:${block.talk.decisions}:${block.heads.A ?? 0}:${block.heads.B ?? 0}:${block.accepted?.version ?? 0}:${block.result?.version ?? 0}:${block.doc?.check?.ok ?? ""}:${r_?.phase ?? ""}:${r_?.active ?? ""}:${r_?.items.done ?? 0}:${r_?.objections?.raised ?? 0}:${r_?.objections?.open ?? 0}:${snap?.lines.at(-1)?.ts ?? 0}` : "";
+	// what changes a document as it is shown without a new version: its check, its acceptance, the run's phase
+	const docKey = block ? `${block.doc?.check?.ok ?? ""}:${block.doc?.check?.failures.length ?? 0}:${block.accepted?.version ?? 0}:${r_?.phase ?? ""}:${r_?.active ?? ""}` : "";
+	// the discussion of each table that is shown (its messages, decisions, objections and ballots)
+	const wanted = block ? (sideBySide ? docTables : [shown]).join("") : "";
 	useEffect(() => {
-		if (!block || !headVersion) { setView(null); return; }
+		if (!block) { setTalks(null); return; }
 		let dead = false;
-		api<PlanView>(`/rooms/${rid}/plan/${block.blockId}${version || resultVersion ? `?version=${version || resultVersion}` : ""}`).then((x) => { if (!dead) setView(x); }).catch(() => {});
+		Promise.all([...wanted].map(async (x) => [x, { blockId: block.blockId, ...(await api<Omit<Talk, "blockId">>(`/rooms/${rid}/talk/${block.blockId}?table=${x}`)) }] as const))
+			.then((got) => { if (!dead) setTalks({ blockId: block.blockId, by: Object.fromEntries(got) }); }).catch(() => {});
 		return () => { dead = true; };
-	}, [rid, block?.blockId, headVersion, version, resultVersion, block?.doc?.check?.ok, block?.doc?.check?.failures.length]);
-
-	// the discussion is fetched when the block or the number of its messages or decisions changes
-	const talkKey = block ? `${block.blockId}:${block.table}:${block.talk.messages}:${block.talk.decisions}:${block.doc?.version ?? 0}:${snap?.run?.objections?.raised ?? 0}:${snap?.run?.objections?.open ?? 0}:${snap?.run?.ballots?.round ?? 0}:${snap?.run?.phase ?? ""}:${block.accepted?.version ?? 0}` : "";
+	}, [rid, bump, wanted]);
+	// how the run with both tables went (the comparison, the numbers of each table), once there is something to show
+	const hasOutcome = !!block && (!!block.result || (r_?.blockId === block.blockId && !!r_.base));
 	useEffect(() => {
-		if (!block) { setTalk(null); return; }
+		if (!block || !hasOutcome) { setOutcome(null); return; }
 		let dead = false;
-		api<Omit<Talk, "blockId">>(`/rooms/${rid}/talk/${block.blockId}`).then((x) => { if (!dead) setTalk({ blockId: block.blockId, ...x }); }).catch(() => {});
+		api<Outcome>(`/rooms/${rid}/outcome/${block.blockId}`).then((x) => { if (!dead) setOutcome({ blockId: block.blockId, ...x }); }).catch(() => {});
 		return () => { dead = true; };
-	}, [rid, talkKey]);
+	}, [rid, bump, hasOutcome]);
 
 	const available = models?.enabled && models.on ? models.models : [];
 	const limits = snap?.limits ?? { minModels: 3, maxModels: 5, maxPerModel: 3, visitorTokens: 0 };
@@ -189,25 +205,26 @@ export function CodemodeForum() {
 	const act = async (fn: () => Promise<unknown>) => { setMsg(""); try { await fn(); } catch (e) { setMsg((e as Error).message); } };
 	const create = () => act(async () => {
 		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang || lang, outline, criteria, ...(docs.length ? { docs } : {}), ...(repo ? { repo: { name: repo, ref } } : {}) });
-		setBrief(""); setOutline(""); setCriteria(""); setDocs([]); setRepo(""); setRef(""); setFocus(r.blockId); setVersion(null);
+		setBrief(""); setOutline(""); setCriteria(""); setDocs([]); setRepo(""); setRef(""); setFocus(r.blockId); setTableSel(null);
 	});
 	const start = () => act(() => api(`/rooms/${rid}/run`, { blockId: block?.blockId, way, rounds, models: picked, perModel, budgetTokens: budgetTokens || undefined, budgetUsd: budgetUsd || undefined }));
 	const toggle = (label: string, add: boolean) => setChosen((cur) => { const n = new Set(cur); if (add) n.add(label); else n.delete(label); return n; });
 	const answers = new Map((snap?.rollcall ?? []).map((a) => [a.model, a]));
 	const table = run ? [...run.models].sort((a, b) => (run.aliases[a] ?? "").localeCompare(run.aliases[b] ?? "")) : [];
 	const runHere = run && block && run.blockId === block.blockId ? run : null;
-	const html = useMemo(() => (view?.doc.sections ?? []).map((s) => ({ ...s, html: renderSection(s.text) })), [view]);
 	const speak = (thread?: string) => act(async () => {
 		const text = thread ? answers_[thread] ?? "" : say;
 		await api(`/rooms/${rid}/message`, { blockId: block?.blockId, text, ...(thread ? { thread } : {}) });
 		if (thread) setAnswers_((cur) => { const { [thread]: _sent, ...rest } = cur; return rest; }); else setSay("");
 	});
-	const acceptNow = () => act(() => api(`/rooms/${rid}/accept`, { blockId: block?.blockId, version: view?.doc.version }));
-	const objectNow = () => act(async () => { await api(`/rooms/${rid}/objection`, { blockId: block?.blockId, section: objSection || block?.doc?.sections[0]?.sectionId, text: objText }); setObjText(""); });
-	const said = talk && block && talk.blockId === block.blockId ? talk : null;
+	const talkOf = (x: Table) => (talks && block && talks.blockId === block.blockId ? talks.by[x] ?? null : null);
+	const said = talkOf(shown);
+	const result = outcome && block && outcome.blockId === block.blockId ? outcome : null;
+	// a run with both tables may end with an older version as its result (a final round that did not agree)
+	const resultOf = (x: Table) => (block?.result && block.result.table === x && !snap?.run?.active ? block.result.version : 0);
 	const who = (m: { model: string; author: string }) => (m.model === "human" ? `${t.you} (${m.author})` : name(m.model));
 	const threads = (said?.messages ?? []).filter((m) => m.thread === m.msgId && m.kind !== "understanding");
-	const name = (model: string) => (runHere?.aliases[model] ? `${runHere.aliases[model]} · ${model}` : model);
+	const name = (model: string) => (model === "table" ? t.theTable : model === "human" ? t.you : runHere?.aliases[model] ? `${runHere.aliases[model]} · ${model}` : model);
 
 	return (
 		<>
@@ -217,6 +234,7 @@ export function CodemodeForum() {
 				<span className="pill">{t.room}: {room}</span>
 				<span className={"pill" + (live ? " pill--accent" : "")}>{live ? t.live : t.offline}</span>
 				<span className="pill">{available.length ? `${available.length} ${t.models}` : t.off}</span>
+				<a className="toplink" href={`/help?lang=${lang}`}>{t.helpLink}</a>
 				<ThemeControls lang={theme.lang} setLang={theme.setLang} mode={theme.mode} changeMode={theme.changeMode} palette={theme.palette} changePalette={theme.changePalette} />
 			</header>
 			<main>
@@ -297,7 +315,7 @@ export function CodemodeForum() {
 					<p className="lead">{t.lead}</p>
 					{blocks.length > 1 ? (
 						<div className="tasks" role="tablist" aria-label={t.tasks}>
-							{blocks.map((b) => <button key={b.blockId} type="button" role="tab" aria-selected={b.blockId === block?.blockId} className={"tasks__tab" + (b.blockId === block?.blockId ? " is-active" : "")} onClick={() => { setFocus(b.blockId); setVersion(null); }}>{firstLine(b.brief, 48)}</button>)}
+							{blocks.map((b) => <button key={b.blockId} type="button" role="tab" aria-selected={b.blockId === block?.blockId} className={"tasks__tab" + (b.blockId === block?.blockId ? " is-active" : "")} onClick={() => { setFocus(b.blockId); setTableSel(null); }}>{firstLine(b.brief, 48)}</button>)}
 						</div>
 					) : null}
 					{block ? (
@@ -330,7 +348,6 @@ export function CodemodeForum() {
 											{runHere.result ? <span className="pill pill--accent">{t.resultIs(runHere.result.table, runHere.result.version)}</span> : null}
 										</div>
 									) : null}
-									{snap?.standings?.runs ? <div className="fieldlabel">{t.standings(snap.standings.runs, snap.standings.A, snap.standings.B)}</div> : null}
 									{runHere.note ? <div className="notice">{runHere.note}</div> : null}
 									<div className="fieldlabel">{t.table}</div>
 									<div className="answers">
@@ -346,8 +363,15 @@ export function CodemodeForum() {
 									</div>
 								</div>
 							) : null}
+							{docTables.length === 2 ? (
+								<div className="tasks" role="tablist" aria-label={t.way}>
+									{docTables.map((x) => <button key={x} type="button" role="tab" aria-selected={!sideBySide && shown === x} className={"tasks__tab" + (!sideBySide && shown === x ? " is-active" : "")} onClick={() => setTableSel(x)}>{t.tableName(x)}{block.result?.table === x ? ` · ${t.isResult}` : ""}</button>)}
+									<button type="button" role="tab" aria-selected={sideBySide} className={"tasks__tab" + (sideBySide ? " is-active" : "")} onClick={() => setTableSel("side")}>{t.side}</button>
+								</div>
+							) : null}
+							{result && (result.stat || result.compares.length) ? <OutcomePanel t={t} locale={locale} o={result} name={name} /> : null}
 							<div className="panel">
-								<h2>{t.talk}</h2>
+								<h2>{t.talk}{docTables.length === 2 ? ` · ${t.tableName(shown)}` : ""}</h2>
 								{said && (said.messages.length || said.decisions.length || said.objections.length || said.ballots.length) ? (
 									<div className="talk">
 										{said.decisions.map((x) => <div key={x.thread} className="talk__decision"><b>{t.decided}</b> {x.text} <span className="muted">({t.agreed(x.agreed.length, x.of)})</span></div>)}
@@ -360,9 +384,22 @@ export function CodemodeForum() {
 										{said.ballots.length ? (
 											<details open>
 												<summary>{t.ballots}</summary>
-												{[...new Set(said.ballots.map((b) => b.round))].map((n) => (
-													<div key={n} className="msg"><b>{t.roundN(n)}</b>{said.ballots.filter((b) => b.round === n).map((b) => <span key={b.model} className={"chip " + (b.counts ? "chip--ok" : b.vote === "approve" ? "chip--wait" : "chip--bad")} title={b.why ?? ""}>{name(b.model)}: {b.vote === "approve" ? t.approve : t.reject}{b.vote === "approve" && !b.counts ? ` (${t.notCounted})` : ""}</span>)}</div>
-												))}
+												{[...new Set(said.ballots.map((b) => `${b.round}:${b.version}`))].map((rv) => { const n = Number(rv.split(":")[0]), v = Number(rv.split(":")[1]); return (
+													<div key={rv} className="msg"><b>{t.roundN(n)} · {t.version} {v}</b>{said.ballots.filter((b) => b.round === n && b.version === v).map((b) => <span key={b.model} className={"chip " + (b.counts ? "chip--ok" : b.vote === "approve" ? "chip--wait" : "chip--bad")} title={b.why ?? ""}>{name(b.model)}: {b.vote === "approve" ? t.approve : t.reject}{b.vote === "approve" && !b.counts ? ` (${t.notCounted}${b.why ? `: ${b.why}` : ""})` : ""}</span>)}</div>
+												); })}
+												{(() => {
+													const last = Math.max(...said.ballots.map((b) => b.round));
+													return (
+														<details className="ballots">
+															<summary>{t.ballotDetails(last)}</summary>
+															{said.ballots.filter((b) => b.round === last).map((b) => (
+																<div key={b.model} className="msg"><b>{name(b.model)}</b>
+																	<ul>{b.criteria.map((c) => <li key={c.n}><span className={"chip " + (c.met ? (c.backed === false ? "chip--wait" : "chip--ok") : "chip--bad")}>{c.n}: {c.met ? t.met : t.notMet}{c.met && c.backed === false ? ` (${t.unbacked})` : ""}</span> <span className="muted">{c.text}</span></li>)}</ul>
+																</div>
+															))}
+														</details>
+													);
+												})()}
 											</details>
 										) : null}
 										{said.objections.length ? (
@@ -399,46 +436,14 @@ export function CodemodeForum() {
 									<button type="submit" className="btn" disabled={!say.trim()}>{t.send}</button>
 								</form>
 							</div>
-							<div className="panel">
-								<h2>{t.doc}</h2>
-								{block.doc && view && view.blockId === block.blockId ? (
-									<>
-										<div className="runline">
-											<label htmlFor="version" className="muted">{t.version}</label>
-											<select id="version" value={version ?? ""} onChange={(e) => setVersion(e.target.value ? Number(e.target.value) : null)}>
-												<option value="">{t.newest} ({block.doc.version})</option>
-												{[...view.versions].reverse().map((v) => <option key={v.version} value={v.version}>{v.version} · {name(v.model)}</option>)}
-											</select>
-											<span className="pill">{(view.doc.bytes / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB</span>
-											<span className={"chip " + (view.check ? (view.check.ok ? "chip--ok" : "chip--bad") : "chip--wait")}>{view.check ? (view.check.ok ? t.checkOk : t.checkBad(view.check.failures.length)) : t.unchecked}</span>
-											{block.accepted ? <span className="chip chip--best">{t.acceptedBy(block.accepted.version, block.accepted.by === "person" ? t.byPerson(block.accepted.who ?? "") : t.byMajority(block.accepted.approvals.length, block.accepted.of))}</span> : null}
-											<a className="toplink" href={`/api/rooms/${rid}/plan/${block.blockId}.md`} target="_blank" rel="noreferrer">{t.markdown}</a>
-										</div>
-										{view.check && !view.check.ok ? (
-											<details className="findings" open>
-												<summary>{t.found}</summary>
-												<ul>{view.check.failures.map((f, i) => <li key={i}><b>{view.doc.sections.find((x) => x.sectionId === f.sectionId)?.title ?? t.whole}:</b> {f.text}</li>)}</ul>
-											</details>
-										) : null}
-										<div className="row">
-											<button type="button" className="btn" onClick={() => void acceptNow()}>{t.acceptIt}</button>
-											<select aria-label={t.objectTo} value={objSection} onChange={(e) => setObjSection(e.target.value)}>{view.doc.sections.map((x) => <option key={x.sectionId} value={x.sectionId}>{x.title}</option>)}</select>
-											<input className="wide" maxLength={600} placeholder={t.objectPh} aria-label={t.objectPh} value={objText} onChange={(e) => setObjText(e.target.value)} />
-											<button type="button" className="btn" disabled={!objText.trim()} onClick={() => void objectNow()}>{t.objectTo}</button>
-										</div>
-										<article className="doc">
-											{html.map((s) => (
-												<section key={s.sectionId} className={view.doc.changed.includes(s.sectionId) ? "doc__section is-changed" : "doc__section"}>
-													<h3>{s.title} <span className="muted">{t.rev} {s.rev} · {name(s.model)}{view.doc.changed.includes(s.sectionId) ? ` · ${t.changed}` : ""}</span></h3>
-													{s.rev === 1 ? <p className="muted">{t.intent} {s.text}</p> : <div dangerouslySetInnerHTML={{ __html: s.html }} />}
-												</section>
-											))}
-										</article>
-									</>
-								) : <div className="empty">{t.noDoc}</div>}
+							<div className={sideBySide ? "docs docs--side" : "docs"}>
+								{(sideBySide ? docTables : [shown]).map((x) => (
+									<DocPane key={`${block.blockId}:${x}`} t={t} locale={locale} rid={rid} block={block} table={x} head={block.heads[x] ?? 0} titled={docTables.length === 2} resultVersion={resultOf(x)} objections={talkOf(x)?.objections ?? []} docKey={docKey} name={name} act={act} />
+								))}
 							</div>
 						</>
 					) : <div className="empty">{t.empty}</div>}
+					{snap?.standings?.runs ? <StandingsPanel t={t} locale={locale} s={snap.standings} /> : null}
 					{snap?.lines.length ? (
 						<div className="panel">
 							<h2>{t.log}</h2>
@@ -457,5 +462,179 @@ export function CodemodeForum() {
 				</div>
 			) : null}
 		</>
+	);
+}
+
+type Text = (typeof T)[keyof typeof T];
+type Named = (model: string) => string;
+
+/** One table's document: a version of it, optionally as the difference to another version, with the objections beside
+ *  their sections, the checker's findings, and the person's yes and no. */
+function DocPane({ t, locale, rid, block, table, head, titled, resultVersion, objections, docKey, name, act }: { t: Text; locale: string; rid: string; block: Block; table: Table; head: number; titled: boolean; resultVersion: number; objections: Objection[]; docKey: string; name: Named; act: (fn: () => Promise<unknown>) => Promise<void> }) {
+	const [version, setVersion] = useState<number | null>(null); // the version shown; null: the result, else the newest
+	const [against, setAgainst] = useState<"" | "prev" | number>(""); // the version it is compared with
+	const [view, setView] = useState<PlanView | null>(null);
+	const [base, setBase] = useState<PlanView | null>(null);
+	const [objSection, setObjSection] = useState("");
+	const [objText, setObjText] = useState("");
+	const want = version || resultVersion || 0;
+	// the texts are fetched when the version asked for, the newest version or the state of the work changes
+	useEffect(() => {
+		if (!head) { setView(null); return; }
+		let dead = false;
+		api<PlanView>(`/rooms/${rid}/plan/${block.blockId}?table=${table}${want ? `&version=${want}` : ""}`).then((x) => { if (!dead) setView(x); }).catch(() => {});
+		return () => { dead = true; };
+	}, [rid, block.blockId, table, head, want, docKey]);
+	const shownVersion = view?.doc.version ?? 0;
+	const baseVersion = !shownVersion || against === "" ? 0 : against === "prev" ? shownVersion - 1 : against === shownVersion ? 0 : against;
+	useEffect(() => {
+		if (!baseVersion) { setBase(null); return; }
+		let dead = false;
+		api<PlanView>(`/rooms/${rid}/plan/${block.blockId}?table=${table}&version=${baseVersion}`).then((x) => { if (!dead) setBase(x); }).catch(() => {});
+		return () => { dead = true; };
+	}, [rid, block.blockId, table, baseVersion]);
+
+	const sections = useMemo(() => (view?.doc.sections ?? []).map((s) => ({ ...s, html: renderSection(s.text) })), [view]);
+	// the difference to the other version, section by section: what a section was there, and what is gone
+	const delta = useMemo(() => {
+		if (!view || !base || base.doc.version !== baseVersion) return null;
+		const old = new Map(base.doc.sections.map((s) => [s.sectionId, s]));
+		const by = new Map(view.doc.sections.map((s): [string, { kind: "new" | "same" | "changed"; lines: Line[] }] => {
+			const was = old.get(s.sectionId);
+			if (!was) return [s.sectionId, { kind: "new", lines: diffText("", s.text) }];
+			if (was.hash === s.hash) return [s.sectionId, { kind: "same", lines: [] }];
+			return [s.sectionId, { kind: "changed", lines: diffText(was.title === s.title ? was.text : `# ${was.title}\n${was.text}`, was.title === s.title ? s.text : `# ${s.title}\n${s.text}`) }];
+		}));
+		return { by, removed: base.doc.sections.filter((s) => !view.doc.sections.some((x) => x.sectionId === s.sectionId)) };
+	}, [view, base, baseVersion]);
+
+	const acceptNow = () => act(() => api(`/rooms/${rid}/accept`, { blockId: block.blockId, version: view?.doc.version, table }));
+	const objectNow = () => act(async () => { await api(`/rooms/${rid}/objection`, { blockId: block.blockId, table, section: objSection || view?.doc.sections[0]?.sectionId, text: objText }); setObjText(""); });
+	const standing = (o: Objection) => o.state === "open" || o.state === "declined";
+	const isResultTable = (block.result?.table ?? block.table) === table;
+
+	return (
+		<div className="panel">
+			<h2>{t.doc}{titled ? ` · ${t.tableName(table)}` : ""}{block.result?.table === table ? ` · ${t.isResult}` : ""}</h2>
+			{head && view && view.blockId === block.blockId ? (
+				<>
+					<div className="runline">
+						<label htmlFor={`version-${table}`} className="muted">{t.version}</label>
+						<select id={`version-${table}`} value={version ?? ""} onChange={(e) => setVersion(e.target.value ? Number(e.target.value) : null)}>
+							<option value="">{resultVersion ? `${t.isResult} (${resultVersion})` : `${t.newest} (${head})`}</option>
+							{[...view.versions].reverse().map((v) => <option key={v.version} value={v.version}>{v.version} · {name(v.model)}</option>)}
+						</select>
+						{view.versions.length > 1 ? (
+							<>
+								<label htmlFor={`against-${table}`} className="muted">{t.compareWith}</label>
+								<select id={`against-${table}`} value={against} onChange={(e) => setAgainst(e.target.value === "" ? "" : e.target.value === "prev" ? "prev" : Number(e.target.value))}>
+									<option value="">{t.noCompare}</option>
+									{shownVersion > 1 ? <option value="prev">{t.previous} ({shownVersion - 1})</option> : null}
+									{[...view.versions].reverse().filter((v) => v.version !== shownVersion).map((v) => <option key={v.version} value={v.version}>{v.version} · {name(v.model)}</option>)}
+								</select>
+							</>
+						) : null}
+						<span className="pill">{(view.doc.bytes / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB</span>
+						<span className={"chip " + (view.check ? (view.check.ok ? "chip--ok" : "chip--bad") : "chip--wait")}>{view.check ? (view.check.ok ? t.checkOk : t.checkBad(view.check.failures.length)) : t.unchecked}</span>
+						{block.accepted && block.table === table ? <span className="chip chip--best">{t.acceptedBy(block.accepted.version, block.accepted.by === "person" ? t.byPerson(block.accepted.who ?? "") : t.byMajority(block.accepted.approvals.length, block.accepted.of))}</span> : null}
+						{isResultTable ? <a className="toplink" href={`/api/plan/${rid}/${block.blockId}.md`} target="_blank" rel="noreferrer">{t.exportIt}</a> : null}
+						<a className="toplink" href={`/api/rooms/${rid}/plan/${block.blockId}.md?table=${table}&version=${view.doc.version}&plain=1`} target="_blank" rel="noreferrer">{t.thisVersion}</a>
+					</div>
+					{view.check && !view.check.ok ? (
+						<details className="findings" open>
+							<summary>{t.found}</summary>
+							<ul>{view.check.failures.map((f, i) => <li key={i}><b>{view.doc.sections.find((x) => x.sectionId === f.sectionId)?.title ?? t.whole}:</b> {f.text}</li>)}</ul>
+						</details>
+					) : null}
+					<div className="row">
+						<button type="button" className="btn" onClick={() => void acceptNow()}>{t.acceptIt}</button>
+						<select aria-label={t.objectTo} value={objSection} onChange={(e) => setObjSection(e.target.value)}>{view.doc.sections.map((x) => <option key={x.sectionId} value={x.sectionId}>{x.title}</option>)}</select>
+						<input className="wide" maxLength={600} placeholder={t.objectPh} aria-label={t.objectPh} value={objText} onChange={(e) => setObjText(e.target.value)} />
+						<button type="button" className="btn" disabled={!objText.trim()} onClick={() => void objectNow()}>{t.objectTo}</button>
+					</div>
+					<article className="doc">
+						{sections.map((s) => {
+							const d = delta?.by.get(s.sectionId), mine = objections.filter((o) => o.sectionId === s.sectionId), settled = mine.filter((o) => !standing(o) && o.state !== "note").length;
+							const marked = d ? d.kind !== "same" : view.doc.changed.includes(s.sectionId), n = d ? diffCount(d.lines) : null;
+							return (
+								<section key={s.sectionId} className={marked ? "doc__section is-changed" : "doc__section"}>
+									<h3>{s.title} <span className="muted">{t.rev} {s.rev} · {name(s.model)}{d ? ` · ${d.kind === "same" ? t.unchanged : d.kind === "new" ? t.newSection : t.linesChanged(n!.del, n!.add)}` : view.doc.changed.includes(s.sectionId) ? ` · ${t.changed}` : ""}</span></h3>
+									{s.origin ? <p className="muted doc__origin">{t.origin} {s.origin}</p> : null}
+									{mine.filter(standing).map((o) => <div key={o.objId} className="doc__objection"><span className={"chip " + (o.state === "open" ? "chip--wait" : "chip--bad")}>{t.objStates[o.state]}</span> <b>{o.model === "human" ? t.you : name(o.model)}</b> {o.defect} <span className="muted">{t.fix}: {o.fix}</span></div>)}
+									{settled ? <div className="muted doc__settled">{t.settled(settled)}</div> : null}
+									{d ? (d.kind === "same" ? null : <DiffLines t={t} lines={d.lines} />) : s.rev === 1 ? <p className="muted">{t.intent} {s.text}</p> : <div dangerouslySetInnerHTML={{ __html: s.html }} />}
+								</section>
+							);
+						})}
+						{(delta?.removed ?? []).map((s) => (
+							<section key={s.sectionId} className="doc__section is-changed">
+								<h3>{s.title} <span className="muted">{t.removedSection}</span></h3>
+								<DiffLines t={t} lines={diffText(s.text, "")} />
+							</section>
+						))}
+					</article>
+				</>
+			) : <div className="empty">{t.noDoc}</div>}
+		</div>
+	);
+}
+
+/** The lines of a difference: removed and added lines marked, the words that differ inside a changed line marked
+ *  again, long unchanged stretches cut. The text is shown as text, never as HTML. */
+function DiffLines({ t, lines }: { t: Text; lines: Line[] }) {
+	return (
+		<pre className="diff">
+			{withContext(lines).map((l, i) => (l.op === "gap" ? <span key={i} className="diff__gap">{t.gap(l.count)}{"\n"}</span> : (
+				<span key={i} className={l.op === "same" ? "diff__same" : l.op === "del" ? "diff__del" : "diff__add"}>
+					{l.op === "same" ? "  " : l.op === "del" ? "− " : "+ "}
+					{l.words ? l.words.map((w, k) => (w.op === "same" ? w.text : <mark key={k}>{w.text}</mark>)) : l.text}{"\n"}
+				</span>
+			)))}
+		</pre>
+	);
+}
+
+/** How the run with both tables went: the result and why, each table in numbers, and every model's blind comparison. */
+function OutcomePanel({ t, locale, o, name }: { t: Text; locale: string; o: Outcome; name: Named }) {
+	return (
+		<div className="panel">
+			<h2>{t.outcome}</h2>
+			{o.chosen ? <div className="runline"><span className="pill pill--accent">{t.resultIs(o.chosen.table, o.chosen.version)}</span><span className="pill">{t.chosenHow[o.chosen.how]}</span></div> : null}
+			{o.stat ? (
+				<table className="stats">
+					<thead><tr><th>{t.statTable}</th><th>{t.statRounds}</th><th>{t.statTokens}</th><th>{t.statCost}</th><th>{t.statAgreed}</th><th>{t.statApprovals}</th><th>{t.statBase}</th></tr></thead>
+					<tbody>
+						{(["A", "B"] as const).map((x) => { const s = o.stat!.tables[x]; return s ? <tr key={x}><td>{x}</td><td>{s.rounds}</td><td>{s.tokens.toLocaleString(locale)}</td><td>{s.costUsd ? `$${s.costUsd.toFixed(4)}` : "–"}</td><td>{s.accepted ? t.yes : t.no}</td><td>{s.approvals}</td><td>{o.stat!.base === x ? `✓${o.stat!.prefer ? ` (${o.stat!.prefer[x]} / ${o.stat!.prefer.A + o.stat!.prefer.B})` : ""}` : ""}</td></tr> : null; })}
+					</tbody>
+				</table>
+			) : null}
+			{o.stat?.final ? <div className="fieldlabel">{t.finalIs(o.stat.final.agreed, o.stat.final.points, o.stat.final.accepted)}</div> : null}
+			{o.compares.map((c) => (
+				<details key={c.model} className="compare">
+					<summary><b>{name(c.model)}</b> {t.prefers(c.prefer)}</summary>
+					<ul>
+						{c.criteria.map((k) => <li key={k.n}><span className="chip">{k.n}: {t.tableName(k.prefer)}</span> {k.text}</li>)}
+						{c.points.map((p, i) => <li key={`p${i}`}><span className="chip chip--ok">{t.better(p.table)}</span> {p.text} <span className="muted">„{p.fromTitle}“ → „{p.intoTitle}“</span></li>)}
+					</ul>
+				</details>
+			))}
+		</div>
+	);
+}
+
+/** Over all runs with both tables: how often each way of working supplied the base of the result, and what it used. */
+function StandingsPanel({ t, locale, s }: { t: Text; locale: string; s: NonNullable<Snapshot["standings"]> }) {
+	return (
+		<div className="panel">
+			<h2>{t.standingsTitle}</h2>
+			<div className="fieldlabel">{t.standingsLead(s.runs)}</div>
+			<table className="stats">
+				<thead><tr><th>{t.way}</th><th>{t.timesBase}</th><th>{t.tokensAll}</th></tr></thead>
+				<tbody>
+					<tr><td>{t.wayA}</td><td>{s.A}</td><td>{(s.tokens?.A ?? 0).toLocaleString(locale)}</td></tr>
+					<tr><td>{t.wayB}</td><td>{s.B}</td><td>{(s.tokens?.B ?? 0).toLocaleString(locale)}</td></tr>
+				</tbody>
+			</table>
+		</div>
 	);
 }

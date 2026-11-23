@@ -63,8 +63,11 @@ so a relative path still means the repository root (`checks/root-scripts.mjs` ke
   space; its base is copied from codemode-chat, it imports nothing from there; variables `FORUM_*`, port 4100):
   `npm --prefix codemode-forum run dev`, `npm run codemode-forum` (after `npm --prefix codemode-forum run build`), tests
   `npm run test:codemode-forum` (they start the processes, with the fake models of `tests/fakes.ts`), typecheck
-  `npm --prefix codemode-forum run typecheck` (own tsconfig, not part of the root `tsc`). No Docker and no Rust space server
-  yet (phases 10 and 11): it runs on this machine only.
+  `npm --prefix codemode-forum run typecheck` (own tsconfig, not part of the root `tsc`); the result of a plan task as Markdown with
+  its generated appendix: `node --experimental-strip-types codemode-forum/server/export-plan.ts --room <room> --block <id> --out <file>`;
+  Docker `npm --prefix codemode-forum run docker:image`, then `docker:local:up|down|logs` (one container per role on this
+  machine, compose project `phi-spaces-forum-local`, port 4110, space 4190; changes containers on this machine). No Rust
+  space server yet (phase 11): it runs on this machine only, never on big or nano.
 - spaces-mmo (`spaces-mmo/`: MMORPG engine, first world Leuchtfeuer; processes space, world, web; PixiJS map; docs in
   `spaces-mmo/docs/`, plan and phases in `spaces-mmo/docs/phasen.en.md`): `npm --prefix spaces-mmo run build` (the page as static files in `spaces-mmo/out/` with `out/BUILD_ID`, which the web process serves, `server/pages.ts`; `--dev` keeps Next's dev server), then
   `npm --prefix spaces-mmo start` (port 3900; `SPACES_MMO_MEM=1` in memory; model calls only with `SPACES_MMO_LLM=1`, they cost tokens), tests `npm --prefix spaces-mmo test` (`npm --prefix spaces-mmo run test:durable`: the same suites with the durable NPC dialogues on, `tests/test-env-durable.ts`, `tests/durable-deviations.ts`; they start the

@@ -22,3 +22,5 @@ codemode-chat/.local
 spaces-mmo/.next
 spaces-mmo/.local
 **/rust/target
+codemode-forum/.next
+codemode-forum/.local

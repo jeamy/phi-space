@@ -4,12 +4,15 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 to 9 of that plan.** The application has its processes, its space, the run mechanics, the admin
+**Status: phases 1 to 10 of that plan.** The application has its processes, its space, the run mechanics, the admin
 login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2),
 read-only sources the models read in (phase 3), the discussion of the table (phase 4), the checker (phase 5), table
 B, where the models write at the same time (phase 6), **ballots**: the table changes the plan until a majority of
 the models agrees that it can be carried out (phase 7), table A, where the models take turns (phase 8), and **both
-tables in one run**: the two ways of working compete, and the better document is the base of the result (phase 9). A run begins with the **roll call**, the **kickoff** and the
+tables in one run**: the two ways of working compete, and the better document is the base of the result (phase 9).
+The page shows the difference between versions, both documents side by side, the comparison and the standings; the
+result is exported with a generated appendix; there are help pages in German and English and a Docker test bed on
+this machine (phase 10). A run begins with the **roll call**, the **kickoff** and the
 **replies**; then it writes at one of two tables:
 
 - **table B** (`way: "parallel"`): every model proposes an outline and the table picks one; the sections are dealt
@@ -34,6 +37,42 @@ to five models, a budget, and start the run on it. Each model gets a name for th
 time; the models learn each other only by these names. The page shows who is at the table, how far the run is, what it
 used, and the document: every version, who wrote which section, and which sections a version changed. A section that
 is not written yet shows what it is to say. The system bar lists the processes and today's model calls.
+
+Beside the document (`client/App.tsx`, `client/lib/diff.ts`):
+
+- **versions and their difference**: choose a version and one to compare it with; every section then shows the lines
+  removed and added, and inside a changed line the words that differ; unchanged sections are marked as such. The
+  difference is shown as text, never as HTML;
+- **both documents side by side**, when both tables have one; the tabs above choose a table or both;
+- **objections beside their sections**: what still stands (open, or declined and so standing for its raiser), and how
+  many are settled;
+- **ballots** per round and version, with every model's rating of each criterion;
+- **the comparison** after a run with both tables: the result and why, each table's rounds, use and approvals, and
+  every model's blind comparison with its reasons;
+- **the standings** over all runs with both tables: how often each way of working was the base of the result;
+- **help** (`/help`, `client/help/articles.ts`): eight articles in German and English.
+
+## The result and its export
+
+`GET /api/plan/<room>/<block>.md` (the same under `/api/rooms/<room>/plan/<block>.md`) returns the result as
+Markdown (`server/export.ts`). Which version that is: the one a person accepted (their word is final); else the result
+of the newest run with both tables; else the version a table accepted; else the newest draft, and the export says that
+nobody accepted it. `?table=` and `?version=` name another version, `?plain=1` leaves the appendix out.
+
+After the plan comes an **appendix a program generates** from the entries of the run, in the language of the task; no
+model writes it: the brief and the criteria, the sources with their commit, the models under their names at the table,
+which version this is and who accepted it, the way of working and, after a run with both tables, the base and why,
+the final round and each table's numbers, the sections taken over from the other table, the table's decisions, the
+questions to the person that stayed unanswered (the assumptions), every ballot, the objections still standing with
+who holds them, the notes, and the cost. The appendix begins after a line with a fixed marker, so what is before it
+is the plan and nothing else.
+
+```bash
+node --experimental-strip-types codemode-forum/server/export-plan.ts --room <room> --block <id> --out docs/plan.md
+```
+
+writes the same to a file (`--table`, `--version`, `--plain` as above; `--space` names another space). A person runs
+it: no process of the forum writes into a repository.
 
 ## The plan task and its document
 
@@ -295,11 +334,23 @@ npm --prefix codemode-forum run space         # or one process: space | sources 
 npm --prefix codemode-forum run typecheck     # own tsconfig, not part of the root tsc
 npm run test:codemode-forum                   # tests (they start the processes themselves, with fake models)
 npm --prefix codemode-forum run backup        # a consistent copy of the running store
+npm --prefix codemode-forum run docker:image  # the image (typecheck and build inside)
+npm --prefix codemode-forum run docker:local:up     # one container per role on this machine, http://localhost:4110
+npm --prefix codemode-forum run docker:local:logs   # … :down stops them; docker:test runs the suite in a container
 ```
 
 `server/restore.ts --from <file> --yes` puts a backup back while the space is stopped. Configuration:
-`codemode-forum/.env.example`. Ports: web 4100, space 4180 when it listens on TCP. Docker and the Rust space server
-(`rust/forum-space`) come with phases 10 and 11; until then the application runs on this machine only.
+`codemode-forum/.env.example`. Ports: web 4100, space 4180 when it listens on TCP.
+
+**Docker** (`docker/Dockerfile`, `docker/docker-compose.yml`, taken over from codemode-chat): one image, one container
+per role. The local test bed (`docker:local:up`, compose project `phi-spaces-forum-local`) runs the space and the
+checker as host "nano" and web, agents, model and sources as host "big", over TCP as between two machines; it
+publishes the page on 4110 and the space on 4190, both on loopback. The repositories a task may read in are mounted
+read-only into the sources container only, whose file system is read-only as well: `FORUM_REPOS_DIR` is the directory
+on this machine, `FORUM_DOCKER_REPOS` names the repositories as the container sees them
+(`FORUM_REPOS_DIR=/home/me/src FORUM_DOCKER_REPOS=phi-space=/repos/phi-space`). The scripts read
+`codemode-forum/.env` when there is one. The Rust space server (`rust/forum-space`) comes with phase 11; until then
+the application runs on this machine only (big and nano run only the Rust implementation).
 
 ## Tests
 
@@ -333,7 +384,13 @@ the middle of a turn. `tests/both.test.ts` covers runs with both tables: the rea
 the points for the final round; a run in which both tables agree, the models compare blind and the final round takes
 over two sections that name their origin; a final round that does not agree, which leaves the base as the result; a
 table that takes over a section of the other, which agreed first, and then begins no further round; the tables'
-shares of the budget; and a stopped run, which takes its tables with it.
+shares of the budget; and a stopped run, which takes its tables with it. `tests/export.test.ts` covers the
+difference between two texts (lines, the words inside a changed line, the cut of long unchanged stretches); the export
+of a run with both tables, which equals the result text for text, with its appendix, the same through both addresses
+and through `server/export-plan.ts`, and what the page is told of the comparison; the export after a failed final
+round (the base, not the newest version), a German task with a German appendix and a declined objection named with
+who holds it, and a version the person accepted. `tests/help.test.ts` holds the help articles to both languages, the
+same anchors in each, and links that lead somewhere.
 
 ## Safety notes
 

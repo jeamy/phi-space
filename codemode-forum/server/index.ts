@@ -140,20 +140,24 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				const admin = (await hub.modelInfo()).admin;
 				return json(res, 200, req.method === "POST" ? { ...admin, ...(await hub.adminChoice()) } : admin);
 			}
-			const pl = /^\/api\/rooms\/([^/]+)\/plan\/([a-z0-9]{1,40})(\.md)?$/.exec(p);
+			// the result as Markdown with its appendix: /api/plan/<room>/<block>.md (the plan's address), the same under
+			// /api/rooms; ?table= and ?version= name another version, ?plain=1 leaves the appendix out
+			const pl = /^\/api\/rooms\/([^/]+)\/plan\/([a-z0-9]{1,40})(\.md)?$/.exec(p) ?? /^\/api\/plan\/([^/]+)\/([a-z0-9]{1,40})(\.md)$/.exec(p);
 			if (pl && req.method === "GET") {
 				if (!ID.test(pl[1]!)) return json(res, 400, { error: "Invalid room id" });
-				if (pl[3]) {
-					const md = await hub.planMarkdown(pl[1]!, pl[2]!, url.searchParams.get("table"));
-					if (md === null) return json(res, 404, { error: "No document yet" });
-					res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "cache-control": "no-store" });
-					return res.end(md);
-				}
 				const v = url.searchParams.get("version");
 				if (v !== null && !/^\d{1,6}$/.test(v)) return json(res, 400, { error: "Invalid version" });
+				if (pl[3]) {
+					const md = await hub.planMarkdown(pl[1]!, pl[2]!, { table: url.searchParams.get("table"), ...(v === null ? {} : { version: Number(v) }), plain: url.searchParams.get("plain") === "1" });
+					if (md === null) return json(res, 404, { error: "No document yet" });
+					res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "cache-control": "no-store", ...(url.searchParams.get("download") === "1" ? { "content-disposition": `attachment; filename="plan-${pl[2]}.md"` } : {}) });
+					return res.end(md);
+				}
 				const got = await hub.plan(pl[1]!, pl[2]!, v === null ? undefined : Number(v), url.searchParams.get("table"));
 				return got ? json(res, 200, got) : json(res, 404, { error: "No document yet" });
 			}
+			const oc = /^\/api\/rooms\/([^/]+)\/outcome\/([a-z0-9]{1,40})$/.exec(p);
+			if (oc && req.method === "GET") return ID.test(oc[1]!) ? json(res, 200, await hub.outcome(oc[1]!, oc[2]!)) : json(res, 400, { error: "Invalid room id" });
 			const tk = /^\/api\/rooms\/([^/]+)\/talk\/([a-z0-9]{1,40})$/.exec(p);
 			if (tk && req.method === "GET") return ID.test(tk[1]!) ? json(res, 200, await hub.talk(tk[1]!, tk[2]!, url.searchParams.get("table"))) : json(res, 400, { error: "Invalid room id" });
 			const m = /^\/api\/rooms\/([^/]+)(?:\/(task|run|stop|message|accept|objection))?$/.exec(p);

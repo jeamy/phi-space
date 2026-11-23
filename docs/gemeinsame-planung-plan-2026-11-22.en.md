@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 to 7 implemented on 2026-11-22, phases 8 and 9 on 2026-11-23 (`codemode-forum/`, see its README); phases 0 and 10 to 12 open. Second version,
+Status: phases 1 to 7 implemented on 2026-11-22, phases 8 to 10 on 2026-11-23 (`codemode-forum/`, see its README); phases 0, 11 and 12 open. Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -339,6 +339,28 @@ before any measurement; phase 0 replaces it with a measured number.
 - `node --experimental-strip-types server/export-plan.ts --room <room> --block <id> --out <file>` writes it to a
   file, for example into `docs/`. No process of the application writes into a repository.
 
+As built (phase 10), where it adds to or differs from the above:
+
+- Which version "the result" is, in this order: the version a person accepted; else the result of the newest run
+  with both tables (`PlanResult`); else the version a table accepted by majority; else the newest draft of the table
+  the block shows, and the appendix says that nobody accepted it. `?table=` and `?version=` export another version,
+  described as what it is; `?plain=1` and `--plain` leave the appendix out. The address is served under
+  `/api/rooms/<room>/plan/<block>.md` as well.
+- The appendix is written in the language of the task, by a program (`server/export.ts`), after a line with a fixed
+  marker. Its cost is what the run recorded: each table's use from the `PlanStrategyStat`, and the whole use of the
+  room's last run when that run worked on this task. The use of earlier runs on the same task is not kept per task
+  and is not in the appendix.
+- On the page the objections that still stand are beside their sections; the discussion (messages, decisions,
+  ballots) is a panel per table, not beside the sections.
+- The difference between versions is computed in the page (`client/lib/diff.ts`), by lines and inside a changed line
+  by words, from the two versions' texts.
+- The help articles are part of the application (`/help`, eight articles in German and English), not of the help
+  site's corpus.
+- Docker: the image and a local test bed with one container per role (`docker:local:up`, ports 4110 and 4190). The
+  compose file splits the roles into the profiles nano (space, checker) and big (web, agents, model, sources)
+  already; scripts for the servers come with phase 11, when the forum has its Rust space server. The sources
+  container alone sees the repositories, mounted read-only, and its own file system is read-only.
+
 ## 12. Phases
 
 Each phase is tested with fake models, keeps the application runnable and is one commit. Checks after each:
@@ -357,7 +379,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 | 7 ✓ | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall; the person's yes and no. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
 | 8 ✓ | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
 | 9 ✓ | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
-| 10 | Page: diff, discussion, ballots, standings, export; help articles in German and English; README; Docker with the local test bed. | help links and both languages; the export equals the result |
+| 10 ✓ | Page: diff, discussion, ballots, standings, export; help articles in German and English; README; Docker with the local test bed. | help links and both languages; the export equals the result |
 | 11 | `codemode-forum/rust/forum-space` and its compose files; remote repositories (admin, host allowlist). | the suite against the Rust server; refused hosts, size and time limits with a local git server |
 | 12 | Live runs of both example briefs, three models, both tables, three times each; report in `codemode-forum/docs/`. | live, costs tokens: ask first |
 

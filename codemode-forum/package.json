@@ -16,7 +16,14 @@
     "model": "node --no-warnings --experimental-strip-types server/model-host.ts",
     "web": "node --no-warnings --experimental-strip-types server/index.ts",
     "backup": "node --no-warnings --experimental-strip-types server/backup.ts",
-    "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts"
+    "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts",
+    "export": "node --no-warnings --experimental-strip-types server/export-plan.ts",
+    "docker:test": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml --profile test run --rm --build codemode-forum-test",
+    "docker:image": "docker build --network host -f docker/Dockerfile --target production -t phi-spaces-forum:prod ..",
+    "docker:local:up": "NANO_CPUS=${NANO_CPUS:-2} PORT=${PORT:-4110} FORUM_SPACE_BIND=127.0.0.1 FORUM_SPACE_PORT=4190 docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -p phi-spaces-forum-local --profile nano --profile big up -d --no-build",
+    "docker:local:down": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -p phi-spaces-forum-local --profile nano --profile big down",
+    "docker:local:logs": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -p phi-spaces-forum-local --profile nano --profile big logs -f",
+    "docker:local:backup": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -p phi-spaces-forum-local --profile nano exec space node --no-warnings --experimental-strip-types server/backup.ts"
   },
   "dependencies": {
     "next": "16.4.6",
