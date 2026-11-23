@@ -32,7 +32,7 @@
   "findings": [
     "Kein Lauf endete mit einer angenommenen Fassung. GPT und Sonnet lehnten in jeder Runde ab und fanden jedes Mal neue Mängel: 27 bis 36 Einwände je Tisch und Lauf.",
     "Die Zustimmungen von Codestral zählten nie. Es stimmte fast immer zu, zitierte aber meist die Kriterien selbst statt den Plan. Eine Mehrheit muss deshalb von GPT und Sonnet gemeinsam kommen.",
-    "Im Blindvergleich gewann jedes Mal das Dokument von Tisch A (reihum). Tisch A kostete aber etwa doppelt so viel wie Tisch B.",
+    "Im Blindvergleich gewann jedes Mal das Dokument von Tisch A (reihum). Tisch A kostete aber mehr als Tisch B, in Lauf 3 doppelt so viel.",
     "Die Ergebnisse decken alle 24 Anforderungen richtig ab. Einzelne frühe Entwürfe hatten Anforderungen erfunden, weil ein Modell die Datei unter einem falschen Pfad (docs/…) suchte; die Einwände der anderen haben das korrigiert.",
     "Ein Lauf kostet 3,90 $ bis 4,80 $ und dauert 11 bis 21 Minuten."
   ],
