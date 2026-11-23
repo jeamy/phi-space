@@ -89,6 +89,9 @@ export async function checkDoc(doc: FullDoc, task: Pick<PlanTask, "outline">, fi
 	const names = new Map<string, number>(); // the last part of every path: a single name is a file when one ends with it
 	for (const p of files?.keys() ?? []) { const n = p.split("/").at(-1)!; names.set(n, (names.get(n) ?? 0) + 1); }
 	const anchors = new Set(doc.sections.map((s) => anchorOf(s.title)));
+	// a plan without a repository among its sources (uploaded documents only) builds something new: every file it names
+	// is one it creates, marked or not
+	const repo = [...(files?.values() ?? [])].some((source) => source === "repo");
 
 	// section: what the person fixed is there, and every section is written
 	const titles = new Set(doc.sections.map((s) => s.title.toLowerCase()));
@@ -107,7 +110,7 @@ export async function checkDoc(doc: FullDoc, task: Pick<PlanTask, "outline">, fi
 				if (seen.has(path)) continue;
 				seen.add(path); counted.paths++;
 				const there = files.has(path) || dirs.has(path) || (!path.includes("/") && names.has(path));
-				if (!there && !isNew) fail("path", `\`${path}\` is not in the sources. Name it as it is there, or mark it as new: \`${path}\` (new).`, s.sectionId);
+				if (!there && !isNew && repo) fail("path", `\`${path}\` is not in the sources. Name it as it is there, or mark it as new: \`${path}\` (new).`, s.sectionId);
 				else if (there && isNew) fail("path", `\`${path}\` is marked as new, but it is in the sources already.`, s.sectionId);
 			}
 			// quote

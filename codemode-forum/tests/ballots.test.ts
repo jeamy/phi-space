@@ -50,6 +50,8 @@ test("a ballot is read, and counts as an approval only with evidence and nothing
 	// words of the plan: at least three, blanks, case and marks aside
 	const plan = "The **goal** of the plan:\nraise `RESOLUTION` to 256.";
 	assert.deepEqual(["the goal of the plan", "Raise resolution  to 256", "of the", "the aim of the plan", "goal of the plan: raise"].map((q) => quoted(plan, q)), [true, true, false, false, true]);
+	// several quotes in one line, or a quote with the model's own remark: one stretch of at least three words is enough
+	assert.deepEqual(['the goal of the plan" and "raise `RESOLUTION` to 256', '“The goal of the plan” says what is wanted.', 'the goal of … to 256', '"of the" and "to 256"', 'It says "the aim of the plan" somewhere.'].map((q) => quoted(plan, q)), [true, true, true, false, false]);
 	const met = (n: number, backed = true) => ({ n, met: true, text: "x", backed });
 	const o = { criteria: 2, blocking: 0, standing: 0 };
 	assert.deepEqual(counts({ vote: "approve", criteria: [met(1), met(2)] }, o), { counts: true });
@@ -123,7 +125,7 @@ test("a declined objection stands for the one who raised it and for nobody else"
 	t.after(() => srv.close());
 	const { id, blockId, s } = await runB(srv.url, "declined");
 	const talk = await talkOf(srv.url, id, blockId);
-	// the reviser left the goal as it was: both objections declined, no new version
+	// the reviser left both sections as they were (one model objects to each): both objections declined, no new version
 	assert.equal(s.run!.doc!.version, 4);
 	assert.deepEqual(talk.objections.map((o) => [o.model, o.state]).sort(), [["fake/beta", "declined"], ["fake/gamma", "withdrawn"]]);
 	// round two: gamma withdraws and approves, beta keeps its objection and so cannot approve; two of three is a majority
@@ -193,4 +195,17 @@ test("the person's no is an objection nobody can pass, and their yes accepts a v
 	assert.deepEqual([yes.status, yes.body.version], [200, 4]);
 	assert.deepEqual((await snapshot(srv.url, id)).blocks[0]!.accepted, { version: 4, by: "person", who: "Ada", approvals: [], of: 0 });
 	assert.equal((await post(srv.url, `/api/rooms/${id}/accept`, { blockId, version: 99 })).status, 400);
+});
+
+test("a reviser cannot leave a section as it is when more than half of the other models object to it", async (t) => {
+	const srv = await startServer();
+	t.after(() => srv.close());
+	const { id, blockId, s } = await runB(srv.url, "overruled", { rounds: 1 });
+	const talk = await talkOf(srv.url, id, blockId);
+	// three tries, each handed back unchanged and refused: no new version, and the objections stay open, not declined
+	assert.equal(await srv.stack.space.count({ type: "FakeCall", fields: { session: id, kind: "revise" } }), 3);
+	assert.deepEqual([s.run!.doc!.version, s.run!.ended, s.run!.objections], [4, "rounds", { raised: 2, open: 2 }]);
+	assert.deepEqual(talk.objections.map((o) => [o.model, o.state]).sort(), [["fake/beta", "open"], ["fake/gamma", "open"]]);
+	const revise = (await srv.stack.space.readAll({ type: "FakeCall", fields: { session: id, kind: "revise" } }, { limit: 5 })).map((e) => e.fields as unknown as { prompt: string });
+	assert.match(revise[0]!.prompt, /More than half of the other models object to this section: it must change/);
 });

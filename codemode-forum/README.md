@@ -4,7 +4,8 @@ At least three AI models develop one plan together and write it as one document.
 document, and vote until a majority agrees that the plan can be carried out. The plan for this application, with its
 phases, is `docs/gemeinsame-planung-plan-2026-11-22.en.md`.
 
-**Status: phases 1 to 11 of that plan.** The application has its processes, its space, the run mechanics, the admin
+**Status: phases 1 to 11 of that plan.** The first runs with real models (phase 0, and phase 12 as far as it got) and what they changed are in
+`docs/live-runs-2026-11-23.en.md`; `tests/live/run.ts` makes one such run against a running stack (it costs tokens). The application has its processes, its space, the run mechanics, the admin
 login and the model limits (phase 1), the plan task with its document kept in sections and versions (phase 2),
 read-only sources the models read in (phase 3), the discussion of the table (phase 4), the checker (phase 5), table
 B, where the models write at the same time (phase 6), **ballots**: the table changes the plan until a majority of

@@ -29,6 +29,9 @@ const failed = async (sections: Record<string, string | null>, o?: { outline?: s
 
 test("a plan that follows the conventions passes", async () => {
 	assert.deepEqual(await check(GOOD, { outline: ["goal", "Steps"] }), { ok: true, failures: [], counted: { paths: 6, quotes: 1, phases: 2, links: 1 } });
+	// with uploaded documents only the plan builds something new: a file it names need not be there (a quote must)
+	assert.deepEqual((await failed({ ...GOOD, Goal: "Build `view.ts` and `src/site/index.html`." }, { files: new Map([["requirements.md", "docs"]]) })).map((f) => f[0]), []);
+	assert.deepEqual((await failed({ ...GOOD, Goal: "> `view.ts`: not there" }, { files: new Map([["requirements.md", "docs"]]) })).map((f) => f[0]), ["quote"]);
 	// without sources there are no paths and quotes to check
 	assert.deepEqual(await check({ ...GOOD, Goal: "Change `src/nowhere.ts`.\n\n> `nowhere.md`: not there" }, { files: null }), { ok: true, failures: [], counted: { paths: 0, quotes: 0, phases: 2, links: 0 } });
 });
@@ -102,7 +105,7 @@ test("the document is checked after the drafts, and the writer mends what the ch
 	// version 4 failed, the writer revised the one section, version 5 passes
 	assert.deepEqual([s.run!.check, s.run!.doc, s.run!.phase], [{ version: 5, ok: true, failures: 0, round: 2 }, { table: "A", version: 5, sections: 3, written: 3 }, "done"]);
 	const checks = (await srv.stack.space.readAll({ type: "PlanCheck", fields: { session: id } }, { limit: 10 })).map((e) => e.fields as unknown as PlanCheck).sort((a, b) => a.version - b.version);
-	assert.deepEqual(checks.map((c) => [c.version, c.ok, c.failures.map((f) => [f.check, f.sectionId])]), [[4, false, [["path", "s2"], ["quote", "s2"], ["link", "s2"], ["phase", "s2"]]], [5, true, []]]);
+	assert.deepEqual(checks.map((c) => [c.version, c.ok, c.failures.map((f) => [f.check, f.sectionId])]), [[4, false, [["quote", "s2"], ["link", "s2"], ["phase", "s2"]]], [5, true, []]]);
 	assert.deepEqual(checks[1]!.counted, { paths: 2, quotes: 1, phases: 1, links: 1 });
 	// the writer was told what was found, as fact, with the section as it was
 	const revise = (await srv.stack.space.readAll({ type: "FakeCall", fields: { session: id, kind: "revise" } }, { limit: 5 })).map((e) => e.fields as unknown as { prompt: string });
@@ -113,7 +116,7 @@ test("the document is checked after the drafts, and the writer mends what the ch
 	assert.match(revise[0]!.prompt, /Name files and directories in backticks/);
 	// the page gets the result with the version it belongs to
 	const view = async (version?: number) => (await (await fetch(`${srv.url}/api/rooms/${id}/plan/${blockId}${version ? `?version=${version}` : ""}`)).json()) as PlanView;
-	assert.deepEqual([(await view()).check, (await view(4)).check!.failures.length, (await view(3)).check, s.blocks[0]!.doc!.check], [{ ok: true, failures: [] }, 4, null, { ok: true, failures: [] }]);
+	assert.deepEqual([(await view()).check, (await view(4)).check!.failures.length, (await view(3)).check, s.blocks[0]!.doc!.check], [{ ok: true, failures: [] }, 3, null, { ok: true, failures: [] }]);
 	assert.match(s.lines.at(-1)!.text, /M1 wrote 3 of 3 sections of the first draft \(version 5, checks passed\)/);
 	assert.equal(s.run!.usage.tokens, 300 + 450 + 400 + 3000 + 1000);
 	for (const type of ["CheckRequest", "CheckResult", "SourceRequest", "SourceResult"]) assert.equal(await srv.stack.space.count({ type, fields: { session: id } }), 0, type);
@@ -127,8 +130,8 @@ test("a writer that mends nothing: after three checks the run ends and says what
 	await post(srv.url, `/api/rooms/${id}/task`, { brief: "Plan how the world gets four times the resolution.", docs: DOCS });
 	assert.equal((await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 80_000 })).status, 200);
 	const s = await ended(srv.url, id);
-	assert.deepEqual([s.run!.check, s.run!.phase, s.run!.doc!.version], [{ version: 6, ok: false, failures: 4, round: 3 }, "done", 6]);
+	assert.deepEqual([s.run!.check, s.run!.phase, s.run!.doc!.version], [{ version: 6, ok: false, failures: 3, round: 3 }, "done", 6]);
 	assert.equal(await srv.stack.space.count({ type: "FakeCall", fields: { session: id, kind: "revise" } }), 2);
-	assert.match(s.lines.at(-1)!.text, /of the first draft \(version 6, 4 check failures left\)/);
-	assert.deepEqual(s.blocks[0]!.doc!.check!.failures.map((f) => f.check), ["path", "quote", "link", "phase"]);
+	assert.match(s.lines.at(-1)!.text, /of the first draft \(version 6, 3 check failures left\)/);
+	assert.deepEqual(s.blocks[0]!.doc!.check!.failures.map((f) => f.check), ["quote", "link", "phase"]);
 });

@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 to 7 implemented on 2026-11-22, phases 8 to 11 on 2026-11-23 (`codemode-forum/`, see its README); phases 0 and 12 (live runs) open. Second version,
+Status: phases 1 to 7 implemented on 2026-11-22, phases 8 to 11 on 2026-11-23 (`codemode-forum/`, see its README); phase 0 done and phase 12 begun on 2026-11-23 (`codemode-forum/docs/live-runs-2026-11-23.en.md`: three of six runs, three rules changed after them). Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -387,7 +387,7 @@ Each phase is tested with fake models, keeps the application runnable and is one
 
 | Phase | Content | Tests |
 |---|---|---|
-| 0 | Baseline in codemode-chat as it is: both example briefs as text tasks with three models, by hand; record where it breaks, calls and cost. | none (live, costs tokens: ask first) |
+| 0 ✓ | Baseline in codemode-chat as it is: both example briefs as text tasks with three models, by hand; record where it breaks, calls and cost. | none (live, costs tokens: ask first) |
 | 1 ✓ | The directory `codemode-forum/` with the copied base: space, web, agents and model processes, launcher, admin, quotas, the run mechanics with the roll call as a run's opening, the refusal of runs with fewer than three models, a page for it; the registrations of section 3. | the stack starts and restarts; the repository's checks pass; a fake model call is booked |
 | 2 ✓ | Plan task, the document entries of section 4 (`PlanTask`, `PlanDoc`, `PlanSection`), sectioned document, snapshot and a read-only document view with its versions. One table; one model writes: after the roll call the first model at the table writes the outline and the first draft of every section. No sources. | versions share unchanged sections; a second writer of a section is refused; sizes at their limits |
 | 3 ✓ | Uploaded documents as a pack; the sources process with local repositories, read from the objects of a commit; reading in steps. | path escape, symbolic link, deny list, limits; a killed sources process; a killed agent goes on from its `ReadStep`s |

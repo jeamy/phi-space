@@ -27,10 +27,12 @@ export const SETTLED_FROM_ROUND = 3;
 
 const norm = (s: string) => s.toLowerCase().replace(/[`*_"“”'’]/g, "").replace(/\s+/g, " ").trim();
 /** Whether words a ballot quotes are in the plan (blanks, case and Markdown marks aside). At least three words: a
- *  word or two are in any text. */
+ *  word or two are in any text. A model often gives several quotes in one line, or a quote with a remark of its own
+ *  ("…" and "…", "…" lists each decision): the line counts when it as a whole, or one stretch of it between quotation
+ *  marks or ellipses, stands in the plan. */
 export function quoted(plan: string, quote: string): boolean {
-	const q = norm(quote.replace(/…|\.\.\./g, " "));
-	return q.split(" ").length >= 3 && norm(plan).includes(q);
+	const text = norm(plan);
+	return [quote, ...quote.split(/["“”„«»]|…|\.\.\./)].map(norm).some((q) => q.split(" ").length >= 3 && text.includes(q));
 }
 
 /** A ballot as a model wrote it: `BALLOT: APPROVE` or `REJECT`; under CRITERIA a line per criterion, `3 met: "words of

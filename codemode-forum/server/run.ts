@@ -243,7 +243,7 @@ async function closingLine(space: SpaceLike, r: RunEntry, how: "finished" | "sto
 	const acc = r.info.accepted, agreed = acc ? `; accepted in round ${acc.round} by ${acc.approvals} of ${acc.of} models` : "";
 	const o = r.info.objections, rounds = r.info.round ? `; ${r.info.round} ${!parallel(r) ? "round" : "review round"}${r.info.round === 1 ? "" : "s"}${!parallel(r) ? " of turns" : ""}, ${o?.raised ?? 0} objection${o?.raised === 1 ? "" : "s"}${o?.open ? `, ${o.open} open` : ""}` : "";
 	const draft = !doc ? "" : parallel(r) ? `${talk}; the table wrote ${doc.written} of ${doc.sections} sections (version ${doc.version}${check})${rounds}${agreed}` : `${talk}; ${writer} wrote ${doc.written} of ${doc.sections} sections of the first draft (version ${doc.version}${check})${rounds}${agreed}`;
-	return `Run ${how}${why}: ${present} of ${r.params.models.length} models answered the roll call${draft || talk} (${cost})`;
+	return `Run ${how}${why}: ${r.runId.endsWith("-F") ? `${r.params.models.length} models` : `${present} of ${r.params.models.length} models answered the roll call`}${draft || talk} (${cost})`;
 }
 
 /** A run's left-over items and slots go, in `txn`. */
@@ -940,6 +940,9 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 			// objected to cannot be declined: the section must change
 			if (e instanceof DocRefused && it.objections?.length && /nothing changed/.test(e.message)) {
 				if (taken.some((o) => o.model === "human" || o.model === "table")) throw new ModelFailed("the person objected to this section, or the table decided to change it: it cannot be left as it is", usage);
+				// nor what more than half of the other models object to: one reviser does not overrule the table
+				const raisers = new Set(taken.filter((o) => o.model !== slot.model).map((o) => o.model));
+				if (raisers.size * 2 > run.params.models.length - 1) throw new ModelFailed("more than half of the other models object to this section: it cannot be left as it is", usage);
 				declined = true;
 			}
 			else if (e instanceof DocRefused) throw new ModelFailed(e.message, usage);

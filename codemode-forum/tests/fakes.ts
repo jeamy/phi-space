@@ -28,6 +28,8 @@ const sectionOf = (c: TextCall) => /Write the section "([^"]+)"/.exec(c.user)?.[
 /** A section's body; the one about the way names the plan's phase and how it is verified, as the checker asks. */
 export const PHASE = "\n\nPhase 1: do it. Verified by a test that can fail.";
 const draft = (c: TextCall) => ({ text: `The ${sectionOf(c).toLowerCase()} of the plan, written by ${c.model}.${/^(steps|weg)$/i.test(sectionOf(c)) ? PHASE : ""}`, model: c.model, usage: use(1000, 0.1) });
+/** The section a revision is asked for, as the prompt shows it: a reviser that hands this back leaves it as it is. */
+const asItIs = (c: TextCall) => /The section "[^"]+" as it is now:\n"""\n([\s\S]*?)\n"""/.exec(c.user)?.[1] ?? draft(c).text;
 export const SLOPPY = "Phase 1: rewrite `missing.md`.\n\nPhase 2: ship it. Verified by a test.\n\n> `README.md`: a line that is not there\n\nSee [the goal](#goals).";
 /** A kickoff without messages (150 tokens), and a reply that answers every question and agrees to every proposal it
  *  is asked about (250 tokens). */
@@ -149,8 +151,11 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	crowd: tableB((model, round, c) => (round !== 1 ? null : review(c, model === "fake/alpha" ? ['objection on "Steps": Phase 1 is too coarse. | fix: Split it in two.', 'objection on "Nowhere": no such section | fix: none', "objection on \"Risks\": could be more detailed"] : [model === "fake/beta" ? OBJECT_GOAL : OBJECT_WHY]))),
 	// approvals without evidence: alpha and beta quote words that are not in the plan
 	bare: tableB((model, _round, c) => (model === "fake/gamma" ? null : review(c, [], { quote: "this all looks fine to me" }))),
-	// the reviser leaves the goal as it is; in the second round gamma withdraws its objection, beta keeps its own
-	declined: tableB((model, round, c) => twoObject(model, round, c) ?? (round === 2 && model !== "fake/alpha" ? review(c, [], { confirm: model === "fake/gamma" ? "withdrawn" : "not resolved: it is still wrong" }) : null), { revise: (c) => draft(c) }),
+	// the reviser leaves the sections as they are (one model objects to each); in the second round gamma withdraws its
+	// objection, beta keeps its own
+	declined: tableB((model, round, c) => (round === 1 && model !== "fake/alpha" ? review(c, [model === "fake/beta" ? OBJECT_GOAL : 'objection on "Risks": It gives no reason. | fix: Say why 256.']) : null) ?? (round === 2 && model !== "fake/alpha" ? review(c, [], { confirm: model === "fake/gamma" ? "withdrawn" : "not resolved: it is still wrong" }) : null), { revise: (c) => ({ ...draft(c), text: asItIs(c) }) }),
+	// beta and gamma object to the same section, and the reviser hands it back as it was
+	overruled: tableB(twoObject, { revise: (c) => ({ ...draft(c), text: asItIs(c) }) }),
 	// beta and gamma object to the goal in rounds one and two; in round three beta objects to a section nobody touched
 	settle: tableB((model, round, c) => (model === "fake/alpha" ? null : round === 1 ? review(c, [model === "fake/beta" ? OBJECT_GOAL : OBJECT_WHY]) : round === 2 ? review(c, ['objection on "Goal": The revision names the target, not the date. | fix: Name a date.'], { confirm: "resolved" }) : model === "fake/beta" ? review(c, ['objection on "Risks": It names no risk of the migration. | fix: Name one.'], { confirm: "resolved" }) : null),
 		{ revise: (c) => { const d = draft(c); return { ...d, text: `${d.text}\n\nRevised by ${c.model} after ${(c.user.match(/^- M\d: /gm) ?? []).length} objections, text ${c.user.length}.` }; } }),

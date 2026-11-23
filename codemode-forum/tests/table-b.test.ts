@@ -82,7 +82,7 @@ test("table B: outlines of all, one picked, sections dealt out, two rounds, two 
 	assert.equal(revise.model, "fake/alpha");
 	assert.ok(revise.prompt.includes(`- ${aliases["fake/gamma"]}: It gives no reason. What would resolve it: Say why 256.`));
 	// (the two objections in the order they were raised, whichever came first)
-	assert.ok(revise.prompt.includes("The table objects to this section. Take up each objection: mend what it names, or leave the text where the objection is wrong.\n- M"));
+	assert.ok(revise.prompt.includes("The table objects to this section. Take up each objection: mend what it names, or leave the text where the objection is wrong. More than half of the other models object to this section: it must change, a text left as it is is not accepted.\n- M"));
 	assert.ok(revise.prompt.includes(`- ${aliases["fake/beta"]}: It does not name the target value. What would resolve it: Name 256 as the target. (about: "The goal of the plan")`));
 	assert.doesNotMatch(revise.prompt, /A program checked the document/);
 	assert.deepEqual([view.doc.version, view.doc.sections[0]!.rev, view.doc.sections[0]!.model, view.check?.ok], [5, 3, revise.model, true]);
