@@ -9,6 +9,7 @@ Phase 0 inventories what the grid switch touches before any format changes. This
 3. [Coordinate fields and their class](#klassen) (plan section 2.2)
 4. [Cells that codemode-chat keeps](#codemode) (plan section 2.2, "Arena and codemode-chat")
 5. [Decisions for phase 1](#offen), collected from the four
+6. [References of acceptance case 6 at scale 1](#referenzen) (plan section 6, case 6)
 
 Each inventory names the TypeScript place. The Rust engine (`rust/mmo-engine/src`) mirrors it file for file and function for function (`commands/build.ts` → `commands/build.rs`, `npc/economy.ts` → `npc/economy.rs`). The plan's single table of rule values is written in phase 1 from this list in both engines. When it is written, every Rust counterpart is checked line by line, and differences are added here.
 
@@ -275,3 +276,43 @@ The class table of plan section 2.2 is this list. The start check fails on a coo
    - a remembered path from one world means nothing in the other.
 
    Proposal: scale them with the cut too, so the bots and the judge know one grid.
+
+<a id="referenzen"></a>
+
+## 6. References of acceptance case 6 at scale 1
+
+### 6.1 World lock per growth run
+
+**Fixture.** `tests/growth-worst.ts` writes the worst case of room growth, and `tests/growth.test.ts` holds it to that. The case has every room of the largest region, which is `ost` with 13 rooms. Each room is all grass at (maxW − strip) × (maxH − strip) = 32 × 20 cells, the largest size that still has seams to try; at 36 × 24 there is no candidate at all. Its plots look like this:
+
+- 505 of 640 cells are plots, so 79 % is taken and the room is full enough to grow (70 %).
+- Only the upper-left part below half the width and height is free: 135 cells, with the spawn in the corner.
+- Every seam lies at or beyond half the room, so the cells on both sides of it are plots.
+- No rectangle crosses a seam. So all 28 candidates (17 east, 11 south) reach `connected`. Each runs both of its searches and is rejected.
+
+The sizes come from `w.growth`, so the same fixture serves the finer grid after the switch.
+
+**Measurement.** `node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/growth-lock.ts`:
+
+- It writes the fixture into a space process (`SPACES_MMO_SPACE_SERVER` selects the Rust one).
+- It runs five growth runs of the TypeScript engine, then five of the Rust engine (`rust/mmo-engine/tests/growth_cost.rs`, started by the script) against the same space.
+- It repeats both with no room full enough. Each room then stops after its reads, so the difference to a full run is the seam search.
+
+The lock is taken once per room and released between rooms. Values are medians of five runs on this development machine, in ms per run of all 13 rooms:
+
+| Space server | Engine | Run | Reads only | Search (difference) | Longest single hold |
+| --- | --- | --- | --- | --- | --- |
+| Rust (`mmo-space`, as on big and nano) | Rust (as on big and nano) | 513 | 211 | about 300 | – |
+| Rust | TypeScript | 338 | 152 | about 186 | 42 |
+| TypeScript | Rust | 766 | 461 | about 305 | – |
+| TypeScript | TypeScript | 586 | 434 | about 152 | 70 |
+
+For TypeScript the script also times the lock itself, from its take to the commit or abort of that transaction. The lock time is the run time less the first read of the rooms (Rust space: 335 of 338 ms).
+
+**What this says for phase 1:**
+
+- **Reference.** The production pair holds the lock about half a second per worst-case epoch run, in 13 holds of about 40 ms each. This is the value the target of case 6 ("at most the reference") is measured against.
+- **Reads under the lock.** The Rust engine reads its 19 entry groups of a room one after another inside the transaction (`commands/growth.rs`). The TypeScript engine sends them together (`Promise.all`). The reads are close to half of the Rust run. Sending them together, or reading the candidates from the mirror outside the lock (plan section 3, growth step 3), removes most of that part.
+- **Search.** The Rust search is slower than the TypeScript one. It keys cells by strings and reads every cell through `walkable` on UTF-16 slices. The shared `Grid` (plan section 3, "Performance strategy") replaces both. At scale 2 the search does 8 times the work, about 2.4 s per run with today's code, so it cannot stay as it is.
+- **Not yet measured.** This run has no load. Case 6 measures the same run "while players build". That needs `tests/perf/live-load.ts` beside it, and its reference is recorded together with the commits per second of the movers (6.2).
+

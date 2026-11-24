@@ -3,7 +3,7 @@
 import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FOREVER, type SpaceLike } from "phi-spaces";
+import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { pinTerrain } from "../server/engine/room-growth.ts";
 import { freeSide, grownDecor, grownGround, growthTick } from "../server/engine/commands/growth.ts";
 import { loadWorld } from "../server/engine/world.ts";
@@ -12,6 +12,7 @@ import type { CharacterFields, RoomFields, RoomGrowthFields } from "../server/mo
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
+import { writeWorstGrowth } from "./growth-worst.ts";
 
 const w = await loadWorld();
 const room = (ground: string[]): RoomFields => ({ roomId: "r", name: "Testwiese", desc: "", ground });
@@ -42,6 +43,21 @@ test("a full room grows once, what it grew stays in its entry, and the next coun
 		assert.equal(r.ground[0]!.length, 28);
 		assert.equal(((await s.readAll({ type: "RoomGrowth" }))[0]!.fields as unknown as RoomGrowthFields).east, 4);
 		assert.equal(await growthTick(s, w, 60_000), 0, "now less than 70 % is taken");
+	} finally { await stack.close(); }
+});
+
+test("the worst case (tests/growth-worst.ts): every room full, every seam tried, none grows; a free row lets one grow", { timeout: 180_000 }, async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space;
+		await s.write({ type: "WorldClock", fields: initialClock(w.id, 12, Date.now(), 1) as never }, null, FOREVER);
+		const worst = await writeWorstGrowth(s, w, 2);
+		assert.deepEqual([worst.width, worst.height, worst.candidates], [w.growth!.maxW - w.growth!.strip, w.growth!.maxH - w.growth!.strip, 28]);
+		assert.equal(await growthTick(s, w, 60_000), 0, "no seam is valid");
+		assert.equal((await s.readAll({ type: "RoomGrowth" })).length, 0);
+		// the first row free to the east edge: the outermost x seam reaches the free part, and that room grows
+		for (let x = 0; x < worst.width; x++) await s.takeIfExists({ type: "Plot", fields: { room: worst.rooms[0]!, x, y: 0 } }, NO_WAIT);
+		assert.equal(await growthTick(s, w, 60_000), 1);
 	} finally { await stack.close(); }
 });
 
