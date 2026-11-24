@@ -1,0 +1,13 @@
+digraph "How Lea and the planning agent get access to brief.md" {
+#include
+	lea [label="Lea\nUser"];
+	north [label="North\nGroup"];
+	agent [label="planner-17\nAgent instance"];
+	root [label="dispatch/\nWorkspace root", fillcolor="#d8eeea"];
+	file [label="brief.md\nChild file", shape=note, style=filled, fillcolor="#fcf2d9"];
+	lea -> north [label="member of"];
+	north -> root [label="editor on"];
+	agent -> root [label="owner on"];
+	root -> file [label="child inherits\nworkspace roles"];
+	{rank=same; north; agent}
+}

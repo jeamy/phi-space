@@ -1,0 +1,18 @@
+digraph "Workspaces of one tenant" {
+#include
+	ranksep=0.6;
+	lea [label="Lea\nUser"]; north [label="North\nGroup"]; agent [label="planner-17\nAgent instance"];
+	subgraph cluster_tenant { label="Private tenant Space: workspace roots under the reserved sentinel"; labelloc=b; color="#648a85"; style=rounded;
+		home_lea [label="lea/\nLea's home", fillcolor="#d8eeea"];
+		dispatch [label="dispatch/\nshared workspace", fillcolor="#d8eeea"];
+		home_agent [label="planner-17/\nagent home", fillcolor="#d8eeea"];
+	}
+	lea -> north [label="member of"];
+	north -> dispatch [label="editor"];
+	agent -> dispatch [label="owner"];
+	lea -> home_lea [label="owner"];
+	agent -> home_agent [label="owner"];
+	{rank=same; lea; north; agent}
+	result [label="Lea's workspaces()\nwhile in North: dispatch, lea\nafter removal from North: lea", fillcolor="#fcf2d9"];
+	dispatch -> result [style=invis];
+}

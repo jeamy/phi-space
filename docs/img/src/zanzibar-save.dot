@@ -1,0 +1,28 @@
+digraph "Saving an existing file inside the tenant queue" {
+#include
+	start [label="Save an existing file\nworkspace, path, expected version,\ntext and operation ID"];
+	opid [label="Validate session and actor,\ncheck the operation ID's signature,\nactor, tenant and retry window"];
+	auth [label="Resolve workspace and path,\ncheck current editor rights"];
+	receipt [label="Look up a receipt for the ID\nand compare its argument digest"];
+	version [label="Compare expected version\nwith stored version"];
+	commit [label="Reserve and verify old content,\nwrite successor and receipt,\ncommit together", fillcolor="#d8eeea"];
+	rejected [label="operationIdRejected", fillcolor="#f8e9e5"];
+	denied [label="notFound for invisible targets\npermissionDenied for visible ones", fillcolor="#f8e9e5"];
+	replay [label="Return recorded version\nNo second write", fillcolor="#d8eeea"];
+	mismatch [label="requestMismatch", fillcolor="#f8e9e5"];
+	conflict [label="versionConflict with current version\nCaller keeps its draft", fillcolor="#fcf2d9"];
+	ok [label="Return committed version", fillcolor="#d8eeea"];
+	unknown [label="Outcome unknown: stop admission\nstore-wide, resolve by receipt", fillcolor="#fcf2d9"];
+	start -> opid;
+	opid -> auth [label="valid"];
+	opid -> rejected [label="invalid or expired"];
+	auth -> receipt [label="allowed"];
+	auth -> denied [label="denied"];
+	receipt -> version [label="no receipt"];
+	receipt -> replay [label="same digest"];
+	receipt -> mismatch [label="other digest"];
+	version -> commit [label="matches"];
+	version -> conflict [label="stale"];
+	commit -> ok [label="durable"];
+	commit -> unknown [label="ambiguous"];
+}
