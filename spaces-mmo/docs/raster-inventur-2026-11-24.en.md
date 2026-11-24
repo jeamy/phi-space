@@ -9,7 +9,7 @@ Phase 0 inventories what the grid switch touches before any format changes. This
 3. [Coordinate fields and their class](#klassen) (plan section 2.2)
 4. [Cells that codemode-chat keeps](#codemode) (plan section 2.2, "Arena and codemode-chat")
 5. [Decisions for phase 1](#offen), collected from the four
-6. [References at scale 1](#referenzen) (plan section 6, cases 4 and 6, phase 0)
+6. [References at scale 1](#referenzen) (plan section 6, cases 4 and 6, phase 0; semantic examples in 6.6)
 
 Each inventory names the TypeScript place. The Rust engine (`rust/mmo-engine/src`) mirrors it file for file and function for function (`commands/build.ts` → `commands/build.rs`, `npc/economy.ts` → `npc/economy.rs`). The plan's single table of rule values is written in phase 1 from this list in both engines. When it is written, every Rust counterpart is checked line by line, and differences are added here.
 
@@ -435,3 +435,32 @@ The plan's target for `atlas` is 25 KiB (25,600 bytes) for 37 base rooms. The ba
 
 Growth draws no chance, so a second run gives the same file, also with the Rust space and world worker loading the world. The cases cover 37 rooms and 179 steps. 34 rooms end at 36 × 24. `perlengrund`, `watt` and `wrackbucht` end at 36 × 16: none of their southern seams passed the checks of `growth.ts` (land, fill, reachability). After the switch the same run at scale 2 is held to this file: every seam and size times `gridScale`, the same sides in the same order.
 
+
+### 6.6 Semantic examples of the distance rules
+
+**What they are.** The plan asks for "semantic examples" at scale 1 and, for every range, to "test all sides and the first cell outside reach" (section 2.1). `tests/semantic-examples.ts` holds 15 rules of section 1 with their metric and their places:
+
+- `BESIDE`, `REACH_POINT`, `FEED_FIRE`, `SITE_REACH`, `EXIT_REACH`, `FIRE_CLEARANCE`, `PASSAGE`;
+- `RING_BESIDE`, `ON_FOOTPRINT`, `SCARE_REACH`, `SCARECROW_REACH`, `GREENHOUSE_REACH`, `SETTLER_CLEARANCE`, `MOVE_BUILDING`;
+- `FLOWER_CROSS`.
+
+Each rule has one target: an area of 3 × 2, a cell, or a fire or exit point. Its examples put the actor on all eight sides of the target, from on the target to two cells beyond the edge of the rule. Each example records the distance and the answer at scale 1. That gives 504 examples, kept in `tests/reference/semantic-scale1.json` (`node --no-warnings --experimental-strip-types tests/semantic-examples.ts --write`).
+
+**What `tests/semantic-examples.test.ts` holds** (part of `npm test`):
+
+- the file is what the rules give;
+- every rule has answers on both sides of its edge;
+- at scale 1 the distances are those of the engine's helpers (`distTo` of `commands/build.ts`, `reach` of `context.ts`); the rules whose formula stands inline in the code (`wild.ts` `gap`, `garden.ts:535`, `garden.ts:297`, `settlers.ts:91`) are written out in the file with their place;
+- at scale 2 every example converted by plan section 2.2 keeps its answer:
+  - a legacy point becomes (2x, 2y);
+  - an area keeps its position and footprint × 2;
+  - a fire or exit point becomes a 2 × 2 area, measured to its footprint;
+  - a length doubles;
+  - a ring "beside" becomes 1 to 2 and not on the footprint;
+  - Manhattan `=== 1` between plants becomes `<= 2`, not the same cell (decision 2.3).
+
+  A length left undoubled makes this test fail.
+
+**Result.** All 504 answers hold at scale 2 under these conversions. This includes the sides where the converted footprint lies one cell closer (east and south: 2d − 1 instead of 2d), because every threshold doubles with it.
+
+**For phase 1.** The scale-2 side of the test uses the conversions written in this file. When phase 1 writes the rule table into both engines, the test takes its thresholds from that table. The examples then hold the engines, not only the plan. The examples cover converted legacy points only. Cells a scale-2 world adds between them (odd coordinates) answer by the same doubled thresholds; the plan's acceptance case 1 covers them in a real room.

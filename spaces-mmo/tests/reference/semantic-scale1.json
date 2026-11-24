@@ -1,0 +1,4307 @@
+{
+	"rules": [
+		{
+			"name": "BESIDE",
+			"places": "30 places, e.g. build.ts:566, animals.ts:73, fishing.ts:27; sleep.ts:84 and shop.ts:183 as > 1",
+			"metric": "point-rect",
+			"target": "area",
+			"test": {
+				"op": "le",
+				"value": 1
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 3,
+				"h": 2
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "REACH_POINT",
+			"places": "default.ts:288 (pick up), cart.ts:46, npc/settlers.ts:135",
+			"metric": "point-point",
+			"target": "point",
+			"test": {
+				"op": "le",
+				"value": 1
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 1,
+				"h": 1
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "FEED_FIRE",
+			"places": "default.ts:418 (> 1: too far), npc/economy.ts:403",
+			"metric": "point-point",
+			"target": "area-point",
+			"test": {
+				"op": "gt",
+				"value": 1
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 1,
+				"h": 1
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": true
+				}
+			]
+		},
+		{
+			"name": "SITE_REACH",
+			"places": "build.ts:270 and its uses",
+			"metric": "point-rect",
+			"target": "area",
+			"test": {
+				"op": "le",
+				"value": 2
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 3,
+				"h": 2
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "EXIT_REACH",
+			"places": "build.ts:80, 388",
+			"metric": "point-point",
+			"target": "area-point",
+			"test": {
+				"op": "le",
+				"value": 2
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 1,
+				"h": 1
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 12
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 12
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 12
+					},
+					"distance": 4,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "FIRE_CLEARANCE",
+			"places": "build.ts:102",
+			"metric": "point-point",
+			"target": "area-point",
+			"test": {
+				"op": "le",
+				"value": 1
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 1,
+				"h": 1
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "PASSAGE",
+			"places": "occupancy.ts:34 isPassage",
+			"metric": "point-point",
+			"target": "area-point",
+			"test": {
+				"op": "le",
+				"value": 1
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 1,
+				"h": 1
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "RING_BESIDE",
+			"places": "npc/economy.ts:172 stepBeside, build.ts:124",
+			"metric": "point-rect",
+			"target": "area",
+			"test": {
+				"op": "eq1"
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 3,
+				"h": 2
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "ON_FOOTPRINT",
+			"places": "build.ts:48 atCell and others (=== 0)",
+			"metric": "point-rect",
+			"target": "area",
+			"test": {
+				"op": "zero"
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 3,
+				"h": 2
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "SCARE_REACH",
+			"places": "wild.ts:298 (wild.scareReach)",
+			"metric": "rect-rect",
+			"target": "point",
+			"test": {
+				"op": "le",
+				"value": 3
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 1,
+				"h": 1
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 12
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 12
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 12
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 3
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 8
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 13
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 3
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 13
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 3
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 8
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 13
+					},
+					"distance": 5,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "SCARECROW_REACH",
+			"places": "wild.ts:66 (wild.scarecrowReach; a bed and a scarecrow)",
+			"metric": "rect-rect",
+			"target": "area",
+			"test": {
+				"op": "le",
+				"value": 3
+			},
+			"actorW": 2,
+			"actorH": 2,
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 3,
+				"h": 2
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 7
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 6
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 6
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 5
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 5
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 4
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 4
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 4
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 3
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 3
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 3
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 4,
+						"y": 2
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 4,
+						"y": 8
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 4,
+						"y": 14
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 2
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 14
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 17,
+						"y": 2
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 17,
+						"y": 8
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 17,
+						"y": 14
+					},
+					"distance": 5,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "GREENHOUSE_REACH",
+			"places": "garden.ts:535 (garden.greenhouse.reach; a bed and a greenhouse)",
+			"metric": "rect-rect",
+			"target": "area",
+			"test": {
+				"op": "le",
+				"value": 3
+			},
+			"actorW": 2,
+			"actorH": 2,
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 3,
+				"h": 2
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 7
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 6
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 6
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 5
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 5
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 4
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 4
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 4
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 3
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 3
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 3
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 4,
+						"y": 2
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 4,
+						"y": 8
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 4,
+						"y": 14
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 2
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 14
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 17,
+						"y": 2
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 17,
+						"y": 8
+					},
+					"distance": 5,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 17,
+						"y": 14
+					},
+					"distance": 5,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "SETTLER_CLEARANCE",
+			"places": "npc/settlers.ts:91",
+			"metric": "point-point",
+			"target": "area-point",
+			"test": {
+				"op": "le",
+				"value": 2
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 1,
+				"h": 1
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 12
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 12
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 12
+					},
+					"distance": 4,
+					"answer": false
+				}
+			]
+		},
+		{
+			"name": "MOVE_BUILDING",
+			"places": "build.ts:185 (> 3: too far from the old place)",
+			"metric": "point-rect",
+			"target": "area",
+			"test": {
+				"op": "gt",
+				"value": 3
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 3,
+				"h": 2
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 9
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 10
+					},
+					"distance": 1,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 14,
+						"y": 11
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 15,
+						"y": 12
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 6,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 4
+					},
+					"distance": 4,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 8
+					},
+					"distance": 4,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 16,
+						"y": 13
+					},
+					"distance": 4,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 3
+					},
+					"distance": 5,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 8
+					},
+					"distance": 5,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 5,
+						"y": 14
+					},
+					"distance": 5,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 3
+					},
+					"distance": 5,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 14
+					},
+					"distance": 5,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 17,
+						"y": 3
+					},
+					"distance": 5,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 17,
+						"y": 8
+					},
+					"distance": 5,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 17,
+						"y": 14
+					},
+					"distance": 5,
+					"answer": true
+				}
+			]
+		},
+		{
+			"name": "FLOWER_CROSS",
+			"places": "garden.ts:297",
+			"metric": "manhattan",
+			"target": "point",
+			"test": {
+				"op": "manhattan1"
+			},
+			"target1": {
+				"x": 10,
+				"y": 8,
+				"w": 1,
+				"h": 1
+			},
+			"examples": [
+				{
+					"actor": {
+						"x": 10,
+						"y": 8
+					},
+					"distance": 0,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 7
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 9,
+						"y": 9
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 7
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 9
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 7
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 8
+					},
+					"distance": 1,
+					"answer": true
+				},
+				{
+					"actor": {
+						"x": 11,
+						"y": 9
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 6
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 8,
+						"y": 10
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 6
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 10
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 6
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 8
+					},
+					"distance": 2,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 12,
+						"y": 10
+					},
+					"distance": 4,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 5
+					},
+					"distance": 6,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 7,
+						"y": 11
+					},
+					"distance": 6,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 5
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 10,
+						"y": 11
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 5
+					},
+					"distance": 6,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 8
+					},
+					"distance": 3,
+					"answer": false
+				},
+				{
+					"actor": {
+						"x": 13,
+						"y": 11
+					},
+					"distance": 6,
+					"answer": false
+				}
+			]
+		}
+	]
+}
