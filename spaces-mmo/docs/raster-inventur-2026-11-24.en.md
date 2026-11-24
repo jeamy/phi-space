@@ -336,7 +336,45 @@ For TypeScript the script also times the lock itself, from its take to the commi
 - **A relative reference.** The fixture's space holds only the worst-case rooms. A live region also has its exits, characters and items, which a room's reads under the lock take in as well (all `Exit` entries, unfiltered, per room). So the absolute values are lower than on big. They hold only against the same fixture at scale 2, measured the same way. They are not a statement about the live servers.
 - **Reads under the lock.** The Rust engine reads its 19 entry groups of a room one after another inside the transaction (`commands/growth.rs`). The TypeScript engine sends them together (`Promise.all`). The reads are close to half of the Rust run. Sending them together, or reading the candidates from the mirror outside the lock (plan section 3, growth step 3), removes most of that part.
 - **Search.** The Rust search is slower than the TypeScript one. It keys cells by strings and reads every cell through `walkable` on UTF-16 slices. The shared `Grid` (plan section 3, "Performance strategy") replaces both. At scale 2 the search does 8 times the work, about 2.4 s per run with today's code, so it cannot stay as it is.
-- **Not yet measured.** This run has no load. Case 6 measures the same run "while players build". That needs `tests/perf/live-load.ts` beside it, and its reference is recorded together with the commits per second of the movers (6.3).
+- **Under load:** see below.
+
+**How often a run comes.** The world worker runs growth in the job `epoch`, every world hour (`epochs.checkWorldMs`). The world clock on big runs at rate 24 (`WorldClock.rate`, read on 2026-11-24). So a region's growth run comes every 150 s of real time, not once an hour.
+
+**What a run sends to the mirrors.** Growth takes the world lock and then the room in its transaction. Both disappear for plain readers until the transaction ends. When no seam is valid the transaction is aborted, and both come back. So every room a run reaches costs 4 revisions in the change stream (2 `del`, a `put` of the lock and a `put` of the whole `Room` entry), and nothing has changed in the end. Every mirror receives them: the gateway and the world worker. Measured with one run of the TypeScript engine on a TypeScript space:
+
+| Space | Rooms reached | Revisions | Bytes in the change stream | of them `Room` puts |
+| --- | --- | --- | --- | --- |
+| the fixture alone | 13 | 53 | 16,901 | 11,962 |
+| the loaded world and the fixture | 50 | 201 | 77,759 | 58,345 |
+
+At scale 2 a `Room` entry carries four times the cells. Phase 1 should record this per run as well. With the occupancy version (plan section 3, growth step 1) a run that finds nothing changed would not take the room at all.
+
+**Under load.** `node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/growth-load.ts` runs a stack as on the servers with the world loaded (world worker, npc process without model calls, web process) and the fixture beside it. It has four windows of 60 s:
+
+- `idle`: growth runs alone;
+- `load`: 50 guest figures of `tests/perf/live-load.ts` (they pick up, carry, sell and walk; they do not build);
+- `load+growth`: the same figures with growth runs;
+- `load again`: the figures alone once more.
+
+A TypeScript growth run starts every 2 s. That samples many runs; it is not the production cadence. Every command reads the world lock in its transaction (`world-host.ts`), and a read inside a transaction makes the entry untakable for every other transaction until it ends (`spaces/src/core.ts`, `readBy`). Growth takes the lock without waiting. So a run stops as soon as a command is open. And while a run holds a room, every new command waits for it.
+
+Rust space server, world worker, npc and web process, on this development machine:
+
+| Window | Growth runs | Rooms reached per run (of 50) | Longest single hold | Answers p50 / p95 |
+| --- | --- | --- | --- | --- |
+| idle | 23, 17 complete; lock held 851 ms per complete run (median) | 50 | 38 ms | – |
+| load | – | – | – | 60 / 265 ms |
+| load+growth | 28, none complete | 0 (median) | 104 ms | 244 / 999 ms |
+| of which sent while a run was open | | | | 611 / 2,094 ms (122 commands) |
+| of which sent outside a run | | | | 222 / 873 ms (1,125 commands) |
+| load again | – | – | – | 556 / 10,002 ms |
+
+What it says:
+
+- **Growth does not get through under steady load.** In 28 runs with 50 figures, no run reached all rooms, and the median run reached none. A full room in a busy region would not grow at scale 1 today. This is the behaviour of the code as it is ("a busy world defers growth"). It is not seen on the servers: in the copies of the four region stores the fullest room has 70 plots of 384 cells, far below 70 %.
+- **A run slows the commands sent during it.** Inside the same window, commands sent while a run was open answered at about 2.8 times the median of the others, and at 2.4 times the p95. This split is the comparable value. The windows themselves are not comparable with each other: the answers drift over the run of the figures ("load again" is the slowest of all, without growth).
+- **For case 6 this means:** under load "the time `WORLD_LOCK` is held per run" has no value to compare, because no run completes. What can be compared under load is the longest single hold and the ratio of the answers during a run to those outside one. Without load the lock time per run is the reference (6.1 above).
+- **The Rust engine under load was not measured.** This script cannot see how far a Rust run gets (`growth_cost.rs` reports its time only). On the fixture alone it ran complete runs (table above).
 
 ### 6.2 Cells looked at per target choice
 
@@ -368,7 +406,7 @@ The world has 95 NPC characters, 0 animals and 0 carts after loading. TypeScript
 - 97 of them change nothing visible (lease renewals);
 - of the rest: `Msg` 24, `WorldSchedule` 21, `Process` 18, `Driftwood` 10–14, `Restock` 9, … `Character` 3.
 
-So without players the NPCs barely move: 3 `Character` commits a minute. Most of the commit load at scale 1 is the world's schedule and the leases, not the movers. The NPCs move by `move x y`, one commit per move, so finer cells do not add commits by themselves. The comparison "before and after, target unchanged" is made with this same run at scale 2. The movers' share under players' load is measured with `tests/perf/live-load.ts` beside it, together with the open part of 6.1.
+So without players the NPCs barely move: 3 `Character` commits a minute. Most of the commit load at scale 1 is the world's schedule and the leases, not the movers. The NPCs move by `move x y`, one commit per move, so finer cells do not add commits by themselves. The comparison "before and after, target unchanged" is made with this same run at scale 2. With 50 guest figures playing (`growth-load.ts`, all four windows) the NPC characters moved in 2 commits a minute, of 7,000 to 11,000 commits a minute in all. The figures of `live-load.ts` hardly call on NPCs, so this is the movers' own pace. Load with talking figures would need a load script of its own.
 
 ### 6.4 Frame sizes and the atlas
 
