@@ -307,6 +307,27 @@ The lock is taken once per room and released between rooms. Values are medians o
 | TypeScript | Rust | 766 | 461 | about 305 | – |
 | TypeScript | TypeScript | 586 | 434 | about 152 | 70 |
 
+**On the servers.** The same measurement ran once on big and once on nano, on 2026-11-24, then everything was removed again. Each run used a throwaway container:
+
+- the server's own `phi-spaces-mmo:rust` image (Node 22, `mmo-space`), with no network and at most 2 CPUs, removed after the run;
+- the scripts and the world in a folder of their own, mounted read-only and deleted afterwards;
+- the Rust measurement as a test binary built in `rust:1.99-bookworm`, the base of that image (`GROWTH_RUST_BIN`).
+
+The deployed checkout and the running containers were not touched. The game kept running beside the measurement, so the values include its load. Medians in ms per run:
+
+| Host | Space server | Engine | Run | Reads only | Longest single hold (TS) |
+| --- | --- | --- | --- | --- | --- |
+| big | Rust | Rust | 452 | 165 | – |
+| big | Rust | TypeScript | 273 | 100 | 34 |
+| big | TypeScript | Rust | 688 | 363 | – |
+| big | TypeScript | TypeScript | 472 | 318 | 56 |
+| nano | Rust | Rust | 840 | 323 | – |
+| nano | Rust | TypeScript | 514 | 230 | 81 |
+| nano | TypeScript | Rust | 1470 | 873 | – |
+| nano | TypeScript | TypeScript | 1025 | 708 | 112 |
+
+big runs the world. Its production pair holds the lock about 450 ms per worst-case run, which is close to this machine. nano is slower by about a factor of two. The order of the four pairs is the same everywhere.
+
 For TypeScript the script also times the lock itself, from its take to the commit or abort of that transaction. The lock time is the run time less the first read of the rooms (Rust space: 335 of 338 ms).
 
 **What this says for phase 1:**

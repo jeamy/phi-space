@@ -5,7 +5,8 @@
 // against the same space. Nothing grows, so every run finds the same store.
 //
 //   node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/growth-lock.ts
-//   GROWTH_ROOMS=<n> rooms instead of the largest region's; SPACES_MMO_SPACE_SERVER=<binary> the Rust space server.
+//   GROWTH_ROOMS=<n> rooms instead of the largest region's; SPACES_MMO_SPACE_SERVER=<binary> the Rust space server;
+//   GROWTH_RUST_BIN=<built growth_cost test binary> instead of cargo (where no cargo is, e.g. in a server's image).
 //
 // Prints one JSON line: the fixture, per engine the wall time of each run (median, max) and, for TypeScript, the time the
 // world lock was held per run (from its take to the commit or abort of that transaction, summed over the rooms) and the
@@ -69,8 +70,9 @@ try {
 	for (let i = 0; i < RUNS; i++) { const t = performance.now(); await growthTick(s, notFull, 60_000); readsOnly.push(performance.now() - t); }
 
 	const cargo = (extra: Record<string, string>) => {
-		const out = execFileSync("cargo", ["test", "--release", "-q", "-p", "mmo-engine", "--test", "growth_cost", "--", "--ignored", "--nocapture"], {
-			cwd: join(import.meta.dirname, "../../rust"), env: { ...process.env, GROWTH_COST_SPACE: stack.world, GROWTH_COST_RUNS: String(RUNS), ...extra }, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"],
+		const bin = process.env.GROWTH_RUST_BIN, args = ["--ignored", "--nocapture", "--exact", "growth_cost"];
+		const out = execFileSync(bin ?? "cargo", bin ? args : ["test", "--release", "-q", "-p", "mmo-engine", "--test", "growth_cost", "--", ...args], {
+			cwd: bin ? undefined : join(import.meta.dirname, "../../rust"), env: { ...process.env, GROWTH_COST_SPACE: stack.world, GROWTH_COST_RUNS: String(RUNS), GROWTH_COST_ROOT: join(import.meta.dirname, "../.."), ...extra }, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"],
 		});
 		const line = out.split("\n").find((l) => l.startsWith("growth_cost "));
 		if (!line) throw new Error(`the Rust measurement printed no result:\n${out}`);

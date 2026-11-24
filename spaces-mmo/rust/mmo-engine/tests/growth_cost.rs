@@ -3,7 +3,7 @@
 //! `GROWTH_COST_SPACE`; `GROWTH_COST_RUNS` growth runs (default 5) on the world of this checkout, each timed
 //! (`GROWTH_COST_READS_ONLY=1`: no room counts as full, so a run is the reads under the lock alone). Prints one
 //! line `growth_cost {"runs":[ms…],"grew":n}`. Without `GROWTH_COST_SPACE` it does nothing.
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use mmo_engine::commands::growth::growth_tick;
@@ -17,7 +17,8 @@ use phi_spaces_client::{connect_space, ConnectOptions};
 fn growth_cost() {
 	let Ok(addr) = std::env::var("GROWTH_COST_SPACE") else { return };
 	let runs: usize = std::env::var("GROWTH_COST_RUNS").ok().and_then(|v| v.parse().ok()).unwrap_or(5);
-	let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+	// GROWTH_COST_ROOT: the spaces-mmo folder whose world is read (a built test binary run elsewhere)
+	let root = std::env::var("GROWTH_COST_ROOT").map(PathBuf::from).unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
 	let mut w = mmo_engine::world::load_world(&root, "leuchtfeuer").expect("the world");
 	// GROWTH_COST_READS_ONLY=1: no room counts as full, each stops after its reads (what the search adds is the rest)
 	if std::env::var("GROWTH_COST_READS_ONLY").as_deref() == Ok("1") { let mut g = j::at(&w, "growth").clone(); phi_json::set(&mut g, "fullShare", 2.0); phi_json::set(&mut w, "growth", g); }
