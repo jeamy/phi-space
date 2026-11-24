@@ -7,6 +7,7 @@ import { isPassage } from "../occupancy.ts";
 import { grownPoint, insertStrip } from "../room-growth.ts";
 import { walkable, type WorldDef } from "../world.ts";
 import { timeNow } from "../source.ts";
+import { components, gridOf } from "../../../shared/grid.ts";
 import { isInterior } from "./interior.ts";
 export { grownGround, grownDecor } from "../room-growth.ts";
 
@@ -43,39 +44,40 @@ export function freeSide(w: WorldDef, room: RoomFields, exits: Array<{ x: number
 	return s ? s.axis === "x" ? "east" : "south" : null;
 }
 
-function reachable(w: WorldDef, ground: string[], blocked: Set<string>, start: { x: number; y: number }): Set<string> {
-	const seen = new Set<string>(), queue = [start];
-	for (let i = 0; i < queue.length; i++) {
-		const p = queue[i]!, key = `${p.x},${p.y}`;
-		if (seen.has(key) || blocked.has(key) || !walkable(w, ground, p.x, p.y)) continue;
-		seen.add(key);
-		for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) queue.push({ x: p.x + dx!, y: p.y + dy! });
-	}
-	return seen;
-}
-
-/** All previously reachable free cells stay reachable, and the new building land connects to that component. */
-function connected(w: WorldDef, room: RoomFields, s: RoomGrowthStep, entries: Taken[]): boolean {
-	const obstacles = entries.filter((e) => is(e, "Plot") || is(e, "Beacon")).map((e) => e.fields as unknown as Rect);
-	const blocked = new Set(obstacles.map((p) => `${p.x},${p.y}`));
-	const free = (p: { x: number; y: number }) => walkable(w, room.ground, p.x, p.y) && !blocked.has(`${p.x},${p.y}`);
-	let start = room.spawn;
-	if (!start || !free(start)) {
-		start = undefined;
-		for (let y = 0; y < room.ground.length && !start; y++) for (let x = 0; x < room.ground[y]!.length; x++) if (free({ x, y })) { start = { x, y }; break; }
-	}
-	if (!start) return false;
-	const g = { east: 0, south: 0, steps: [s] }, ground = insertStrip(room.ground, s);
-	const after = reachable(w, ground, new Set(obstacles.map((p) => { const q = grownPoint(p, g); return `${q.x},${q.y}`; })), grownPoint(start, g));
-	for (const key of reachable(w, room.ground, blocked, start)) {
-		const [x, y] = key.split(",").map(Number), q = grownPoint({ x: x!, y: y! }, g);
-		if (!after.has(`${q.x},${q.y}`)) return false;
-	}
-	for (let i = 0; i < s.fill.length; i++) if (s.fill[i] === w.growth!.tile || s.fill[i] === PATH) for (let j = 0; j < s.size; j++) {
-		const p = s.axis === "x" ? { x: s.at + j, y: i } : { x: i, y: s.at + j };
-		if (!after.has(`${p.x},${p.y}`)) return false;
-	}
-	return true;
+/** The seams of one room, checked against its free cells (not walkable land, a plot or a fire is not free): a seam is safe
+ *  when every row of the new strip that is building land (grass or path) joins the part of the room its start cell
+ *  (the spawn, else the first free cell) lies in. One labelling of the room's parts serves every seam; a seam then looks
+ *  only at the cells on both sides of it (plan section 3, growth step 1).
+ *
+ *  Why that is all: a strip row takes grass or path where either neighbour has it, else the left neighbour's land, so
+ *  where both cells beside a seam were free the strip between them is walkable, and every way that crossed the seam still
+ *  crosses it. What was reachable stays reachable; only the new land has to join it. tests/growth-seams.test.ts holds
+ *  this against the two searches over the grown room it replaced. */
+export function seamCheck(w: WorldDef, room: RoomFields, entries: Taken[]): (s: RoomGrowthStep) => boolean {
+	const ground = room.ground, width = ground[0]?.length ?? 0, height = ground.length;
+	const blocked = new Set(entries.filter((e) => is(e, "Plot") || is(e, "Beacon")).map((e) => `${e.fields.x},${e.fields.y}`));
+	const grid = gridOf(width, height, (x, y) => walkable(w, ground, x, y) && !blocked.has(`${x},${y}`));
+	let start = room.spawn && walkable(w, ground, room.spawn.x, room.spawn.y) && !blocked.has(`${room.spawn.x},${room.spawn.y}`) ? room.spawn : undefined;
+	if (!start) { const first = grid.open.indexOf(1); if (first >= 0) start = { x: first % width, y: Math.floor(first / width) }; }
+	if (!start) return () => false;
+	const label = components(grid), home = label[start.y * width + start.x]!;
+	return (s) => {
+		const length = s.axis === "x" ? width : height;
+		const at = (along: number, i: number) => along < 0 || along >= length ? -1 : s.axis === "x" ? label[i * width + along]! : label[along * width + i]!;
+		// the strip's walkable rows in runs; each run joins the parts on both sides of the seam beside it
+		const parent = new Map<number, number>(), find = (l: number): number => { let r = l; while (parent.has(r) && parent.get(r) !== r) r = parent.get(r)!; return r; };
+		const runs: Array<{ labels: number[]; land: boolean }> = [];
+		let run: { labels: number[]; land: boolean } | null = null;
+		for (let i = 0; i < s.fill.length; i++) {
+			const tile = s.fill[i]!;
+			if (!w.tiles[tile]?.walk) { run = null; continue; }
+			if (!run) { run = { labels: [], land: false }; runs.push(run); }
+			if (tile === w.growth!.tile || tile === PATH) run.land = true;
+			for (const l of [at(s.at - 1, i), at(s.at, i)]) if (l >= 0) run.labels.push(l);
+		}
+		for (const r of runs) for (const l of r.labels.slice(1)) { const a = find(r.labels[0]!), b = find(l); if (a !== b) parent.set(b, a); }
+		return runs.every((r) => !r.land || r.labels.some((l) => find(l) === find(home)));
+	};
 }
 
 /** Changes only absolute coordinates. Bed plants, room overview slots and carried items keep their local coordinates. */
@@ -115,7 +117,8 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 			const occupied = new Set(entries.filter((x) => is(x, "Plot")).map((x) => `${x.fields.x},${x.fields.y}`).filter((key) => land.has(key)));
 			if (!land.size || occupied.size < land.size * d.fullShare) { await space.abort(txn); continue; }
 			const rectangles = entries.filter((x) => x.fields.room === room.roomId).flatMap((x) => is(x, "Motion") && x.fields.zone ? [x.fields.zone as unknown as Rect] : typeof x.fields.w === "number" && typeof x.fields.h === "number" ? [x.fields as unknown as Rect] : []);
-			const step = [...candidates(w, room, exits)].find((s) => !rectangles.some((r) => crosses(r, s)) && connected(w, room, s, entries));
+			const safe = seamCheck(w, room, entries);
+			const step = [...candidates(w, room, exits)].find((s) => !rectangles.some((r) => crosses(r, s)) && safe(s));
 			if (!step) { await space.abort(txn); continue; }
 			const was = await space.takeIfExists({ type: "RoomGrowth", fields: { roomId: room.roomId } }, NO_WAIT, { txn });
 			const before: RoomGrowthFields = was ? fieldsOf<RoomGrowthFields>(was) : { roomId: room.roomId, east: 0, south: 0 };

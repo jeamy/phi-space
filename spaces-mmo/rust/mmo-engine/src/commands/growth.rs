@@ -14,6 +14,7 @@ use crate::occupancy::is_passage;
 use crate::room_growth::{grown_point, insert_strip, rows, rows_json};
 use crate::source::time_now;
 use crate::space::{fields, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
+use crate::grid::Grid;
 use crate::world::walkable;
 
 const POSITIONED: [&str; 17] = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Plot", "Zone", "Motion", "Animal", "Tree"];
@@ -70,55 +71,55 @@ pub fn free_side(w: &Json, room: &Json, exits: &[Json]) -> Option<&'static str> 
 	candidates(w, &rows(j::at(room, "ground")), exits).first().map(|s| if j::s(s, "axis") == "x" { "east" } else { "south" })
 }
 
-fn reachable(w: &Json, ground: &[String], blocked: &HashSet<String>, start: (f64, f64)) -> HashSet<String> {
-	let mut seen = HashSet::new();
-	let mut queue = vec![start];
-	let mut i = 0;
-	while i < queue.len() {
-		let (x, y) = queue[i];
-		i += 1;
-		let k = key(x, y);
-		if seen.contains(&k) || blocked.contains(&k) || !walkable(w, ground, x, y) { continue; }
-		seen.insert(k);
-		for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] { queue.push((x + dx, y + dy)); }
-	}
-	seen
-}
-
-/// `connected`: all reachable free cells stay reachable, and the new building land connects to them.
-fn connected(w: &Json, room: &Json, ground: &[String], s: &Json, entries: &[Json]) -> Result<bool> {
-	let obstacles: Vec<&Json> = entries.iter().filter(|e| is(e, "Plot") || is(e, "Beacon")).map(fields).collect();
-	let blocked: HashSet<String> = obstacles.iter().map(|p| key_of(p)).collect();
+/// `seamCheck`: the seams of one room against its free cells (walkable land without a plot or a fire). A seam is safe
+/// when every run of the new strip that is building land (grass or path) joins the part of the room its start cell (the
+/// spawn, else the first free cell) lies in. One labelling of the room's parts serves every seam; a seam looks only at
+/// the cells beside it (plan section 3, growth step 1). Where both cells beside a seam were free the strip between them
+/// is walkable (it takes grass or path where either has it, else the left one's land), so every way that crossed the
+/// seam still crosses it: only the new land has to join. The tests below hold it against the two searches it replaced.
+pub fn seam_check(w: &Json, room: &Json, ground: &[String], entries: &[Json]) -> impl Fn(&Json) -> bool {
+	let blocked: HashSet<String> = entries.iter().filter(|e| is(e, "Plot") || is(e, "Beacon")).map(|e| key_of(fields(e))).collect();
 	let free = |x: f64, y: f64| walkable(w, ground, x, y) && !blocked.contains(&key(x, y));
-	let mut start = j::opt(room, "spawn").map(|p| (j::n(p, "x"), j::n(p, "y")));
-	if start.is_none_or(|(x, y)| !free(x, y)) {
-		start = None;
-		'rows: for (y, row) in ground.iter().enumerate() { for x in 0..js::len16(row) { if free(x as f64, y as f64) { start = Some((x as f64, y as f64)); break 'rows; } } }
-	}
-	let Some(start) = start else { return Ok(false) };
-	let g = obj! { "east" => 0.0, "south" => 0.0, "steps" => Json::Array(vec![s.clone()]) };
-	let grown = insert_strip(ground, s, false)?;
-	let moved = |x: f64, y: f64| { let q = grown_point(&pt(x, y), &g, 0); (j::n(&q, "x"), j::n(&q, "y")) };
-	let gs = moved(start.0, start.1);
-	let after = reachable(w, &grown, &obstacles.iter().map(|p| { let q = grown_point(&pt(j::n(p, "x"), j::n(p, "y")), &g, 0); key_of(&q) }).collect(), gs);
-	for k in reachable(w, ground, &blocked, start) {
-		let mut it = k.split(',').map(js::to_number);
-		let (x, y) = (it.next().unwrap_or(f64::NAN), it.next().unwrap_or(f64::NAN));
-		let q = moved(x, y);
-		if !after.contains(&key(q.0, q.1)) { return Ok(false); }
-	}
-	let tile = j::s(j::at(w, "growth"), "tile");
-	let (at, size) = (j::n(s, "at"), j::n(s, "size"));
-	for (i, f) in j::a(s, "fill").iter().enumerate() {
-		if f.as_str() != Some(tile) && f.as_str() != Some(PATH) { continue; }
-		let mut jj = 0.0;
-		while jj < size {
-			let p = if j::s(s, "axis") == "x" { (at + jj, i as f64) } else { (i as f64, at + jj) };
-			if !after.contains(&key(p.0, p.1)) { return Ok(false); }
-			jj += 1.0;
+	let (width, height) = (ground.first().map_or(0, |r| js::len16(r)), ground.len());
+	let grid = Grid::of(width, height, |x, y| free(x as f64, y as f64));
+	let mut start = j::opt(room, "spawn").map(|p| (j::n(p, "x"), j::n(p, "y"))).filter(|&(x, y)| free(x, y)).map(|(x, y)| (x as usize, y as usize));
+	if start.is_none() { start = grid.open.iter().position(|&o| o).map(|i| (i % width, i / width)); }
+	let label = grid.components();
+	let home = start.map(|(x, y)| label[y * width + x]);
+	let (tiles, land, path) = (j::at(w, "tiles").clone(), j::s(j::at(w, "growth"), "tile").to_owned(), PATH.to_owned());
+	move |s: &Json| {
+		let Some(home) = home else { return false };
+		let x_axis = j::s(s, "axis") == "x";
+		let length = if x_axis { width } else { height };
+		let at = j::n(s, "at") as isize;
+		let lab = |along: isize, i: usize| -> i32 {
+			if along < 0 || along as usize >= length { return -1; }
+			let along = along as usize;
+			if x_axis { label[i * width + along] } else { label[along * width + i] }
+		};
+		// the strip's walkable rows in runs; each run joins the parts on both sides of the seam beside it
+		let mut runs: Vec<(Vec<i32>, bool)> = Vec::new();
+		let mut open = false;
+		for (i, f) in j::a(s, "fill").iter().enumerate() {
+			let tile = f.as_str();
+			let walks = tile.and_then(|t| tiles.get(t)).and_then(|t| t.get("walk")).is_some_and(j::truthy);
+			if !walks { open = false; continue; }
+			if !open { runs.push((Vec::new(), false)); open = true; }
+			let run = runs.last_mut().expect("a run");
+			if tile == Some(land.as_str()) || tile == Some(path.as_str()) { run.1 = true; }
+			for l in [lab(at - 1, i), lab(at, i)] { if l >= 0 { run.0.push(l); } }
 		}
+		let mut parent: std::collections::HashMap<i32, i32> = std::collections::HashMap::new();
+		fn find(parent: &std::collections::HashMap<i32, i32>, l: i32) -> i32 { let mut r = l; while let Some(&p) = parent.get(&r) { if p == r { break; } r = p; } r }
+		for (labels, _) in &runs {
+			for &l in labels.iter().skip(1) {
+				let (a, b) = (find(&parent, labels[0]), find(&parent, l));
+				if a != b { parent.insert(b, a); }
+			}
+		}
+		let root = find(&parent, home);
+		runs.iter().all(|(labels, land)| !*land || labels.iter().any(|&l| find(&parent, l) == root))
 	}
-	Ok(true)
 }
 
 /// `moved`: an entry's fields with its absolute coordinates in the grown room (things carried, bed plants and overview
@@ -181,9 +182,10 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 				else if j::no(f, "w").is_some() && j::no(f, "h").is_some() { Some(f.clone()) } else { None }
 			}).collect();
 			let mut step = None;
+			let safe = seam_check(w, &room, &ground, &entries);
 			for s in candidates(w, &ground, &exits) {
 				if rects.iter().any(|r| crosses(r, &s)) { continue; }
-				if connected(w, &room, &ground, &s, &entries)? { step = Some(s); break; }
+				if safe(&s) { step = Some(s); break; }
 			}
 			let Some(step) = step else { return Ok(Some(false)) };
 			let was = space.take_if_exists(&tmpl("RoomGrowth", obj! { "roomId" => room_id.as_str() }), NO_WAIT, Some(&txn)).await?;
@@ -231,3 +233,108 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 	}
 	Ok(grew)
 }
+
+#[cfg(test)]
+mod tests {
+	//! `seam_check` against `connected`, the two searches over the grown room it replaced (kept here as it was), over
+	//! random rooms, every seam on both axes and strips of 1 to 4 (as tests/growth-seams.test.ts does in TypeScript).
+	use super::*;
+
+	fn reachable(w: &Json, ground: &[String], blocked: &HashSet<String>, start: (f64, f64)) -> HashSet<String> {
+		let mut seen = HashSet::new();
+		let mut queue = vec![start];
+		let mut i = 0;
+		while i < queue.len() {
+			let (x, y) = queue[i];
+			i += 1;
+			let k = key(x, y);
+			if seen.contains(&k) || blocked.contains(&k) || !walkable(w, ground, x, y) { continue; }
+			seen.insert(k);
+			for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] { queue.push((x + dx, y + dy)); }
+		}
+		seen
+	}
+
+	/// `connected`: all reachable free cells stay reachable, and the new building land connects to them.
+	pub(super) fn connected(w: &Json, room: &Json, ground: &[String], s: &Json, entries: &[Json]) -> Result<bool> {
+		let obstacles: Vec<&Json> = entries.iter().filter(|e| is(e, "Plot") || is(e, "Beacon")).map(fields).collect();
+		let blocked: HashSet<String> = obstacles.iter().map(|p| key_of(p)).collect();
+		let free = |x: f64, y: f64| walkable(w, ground, x, y) && !blocked.contains(&key(x, y));
+		let mut start = j::opt(room, "spawn").map(|p| (j::n(p, "x"), j::n(p, "y")));
+		if start.is_none_or(|(x, y)| !free(x, y)) {
+			start = None;
+			'rows: for (y, row) in ground.iter().enumerate() { for x in 0..js::len16(row) { if free(x as f64, y as f64) { start = Some((x as f64, y as f64)); break 'rows; } } }
+		}
+		let Some(start) = start else { return Ok(false) };
+		let g = obj! { "east" => 0.0, "south" => 0.0, "steps" => Json::Array(vec![s.clone()]) };
+		let grown = insert_strip(ground, s, false)?;
+		let moved = |x: f64, y: f64| { let q = grown_point(&pt(x, y), &g, 0); (j::n(&q, "x"), j::n(&q, "y")) };
+		let gs = moved(start.0, start.1);
+		let after = reachable(w, &grown, &obstacles.iter().map(|p| { let q = grown_point(&pt(j::n(p, "x"), j::n(p, "y")), &g, 0); key_of(&q) }).collect(), gs);
+		for k in reachable(w, ground, &blocked, start) {
+			let mut it = k.split(',').map(js::to_number);
+			let (x, y) = (it.next().unwrap_or(f64::NAN), it.next().unwrap_or(f64::NAN));
+			let q = moved(x, y);
+			if !after.contains(&key(q.0, q.1)) { return Ok(false); }
+		}
+		let tile = j::s(j::at(w, "growth"), "tile");
+		let (at, size) = (j::n(s, "at"), j::n(s, "size"));
+		for (i, f) in j::a(s, "fill").iter().enumerate() {
+			if f.as_str() != Some(tile) && f.as_str() != Some(PATH) { continue; }
+			let mut jj = 0.0;
+			while jj < size {
+				let p = if j::s(s, "axis") == "x" { (at + jj, i as f64) } else { (i as f64, at + jj) };
+				if !after.contains(&key(p.0, p.1)) { return Ok(false); }
+				jj += 1.0;
+			}
+		}
+		Ok(true)
+	}
+
+	/// The fill a seam takes (`candidates`), without the condition of half grass.
+	fn step(w: &Json, ground: &[String], axis: &str, at: usize, size: f64) -> Json {
+		let (width, height) = (js::len16(&ground[0]), ground.len());
+		let (length, across) = if axis == "x" { (width, height) } else { (height, width) };
+		let tile = Json::from(j::s(j::at(w, "growth"), "tile"));
+		let path = Json::from(PATH);
+		let cell = |along: usize, cross: usize| if axis == "x" { cell_at(ground, cross, along) } else { cell_at(ground, along, cross) };
+		let fill: Vec<Json> = (0..across).map(|i| {
+			let a = cell(at - 1, i);
+			let b = if at < length { cell(at, i) } else { a.clone() };
+			if a == path || b == path { path.clone() } else if a == tile || b == tile { tile.clone() } else { a }
+		}).collect();
+		obj! { "axis" => axis, "at" => at as f64, "size" => size, "fill" => Json::Array(fill) }
+	}
+
+	#[test]
+	fn seam_check_answers_as_the_two_searches() {
+		let w = phi_json::parse(r##"{"tiles":{"~":{"walk":false},".":{"walk":true},",":{"walk":true},":":{"walk":true},"_":{"walk":true},"#":{"walk":false}},"growth":{"tile":","}}"##).unwrap();
+		let mut seed: u64 = 11;
+		let mut rnd = move || { seed = (seed.wrapping_mul(1103515245).wrapping_add(12345)) % (1 << 31); seed as f64 / (1u64 << 31) as f64 };
+		let tiles = [",", ",", ",", ".", ":", "~", "#", "_"];
+		let (mut seams, mut safe) = (0, 0);
+		for n in 0..300 {
+			let (width, height) = (3 + (rnd() * 34.0) as usize, 3 + (rnd() * 22.0) as usize);
+			let (water, plots) = (rnd() * 0.25, rnd() * 0.25);
+			let ground: Vec<String> = (0..height).map(|_| (0..width).map(|_| if rnd() < water { if rnd() < 0.7 { "~" } else { "#" } } else { tiles[(rnd() * tiles.len() as f64) as usize] }).collect()).collect();
+			let mut entries = Vec::new();
+			for y in 0..height { for x in 0..width { if rnd() < plots { let ty = if rnd() < 0.9 { "Plot" } else { "Beacon" }; entries.push(obj! { "type" => ty, "types" => Json::Array(vec![Json::from(ty)]), "fields" => obj! { "x" => x as f64, "y" => y as f64 } }); } } }
+			if rnd() < 0.3 { let x = (rnd() * width as f64) as usize; for y in 0..height { entries.push(obj! { "type" => "Plot", "types" => Json::Array(vec![Json::from("Plot")]), "fields" => obj! { "x" => x as f64, "y" => y as f64 } }); } }
+			let mut room = obj! { "roomId" => "r", "ground" => Json::Array(ground.iter().map(|r| Json::from(r.as_str())).collect()) };
+			if rnd() < 0.7 { j::set(&mut room, "spawn", obj! { "x" => (rnd() * width as f64).floor(), "y" => (rnd() * height as f64).floor() }); }
+			let check = seam_check(&w, &room, &ground, &entries);
+			for axis in ["x", "y"] {
+				let length = if axis == "x" { width } else { height };
+				for at in 1..=length {
+					let s = step(&w, &ground, axis, at, 1.0 + (rnd() * 4.0).floor());
+					let before = connected(&w, &room, &ground, &s, &entries).unwrap();
+					assert_eq!(check(&s), before, "room {n} ({width}x{height}), {axis}@{at}: {ground:?}");
+					seams += 1;
+					if before { safe += 1; }
+				}
+			}
+		}
+		assert!(safe * 10 > seams && safe * 10 < seams * 9, "both answers occur: {safe} of {seams} safe");
+	}
+}
+
