@@ -18,6 +18,7 @@ import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { ClockCache, decayNowMs, paceMs } from "./engine/clockcache.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
+import { awaitGridFormat } from "./engine/grid-format.ts";
 import { presentAt } from "./engine/worldtime.ts";
 import { claimRole } from "./npc/minds.ts";
 import { scriptFor, type Npc } from "./npc/scripts.ts";
@@ -37,6 +38,8 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	const w = o.world ?? (await loadWorld());
 	const conn = connectSpace(o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
 	const space = conn.space;
+	// the grid format before any write (shared/grid-format.ts): an NPC of another scale would walk to wrong cells
+	await awaitGridFormat(space, w).catch((e) => { conn.close(); throw e; });
 	const halt = new AbortController();
 	const sleep = (ms: number) => abortableSleep(halt.signal, ms);
 	const runs: Promise<void>[] = [];

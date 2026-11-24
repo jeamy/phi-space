@@ -1,0 +1,167 @@
+{
+	"Site": {
+		"x,y,w,h": "area"
+	},
+	"Building": {
+		"x,y,w,h": "area"
+	},
+	"Ruin": {
+		"x,y,w,h": "area"
+	},
+	"Scenery": {
+		"x,y,w,h": "area"
+	},
+	"Bed": {
+		"x,y,w,h": "area",
+		"plants[].x,y": "point"
+	},
+	"Field": {
+		"x,y,w,h": "area"
+	},
+	"Tree": {
+		"x,y,w,h": "area"
+	},
+	"Zone": {
+		"x,y,w,h": "area"
+	},
+	"Motion": {
+		"zone.x,y,w,h": "area"
+	},
+	"MillLoad": {
+		"x,y,w,h": "area"
+	},
+	"SiteOrder": {
+		"x,y,w,h": "area"
+	},
+	"Beacon": {
+		"x,y": "area"
+	},
+	"Exit": {
+		"x,y": "area",
+		"arrive.x,y": "point"
+	},
+	"Room": {
+		"building.x,y,w,h": "area",
+		"spawn.x,y": "point",
+		"map.x,y": "fixed"
+	},
+	"Character": {
+		"x,y": "point",
+		"aboard.spot.x,y": "point"
+	},
+	"Handover": {
+		"character.x,y": "point",
+		"character.aboard.spot.x,y": "point"
+	},
+	"Spot": {
+		"x,y": "point"
+	},
+	"Item": {
+		"x,y": "point"
+	},
+	"Animal": {
+		"x,y": "point"
+	},
+	"Cart": {
+		"x,y": "point"
+	},
+	"Plot": {
+		"x,y": "point"
+	},
+	"Route": {
+		"cells[].x,y": "path"
+	},
+	"Road": {
+		"cells[].x,y": "path"
+	},
+	"RoomGrowth": {
+		"east,south,baseWidth,baseHeight,steps[].at,size,fill": "growth"
+	},
+	"Intent": {
+		"line": "text"
+	},
+	"NpcMemory": {
+		"text": "text"
+	},
+	"Msg": {
+		"text": "text"
+	},
+	"Notice": {
+		"text": "text"
+	},
+	"Account": {},
+	"ActorToken": {},
+	"BeamRest": {},
+	"BedCommons": {},
+	"Blessing": {},
+	"ChatBlock": {},
+	"ChatGroup": {},
+	"ChatInvite": {},
+	"ChatKey": {},
+	"ChatMember": {},
+	"ChatMsg": {},
+	"ChatReport": {},
+	"ChatWait": {},
+	"Contribution": {},
+	"Courier": {},
+	"Credential": {},
+	"Deed": {},
+	"Epoch": {},
+	"Estate": {},
+	"FireBuilder": {},
+	"FireChain": {},
+	"Flame": {},
+	"Fog": {},
+	"Freight": {},
+	"GridFormat": {},
+	"HelpEntry": {},
+	"LightUse": {},
+	"Listing": {},
+	"LlmCount": {},
+	"LlmStatus": {},
+	"Loan": {},
+	"Lock": {},
+	"Migrated": {},
+	"ModelInfo": {},
+	"NameAlias": {},
+	"NpcAwake": {},
+	"NpcBorn": {},
+	"NpcOwner": {},
+	"NpcVisit": {},
+	"Offer": {},
+	"Order": {},
+	"ParkCare": {},
+	"Passage": {},
+	"Process": {},
+	"Prototype": {},
+	"Rested": {},
+	"Restock": {},
+	"Sated": {},
+	"SceneryGone": {},
+	"Season": {},
+	"SeedRest": {},
+	"Session": {},
+	"Setting": {},
+	"Settlement": {},
+	"SettlementName": {},
+	"ShopOrder": {},
+	"Show": {},
+	"ShowEntry": {},
+	"Sleep": {},
+	"StoreLog": {},
+	"Tag": {},
+	"Think": {},
+	"Thought": {},
+	"Translate": {},
+	"Travel": {},
+	"Variety": {},
+	"Vote": {},
+	"Wanted": {},
+	"WebSession": {},
+	"Wind": {},
+	"WorkRest": {},
+	"WorldClock": {},
+	"WorldEvent": {},
+	"WorldLoaded": {},
+	"WorldSchedule": {}
+}

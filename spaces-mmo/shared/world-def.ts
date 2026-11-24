@@ -29,6 +29,11 @@ export type WorldDef = {
 	decor?: Record<string, DecorDef>;
 	/** Raised when the definition changes: a world worker loads a newer version (rooms, exits, prototypes, help). */
 	version: number;
+	/** Cells per scale-1 cell edge (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 2); absent: 1. A binary runs
+	 *  the scales of `SUPPORTED_FORMAT` (shared/grid-format.ts) only. */
+	gridScale?: number;
+	/** The scale the generator was designed at, resampled to `gridScale` (section 2); absent: designed natively. */
+	derivedFrom?: number;
 	/** The hour of day 0 a new world's clock starts at (default 8; docs/weltzeit.en.md). */
 	startHour?: number;
 	/** A daily `evening` event at this world hour (docs/weltzeit.en.md): the schedule is made with the world. */

@@ -310,6 +310,7 @@ pub async fn run_world(o: HostOptions, ready: impl FnOnce(), halt: watch::Receiv
 	let mut others: Vec<(String, Space)> = Vec::new();
 	if !region.is_empty() { for (id, address) in region_addresses(&full, "")? { if id != region { others.push((id, connect(&address)?)); } } }
 	refuse_other_world(&space, &full, &region).await?;
+	crate::grid_format::check_grid_format(&space, &w).await?;
 	let loaded = load_into_space(&space, &w, LoadOptions { replace: false, txn_ms: None, elsewhere: (!region.is_empty()).then(|| others.iter().map(|(_, s)| s.clone()).collect()) }).await?;
 	let proc = announce(space.clone(), "world", halt.clone());
 	if loaded.loaded { println!("[world] loaded {} version {}{}", j::s(&w, "id"), phi_json::number_text(j::n(&w, "version")), if loaded.spawned.is_empty() { String::new() } else { format!(", placed {}", loaded.spawned.join(", ")) }); }

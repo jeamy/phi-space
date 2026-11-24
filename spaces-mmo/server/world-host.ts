@@ -39,6 +39,7 @@ import { motionTick } from "./engine/commands/townhall.ts";
 import { showTick } from "./engine/commands/festival.ts";
 import { byPeoplesPace, seasonTick, syncRates } from "./engine/clock.ts";
 import { growthTick } from "./engine/commands/growth.ts";
+import { checkGridFormat } from "./engine/grid-format.ts";
 import { cartTick } from "./engine/commands/cart.ts";
 import { passageTick } from "./engine/commands/passage.ts";
 import { loanTick } from "./engine/commands/shop.ts";
@@ -101,6 +102,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		return false;
 	};
 	await refuseOtherWorld(space, full, region).catch((e) => { conn.close(); for (const c of otherConns) c.close(); throw e; });
+	await checkGridFormat(space, w).catch((e) => { conn.close(); for (const c of otherConns) c.close(); throw e; });
 	const loaded = await loadIntoSpace(space, w, region ? { elsewhere } : {}).catch((e) => { conn.close(); for (const c of otherConns) c.close(); throw e; });
 	const proc = announce(space, "world");
 	const delivering = region ? deliver(space, others, full, halt.signal) : Promise.resolve();

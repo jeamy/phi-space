@@ -139,6 +139,8 @@ impl Space {
 		if txn.is_some() { self.flush().await?; }
 		Ok(self.remote.read_all(tmpl, Some(limit as f64), txn).await?)
 	}
+	/// `stats()`: the space's counts (`byType` among them).
+	pub async fn stats(&self) -> Result<Json> { self.flush().await?; Ok(self.remote.stats().await?) }
 	pub async fn count(&self, tmpl: &Json, txn: Option<&str>) -> Result<f64> {
 		if let Some(m) = self.copy(txn) { return Ok(m.count(tmpl)); }
 		if txn.is_some() { self.flush().await?; }
