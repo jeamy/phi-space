@@ -371,3 +371,12 @@ test("slow frames that vary from second to second let the resolution give way to
 	}
 	assert.equal(p.scale, SHARP.min);
 });
+
+test("the measuring mode: ?ratio= fixes the pixel ratio between 0.5 and 2, anything else leaves the view as it is", async () => {
+	const { fixedRatio } = await import("../client/closeup3d.ts");
+	assert.equal(fixedRatio(""), null);
+	assert.equal(fixedRatio("?ratio=1"), 1);
+	assert.equal(fixedRatio("?zoom=2&ratio=1.5"), 1.5);
+	assert.equal(fixedRatio("?ratio=3"), null);
+	assert.equal(fixedRatio("?ratio=abc"), null);
+});

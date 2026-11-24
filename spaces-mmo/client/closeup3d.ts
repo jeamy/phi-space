@@ -25,6 +25,16 @@ export function frameSummary(times: number[], calls: number[], triangles: number
 	};
 }
 
+/** The measuring mode of the 3D view (docs/3d-welt-und-raster-plan-2026-11-21.en.md acceptance case 5, protocol in
+ *  docs/messprotokoll-fall5.en.md): `?ratio=<n>` in the page's address fixes the picture's pixels per CSS pixel at n
+ *  (0.5 to 2) and turns `sharpen()` off, so that two measurements draw the same number of pixels. Null: the normal view. */
+export function fixedRatio(search: string): number | null {
+	const v = new URLSearchParams(search).get("ratio");
+	if (v === null) return null;
+	const n = Number(v);
+	return Number.isFinite(n) && n >= 0.5 && n <= 2 ? n : null;
+}
+
 /** The picture's resolution follows the frame rate, on every device (3D v3: one quality level, the resolution is what
  *  gives): below `slow` milliseconds a frame for a second, it drops by `step`; when frames come faster than `fast` for
  *  `hold` seconds, it rises again, up to the screen's. Never below `floor` pixels per CSS pixel. A drop that brings no

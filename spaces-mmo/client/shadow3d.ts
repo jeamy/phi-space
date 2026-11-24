@@ -16,14 +16,14 @@ const STILL = 1 << 0, MOVING = 1 << MOVING_LAYER;
 export function splitShadows(t: T, renderer: WebGLRenderer, sun: DirectionalLight) {
 	const map = renderer.shadowMap as unknown as { render(lights: unknown, scene: unknown, camera: { layers: { mask: number } }): void; autoUpdate: boolean; needsUpdate: boolean };
 	const draw = map.render.bind(renderer.shadowMap);
-	let kept: WebGLRenderTarget | null = null, still = true;
+	let kept: WebGLRenderTarget | null = null, still = true, full = 0;
 	map.render = (lights, scene, camera) => {
 		if (!map.autoUpdate && !map.needsUpdate) return;
 		const mask = camera.layers.mask, clear = renderer.clear;
 		try {
 			const shadow = sun.shadow, size = shadow.map?.width ?? 0;
 			if (still || !kept || !shadow.map || kept.width !== size) {
-				camera.layers.mask = STILL; draw(lights, scene, camera); still = false;
+				camera.layers.mask = STILL; draw(lights, scene, camera); still = false; full++;
 				const drawn = shadow.map;
 				if (!drawn?.depthTexture) return;
 				if (!kept || kept.width !== drawn.width || kept.height !== drawn.height) {
@@ -42,6 +42,8 @@ export function splitShadows(t: T, renderer: WebGLRenderer, sun: DirectionalLigh
 	return {
 		/** The still part is drawn anew with the next shadow map (the sun moved, a thing came or went, a detail changed). */
 		redrawStill(): void { still = true; },
+		/** How often the whole map was drawn (the still part with it), since the view started: the expensive shadow frames. */
+		fullDraws(): number { return full; },
 		dispose(): void { kept?.depthTexture?.dispose(); kept?.dispose(); kept = null; map.render = draw; },
 	};
 }

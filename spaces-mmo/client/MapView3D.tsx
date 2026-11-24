@@ -18,7 +18,7 @@ import { tr } from "./i18n/index.ts";
 import { buildingModel, greenhouseGlass, linerGeometry, sceneryModel } from "./buildings3d.ts";
 import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, FRUIT_AT, TREE_SORT_MODELS, willowRods, placeLook, plantGeometry, prepareModelDetails, propMaterial, contactShadow, propMesh, merge, cached, plainMaterial, solidMesh, propShadow, propShadows, setNight, TINTED, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
-import { shadowSizeAt, closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
+import { shadowSizeAt, closeBlur, fixedRatio, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
 import { AO, aoHider, createAoBaker, installAo, tuneAo } from "./ao3d.ts";
 import { MOVING_LAYER, splitShadows } from "./shadow3d.ts";
@@ -54,7 +54,9 @@ type Scene3D = {
 	/** the resolution as it follows the frame rate (sharpness) */
 	sharp: Sharpness;
 	/** a running measurement: per frame its time, its draw calls, and the JavaScript in it (moving things, drawing) */
-	measurement: { at: number; times: number[]; calls: number[]; moves: number[]; draws: number[]; remaining: number } | null;
+	measurement: { at: number; times: number[]; calls: number[]; moves: number[]; draws: number[]; remaining: number; full0: number | null } | null;
+	/** a room change under way (since when the new room is built) and how long the last one took to its first frame */
+	roomChange?: { since: number; built: boolean } | null; roomMs?: number | null;
 	/** a running measurement by parts (PARTS): which part is left out, since when, and the frames so far */
 	parts: { step: number; at: number; times: number[]; draws: number[]; lines: string[]; base: number } | null;
 	detailAt: number;
@@ -150,7 +152,7 @@ export function MapView3D(props: MapRendererProps) {
 	useEffect(() => onFpsStart(() => {
 		const s = state.current;
 		if (!s || s.measurement) return;
-		s.measurement = { at: performance.now(), times: [], calls: [], moves: [], draws: [], remaining: 32 };
+		s.measurement = { at: performance.now(), times: [], calls: [], moves: [], draws: [], remaining: 32, full0: null };
 		sayFps({ running: true, remaining: 32 });
 	}), []);
 
@@ -209,7 +211,8 @@ export function MapView3D(props: MapRendererProps) {
 						s.frame = requestAnimationFrame(frame); return;
 					}
 					// the resolution holds still while the parts are measured: they are compared with one another
-					if (!s.parts && sharpen(s.sharp, elapsed, now)) setRatio(s);
+					// with a fixed ratio (?ratio=, measuring mode) the resolution never follows the frames
+					if (!s.parts && FIXED_RATIO === null && sharpen(s.sharp, elapsed, now)) setRatio(s);
 					s.renderer.info.reset();
 					const began = s.measurement || s.parts ? performance.now() : 0;
 					const rowing = rowTick(s, now, latest.current), moved = step(s, dt, now / 1000, latest.current.me) || rowing;
@@ -229,12 +232,14 @@ export function MapView3D(props: MapRendererProps) {
 					const drawing = s.measurement || s.parts ? performance.now() : 0;
 					s.post.render(closeBlur(s.zoom), shadows);
 					if (s.parts) measureParts(s, elapsed, now, performance.now() - drawing);
+					// a room change ends with the first frame drawn of the new room
+					if (s.roomChange?.built) { s.roomMs = performance.now() - s.roomChange.since; s.roomChange = null; }
 					if (s.measurement) {
 						const m = s.measurement, seconds = Math.max(0, 32 - Math.floor((now - m.at) / 1000));
 						if (seconds !== m.remaining) { m.remaining = seconds; sayFps({ running: true, remaining: seconds }); }
-						if (now - m.at >= 2000) { m.times.push(elapsed); m.calls.push(renderer.info.render.calls); m.moves.push(drawing - began); m.draws.push(performance.now() - drawing); }
+						if (now - m.at >= 2000) { m.full0 ??= s.shadows.fullDraws(); m.times.push(elapsed); m.calls.push(renderer.info.render.calls); m.moves.push(drawing - began); m.draws.push(performance.now() - drawing); }
 						if (now - m.at >= 32000) {
-							const sum = frameSummary(m.times, m.calls, renderer.info.render.triangles, renderer.info.memory.geometries);
+							const sum = frameSummary(m.times, m.calls, renderer.info.render.triangles, renderer.info.memory.geometries), fulls = s.shadows.fullDraws() - (m.full0 ?? 0);
 							const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0), size = renderer.getDrawingBufferSize(new t.Vector2());
 							// what tells a slow graphics card from slow JavaScript: the time inside the frame's own code against the frame's
 							// whole time (the rest is the card and the browser), the work handed over, and how far the resolution gave way
@@ -242,8 +247,11 @@ export function MapView3D(props: MapRendererProps) {
 								`${sum.fps.toFixed(1)} FPS · Frame ${sum.p50Ms.toFixed(0)} ms (95 %: ${sum.p95Ms.toFixed(0)} ms)`,
 								`JavaScript: bewegen ${mean(m.moves).toFixed(1)} ms, zeichnen ${mean(m.draws).toFixed(1)} ms`,
 								`${Math.round(sum.drawCalls)} Draw-Calls · ${Math.round(sum.triangles / 1000)} Tsd. Dreiecke · Zoom ${s.zoom.toFixed(2)}`,
-								`Bild ${size.x}×${size.y} px · Schärfe ${Math.round(s.sharp.scale * 100)} % · Gerät ${fullRatio().toFixed(2)}×`,
+								`Bild ${size.x}×${size.y} px · Schärfe ${Math.round(s.sharp.scale * 100)} % · Gerät ${deviceRatio().toFixed(2)}×${FIXED_RATIO !== null ? ` · Pixelrate fest ${FIXED_RATIO}×` : ""}`,
+								`Frame 99 %: ${sum.p99Ms.toFixed(0)} ms · Schatten ganz gezeichnet: ${fulls} (${(fulls / 30).toFixed(1)}/s)${s.roomMs != null ? ` · letzter Raumwechsel ${Math.round(s.roomMs)} ms` : ""}`,
 							] });
+							// the same as one line for the protocol (docs/messprotokoll-fall5.en.md), on the console of a remote debugger
+							console.info(`[fps] ${JSON.stringify({ room: s.room.roomId, zoom: +s.zoom.toFixed(2), fps: +sum.fps.toFixed(1), p50Ms: +sum.p50Ms.toFixed(1), p95Ms: +sum.p95Ms.toFixed(1), p99Ms: +sum.p99Ms.toFixed(1), drawCalls: Math.round(sum.drawCalls), triangles: sum.triangles, fullShadows: fulls, pixels: `${size.x}x${size.y}`, sharpness: s.sharp.scale, fixedRatio: FIXED_RATIO, roomMs: s.roomMs ?? null })}`);
 							s.measurement = null;
 						}
 					}
@@ -269,7 +277,7 @@ export function MapView3D(props: MapRendererProps) {
 		const s = state.current;
 		if (!ready || !s) return;
 		let dead = false;
-		if (s.room.roomId !== props.room.roomId) { s.panX = 0; s.panZ = 0; }
+		if (s.room.roomId !== props.room.roomId) { s.panX = 0; s.panZ = 0; s.roomChange = { since: performance.now(), built: false }; }
 		s.room = props.room; s.world = props.world;
 		for (const m of [s.chars, s.objs]) for (const id of [...m.keys()]) remove(s, m, id);
 		// the old ground and its plants go at once: until the new ground stands, sync puts nothing on the old one
@@ -292,6 +300,7 @@ export function MapView3D(props: MapRendererProps) {
 			sync(s, latest.current.chars, latest.current.objs, latest.current.me, true);
 			s.aoDue = true;
 			resize(s);
+			if (s.roomChange) s.roomChange.built = true;
 		})();
 		return () => { dead = true; };
 	}, [ready, props.room, props.world]);
@@ -1123,7 +1132,10 @@ function lightRoom(s: Scene3D): void {
 }
 /** How bright the picture is under the tone curve, the sun's and the moon's light, and the sky's light on everything. */
 /** The pixel ratio at full sharpness: the screen's, at most 2. */
-const fullRatio = () => Math.min(2, window.devicePixelRatio || 1);
+const deviceRatio = () => Math.min(2, window.devicePixelRatio || 1);
+/** The measuring mode (closeup3d.ts fixedRatio): the page's `?ratio=` fixes the pixel ratio and holds sharpen() off. */
+const FIXED_RATIO = typeof location === "undefined" ? null : fixedRatio(location.search);
+const fullRatio = () => FIXED_RATIO ?? deviceRatio();
 function setRatio(s: Scene3D): void {
 	s.renderer.setPixelRatio(Math.max(Math.min(SHARP.floor, fullRatio()), fullRatio() * s.sharp.scale));
 	s.size = { w: 0, h: 0 }; resize(s);
