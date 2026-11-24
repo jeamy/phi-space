@@ -18,8 +18,7 @@ import { FOREVER, type SpaceLike } from "phi-spaces";
 import { growthTick } from "../../server/engine/commands/growth.ts";
 import { loadWorld } from "../../server/engine/world.ts";
 import { initialClock } from "../../server/engine/worldtime.ts";
-import { WORLD_LOCK } from "../../server/model.ts";
-import { largestRegionRooms, writeWorstGrowth } from "../growth-worst.ts";
+import { largestRegionRooms, timedLock, writeWorstGrowth } from "../growth-worst.ts";
 import { startStack } from "../stack.ts";
 
 const RUNS = Number(process.env.GROWTH_RUNS ?? 5);
@@ -28,25 +27,6 @@ const rooms = Number(process.env.GROWTH_ROOMS ?? largestRegionRooms(w));
 
 const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]!; };
 const round = (x: number) => Math.round(x * 10) / 10;
-
-/** The space with every hold of the world lock timed: from the take inside a transaction to its commit or abort. */
-function timedLock(space: SpaceLike, holds: number[]): SpaceLike {
-	const since = new Map<string, number>();
-	const end = (txn: string) => { const t = since.get(txn); if (t !== undefined) { holds.push(performance.now() - t); since.delete(txn); } };
-	return new Proxy(space, {
-		get(target, key, receiver) {
-			const f = Reflect.get(target, key, receiver);
-			if (typeof f !== "function") return f;
-			if (key === "takeIfExists") return async (template: { type?: string }, ms: number, o?: { txn?: string }) => {
-				const t = performance.now(), got = await f.call(target, template, ms, o);
-				if (got && o?.txn && template.type === WORLD_LOCK.type) since.set(o.txn, t);
-				return got;
-			};
-			if (key === "commit" || key === "abort") return async (txn: string, ...rest: unknown[]) => { try { return await f.call(target, txn, ...rest); } finally { end(txn); } };
-			return f.bind(target);
-		},
-	});
-}
 
 const stack = await startStack({ worlds: 0 });
 try {

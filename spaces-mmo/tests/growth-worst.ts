@@ -10,6 +10,7 @@
 // The sizes follow the world definition (w.growth), so the same fixture serves the finer grid after the switch.
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import type { WorldDef } from "../server/engine/world.ts";
+import { WORLD_LOCK } from "../server/model.ts";
 import { regionsOf, regionWorld } from "../server/engine/regions.ts";
 
 export type WorstGrowth = { rooms: string[]; width: number; height: number; free: number; plots: number; candidates: number };
@@ -46,4 +47,23 @@ export async function writeWorstGrowth(space: SpaceLike, w: WorldDef, rooms = la
 	const candidates = (width - Math.ceil(width / 2) + 1) + (height - Math.ceil(height / 2) + 1);
 	if (plots < width * height * d.fullShare) throw new Error("the worst case must be full enough to grow");
 	return { rooms: ids, width, height, free: freeW * freeH, plots, candidates };
+}
+
+/** The space with every hold of the world lock timed: from the take inside a transaction to its commit or abort. */
+export function timedLock(space: SpaceLike, holds: number[]): SpaceLike {
+	const since = new Map<string, number>();
+	const end = (txn: string) => { const t = since.get(txn); if (t !== undefined) { holds.push(performance.now() - t); since.delete(txn); } };
+	return new Proxy(space, {
+		get(target, key, receiver) {
+			const f = Reflect.get(target, key, receiver);
+			if (typeof f !== "function") return f;
+			if (key === "takeIfExists") return async (template: { type?: string }, ms: number, o?: { txn?: string }) => {
+				const t = performance.now(), got = await f.call(target, template, ms, o);
+				if (got && o?.txn && template.type === WORLD_LOCK.type) since.set(o.txn, t);
+				return got;
+			};
+			if (key === "commit" || key === "abort") return async (txn: string, ...rest: unknown[]) => { try { return await f.call(target, txn, ...rest); } finally { end(txn); } };
+			return f.bind(target);
+		},
+	});
 }
