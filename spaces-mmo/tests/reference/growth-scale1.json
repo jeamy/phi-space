@@ -1,0 +1,414 @@
+{
+	"world": "leuchtfeuer",
+	"gridScale": 1,
+	"growth": {
+		"strip": 4,
+		"fullShare": 0.7,
+		"maxW": 36,
+		"maxH": 24,
+		"tile": ","
+	},
+	"cases": [
+		{
+			"roomId": "alte-warte",
+			"size": "36x24",
+			"steps": [
+				"x@17+4",
+				"x@21+4",
+				"x@25+4",
+				"y@13+4",
+				"y@17+4"
+			]
+		},
+		{
+			"roomId": "anleger",
+			"size": "36x24",
+			"steps": [
+				"x@19+4",
+				"x@23+4",
+				"x@27+4",
+				"y@11+4",
+				"y@15+4"
+			]
+		},
+		{
+			"roomId": "duenen",
+			"size": "36x24",
+			"steps": [
+				"y@14+4",
+				"x@20+4",
+				"x@24+4",
+				"x@28+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "fischerdorf",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "graue-bucht",
+			"size": "36x24",
+			"steps": [
+				"y@14+4",
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "hafenviertel",
+			"size": "36x24",
+			"steps": [
+				"x@19+4",
+				"x@23+4",
+				"x@27+4",
+				"y@11+4",
+				"y@15+4"
+			]
+		},
+		{
+			"roomId": "klippenkopf",
+			"size": "36x24",
+			"steps": [
+				"x@17+4",
+				"x@21+4",
+				"x@25+4",
+				"y@12+4",
+				"y@16+4"
+			]
+		},
+		{
+			"roomId": "klippenpfad",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "koehlerwald",
+			"size": "36x24",
+			"steps": [
+				"x@18+4",
+				"x@22+4",
+				"x@26+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "krabbenbucht",
+			"size": "36x24",
+			"steps": [
+				"x@18+4",
+				"x@22+4",
+				"x@26+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "kraterhang",
+			"size": "36x24",
+			"steps": [
+				"x@18+4",
+				"x@22+4",
+				"x@26+4",
+				"y@11+4",
+				"y@15+4"
+			]
+		},
+		{
+			"roomId": "kupferhafen-kai",
+			"size": "36x24",
+			"steps": [
+				"x@21+4",
+				"x@25+4",
+				"x@29+4",
+				"y@13+4",
+				"y@17+4"
+			]
+		},
+		{
+			"roomId": "kupferhafen-markt",
+			"size": "36x24",
+			"steps": [
+				"x@20+4",
+				"x@24+4",
+				"x@28+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "leuchtklippe",
+			"size": "36x24",
+			"steps": [
+				"x@21+4",
+				"x@25+4",
+				"x@29+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "moewenfels-strand",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@11+4",
+				"y@15+4"
+			]
+		},
+		{
+			"roomId": "moewennest",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "moorwald",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "muschelbank",
+			"size": "36x24",
+			"steps": [
+				"x@18+4",
+				"x@22+4",
+				"x@26+4",
+				"y@10+4",
+				"y@14+4"
+			]
+		},
+		{
+			"roomId": "nebelholm-ufer",
+			"size": "36x24",
+			"steps": [
+				"x@19+4",
+				"x@23+4",
+				"x@27+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "perlengrund",
+			"size": "36x16",
+			"steps": [
+				"x@18+4",
+				"x@22+4",
+				"x@26+4"
+			]
+		},
+		{
+			"roomId": "rauchhafen",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "riffdorf",
+			"size": "36x24",
+			"steps": [
+				"x@19+4",
+				"x@23+4",
+				"x@27+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "robbenbank",
+			"size": "36x24",
+			"steps": [
+				"x@18+4",
+				"x@22+4",
+				"x@26+4",
+				"y@10+4",
+				"y@14+4"
+			]
+		},
+		{
+			"roomId": "salzgarten",
+			"size": "36x24",
+			"steps": [
+				"x@16+4",
+				"x@20+4",
+				"x@24+4",
+				"y@13+4",
+				"y@17+4"
+			]
+		},
+		{
+			"roomId": "salzwiesen",
+			"size": "36x24",
+			"steps": [
+				"x@19+4",
+				"x@23+4",
+				"x@27+4",
+				"y@10+4",
+				"y@14+4"
+			]
+		},
+		{
+			"roomId": "schaerenhafen",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@11+4",
+				"y@15+4"
+			]
+		},
+		{
+			"roomId": "schwarzer-strand",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@10+4",
+				"y@14+4"
+			]
+		},
+		{
+			"roomId": "seehundstrand",
+			"size": "36x24",
+			"steps": [
+				"x@18+4",
+				"x@22+4",
+				"x@26+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "speicher",
+			"size": "36x24",
+			"steps": [
+				"y@11+4",
+				"y@15+4",
+				"x@17+4",
+				"x@21+4",
+				"x@25+4"
+			]
+		},
+		{
+			"roomId": "steinkreis",
+			"size": "36x24",
+			"steps": [
+				"x@19+4",
+				"x@23+4",
+				"x@27+4",
+				"y@10+4",
+				"y@14+4"
+			]
+		},
+		{
+			"roomId": "tang-strand",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "torfmoor",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@11+4",
+				"y@15+4"
+			]
+		},
+		{
+			"roomId": "verlorener-hain",
+			"size": "36x24",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4",
+				"y@10+4",
+				"y@14+4"
+			]
+		},
+		{
+			"roomId": "vogelklippen",
+			"size": "36x24",
+			"steps": [
+				"x@18+4",
+				"x@22+4",
+				"x@26+4",
+				"y@11+4",
+				"y@15+4"
+			]
+		},
+		{
+			"roomId": "watt",
+			"size": "36x16",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4"
+			]
+		},
+		{
+			"roomId": "werft",
+			"size": "36x24",
+			"steps": [
+				"x@19+4",
+				"x@23+4",
+				"x@27+4",
+				"y@14+4",
+				"y@18+4"
+			]
+		},
+		{
+			"roomId": "wrackbucht",
+			"size": "36x16",
+			"steps": [
+				"x@22+4",
+				"x@26+4",
+				"x@30+4"
+			]
+		}
+	]
+}

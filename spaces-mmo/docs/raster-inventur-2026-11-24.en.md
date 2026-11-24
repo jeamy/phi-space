@@ -9,7 +9,7 @@ Phase 0 inventories what the grid switch touches before any format changes. This
 3. [Coordinate fields and their class](#klassen) (plan section 2.2)
 4. [Cells that codemode-chat keeps](#codemode) (plan section 2.2, "Arena and codemode-chat")
 5. [Decisions for phase 1](#offen), collected from the four
-6. [References of acceptance case 6 at scale 1](#referenzen) (plan section 6, case 6)
+6. [References at scale 1](#referenzen) (plan section 6, cases 4 and 6, phase 0)
 
 Each inventory names the TypeScript place. The Rust engine (`rust/mmo-engine/src`) mirrors it file for file and function for function (`commands/build.ts` → `commands/build.rs`, `npc/economy.ts` → `npc/economy.rs`). The plan's single table of rule values is written in phase 1 from this list in both engines. When it is written, every Rust counterpart is checked line by line, and differences are added here.
 
@@ -279,7 +279,7 @@ The class table of plan section 2.2 is this list. The start check fails on a coo
 
 <a id="referenzen"></a>
 
-## 6. References of acceptance case 6 at scale 1
+## 6. References at scale 1
 
 ### 6.1 World lock per growth run
 
@@ -336,5 +336,64 @@ For TypeScript the script also times the lock itself, from its take to the commi
 - **A relative reference.** The fixture's space holds only the worst-case rooms. A live region also has its exits, characters and items, which a room's reads under the lock take in as well (all `Exit` entries, unfiltered, per room). So the absolute values are lower than on big. They hold only against the same fixture at scale 2, measured the same way. They are not a statement about the live servers.
 - **Reads under the lock.** The Rust engine reads its 19 entry groups of a room one after another inside the transaction (`commands/growth.rs`). The TypeScript engine sends them together (`Promise.all`). The reads are close to half of the Rust run. Sending them together, or reading the candidates from the mirror outside the lock (plan section 3, growth step 3), removes most of that part.
 - **Search.** The Rust search is slower than the TypeScript one. It keys cells by strings and reads every cell through `walkable` on UTF-16 slices. The shared `Grid` (plan section 3, "Performance strategy") replaces both. At scale 2 the search does 8 times the work, about 2.4 s per run with today's code, so it cannot stay as it is.
-- **Not yet measured.** This run has no load. Case 6 measures the same run "while players build". That needs `tests/perf/live-load.ts` beside it, and its reference is recorded together with the commits per second of the movers (6.2).
+- **Not yet measured.** This run has no load. Case 6 measures the same run "while players build". That needs `tests/perf/live-load.ts` beside it, and its reference is recorded together with the commits per second of the movers (6.3).
+
+### 6.2 Cells looked at per target choice
+
+**Measurement.** `node --no-warnings --experimental-strip-types tests/perf/target-choice.ts`, with no browser and no space:
+
+- The search is `nextStep` of `client/walk.ts`, with a `free` that counts its calls.
+- The choice is copied from `walkTo` in `client/App.tsx`: the goal when it is free, else the first cell of rings 1 to 6 around it that is free and has a way. Keep the two alike until phase 1 replaces the choice by one search.
+- The room is the largest one (36 × 24 = 864 cells), all grass, with three cases:
+
+| Case | Candidates tried | Searches | Cells looked at | Time on this machine (node) |
+| --- | --- | --- | --- | --- |
+| reachable: free goal in the open room | 0 | 1 | 966 | 0.5 ms |
+| unreachable: free goal, the figure on a strip behind a column of water | 0 | 1 | 828 | 0.5 ms |
+| occupied and enclosed: the goal in a 3 × 3 building, everything around it beyond the water | 169 | 160 | 132,970 | 56 ms |
+
+The third case is the one case 6 is about. Each free cell of the rings starts a search of its own, and each search floods the far side of the water (up to its limit of 1024 cells). So the cost is the number of candidates times the room, about 154 times the room's cells already at scale 1. On a phone it is a multiple of the 56 ms, close to one tick (150 ms) or above it. Case 6 sets the target "at most room area plus candidates". At scale 2 the same choice has 624 candidates in a room of 3456 cells. One search from the figure, as the plan says, is the fix. The phone's own time is recorded on the phone (case 5).
+
+### 6.3 Commits of the server-driven movers
+
+**Measurement.** `node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/mover-commits.ts`:
+
+- It runs a stack as on the servers, without players: the space, a world worker that loads the world, and an npc process without model calls.
+- It waits 20 s to settle, then counts 60 s.
+- Every commit that changes what a reader sees is one revision (`statsWithRevision`). The batches of the change stream say which entry types each commit touched.
+
+The world has 95 NPC characters, 0 animals and 0 carts after loading. TypeScript and Rust processes (`SPACES_MMO_SPACE_SERVER`, `SPACES_MMO_WORLD_CMD`, `SPACES_MMO_NPC_CMD`) give the same result:
+
+- 214 commits in 60 s, 3.6 per second;
+- 97 of them change nothing visible (lease renewals);
+- of the rest: `Msg` 24, `WorldSchedule` 21, `Process` 18, `Driftwood` 10–14, `Restock` 9, … `Character` 3.
+
+So without players the NPCs barely move: 3 `Character` commits a minute. Most of the commit load at scale 1 is the world's schedule and the leases, not the movers. The NPCs move by `move x y`, one commit per move, so finer cells do not add commits by themselves. The comparison "before and after, target unchanged" is made with this same run at scale 2. The movers' share under players' load is measured with `tests/perf/live-load.ts` beside it, together with the open part of 6.1.
+
+### 6.4 Frame sizes and the atlas
+
+**Measurement.** `node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/frame-bytes.ts` (plan case 4):
+
+- It starts a server as in production and connects one player.
+- It measures the frames the page gets. The gateway sends each frame as its JSON text, so the bytes are those of the parsed frame.
+- Then every room grows without the fill condition until none can grow, and the player connects again.
+
+TypeScript and Rust processes give the same sizes, up to 1–2 bytes in `hello` and `atlasState`. Bytes, UTF-8:
+
+| State | `hello` | its `room` | `atlas` | `atlasState` | Rooms in the atlas, their cells |
+| --- | --- | --- | --- | --- | --- |
+| base (as loaded; the player's room 24 × 16) | 30,623 | 1,124 | 21,355 | 805 | 37, 14,208 |
+| maximal (every room grown; the player's room 36 × 24) | 32,162 | 2,132 | 39,067 | 807 | 37, 31,104 |
+
+The plan's target for `atlas` is 25 KiB (25,600 bytes) for 37 base rooms. The base atlas takes 21,355 bytes of that already at scale 1. At scale 2 a base room has four times the cells. The gateway's preview must therefore sample 2 × 2 game cells per preview cell (plan section 4, "Atlas"), which brings it back to about the size measured here. The room's share of `hello` is small (4 to 7 %). Most of `hello` is the world's definition (tiles, skins, prototypes).
+
+### 6.5 Reproducible growth cases
+
+**Measurement.** `node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/growth-cases.ts`:
+
+- It loads the world and grows every room without the fill condition until none can grow.
+- For each room it records the steps it took (axis, seam, size) and its final size.
+- It compares them with `tests/reference/growth-scale1.json`; `--write` writes that file anew.
+
+Growth draws no chance, so a second run gives the same file, also with the Rust space and world worker loading the world. The cases cover 37 rooms and 179 steps. 34 rooms end at 36 × 24. `perlengrund`, `watt` and `wrackbucht` end at 36 × 16: none of their southern seams passed the checks of `growth.ts` (land, fill, reachability). After the switch the same run at scale 2 is held to this file: every seam and size times `gridScale`, the same sides in the same order.
 
