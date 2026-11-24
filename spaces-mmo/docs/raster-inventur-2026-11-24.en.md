@@ -4,10 +4,11 @@
 
 Phase 0 inventories what the grid switch touches before any format changes. This document holds the inventories in the order of the plan:
 
-1. [Rule values in cells](#regeln) (plan section 2.4): **done**, below.
-2. Reactions to entering a cell (plan section 3, "Execution"): to follow.
-3. Coordinate fields and their class (plan section 2.2): to follow.
-4. Cells that codemode-chat keeps (plan section 2.2, "Arena and codemode-chat"): to follow.
+1. [Rule values in cells](#regeln) (plan section 2.4)
+2. [Reactions to entering a cell](#betreten) (plan section 3, "Execution")
+3. [Coordinate fields and their class](#klassen) (plan section 2.2)
+4. [Cells that codemode-chat keeps](#codemode) (plan section 2.2, "Arena and codemode-chat")
+5. [Decisions for phase 1](#offen), collected from the four
 
 Each inventory names the TypeScript place. The Rust engine (`rust/mmo-engine/src`) mirrors it file for file and function for function (`commands/build.ts` → `commands/build.rs`, `npc/economy.ts` → `npc/economy.rs`). The plan's single table of rule values is written in phase 1 from this list in both engines. When it is written, every Rust counterpart is checked line by line, and differences are added here.
 
@@ -53,6 +54,7 @@ The plan's section 2.4 names only `growth.*`, `field.*PerCells` and `perCell`. T
 | `npc/economy.ts:167` `stepBeside(…, reach = 1)` | 1 | length | NPC stands beside a building |
 | `npc/settlers.ts:74` `besideOf(…, reach = 1)` | 1 | length | the same for settlers |
 | `commands/build.ts:662` `MOVES_PER_COMMAND` | 100 | things, stays | not cells |
+| `server/accounts.ts:337` scatter `randomInt(-3, 4)`, `randomInt(-2, 3)` around the spawn | ±3, ±2 | length | where a new character starts, before `freeCellNear` |
 
 ### 1.3 Bare numbers in distance comparisons (TS server)
 
@@ -128,8 +130,148 @@ The client mirrors several server rules to show and pre-check actions. It takes 
 
 ### 1.7 Result for the plan
 
-- The table of plan section 2.4 gets the values of 1.1–1.3 and 1.5 by name. The 30 "beside" literals and the eight reach literals go through two named entries (`BESIDE`, `REACH_POINT`), so the switch changes two numbers instead of 38.
-- Three questions for phase 1:
-  - the ring at exactly 1 (1.3);
-  - neighbouring flowers (1.3);
-  - `MAX_TRAIL` of the arena (1.2).
+The table of plan section 2.4 gets the values of 1.1–1.3 and 1.5 by name. The 30 "beside" literals and the eight reach literals go through two named entries (`BESIDE`, `REACH_POINT`), so the switch changes two numbers instead of 38.
+
+<a id="betreten"></a>
+
+## 2. Reactions to entering a cell
+
+The plan demands that an intent of two steps triggers in the cell between them whatever a single step would have triggered (section 3, "Execution"). Read for this: the movement commands (`commands/default.ts`: `step`, `moveTo`, `move`, `traverse`, `relocate`, `placeIn`; Rust `commands/default.rs`: `step`, `move_to`, `traverse`), every reader of `Character` positions in the engine, the world worker and the NPC process, and the client's walk.
+
+**Server: one reaction, the exit.** `moveTo` checks the target cell against the room's exits (`default.ts:38`) and calls `traverse` on a hit. `traverse` (`default.ts:129`):
+
+- checks the exit's locks (`check(c, exit.locks, "traverse")`);
+- refuses in fog above `exit.fogMax` (`throughFog`, `default.ts:108`);
+- hands the figure to another region (`handOff`, `engine/handover.ts`) or places it in the target room at the arrival cell, moved by the growth of the target room (`grownPoint`) and to the nearest free cell (`placeIn`);
+- drops the figure's trade offers (`dropOffers`) and tells both rooms.
+
+At scale 2 the exit is a 2×2 area (plan section 2.2): the hit becomes a footprint test, so leg one of a double step that enters any cell of it takes the exit and ends the intent.
+
+**Server: what a step itself checks, per cell.** For a double step each of these must hold for both legs, in order:
+
+- `walkable` terrain (`default.ts:246`);
+- the cell is not blocked by an object (`blockedIn`, with the leaving-a-bed exception and the fire's own refusal text, `default.ts:42–46`);
+- no other online figure holds the cell (the `Spot` with `unique`, `claimSpot`, `occupancy.ts`);
+- on a passage cell around an exit (`isPassage`) the figure holds no Spot (`releaseSpot`, `default.ts:55`).
+
+The step writes `ack`, or on a refusal `refused` with the position kept (`default.ts:248–254`). A double step writes one `ack` with the cell actually reached (plan section 3, "Acknowledgement").
+
+**Nothing else reacts to a figure entering a cell.** Checked and not reactions:
+
+- *Wild animals:* scaring them off is a command (`commands/wild.ts:298`, within `scareReach`), not an entry. No tick looks at where figures stand.
+- *Zones* (`Zone`, `Motion.zone`): they restrict building (`zoneRefusal`, `commands/build.ts:87`); entering one does nothing.
+- *Ship and train:* boarding and landing are commands and intents (`commands/passage.ts`, `commands/cart.ts`); landing is sent by the liner tick.
+- *Fire light, fog, island counts:* `fire.ts:283` counts people per island, by room, not by cell.
+- *NPC loops* (`npc/economy.ts`, `npc/settlers.ts`, `npc/requests.ts`): they walk with `move` and then act. They react to where they arrived, not to the cells crossed.
+
+The Rust engine has the same single reaction (`default.rs:25` `move_to` → `default.rs:165` `traverse`). Both gateways check the step's shape (`server/gateway.ts:310`; `rust/mmo-web/src/gateway.rs:374`: `|dx|+|dy| = 1`); with the double step they admit length two on one axis (plan section 3).
+
+**Client: three reactions, all on arrival.**
+
+- Fetching a thing: when the own figure stands within reach of it, the page stops walking and picks it up (`client/App.tsx:1147`).
+- Walking to a fire first (`App.tsx:1138`).
+- A walk ending on an exit hands over to the room change (`client/walk.ts:76`).
+
+They test the figure's acknowledged position against a reach (inventory 1.5), so a double step that passes the reach cell without stopping there is caught on the next acknowledged cell. The reach is 2 at scale 2, and a double step moves 2, so the figure cannot jump over it on a straight line.
+
+**Result.** Phase 1 needs no general "entered cell" hook. The intermediate cell of a double step runs the same per-cell checks as a single step, and the exit test becomes a footprint test. The plan's phrase "whatever the inventory of phase 0 finds besides" finds nothing besides.
+
+<a id="klassen"></a>
+
+## 3. Coordinate fields and their class
+
+From `shared/model.ts`, `server/engine/handover.ts` (`HandoverFields`), `server/engine/courier.ts` and every entry type the server writes (`space.write({ type: … })`, 94 types). Classes as in plan section 2.2.
+
+**Area (position and footprint × `gridScale`)**
+
+| Type | Fields |
+| --- | --- |
+| `Site`, `Building`, `Ruin`, `Scenery` | `x, y, w, h` |
+| `Bed`, `Field`, `Tree` | `x, y, w, h` (`Tree.w/h` typed as literal `1`: plan section 2.1) |
+| `Zone` | `x, y, w, h` |
+| `Motion` | `zone: {x, y, w, h}` |
+| `MillLoad` | `x, y, w, h` (the mill's place kept for when it is gone) |
+| `SiteOrder` | `x, y, w, h` (the site's place) |
+| `Room` | `building: {x, y, w, h}` (the outer footprint of an interior's building) |
+| `Beacon` | `x, y` (gets `w, h`, plan section 2.2) |
+| `Exit` | `x, y` (gets `w, h`) |
+
+**Cell point (one exact cell, `(2x, 2y)` on conversion)**
+
+| Type | Fields |
+| --- | --- |
+| `Character` | `x, y`; `aboard.spot: {x, y}` |
+| `Handover` | `character.x, character.y` (and `character.aboard.spot`) |
+| `Spot` | `x, y` |
+| `Item` | `x, y` on the ground (`location` a room) |
+| `Animal` | `x, y` |
+| `Cart` | `x, y` |
+| `Bed` | `plants[].x, plants[].y` (absolute, plan section 5) |
+| `Exit` | `arrive: {x, y}` |
+| `Room` | `spawn: {x, y}` |
+| `Route` | `cells[]: {room, x, y}`, a path; plan section 5, "Roads and progress" (insert the missing cell) |
+| `Road` | `cells[]: {x, y}`, the same path per room |
+| `Plot` | `x, y`. Not converted: the occupancy migration removes plots before the grid migration (plan section 5) |
+
+**Growth history: its own rule** (plan section 5, "Terrain, spawn and growth"). `RoomGrowth`: `east`, `south`, `baseWidth`, `baseHeight` (lengths, × 2); `steps[].at`, `steps[].size` (lengths, × 2); `steps[].fill` (each element twice).
+
+**No room reference, unchanged**
+
+- `Room.map` (atlas)
+- `Item.x/y = -1` while carried (the inventory sentinel)
+
+**Terrain itself.** `Room.ground`, `Room.decor`: resampled (plan section 2.4), not a coordinate field.
+
+**Coordinates in text.**
+
+- `Intent.line` (`move 5 7`, `versetze …`): an unexecuted intent blocks the release (plan section 5).
+- `NpcMemory.text` (≤ 4 KiB, written by the model): may name cells. Phase 1 decides whether to clear it at the cut or keep it as stale prose.
+- `Msg`, `Notice` texts: past messages, not converted.
+
+**No coordinates.** Checked: the other written types. Their `at`, `from`, `to` are times, room or character ids or names (`Offer`, `Msg`, `Passage`, `Courier`, `Listing`, `Wanted`, `Variety`, `ShowEntry`, `Epoch`, `StoreLog`, `WorldLoaded`, …).
+
+**Accounts space (`nano`).** `Account`, `Credential`, `NameAlias`, `WebSession`: no coordinates. A new character's place is computed from `Room.spawn` of the world region (`server/accounts.ts:329–338`), not stored in the accounts space. Step 1 of the cut still checks the actual store (plan section 5).
+
+The class table of plan section 2.2 is this list. The start check fails on a coordinate field of a written type that has no class. Phase 0 implements it with exactly these rows.
+
+<a id="codemode"></a>
+
+## 4. Cells that codemode-chat keeps
+
+**Task definitions in code (Leuchtfeuer cells, scaled with the cut).**
+
+- `codemode-chat/server/island.ts:39–47, 94–…`: episodes as `[room, x, y]` for the start and the driftwood, in the rooms of the Graue Insel.
+- `ANLEGER_FIRE = {room, x: 7, y: 5}` (`island.ts:92`): the fire of the Anleger, named in the task text (`tasks.ts:158–159`).
+- Start cells become cell points `(2x, 2y)`. The fire becomes the centre of its 2×2 footprint where a text names it.
+
+**Rule values (lengths, × 2).**
+
+- `server/memory.ts:30` `NEAR = 3`: Manhattan, "near" for recall.
+- `server/memory.ts:32` `JUMP_CELLS = 10`: cost of a jump between remembered paths.
+- `server/subgoals.ts:13` "within 3 cells of `near`": the same as spaces-mmo's `SUBGOAL_NEAR`.
+- `server/tides.ts:48`, `server/toyisland.ts:147`: "3 cells in from the exit".
+- The model-facing texts that state them: `bottask.ts:140–141, 152–153`, `llm.ts:354`, `tasks.ts:135–136`.
+
+**Stored entries (cell points, scaled with the cut, plan section 2.2).**
+
+- `BotEpisode`: `path: PathStep[]` (`[room, x, y]`), `start`, `setup.items`.
+- `PlanMemory` (`MemoryPath`): `path`, `obs` (tide observations with `x, y`).
+- `BotRoom`: `geo`. Not converted, read anew from the arena (plan section 2.2).
+
+**Not cells.** `PATH_MAX = 200` (`judge.ts:517`, the number of path points kept) and `MAX_MEMORY`.
+
+**Toy islands: a world of their own at scale 1.** `server/toyisland.ts` and `server/toyarena.ts` play bots in the judge's own process on generated islands. Each room is "24 × 16 cells of ground inside a rim of water" (`toyisland.ts:3`), with the rules of `move`, exits, driftwood and fire written there. The Graue Insel is copied by its room names and exits (`island.ts` `ISLAND_ROOMS`), not by its cells. It shares no store or code with the engine. Open decision (5).
+
+<a id="offen"></a>
+
+## 5. Decisions for phase 1
+
+1. **Rings at exactly 1** (1.3: `build.ts:124`, `npc/economy.ts:172`). Proposal: within the doubled reach and not on the footprint (1 to 2).
+2. **Neighbouring flowers** (1.3: `garden.ts:297`). Proposal: Manhattan `<= 2`, two plants never on one cell.
+3. **`MAX_TRAIL` of the arena** (1.2). Proposal: double it, so the trail keeps the same physical length.
+4. **`NpcMemory` at the cut** (3). Proposal: clear it. The model writes it anew, and stale cells would send NPCs to the wrong place.
+5. **Toy islands of codemode-chat** (4). Either they stay at scale 1, or they are scaled with the cut. Staying at scale 1:
+   - their task texts and the `NEAR`/`JUMP_CELLS` values then differ from the arena's;
+   - a remembered path from one world means nothing in the other.
+
+   Proposal: scale them with the cut too, so the bots and the judge know one grid.
