@@ -1,15 +1,15 @@
 // What a tap's target choice costs the client (docs/3d-welt-und-raster-plan-2026-11-21.en.md acceptance case 6): the
 // cells it looks at and the time, in the largest room (w.growth maxW × maxH), for a reachable target, an unreachable one
 // and an occupied target whose surroundings are unreachable. No space, no browser: the search of client/walk.ts
-// (`nextStep`) with a counting `free`, and the choice of client/App.tsx `walkTo` copied here: the goal when it is free,
-// else the first of the cells in rings 1 to 6 around it that is free and has a way (App.tsx; keep the two alike until
-// phase 1 replaces the choice by one search).
+// (`nextStep`) with a counting `free`, and the choice App.tsx `walkTo` made before 2026-11-24 copied here (`legacy`: the
+// goal when it is free, else the first cell of the rings 1 to 6 that is free and has a way, a search per candidate),
+// beside the one search of client/walk.ts `chooseTarget` that replaced it (`oneSearch`).
 //
 //   node --no-warnings --experimental-strip-types tests/perf/target-choice.ts
 //
 // Prints one JSON line per case: the room, the candidates tried, the searches run, the cells looked at (calls of `free`)
 // and the median time of TARGET_RUNS choices (default 20) on this machine. The phone's time is recorded on the phone.
-import { nextStep } from "../../client/walk.ts";
+import { chooseTarget, nextStep } from "../../client/walk.ts";
 import { loadWorld } from "../../server/engine/world.ts";
 
 type Cell = { x: number; y: number };
@@ -55,5 +55,11 @@ for (const c of cases) {
 	const looks = counter.looks, times: number[] = [];
 	for (let i = 0; i < RUNS; i++) { const t = performance.now(); choose(free, c.start, c.goal); times.push(performance.now() - t); }
 	times.sort((a, b) => a - b);
-	console.log(JSON.stringify({ case: c.name, room: `${W}x${H}`, cells: W * H, end: result.end ?? null, way: result.way, candidates: result.candidates, searches, looks, medianMs: Math.round(times[Math.floor(times.length / 2)]! * 1000) / 1000 }));
+	const { free: f2, counter: c2 } = room(c.wall, c.taken);
+	const end2 = chooseTarget(f2, c.start, c.goal, W, H), looks2 = c2.looks, times2: number[] = [];
+	for (let i = 0; i < RUNS; i++) { const t = performance.now(); chooseTarget(f2, c.start, c.goal, W, H); times2.push(performance.now() - t); }
+	times2.sort((a, b) => a - b);
+	if (JSON.stringify(end2) !== JSON.stringify(result.end ?? null)) throw new Error(`${c.name}: the one search chose ${JSON.stringify(end2)}, the legacy choice ${JSON.stringify(result.end)}`);
+	const ms = (t: number[]) => Math.round(t[Math.floor(t.length / 2)]! * 1000) / 1000;
+	console.log(JSON.stringify({ case: c.name, room: `${W}x${H}`, cells: W * H, end: result.end ?? null, way: result.way, legacy: { candidates: result.candidates, searches, looks, medianMs: ms(times) }, oneSearch: { looks: looks2, medianMs: ms(times2) } }));
 }

@@ -392,6 +392,16 @@ What it says:
 
 The third case is the one case 6 is about. Each free cell of the rings starts a search of its own, and each search floods the far side of the water (up to its limit of 1024 cells). So the cost is the number of candidates times the room, about 154 times the room's cells already at scale 1. On a phone it is a multiple of the 56 ms, close to one tick (150 ms) or above it. Case 6 sets the target "at most room area plus candidates". At scale 2 the same choice has 624 candidates in a room of 3456 cells. One search from the figure, as the plan says, is the fix. The phone's own time is recorded on the phone (case 5).
 
+**After the one search (phase 1, 2026-11-24, `chooseTarget` in `client/walk.ts`).** The same script measures both. `legacy` is the choice as it was, `oneSearch` is the one search that replaced it. `oneSearch` is the choice alone: for a free goal `walkTo` still checks the way once (`nextStep`), as before.
+
+| Case | Cells looked at before → after | Time before → after |
+| --- | --- | --- |
+| reachable | 966 → 1 (+ the way check) | 0.6 → 0.001 ms |
+| unreachable | 828 → 1 (+ the way check) | 0.4 → 0.001 ms |
+| occupied and enclosed | 132,970 → 312 | 53 → 0.2 ms |
+
+`tests/walk.test.ts` holds the one search to the search per candidate over 400 random rooms, with the bound "at most room area plus candidates".
+
 ### 6.3 Commits of the server-driven movers
 
 **Measurement.** `node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/mover-commits.ts`:
