@@ -1,0 +1,10 @@
+digraph "Revocation with an already-open editor" {
+#include
+	before [label="Lea reads brief.md version 4\nNorth is her only grant on dispatch"];
+	revoke [label="Tenant administrator removes Lea from North\nCommit membership change in the same tenant queue", fillcolor="#fcf2d9"];
+	ack [label="Removal acknowledged"];
+	listing [label="Lea lists her workspaces\ndispatch is no longer listed"];
+	save [label="Lea saves from the open editor\nService checks current rights again"];
+	result [label="notFound, same as an absent path\nFile remains at version 4", fillcolor="#f8e9e5"];
+	before -> revoke -> ack -> listing -> save -> result;
+}
