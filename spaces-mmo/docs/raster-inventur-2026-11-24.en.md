@@ -288,7 +288,7 @@ The class table of plan section 2.2 is this list. The start check fails on a coo
 - 505 of 640 cells are plots, so 79 % is taken and the room is full enough to grow (70 %).
 - Only the upper-left part below half the width and height is free: 135 cells, with the spawn in the corner.
 - Every seam lies at or beyond half the room, so the cells on both sides of it are plots.
-- No rectangle crosses a seam. So all 28 candidates (17 east, 11 south) reach `connected`. Each runs both of its searches and is rejected.
+- No rectangle crosses a seam. So all 28 candidates (17 east, 11 south) reach the seam check and are rejected. Before growth step 1 (the reference below) that check was `connected`, which ran two searches over the grown room for each candidate.
 
 The sizes come from `w.growth`, so the same fixture serves the finer grid after the switch.
 
@@ -306,6 +306,17 @@ The lock is taken once per room and released between rooms. Values are medians o
 | Rust | TypeScript | 338 | 152 | about 186 | 42 |
 | TypeScript | Rust | 766 | 461 | about 305 | – |
 | TypeScript | TypeScript | 586 | 434 | about 152 | 70 |
+
+**After growth step 1 (d5a2853, 2026-11-24).** The seam check labels the room's parts once (`shared/grid.ts`, `rust/mmo-engine/src/grid.rs`) and looks only at the cells beside each seam. It gives the same answer as `connected` (`tests/growth-seams.test.ts` and the test in `commands/growth.rs`, 300 random rooms). Same measurement, same machine, medians of five runs in ms:
+
+| Space server | Engine | Run (reference) | Run | Reads only | Search (difference) | Longest single hold (reference) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Rust | Rust (as on big and nano) | 513 | 192 | 184 | about 8 | – |
+| Rust | TypeScript | 338 | 166 | 160 | about 6 | 21 (42) |
+| TypeScript | Rust | 766 | 499 | 477 | about 22 | – |
+| TypeScript | TypeScript | 586 | 400 | 431 | none measurable | 65 (70) |
+
+The search is gone from the lock time. What is left is the 19 type reads per room. The Rust engine reads them one after the other, which is why it reads more slowly than TypeScript. Batching those reads is the next part of growth step 1. Under load the step does not change the behaviour: growth still takes the lock without waiting and defers while commands are open.
 
 **On the servers.** The same measurement ran once on big and once on nano, on 2026-11-24, then everything was removed again. Each run used a throwaway container:
 
