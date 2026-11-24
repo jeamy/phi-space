@@ -92,6 +92,43 @@ export function nextStep(free: (x: number, y: number) => boolean, from: Cell, to
 	return null;
 }
 
+/** Where a tap at `goal` leads (App.tsx walkTo): the goal itself when it is free; else the first cell of the rings 1 to
+ *  `rings` around it (ring by ring, row by row) that is the figure's own cell, or free and reachable from `start` over
+ *  free cells. One search from `start` over the room (`w` × `h`) answers every candidate, so a tap looks at no more
+ *  than the room's cells plus the candidates (before, every candidate searched anew: about 150 times the room for an
+ *  occupied goal beyond water). Null: no cell leads there. Same answer as a search per candidate within the room. */
+export function chooseTarget(free: (x: number, y: number) => boolean, start: Cell, goal: Cell, w: number, h: number, rings = 6): Cell | null {
+	if (free(goal.x, goal.y)) return goal;
+	let reached: Uint8Array | null = null;
+	const reach = (c: Cell) => {
+		if (c.x < 0 || c.y < 0 || c.x >= w || c.y >= h) return false;
+		if (!reached) {
+			// one breadth-first search from the figure over the free cells of the room
+			reached = new Uint8Array(w * h);
+			const seen = new Uint8Array(w * h), queue: number[] = [];
+			if (start.x >= 0 && start.y >= 0 && start.x < w && start.y < h) { seen[start.y * w + start.x] = 1; queue.push(start.y * w + start.x); }
+			for (let i = 0; i < queue.length; i++) {
+				const at = queue[i]!, x = at % w, y = (at - x) / w;
+				reached[at] = 1;
+				for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+					const nx = x + dx, ny = y + dy, n = ny * w + nx;
+					if (nx < 0 || ny < 0 || nx >= w || ny >= h || seen[n]) continue;
+					seen[n] = 1;
+					if (free(nx, ny)) queue.push(n);
+				}
+			}
+		}
+		return reached[c.y * w + c.x] === 1;
+	};
+	for (let r = 1; r <= rings; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+		if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+		const c = { x: goal.x + dx, y: goal.y + dy };
+		if (c.x === start.x && c.y === start.y) return c;
+		if (free(c.x, c.y) && reach(c)) return c;
+	}
+	return null;
+}
+
 /** An arrow on the screen (up is [0, -1]) as a step on the grid, for a 3D view whose camera stands at `angle` around the
  *  room (MapView3D: the camera at (cos a, sin a) of the room's middle, looking at it). Up walks away from the camera,
  *  right to the right of it; the view's turn is taken to the nearest quarter, so a slanted view still has one answer
