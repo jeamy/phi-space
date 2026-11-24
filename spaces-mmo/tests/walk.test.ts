@@ -1,7 +1,7 @@
 // The own character's walk on the page (client/walk.ts): ahead of the server, matched by step numbers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_AHEAD, RESYNC_MS, screenToGrid, Walker } from "../client/walk.ts";
+import { chooseTarget, MAX_AHEAD, nextStep, RESYNC_MS, screenToGrid, Walker } from "../client/walk.ts";
 
 const walker = (x = 5, y = 5) => { const w = new Walker(); w.reset({ x, y }); return w; };
 
@@ -71,4 +71,40 @@ test("in the 3D view the arrows follow the view: turned half around, up walks do
 	assert.equal(new Set(q.map(String)).size, 4, "a quarter turn: four different steps");
 	assert.ok(q.every(([x, y]) => Math.abs(x) + Math.abs(y) === 1), "each one cell along the grid");
 	assert.deepEqual(screenToGrid(up, start + 2 * Math.PI), up, "a full turn is no turn");
+});
+
+/** The target choice as App.tsx walkTo made it before chooseTarget: a search per candidate (kept to hold the new one). */
+function legacyTarget(free: (x: number, y: number) => boolean, start: { x: number; y: number }, goal: { x: number; y: number }) {
+	const cells: Array<{ x: number; y: number }> = [goal];
+	for (let r = 1; r <= 6; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) === r) cells.push({ x: goal.x + dx, y: goal.y + dy });
+	const here = (c: { x: number; y: number }) => c.x === start.x && c.y === start.y;
+	return (free(goal.x, goal.y) ? goal : cells.find((c) => (free(c.x, c.y) || here(c)) && (here(c) || nextStep(free, start, c)))) ?? null;
+}
+
+test("a tap's target in one search: the same cell as a search per candidate, and at most the room plus the candidates looked at", () => {
+	let seed = 7;
+	const rnd = () => { seed = (seed * 1103515245 + 12345) % 2 ** 31; return seed / 2 ** 31; };
+	for (let i = 0; i < 400; i++) {
+		const w = 4 + Math.floor(rnd() * 33), h = 4 + Math.floor(rnd() * 21), density = rnd() * 0.6;
+		const open = Array.from({ length: h }, () => Array.from({ length: w }, () => rnd() >= density));
+		// now and then a wall of water across the room: the far side cannot be reached
+		if (rnd() < 0.3) { const x = Math.floor(rnd() * w); for (let y = 0; y < h; y++) open[y]![x] = false; }
+		let looks = 0;
+		const free = (x: number, y: number) => { looks++; return !!open[y]?.[x]; };
+		const start = { x: Math.floor(rnd() * w), y: Math.floor(rnd() * h) }, goal = { x: Math.floor(rnd() * w), y: Math.floor(rnd() * h) };
+		const before = legacyTarget(free, start, goal);
+		looks = 0;
+		const after = chooseTarget(free, start, goal, w, h);
+		assert.deepEqual(after, before, `room ${w}x${h} #${i}, start ${start.x},${start.y}, goal ${goal.x},${goal.y}`);
+		assert.ok(looks <= w * h + 169, `room ${w}x${h} #${i}: ${looks} cells looked at`);
+	}
+});
+
+test("the occupied goal beyond the water: one search instead of one per candidate", () => {
+	const w = 36, h = 24, mid = { x: 21, y: 12 };
+	const free = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && x !== 5 && !(Math.abs(x - mid.x) <= 1 && Math.abs(y - mid.y) <= 1);
+	let looks = 0;
+	const counted = (x: number, y: number) => { looks++; return free(x, y); };
+	assert.equal(chooseTarget(counted, { x: 1, y: 1 }, mid, w, h), null);
+	assert.ok(looks <= w * h + 169, `${looks} cells looked at (before: about 133,000)`);
 });

@@ -24,7 +24,7 @@ import type { ChatState } from "../shared/frames.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
-import { MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
+import { chooseTarget, MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
 import { cellAbout, cellEntries, type CellInput, hereEntries, itemEntries, KEEPERS, tapTarget, wildHere } from "./cellActions.ts";
 import { hintsFor, type Hint } from "./hints.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
@@ -959,11 +959,11 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		stopWalk.current();
 		const start = walker.current.shown;
 		if (!start) return;
-		// on something that stands there one cannot stand: the nearest cell a way leads to, the one beside it
-		const free = freeCells(), cells: Array<{ x: number; y: number }> = [goal];
-		for (let r = 1; r <= 6; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) === r) cells.push({ x: goal.x + dx, y: goal.y + dy });
+		// on something that stands there one cannot stand: the nearest cell a way leads to, the one beside it (one search
+		// from the figure answers all of them, walk.ts chooseTarget)
+		const ground = seen.current.hello?.room.ground ?? [];
 		const here = (c: { x: number; y: number }) => c.x === start.x && c.y === start.y;
-		const end = free(goal.x, goal.y) ? goal : cells.find((c) => (free(c.x, c.y) || here(c)) && (here(c) || nextStep(free, start, c)));
+		const end = chooseTarget(freeCells(), start, goal, Math.max(0, ...ground.map((row) => row.length)), ground.length) ?? undefined;
 		const way = () => { const from = walker.current.shown; return from && end ? nextStep(freeCells(), from, end) : null; };
 		if (end && here(end)) return;
 		if (!way()) { if (!here(goal)) append({ kind: "error", text: "Dorthin führt kein Weg.", from: "", at: Date.now() }); return; }
