@@ -1,0 +1,101 @@
+//! The start check of the grid format (`shared/grid-format.ts`, `server/engine/grid-format.ts`;
+//! docs/3d-welt-und-raster-plan-2026-11-21.en.md section 5): before a process writes to a world or region space it reads
+//! the store's GridFormat entry and the entry types it holds and refuses a store this binary cannot run. It only reads.
+//! The class table is `grid_classes.json`, written from the TypeScript one by `npm run grid:classes`.
+use std::sync::OnceLock;
+
+use phi_json::{obj, Json};
+
+use crate::j;
+use crate::space::{Error, Result, Space};
+
+/// The format a store without a GridFormat entry has, and the one this binary runs (until the cut the same).
+pub const SUPPORTED_SCALE: f64 = 1.0;
+pub const SUPPORTED_OCCUPANCY: &str = "plots";
+
+/// `GRID_CLASSES`: every entry type a world or region space holds, with its coordinate fields.
+pub fn grid_classes() -> &'static Json {
+	static TABLE: OnceLock<Json> = OnceLock::new();
+	TABLE.get_or_init(|| phi_json::parse(include_str!("grid_classes.json")).expect("grid_classes.json"))
+}
+
+/// `classRow`: the row an entry type is classed by, its own or that of a typeclass above it (`Item`); none: unknown.
+pub fn class_row(kind: &str, typeclasses: &Json) -> Option<String> {
+	let mut seen: Vec<String> = Vec::new();
+	let mut t = Some(kind.to_string());
+	while let Some(k) = t {
+		if seen.contains(&k) { break; }
+		if grid_classes().get(&k).is_some() { return Some(k); }
+		t = typeclasses.get(&k).and_then(Json::as_str).map(str::to_string);
+		seen.push(k);
+	}
+	None
+}
+
+fn scale_text(v: Option<f64>) -> String { v.map_or("none".into(), phi_json::number_text) }
+
+/// `gridRefusal`: why a store cannot be run by this binary, or none.
+pub fn grid_refusal(w: &Json, markers: &[Json], types: &[String]) -> Option<String> {
+	let scale = j::opt(w, "gridScale").and_then(Json::as_f64).unwrap_or(1.0);
+	if scale != SUPPORTED_SCALE { return Some(format!("the world definition has gridScale {}; this binary runs gridScale {} only", phi_json::number_text(scale), phi_json::number_text(SUPPORTED_SCALE))); }
+	if markers.len() > 1 { return Some(format!("the store holds {} GridFormat entries; it is damaged, restore it from its backup", markers.len())); }
+	if let Some(m) = markers.first() {
+		let id = j::s(w, "id");
+		if j::s(m, "worldId") != id { return Some(format!("the store's grid format is of the world {}, not {id}", j::s(m, "worldId"))); }
+		if j::s(m, "state") != "complete" { return Some(format!("a grid migration of this store has not finished (GridFormat state {}): run the migration again from its backup", j::s(m, "state"))); }
+		let (ms, mo) = (j::n(m, "gridScale"), j::s(m, "occupancy"));
+		if ms != SUPPORTED_SCALE || mo != SUPPORTED_OCCUPANCY { return Some(format!("the store is in the grid format gridScale {}, occupancy {mo}; this binary runs gridScale {}, occupancy {SUPPORTED_OCCUPANCY} only (a store migrated by the grid switch needs the binaries of its cut)", phi_json::number_text(ms), phi_json::number_text(SUPPORTED_SCALE))); }
+		let (md, wd) = (j::opt(m, "derivedFrom").and_then(Json::as_f64), j::opt(w, "derivedFrom").and_then(Json::as_f64));
+		if md != wd { return Some(format!("the store's geometry is derived from scale {}, the world definition's from {}", scale_text(md), scale_text(wd))); }
+	}
+	let typeclasses = j::at(w, "typeclasses");
+	let mut unknown: Vec<&String> = types.iter().filter(|t| class_row(t, typeclasses).is_none()).collect();
+	unknown.sort();
+	if !unknown.is_empty() { return Some(format!("the store holds entry types without a grid class: {} (shared/grid-format.ts GRID_CLASSES)", unknown.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))); }
+	None
+}
+
+/// `checkGridFormat`: an error when `space` holds a store in a grid format this binary does not run.
+pub async fn check_grid_format(space: &Space, w: &Json) -> Result<()> {
+	let markers: Vec<Json> = space.read_all(&obj! { "type" => "GridFormat" }, None).await?.iter().map(|e| j::at(e, "fields").clone()).collect();
+	let stats = space.stats().await?;
+	let types: Vec<String> = j::at(&stats, "byType").as_object().map(|o| o.keys().map(str::to_string).collect()).unwrap_or_default();
+	match grid_refusal(w, &markers, &types) { Some(why) => Err(Error::Other(format!("grid format: {why}"))), None => Ok(()) }
+}
+
+/// `awaitGridFormat`: the check until the space answers (a process may start before its space). A refusal ends it at
+/// once, a failed call to the space is tried again after `retry_ms`, `tries` times.
+pub async fn await_grid_format(space: &Space, w: &Json, tries: usize, retry_ms: u64) -> Result<()> {
+	let mut i = 1;
+	loop {
+		match check_grid_format(space, w).await {
+			Err(Error::Space(_)) if i < tries => { tokio::time::sleep(std::time::Duration::from_millis(retry_ms)).await; i += 1; }
+			other => return other,
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use phi_json::parse;
+
+	fn world() -> Json { parse(r#"{"id":"leuchtfeuer","typeclasses":{"Driftwood":"Item","Bundle":"Driftwood"}}"#).unwrap() }
+	fn marker(f: &str) -> Json { parse(&format!(r#"{{"worldId":"leuchtfeuer","gridScale":1,"occupancy":"plots","state":"complete"{f}}}"#)).unwrap() }
+
+	#[test]
+	fn legacy_starts_and_others_are_refused() {
+		let w = world();
+		assert_eq!(grid_refusal(&w, &[], &["Character".into(), "Bundle".into()]), None);
+		assert_eq!(grid_refusal(&w, &[marker("")], &[]), None);
+		for f in [r#","gridScale":2"#, r#","occupancy":"footprints""#, r#","state":"running""#, r#","worldId":"x""#, r#","derivedFrom":1"#] {
+			assert!(grid_refusal(&w, &[marker(f)], &[]).is_some(), "{f}");
+		}
+		assert!(grid_refusal(&w, &[marker(""), marker("")], &[]).unwrap().contains("2 GridFormat entries"));
+		let mut w2 = world();
+		w2.as_object_mut().unwrap().insert("gridScale", Json::Number(2.0));
+		assert!(grid_refusal(&w2, &[], &[]).unwrap().contains("gridScale 2"));
+		assert!(grid_refusal(&w, &[], &["Hovercraft".into()]).unwrap().contains("without a grid class: Hovercraft"));
+		assert_eq!(class_row("Bundle", j::at(&w, "typeclasses")).as_deref(), Some("Item"));
+	}
+}

@@ -23,6 +23,7 @@ import { pathToFileURL } from "node:url";
 import { Accounts, AuthError, type AccountOptions, type Me } from "./accounts.ts";
 import { loadWorld, worldAsset } from "./engine/world.ts";
 import { Gateway } from "./gateway.ts";
+import { awaitGridFormat } from "./engine/grid-format.ts";
 import { announce, connectSpace, DEFAULT_ACCOUNTS, DEFAULT_SPACE, systemInfo } from "./space.ts";
 import { RegionSpaces } from "./region-spaces.ts";
 import { upgradeWebSocket } from "phi-spaces/ws";
@@ -64,6 +65,9 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	// settings, the model's entries and the system bar; the settings are written to every region
 	const regions = RegionSpaces.connect(w, o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE), o.regions);
 	const world = { space: regions.homeSpace, close: () => regions.close() };
+	// the grid format of every region before any write (shared/grid-format.ts): a new character would start at a cell
+	// of the wrong scale
+	try { for (const [, s] of regions.entries()) await awaitGridFormat(s, w); } catch (e) { regions.close(); throw e; }
 	const stats = statsCache(regions, w);
 	const store = connectSpace(o.accounts ?? (process.env.SPACES_MMO_ACCOUNTS || DEFAULT_ACCOUNTS));
 	const accounts = new Accounts(regions, store.space, w, o.accountOptions);

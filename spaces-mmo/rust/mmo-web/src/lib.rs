@@ -356,6 +356,9 @@ pub async fn run_web(root: PathBuf, ready: impl FnOnce(&str), mut halt: watch::R
 	let w = Rc::new(mmo_engine::world::load_world(&root, &id).map_err(|e| e.to_string())?);
 	let whole = std::env::var("SPACES_MMO_SPACE").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| DEFAULT_SPACE.into());
 	let regions = Rc::new(RegionSpaces::connect(&w, &whole).map_err(|e| e.to_string())?);
+	// the grid format of every region before any write (shared/grid-format.ts): a new character would start at a cell
+	// of the wrong scale
+	for (_, s) in regions.entries() { mmo_engine::grid_format::await_grid_format(s, &w, 60, 1000).await.map_err(|e| e.to_string())?; }
 	let accounts_addr = std::env::var("SPACES_MMO_ACCOUNTS").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| DEFAULT_ACCOUNTS.into());
 	let store = mmo_engine::world_host::connect(&accounts_addr).map_err(|e| e.to_string())?;
 	let accounts = Rc::new(Accounts::new(regions.clone(), store.clone(), (*w).clone()));

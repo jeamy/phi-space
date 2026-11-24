@@ -3,6 +3,7 @@
 // newer version by itself); --replace writes the definition's rooms, exits, prototypes and help again and places the
 // items that exist nowhere. Rooms and things builders made stay.
 import "./env.ts";
+import { checkGridFormat } from "./engine/grid-format.ts";
 import { loadIntoSpace } from "./engine/loader.ts";
 import { loadWorld } from "./engine/world.ts";
 import { connectSpace, DEFAULT_SPACE } from "./space.ts";
@@ -10,6 +11,7 @@ import { connectSpace, DEFAULT_SPACE } from "./space.ts";
 const w = await loadWorld();
 const conn = connectSpace(process.env.SPACES_MMO_SPACE || DEFAULT_SPACE);
 try {
+	await checkGridFormat(conn.space, w);
 	const r = await loadIntoSpace(conn.space, w, { replace: process.argv.includes("--replace") });
 	console.log(r.loaded ? `[world:load] ${w.id} version ${r.version} written${r.spawned.length ? `; placed ${r.spawned.join(", ")}` : ""}` : `[world:load] ${w.id} version ${r.version} is current; only missing parts written (--replace writes everything)`);
 } finally { conn.close(); }

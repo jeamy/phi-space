@@ -86,6 +86,8 @@ pub async fn run_npcs(root: PathBuf, ready: impl FnOnce(), halt: watch::Receiver
 	let world = std::env::var("SPACES_MMO_WORLD").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "leuchtfeuer".into());
 	let full = Rc::new(crate::world::load_world(&root, &world)?);
 	let space = connect(&address)?;
+	// the grid format before any write (shared/grid-format.ts): an NPC of another scale would walk to wrong cells
+	crate::grid_format::await_grid_format(&space, &full, 60, 1000).await?;
 	let owner = Rc::new(format!("npc-proc-{}", hex(&random_bytes(4))));
 	let world_clock = Rc::new(ClockCache::new(space.clone(), Some(j::s(&full, "id").to_owned())));
 	let clock = Rc::new(ClockCache::new(space.clone(), None));
