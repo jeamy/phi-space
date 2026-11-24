@@ -316,7 +316,7 @@ The lock is taken once per room and released between rooms. Values are medians o
 | TypeScript | Rust | 766 | 499 | 477 | about 22 | – |
 | TypeScript | TypeScript | 586 | 400 | 431 | none measurable | 65 (70) |
 
-The search is gone from the lock time. What is left is the 19 type reads per room. The Rust engine reads them one after the other, which is why it reads more slowly than TypeScript. Batching those reads is the next part of growth step 1. Under load the step does not change the behaviour: growth still takes the lock without waiting and defers while commands are open.
+The search is gone from the lock time. What is left is the 19 type reads per room. The Rust engine read them one after the other. Since 7b179b2 it sends them at once, as TypeScript does (`space::join_all`). Its runs went from 192 to 183 ms on the Rust space server and from 499 to 452 ms on the TypeScript one, about the spread between runs. So the reads are bound by the space server's work on each read, not by the round trips. Making them cheaper is a question for the occupancy query of growth step 2 (one rectangle query instead of 17 type reads), not for the engine. Under load the step does not change the behaviour: growth still takes the lock without waiting and defers while commands are open.
 
 **On the servers.** The same measurement ran once on big and once on nano, on 2026-11-24, then everything was removed again. Each run used a throwaway container:
 
