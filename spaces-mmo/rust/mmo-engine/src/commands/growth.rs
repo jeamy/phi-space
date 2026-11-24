@@ -13,7 +13,7 @@ use crate::model::world_lock;
 use crate::occupancy::is_passage;
 use crate::room_growth::{grown_point, insert_strip, rows, rows_json};
 use crate::source::time_now;
-use crate::space::{fields, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
+use crate::space::{fields, join_all, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::grid::Grid;
 use crate::world::walkable;
 
@@ -163,9 +163,12 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 			let room_id = j::s(&room, "roomId").to_owned();
 			let ground = rows(j::at(&room, "ground"));
 			let mut entries: Vec<Json> = Vec::new();
-			for ty in POSITIONED { entries.extend(space.read_all(&tmpl(ty, obj! { "room" => room_id.as_str() }), Some(&txn)).await?); }
-			entries.extend(space.read_all(&tmpl("Item", obj! { "location" => room_id.as_str() }), Some(&txn)).await?);
-			entries.extend(space.read_all(&obj! { "type" => "Exit" }, Some(&txn)).await?);
+			// the groups at once, as TypeScript's Promise.all, in the same order
+			let mut templates: Vec<Json> = POSITIONED.iter().map(|ty| tmpl(ty, obj! { "room" => room_id.as_str() })).collect();
+			templates.push(tmpl("Item", obj! { "location" => room_id.as_str() }));
+			templates.push(obj! { "type" => "Exit" });
+			let reads = templates.iter().map(|t| Box::pin(space.read_all(t, Some(&txn))) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Json>>> + '_>>).collect();
+			for group in join_all(reads).await { entries.extend(group?); }
 			let exits: Vec<Json> = entries.iter().filter(|x| is(x, "Exit") && j::so(fields(x), "location") == Some(room_id.as_str())).map(|x| fields(x).clone()).collect();
 			let mut land: HashSet<String> = HashSet::new();
 			for (y, row) in ground.iter().enumerate() {

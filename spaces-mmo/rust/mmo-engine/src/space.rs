@@ -54,6 +54,21 @@ pub fn not_understood<T>(text: impl Into<String>) -> Result<T> { Err(Error::NotU
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// `Promise.all` within one task: polls every future until all are ready and gives their results in the order given, so
+/// several calls are on the wire at once (the socket answers them by id).
+pub async fn join_all<'a, T>(mut futures: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = T> + 'a>>>) -> Vec<T> {
+	let mut out: Vec<Option<T>> = futures.iter().map(|_| None).collect();
+	std::future::poll_fn(move |cx| {
+		let mut done = true;
+		for (f, o) in futures.iter_mut().zip(out.iter_mut()) {
+			if o.is_none() {
+				match f.as_mut().poll(cx) { std::task::Poll::Ready(v) => *o = Some(v), std::task::Poll::Pending => done = false }
+			}
+		}
+		if done { std::task::Poll::Ready(out.iter_mut().map(|o| o.take().expect("ready")).collect()) } else { std::task::Poll::Pending }
+	}).await
+}
+
 /// The space of a world (or of the accounts). Ported code reaches the space only through these methods, so a buffered
 /// transaction or a copy of the world (`bufferedTxn`, `Mirror` of `server/space.ts`) can come in here.
 #[derive(Clone)]
