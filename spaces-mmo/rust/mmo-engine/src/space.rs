@@ -55,7 +55,8 @@ pub fn not_understood<T>(text: impl Into<String>) -> Result<T> { Err(Error::NotU
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// `Promise.all` within one task: polls every future until all are ready and gives their results in the order given, so
-/// several calls are on the wire at once (the socket answers them by id).
+/// several calls are on the wire at once (the socket answers them by id). For reads: on a buffered space each call under
+/// the transaction flushes the waiting writes first, and calls at once would interleave those flushes.
 pub async fn join_all<'a, T>(mut futures: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = T> + 'a>>>) -> Vec<T> {
 	let mut out: Vec<Option<T>> = futures.iter().map(|_| None).collect();
 	std::future::poll_fn(move |cx| {
