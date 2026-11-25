@@ -170,7 +170,7 @@ test("a holder killed while it holds a room's lock: refused meanwhile, the lock 
 		const light = async () => (await s.readAll({ type: "LightUse", fields: { beaconId: fire.beaconId } }))[0]?.fields.used ?? 0;
 		const used = await light();
 
-		const LEASE = 6_000;
+		const LEASE = 20_000;
 		const holder = spawnProcess(process.execPath, ["--no-warnings", "--experimental-strip-types", "tests/lock-holder.ts", srv.stack.world, room, String(LEASE)], { stdio: ["ignore", "pipe", "inherit"] });
 		const [line] = (await once(holder.stdout!, "data")) as [Buffer];
 		assert.equal(line.toString().trim(), `held ${before}`);
@@ -181,11 +181,10 @@ test("a holder killed while it holds a room's lock: refused meanwhile, the lock 
 
 		const target = `${r.x} ${r.y}`;
 		const refused = await says(a, `bau hütte ${target}`, /steckt eine Baustelle ab|passt keine?|Hier wird gerade/);
-		if (Date.now() - killedAt < LEASE) {
-			assert.match(refused, LOST.lock);
-			assert.deepEqual(await on(s, room, r), [], "a refused command leaves no footprint");
-			assert.equal(await light(), used, "nor does it use the fire's light");
-		}
+		assert.ok(Date.now() - killedAt < LEASE, "answered while the killed holder's lease still runs");
+		assert.match(refused, LOST.lock);
+		assert.deepEqual(await on(s, room, r), [], "a refused command leaves no footprint");
+		assert.equal(await light(), used, "nor does it use the fire's light");
 		await eventually(async () => (await s.readAll(roomLock(room))).length === 1, LEASE * 3, "the lock back after the lease");
 		assert.equal(lockVersion((await s.readAll(roomLock(room)))[0]!.fields), before, "the killed holder's write-back is gone with its transaction");
 		let staked = "";
