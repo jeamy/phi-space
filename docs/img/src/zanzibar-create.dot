@@ -7,7 +7,7 @@ digraph "Creating a child in a workspace" {
   replay [label="Match → recorded outcome\nOther digest → requestMismatch"];
   name [label="Look up the final name"];
   collision [label="Existing child → alreadyExists\nCreate-only write on a file → versionConflict",fillcolor="#fcf2d9"];
-  create [label="Commit node, receipt and audit\nInclude version 1 content for a file",fillcolor="#d8eeea"];
+  create [label="For a file, first seal its bytes into a blob\nCommit node, receipt and audit\nwith the version 1 content row",fillcolor="#d8eeea"];
   request -> parent; parent -> reject [label="cannot create"]; parent -> receipt [label="authorized"];
   receipt -> replay [label="found"]; receipt -> name [label="new ID"];
   name -> collision [label="occupied"]; name -> create [label="free"];

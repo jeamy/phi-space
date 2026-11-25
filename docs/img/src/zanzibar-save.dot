@@ -1,20 +1,21 @@
 digraph "Saving an existing file inside the tenant queue" {
 #include
-	start [label="Save an existing file\nworkspace, path, expected version,\ntext and operation ID"];
+	start [label="Save an existing file\nworkspace, path, expected version,\nbytes and operation ID"];
 	admit [label="Authenticate the session handle,\nadmit into that tenant's queue,\ncheck actor state, mode and input"];
 	refused [label="unauthenticated, unavailable\nor invalidInput", fillcolor="#f8e9e5"];
 	opid [label="Check the operation ID's signature,\nactor, tenant and retry window"];
 	auth [label="Resolve workspace and path,\ncheck current editor rights"];
 	receipt [label="Look up a receipt for the ID\nand compare its argument digest"];
-	version [label="Compare expected version\nwith stored version"];
-	commit [label="Reserve and verify old content,\nwrite successor, receipt and audit,\ncommit together", fillcolor="#d8eeea"];
+	version [label="Compare expected version\nwith stored version, check budgets"];
+	blob [label="Seal the bytes into a new blob,\nflush it to disk"];
+	commit [label="Reserve and verify old content row,\nwrite successor naming the new blob,\nreceipt and audit, commit together,\nthen delete the old blob", fillcolor="#d8eeea"];
 	rejected [label="operationIdRejected", fillcolor="#f8e9e5"];
 	denied [label="notFound for invisible targets\npermissionDenied for visible ones", fillcolor="#f8e9e5"];
 	replay [label="Return recorded version\nNo second write", fillcolor="#d8eeea"];
 	mismatch [label="requestMismatch", fillcolor="#f8e9e5"];
 	conflict [label="versionConflict with current version\nCaller keeps its draft", fillcolor="#fcf2d9"];
 	ok [label="Return committed version", fillcolor="#d8eeea"];
-	unknown [label="Outcome unknown: stop admission\nstore-wide, resolve by receipt", fillcolor="#fcf2d9"];
+	unknown [label="Outcome unknown: stop admission\nstore-wide, resolve by receipt,\ndelete no blob", fillcolor="#fcf2d9"];
 	start -> admit;
 	admit -> opid [label="admitted"];
 	admit -> refused [label="refused"];
@@ -25,7 +26,8 @@ digraph "Saving an existing file inside the tenant queue" {
 	receipt -> version [label="no receipt"];
 	receipt -> replay [label="same digest"];
 	receipt -> mismatch [label="other digest"];
-	version -> commit [label="matches"];
+	version -> blob [label="matches"];
+	blob -> commit;
 	version -> conflict [label="stale"];
 	commit -> ok [label="durable"];
 	commit -> unknown [label="ambiguous"];

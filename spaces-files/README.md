@@ -83,6 +83,11 @@ Not yet there, by the plan's order: operation IDs and receipts, the file and adm
 
 Suspending a tenant on `inconsistentState` belongs to the operations that meet it and arrives with phase 3.
 
+Since 2026-11-25 the plan keeps file contents out of the Space: each version is an AES-256-GCM-sealed blob in a blob
+directory of its own, and FsContent names it (plan section 3, *Contents*). Files are bytes, text or binary, bounded by
+`maxFileBytes` rather than by the Space's entry limit. Phase 2's text row and its 10 KiB limit (`content()`, `checkText`,
+`textBytes`, the content-row cases of `assertLimitsFit`) are replaced by the blob store in phase 3.
+
 ## Commands
 
 From this directory (or with `npm --prefix spaces-files` from the repository root):
