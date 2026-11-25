@@ -70,7 +70,7 @@ test("input is checked before anything commits", async () => {
 	} finally { await s.close(); }
 });
 
-test("leftover rows and unknown versions in a tenant Space are refused", async () => {
+test("leftover rows and unknown versions in a tenant Space are refused, and suspend that tenant", async () => {
 	const s = await mem();
 	try {
 		await s.reserveTenantSpace("acme");
@@ -81,6 +81,10 @@ test("leftover rows and unknown versions in a tenant Space are refused", async (
 		await s.reserveTenantSpace("globex");
 		await raw(s, "globex").write({ type: T.meta, fields: { tenantId: "globex", schemaVersion: 99, formatVersion: 1 } }, null, FOREVER);
 		await assert.rejects(s.inTenant("globex", async () => "ran"), InconsistentState);
+		// an inconsistentState suspends that tenant until operator repair; the others keep running
+		assert.equal(s.admission.suspended("globex"), "inconsistentState");
+		await assert.rejects(s.createTenant("globex", ADMIN), (e: Error & { code?: string }) => e.code === "unavailable");
+		s.admission.resume("globex");
 		await assert.rejects(s.createTenant("globex", ADMIN), InconsistentState);
 	} finally { await s.close(); }
 });

@@ -94,6 +94,9 @@ async function directRole(d: PolicyData, nodeId: string, subjects: Set<string>, 
 
 export type Resolved = { root: NodeRow; node: NodeRow; parent: NodeRow | null; role: Role };
 
+/** The one child of that name, or null; two of them, or one recorded under another parent, is `inconsistentState`. */
+export const childNamed = (d: PolicyData, parentId: string, name: string): Promise<NodeRow | null> => only(d, parentId, name);
+
 async function only(d: PolicyData, parentId: string, name: string): Promise<NodeRow | null> {
 	const found = await d.children(parentId, name, 2);
 	if (found.length > 1) throw new InconsistentState(`two nodes share one name under ${parentId}`);

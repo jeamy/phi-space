@@ -9,11 +9,16 @@ import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 import { DEFAULT_LIMITS, FOREVER, UniqueConflict } from "phi-spaces/core";
 import { assertLimitsFit, assertRowFits, DEFAULT_FS_LIMITS, encodedBytes, type FsLimits } from "./limits.ts";
-import { checkQuotas } from "./quotas.ts";
+import { checkQuotas, sumContentBytes } from "./quotas.ts";
 import { Admission, Unavailable, type AdmissionOptions } from "./admission.ts";
 import { DeploymentState, type DeploymentOptions } from "./deployment.ts";
 import { BlobStore } from "./blobs.ts";
-import { issueOperationIds } from "./opids.ts";
+import { issueOperationIds, verifyOperationId, type VerifiedOpId } from "./opids.ts";
+import { lookupReceipt, receiptRow, reserveReceipt, type Outcome } from "./receipts.ts";
+import { checkContents, parsePath, pathString } from "./paths.ts";
+import { contentDigest, requestDigest } from "./digest.ts";
+import { atLeast, childNamed, resolve, spaceData, type NodeRow } from "./policy.ts";
+import type { BlobRef } from "./blobs.ts";
 import { assertSeparateDirs, prepareDataDir } from "./dirs.ts";
 import * as schema from "./schema.ts";
 import { InconsistentState } from "./schema.ts";
@@ -64,7 +69,21 @@ export type FilesServiceOptions = AdmissionOptions & {
 	state?: Omit<DeploymentOptions, "dir">;
 	/** The filesystem's limits (section 3); checked against the tenant Spaces' limits on open. */
 	limits?: Partial<FsLimits>;
+	/** The lease of a save's transaction: after a crash, its reservation lapses this long after it began (default 10 s). */
+	saveTxnLeaseMs?: number;
+	/** Tests only: called at the named points of a save (section 6.3), to inject a failure or a crash there. */
+	faultHook?: (point: FaultPoint) => void | Promise<void>;
 };
+
+/** Where a save can be interrupted: before the blob write, between it and the commit, around the commit call (its
+ *  outcome then is unknown), and after the commit before the old blob's deletion. */
+export type FaultPoint = "beforeBlob" | "afterBlob" | "commit:before" | "commit:after" | "afterCommit";
+
+/** A directory entry as `list` returns it. */
+export type ListEntry = { name: string; kind: "dir" | "file" };
+
+/** A save whose commit outcome is unknown: the blobs it may need, until `resolveOutcomes` decides (section 6.1). */
+type Unresolved = { tenantId: string; txn: string; nodeId: string; newBlobId: string; oldBlobId: string | null };
 
 export class FilesService {
 	readonly admission: Admission;
@@ -79,6 +98,13 @@ export class FilesService {
 	readonly #ready = new Set<string>();
 	/** The highest FsAudit seq per tenant, read once when the tenant is first written after opening (section 3). */
 	readonly #seq = new Map<string, number>();
+	/** The content bytes per tenant (the sum of the content rows' size), summed once and then kept by the writer. */
+	readonly #contentBytes = new Map<string, number>();
+	readonly #unresolved: Unresolved[] = [];
+	/** Tenants checked, once per process, for transaction state left by an earlier process (section 6.1). */
+	readonly #settled = new Set<string>();
+	readonly #saveLeaseMs: number;
+	readonly #fault: (point: FaultPoint) => void | Promise<void>;
 	#closed = false;
 
 	private constructor(host: OwnStoreHost, state: DeploymentState, blobs: BlobStore, stopService: () => Promise<void>, storePath: string | null, o: FilesServiceOptions) {
@@ -90,6 +116,8 @@ export class FilesService {
 		this.admission = new Admission(o);
 		this.#now = o.now ?? Date.now;
 		this.limits = { ...DEFAULT_FS_LIMITS, ...o.limits };
+		this.#fault = o.faultHook ?? (() => {});
+		this.#saveLeaseMs = o.saveTxnLeaseMs ?? 10_000;
 	}
 
 	static async open(o: FilesServiceOptions): Promise<FilesService> {
@@ -117,14 +145,33 @@ export class FilesService {
 		return service;
 	}
 
-	/** Runs `op` in the tenant's queue with that tenant's private Space, once its initialization has committed (section 2). */
+	/**
+	 * Runs `op` in the tenant's queue with that tenant's private Space, once its initialization has committed (section 2).
+	 * An `inconsistentState` suspends the tenant until operator repair (section 4); the other tenants keep running.
+	 */
 	inTenant<T>(tenantId: string, op: (space: PhiSpaces) => Promise<T>): Promise<T> {
 		return this.#inSpace(tenantId, async (space) => {
-			if (!this.#ready.has(tenantId)) {
-				if (!(await this.#checkMeta(tenantId, space))) throw new TenantProvisioning(tenantId);
-				this.#ready.add(tenantId);
+			try {
+				if (!this.#ready.has(tenantId)) {
+					if (!(await this.#checkMeta(tenantId, space))) throw new TenantProvisioning(tenantId);
+					this.#ready.add(tenantId);
+				}
+				if (!this.#settled.has(tenantId)) {
+					// a save of an earlier process may still hold a content row: until its lease lapses and the reaper
+					// returns the row, a read would miss it. The tenant starts closed and resolves that first.
+					const st = await space.stats();
+					if (st.txns > 0 || st.locked > 0 || st.uncommitted > 0) throw new Unavailable(`tenant ${tenantId} waits for transactions of an earlier process to lapse`, this.#saveLeaseMs);
+					this.#settled.add(tenantId);
+				}
+				return await op(space);
+			} catch (e) {
+				if (e instanceof InconsistentState) {
+					// the diagnostic names IDs and kinds only (the error messages are written so), never names or contents
+					console.error(`[files] tenant ${tenantId} suspended: ${e.message}`);
+					this.admission.suspend(tenantId, "inconsistentState");
+				}
+				throw e;
 			}
-			return op(space);
 		});
 	}
 
@@ -270,6 +317,230 @@ export class FilesService {
 		return this.withSession(handle, async (s) => issueOperationIds(this.state, s, count, this.limits));
 	}
 
+	// ---------------------------------------------------------------- file operations (section 5)
+
+	/** The workspaces whose root the session's actor can view, in name order; bounded like `list`. */
+	workspaces(handle: unknown): Promise<string[]> {
+		return this.withSession(handle, async (s, space) => {
+			const roots = await space.readAll({ type: schema.T.node, fields: { parentId: schema.WORKSPACES } }, { limit: this.limits.maxWorkspaces + 1 });
+			if (roots.length > this.limits.maxWorkspaces) throw new schema.CapacityExceeded(`more than ${this.limits.maxWorkspaces} workspaces`);
+			const d = spaceData(space), out: string[] = [];
+			for (const r of roots) {
+				try { await resolve(d, s, r.fields.name as string, [], { limits: this.limits }); out.push(r.fields.name as string); }
+				catch (e) { if (!(e instanceof schema.NotFound)) throw e; }
+			}
+			return out.sort(byName);
+		});
+	}
+
+	/** The immediate children of a visible directory, in name order (viewer on it). No partial listing. */
+	list(handle: unknown, workspace: unknown, path: unknown): Promise<ListEntry[]> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, "list", this.limits);
+			const r = await resolve(spaceData(space), s, ws, segs, { limits: this.limits });
+			if (r.node.kind !== "dir") throw new schema.InvalidInput("list needs a directory");
+			const kids = await space.readAll({ type: schema.T.node, fields: { parentId: r.node.nodeId } }, { limit: this.limits.maxDirEntries + 1 });
+			if (kids.length > this.limits.maxDirEntries) throw new schema.CapacityExceeded(`a directory holds more than ${this.limits.maxDirEntries} entries`);
+			return kids.map((k) => ({ name: k.fields.name as string, kind: k.fields.kind as "dir" | "file" })).sort((a, b) => byName(a.name, b.name));
+		});
+	}
+
+	/** A file's bytes and version, from the same ordered operation (viewer on the file). The whole blob is read and
+	 *  authenticated inside the queue slot, so no later save can delete it under the reader (section 6.1). */
+	read(handle: unknown, workspace: unknown, path: unknown): Promise<{ bytes: Buffer; version: number }> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, "read", this.limits);
+			const r = await resolve(spaceData(space), s, ws, segs, { limits: this.limits });
+			if (r.node.kind !== "file") throw new schema.InvalidInput("read needs a file");
+			const row = await this.#contentRow(s.tenantId, space, r.node);
+			return { bytes: await this.blobs.get({ tenantId: s.tenantId, nodeId: r.node.nodeId, version: row.version }, row.ref), version: row.version };
+		});
+	}
+
+	/**
+	 * Creates exactly one directory (editor on the parent; creation branch of section 5). An existing child of either kind
+	 * is `alreadyExists`; no parent is created implicitly. A retry with the same operation ID answers from its receipt.
+	 */
+	mkdir(handle: unknown, workspace: unknown, path: unknown, operationId: unknown): Promise<{ status: "created" }> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, "mkdir", this.limits);
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			const parent = await this.#creationParent(s, space, ws, segs);
+			const digest = requestDigest("mkdir", { workspace: ws, path: pathString(segs) });
+			if (await lookupReceipt(space, s, id.operationId, digest)) return { status: "created" as const };
+			const name = segs[segs.length - 1];
+			if (await childNamed(spaceData(space), parent.nodeId, name)) throw new schema.AlreadyExists("a child of that name exists");
+			const nodeId = await this.#freshNodeId(space);
+			const rows = [schema.node(nodeId, parent.nodeId, name, "dir"), receiptRow(s, id, digest, {})];
+			await this.#admitRows(s.tenantId, space, rows, { nodes: 1, dirEntries: { parentId: parent.nodeId, n: 1 } });
+			await this.#commitMutation(s, space, id, "mkdir", [nodeId], rows, null);
+			return { status: "created" as const };
+		});
+	}
+
+	/**
+	 * Saves a file (section 6.3). `expectedVersion` 0 creates it (editor on the parent; an existing file answers
+	 * `versionConflict` with its version, a directory `alreadyExists`); a positive one replaces that version of an
+	 * existing file (editor on it; a stale version is `versionConflict` with the current one). The receipt is checked
+	 * before the version, so a retry after a lost reply recovers the committed version instead of a conflict. Every
+	 * check runs before the blob is written; the old blob is deleted only after the commit.
+	 */
+	write(handle: unknown, workspace: unknown, path: unknown, bytes: unknown, expectedVersion: unknown, operationId: unknown): Promise<{ version: number }> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, "write", this.limits);
+			const data = checkContents(bytes, this.limits);
+			if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) throw new schema.InvalidInput("expectedVersion must be a non-negative integer");
+			const expected = expectedVersion as number;
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			const digest = requestDigest("write", { workspace: ws, path: pathString(segs), contents: contentDigest(data), expectedVersion: expected });
+			const d = spaceData(space);
+			const replay = (o: Outcome) => ({ version: o.version as number });
+
+			if (expected === 0) {
+				const parent = await this.#creationParent(s, space, ws, segs);
+				const done = await lookupReceipt(space, s, id.operationId, digest);
+				if (done) return replay(done);
+				const name = segs[segs.length - 1];
+				const existing = await childNamed(d, parent.nodeId, name);
+				if (existing?.kind === "dir") throw new schema.AlreadyExists("a directory of that name exists");
+				// editor on the parent is inherited by the file: the caller may learn its version
+				if (existing) throw new schema.VersionConflict((await this.#contentRow(s.tenantId, space, existing)).version);
+				const nodeId = await this.#freshNodeId(space);
+				const fresh = (ref: BlobRef) => [schema.node(nodeId, parent.nodeId, name, "file"), schema.content(nodeId, 1, ref), receiptRow(s, id, digest, { version: 1 })];
+				await this.#admitRows(s.tenantId, space, fresh(this.#sizing(data.length)), { nodes: 1, dirEntries: { parentId: parent.nodeId, n: 1 }, contentBytes: data.length });
+				await this.#fault("beforeBlob");
+				const ref = await this.blobs.put({ tenantId: s.tenantId, nodeId, version: 1 }, data);
+				await this.#commitMutation(s, space, id, "write", [nodeId], fresh(ref), { nodeId, newBlobId: ref.blobId, oldBlobId: null, contentDelta: data.length });
+				return { version: 1 };
+			}
+
+			const r = await resolve(d, s, ws, segs, { limits: this.limits });
+			if (r.node.kind !== "file") throw new schema.InvalidInput("write with a positive version needs a file");
+			if (!atLeast(r.role, "editor")) throw new schema.PermissionDenied("write needs editor on the file");
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return replay(done);
+			const cur = await this.#contentRow(s.tenantId, space, r.node);
+			if (cur.version !== expected) throw new schema.VersionConflict(cur.version);
+			const version = expected + 1, nodeId = r.node.nodeId;
+			const rows = (ref: BlobRef) => [schema.content(nodeId, version, ref), receiptRow(s, id, digest, { version })];
+			await this.#admitRows(s.tenantId, space, rows(this.#sizing(data.length)), { contentBytes: data.length - cur.ref.size }, [schema.content(nodeId, expected, cur.ref)]);
+			await this.#fault("beforeBlob");
+			const ref = await this.blobs.put({ tenantId: s.tenantId, nodeId, version }, data);
+			await this.#commitMutation(s, space, id, "write", [nodeId], rows(ref), { nodeId, newBlobId: ref.blobId, oldBlobId: cur.ref.blobId, contentDelta: data.length - cur.ref.size, replace: { version: expected, blobId: cur.ref.blobId } });
+			return { version };
+		});
+	}
+
+	/** The parent of a node to create: visible (else `notFound`), a directory (else `invalidInput`), editor (else
+	 *  `permissionDenied`); section 5, creation branch. */
+	async #creationParent(s: Session, space: PhiSpaces, ws: string, segs: string[]): Promise<NodeRow> {
+		const p = await resolve(spaceData(space), s, ws, segs.slice(0, -1), { limits: this.limits });
+		if (p.node.kind !== "dir") throw new schema.InvalidInput("the parent is not a directory");
+		if (!atLeast(p.role, "editor")) throw new schema.PermissionDenied("creating needs editor on the parent");
+		return p.node;
+	}
+
+	/** A blob reference of the size the real one will have, to measure rows before the blob is written. */
+	#sizing(size: number): BlobRef { return { blobId: "x".repeat(22), size, keyGeneration: this.state.currentContentKey().generation }; }
+
+	async #contentRow(tenantId: string, space: PhiSpaces, n: NodeRow): Promise<{ version: number; ref: BlobRef }> {
+		const rows = await space.readAll({ type: schema.T.content, fields: { nodeId: n.nodeId } }, { limit: 2 });
+		if (rows.length !== 1) throw new InconsistentState(`tenant ${tenantId}: file ${n.nodeId} has ${rows.length} content rows`);
+		const f = rows[0].fields;
+		return { version: f.version as number, ref: { blobId: f.blobId as string, size: f.size as number, keyGeneration: f.keyGeneration as number } };
+	}
+
+	/** The budgets of a mutation before anything is written: quotas, the rows' stored bytes and a receipt slot. */
+	async #admitRows(tenantId: string, space: PhiSpaces, rows: ReturnType<typeof schema.meta>[], demand: Parameters<typeof checkQuotas>[2], replaced: ReturnType<typeof schema.meta>[] = []): Promise<void> {
+		for (const e of rows) assertRowFits(e.fields, DEFAULT_LIMITS);
+		const stored = rows.reduce((n, r) => n + encodedBytes(r.fields), 0) - replaced.reduce((n, r) => n + encodedBytes(r.fields), 0);
+		await checkQuotas(space, this.limits, { ...demand, storedBytes: stored }, await this.#tenantContentBytes(tenantId, space));
+		await reserveReceipt(space, this.state, this.limits, "ordinary");
+	}
+
+	async #tenantContentBytes(tenantId: string, space: PhiSpaces): Promise<number> {
+		let n = this.#contentBytes.get(tenantId);
+		if (n === undefined) { n = await sumContentBytes(space); this.#contentBytes.set(tenantId, n); }
+		return n;
+	}
+
+	/**
+	 * Commits a mutation's rows with its audit row in one transaction (section 6.3, steps 6 and 7). A content
+	 * replacement first takes the old row under the transaction and verifies it, then writes the successor without a
+	 * uniqueness check; every new row names its creation key. A failure before the commit call aborts and deletes the new
+	 * blob. A commit whose outcome is unknown closes admission for every tenant and keeps both blobs until
+	 * `resolveOutcomes`. After a durable commit the old blob is deleted.
+	 */
+	async #commitMutation(s: Session, space: PhiSpaces, id: VerifiedOpId, operation: string, targets: string[], rows: ReturnType<typeof schema.meta>[],
+		save: { nodeId: string; newBlobId: string; oldBlobId: string | null; contentDelta: number; replace?: { version: number; blobId: string } } | null): Promise<void> {
+		const seq = (await this.#lastSeq(s.tenantId, space)) + 1;
+		const all = [...rows, schema.audit(seq, this.state.now(), { kind: s.actorKind, id: s.actorId }, operation, targets, id.operationId, "ok")];
+		let txn: string | null = null;
+		try {
+			if (save) await this.#fault("afterBlob");
+			for (const e of all) assertRowFits(e.fields, DEFAULT_LIMITS);
+			txn = (await space.createTransaction(this.#saveLeaseMs)).id;
+			if (save?.replace) {
+				const old = await space.take({ type: schema.T.content, fields: { nodeId: save.nodeId } }, 0, { txn });
+				if (old === null || old.fields.version !== save.replace.version || old.fields.blobId !== save.replace.blobId)
+					throw new InconsistentState(`tenant ${s.tenantId}: the content row of ${save.nodeId} changed under the queue`);
+			}
+			for (const e of all) {
+				const replacing = save?.replace && e.type === schema.T.content;
+				await space.write(e, txn, FOREVER, replacing ? {} : { unique: schema.KEY[e.type as keyof typeof schema.KEY] });
+			}
+		} catch (e) {
+			if (txn !== null) await space.abort(txn).catch(() => {});
+			if (save) await this.blobs.delete(s.tenantId, save.newBlobId).catch(() => {});
+			if (e instanceof UniqueConflict) throw new InconsistentState(`tenant ${s.tenantId}: ${e.message}`);
+			throw e;
+		}
+		try {
+			await this.#fault("commit:before");
+			await space.commit(txn);
+			await this.#fault("commit:after");
+		} catch (e) {
+			// the commit may or may not have happened: stop every tenant until it is resolved (section 6.1)
+			if (save) this.#unresolved.push({ tenantId: s.tenantId, txn, nodeId: save.nodeId, newBlobId: save.newBlobId, oldBlobId: save.oldBlobId });
+			this.#seq.delete(s.tenantId);
+			this.#contentBytes.delete(s.tenantId);
+			void this.admission.close();
+			console.error(`[files] the outcome of a commit of tenant ${s.tenantId} is unknown; admission is closed until it is resolved (${(e as Error).message})`);
+			throw new Unavailable("the outcome of a commit is unknown; retry later");
+		}
+		this.#seq.set(s.tenantId, seq);
+		if (save) {
+			const n = this.#contentBytes.get(s.tenantId);
+			if (n !== undefined) this.#contentBytes.set(s.tenantId, n + save.contentDelta);
+			await this.#fault("afterCommit");
+			// a deletion held by a backup, or one that fails, leaves an orphan for the sweep
+			if (save.oldBlobId !== null) await this.blobs.delete(s.tenantId, save.oldBlobId).catch(() => false);
+		}
+	}
+
+	/**
+	 * Resolves the saves whose commit outcome is unknown, then opens admission again (a host-operator step, section
+	 * 6.1): every started operation is drained first; each open transaction is aborted (a committed one is gone), and
+	 * the content row then decides which blob survives. Returns how many it resolved.
+	 */
+	async resolveOutcomes(): Promise<number> {
+		await this.admission.close();
+		const n = this.#unresolved.length;
+		for (const u of this.#unresolved.splice(0)) {
+			const space = new PhiSpaces(this.host, ctx, this.#now, undefined, undefined, { space: tenantAlias(u.tenantId) });
+			await space.abort(u.txn).catch(() => {});
+			const row = await space.readIfExists({ type: schema.T.content, fields: { nodeId: u.nodeId } }, 0);
+			if (row?.fields.blobId === u.newBlobId) { if (u.oldBlobId !== null) await this.blobs.delete(u.tenantId, u.oldBlobId); }
+			else await this.blobs.delete(u.tenantId, u.newBlobId);
+		}
+		this.admission.reopen();
+		return n;
+	}
+
 	/** Ends a session (logout); an unknown handle is no error. */
 	logout(handle: string): void { this.state.endSession(handle); }
 
@@ -365,3 +636,6 @@ export class FilesService {
 		this.state.close();
 	}
 }
+
+/** The deterministic order of names in listings: by UTF-16 code units of the canonical (NFC) form. */
+const byName = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);

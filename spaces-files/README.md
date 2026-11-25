@@ -110,6 +110,16 @@ directory of its own, and FsContent names it (plan section 3, *Contents*). Files
   `reserveReceipt` bounds the ordinary pool (`maxReceipts`) and the security reserve, prunes expired receipts (earliest
   first, floor persisted before) and never evicts a live one. Defaults: retry window one hour, skew two minutes
   (`tests/opids.test.ts`).
+- Step 3, the file operations (`server/service.ts`): `workspaces`, `list`, `read`, `mkdir` and `write` in the order of
+  checks of section 5 (session, queue, actor, input, operation ID, rights, receipt, preconditions, budgets). Creation
+  follows the parent branch (`notFound`, `invalidInput`, `permissionDenied`, then the receipt, then `alreadyExists` or
+  `versionConflict` with the version); a save checks the receipt before the version, writes the blob only after every
+  check, takes and verifies the old content row inside the transaction and deletes the old blob after the commit. A
+  failure before the commit deletes the new blob; an unknown commit outcome closes admission for every tenant until
+  `resolveOutcomes` lets the content row decide which blob survives. After a restart a tenant waits until transactions
+  of the earlier process have lapsed. An `inconsistentState` suspends that tenant alone. Tests on memory and on disk,
+  races, budgets, injected failures, both kinds of unknown outcome, and SIGKILL at every point of a save in a child
+  process (`tests/files.test.ts`, `tests/support/crash-driver.ts`).
 
 ## Commands
 

@@ -71,6 +71,12 @@ export class AlreadyExists extends Error {
 	readonly code = "alreadyExists";
 	constructor(message: string) { super(message); this.name = "AlreadyExists"; }
 }
+/** The expected version does not match; the reply carries the current one (section 5). */
+export class VersionConflict extends Error {
+	readonly code = "versionConflict";
+	readonly currentVersion: number;
+	constructor(currentVersion: number) { super(`version conflict: the current version is ${currentVersion}`); this.name = "VersionConflict"; this.currentVersion = currentVersion; }
+}
 export class PermissionDenied extends Error {
 	readonly code = "permissionDenied";
 	constructor(message: string) { super(message); this.name = "PermissionDenied"; }
