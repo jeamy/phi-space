@@ -1,7 +1,9 @@
 digraph "Saving an existing file inside the tenant queue" {
 #include
 	start [label="Save an existing file\nworkspace, path, expected version,\ntext and operation ID"];
-	opid [label="Validate session and actor,\ncheck the operation ID's signature,\nactor, tenant and retry window"];
+	admit [label="Authenticate the session handle,\nadmit into that tenant's queue,\ncheck actor state, mode and input"];
+	refused [label="unauthenticated, unavailable\nor invalidInput", fillcolor="#f8e9e5"];
+	opid [label="Check the operation ID's signature,\nactor, tenant and retry window"];
 	auth [label="Resolve workspace and path,\ncheck current editor rights"];
 	receipt [label="Look up a receipt for the ID\nand compare its argument digest"];
 	version [label="Compare expected version\nwith stored version"];
@@ -13,7 +15,9 @@ digraph "Saving an existing file inside the tenant queue" {
 	conflict [label="versionConflict with current version\nCaller keeps its draft", fillcolor="#fcf2d9"];
 	ok [label="Return committed version", fillcolor="#d8eeea"];
 	unknown [label="Outcome unknown: stop admission\nstore-wide, resolve by receipt", fillcolor="#fcf2d9"];
-	start -> opid;
+	start -> admit;
+	admit -> opid [label="admitted"];
+	admit -> refused [label="refused"];
 	opid -> auth [label="valid"];
 	opid -> rejected [label="invalid or expired"];
 	auth -> receipt [label="allowed"];
