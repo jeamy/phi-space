@@ -26,8 +26,8 @@ async function tenant(o: Partial<FilesServiceOptions> = {}, root?: string) {
 	const s = await FilesService.open({ ...dirs, ...o });
 	await s.createTenant("acme", { actorId: "adm", homeName: "adm", issuer: "i", subject: "adm" });
 	const by = { actorKind: "user" as const, actorId: "adm" };
-	await s.registerActor("acme", by, "user", "lea", "lea", { issuer: "i", subject: "lea" });
-	await s.registerActor("acme", by, "agent", "planner-17", "planner-17", { enrolledHostPeerId: "host-1", agentId: "planner-17" });
+	await s.provisionActor("acme", by, "user", "lea", "lea", { issuer: "i", subject: "lea" });
+	await s.provisionActor("acme", by, "agent", "planner-17", "planner-17", { enrolledHostPeerId: "host-1", agentId: "planner-17" });
 	return { s, ...(await sessions(s)) };
 }
 async function sessions(s: FilesService) {

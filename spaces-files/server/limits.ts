@@ -50,6 +50,8 @@ export type FsLimits = {
 	retryWindowMs: number;
 	clockSkewMs: number;
 	maxOperationIdsPerCall: number;
+	/** Relations `deleteActor` removes in its one transaction; an actor with more is disabled and pruned in batches. */
+	maxDeleteRelations: number;
 	/** Receipts per tenant for ordinary mutations, and the extra ones only security actions may use (section 3). */
 	maxReceipts: number;
 	securityReceiptReserve: number;
@@ -74,6 +76,7 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	auditReserveBytes: 4 * 1024 * 1024,
 	securityReserveBytes: 256 * 1024,
 	maxWorkPerDecision: 512,
+	maxDeleteRelations: 256,
 	retryWindowMs: 3600_000,
 	clockSkewMs: 120_000,
 	maxOperationIdsPerCall: 64,
@@ -102,6 +105,11 @@ export function assertLimitsFit(fs: FsLimits, space: Pick<Limits, "maxEntryBytes
 	if (list > fs.maxReplyBytes) fail("a full directory listing", list, fs.maxReplyBytes);
 	const workspaces = fs.maxWorkspaces * (worstJsonString(fs.maxNameBytes) + 8);
 	if (workspaces > fs.maxReplyBytes) fail("a full workspace listing", workspaces, fs.maxReplyBytes);
+	// the admin listings: an actor row as listed is at most its kind, a 128-character ID, its state and a node ID
+	const actors = fs.maxActors * (130 + 24 + 64);
+	if (actors > fs.maxReplyBytes) fail("a full actor or group-member listing", actors, fs.maxReplyBytes);
+	const groups = fs.maxGroups * (worstJsonString(fs.maxNameBytes) + 4);
+	if (groups > fs.maxReplyBytes) fail("a full group listing", groups, fs.maxReplyBytes);
 	const grants = fs.maxGrantsPerTarget * (2 * worstJsonString(fs.maxNameBytes) + 128);
 	if (grants > fs.maxReplyBytes) fail("a full grant listing", grants, fs.maxReplyBytes);
 	if (fs.maxPathBytes < fs.maxNameBytes) fail("a path of one segment", fs.maxNameBytes, fs.maxPathBytes);

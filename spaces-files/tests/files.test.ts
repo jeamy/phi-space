@@ -25,7 +25,7 @@ async function fixture(o: Partial<FilesServiceOptions> = {}, disk?: string) {
 	const s = await FilesService.open({ ...dirs, ...o });
 	const t = await s.createTenant("acme", { actorId: "lea", homeName: "lea", issuer: "i", subject: "lea" });
 	assert.ok(t.status === "created");
-	const p = await s.registerActor("acme", { actorKind: "user", actorId: "lea" }, "agent", "planner", "planner", { enrolledHostPeerId: "host-1", agentId: "planner" });
+	const p = await s.provisionActor("acme", { actorKind: "user", actorId: "lea" }, "agent", "planner", "planner", { enrolledHostPeerId: "host-1", agentId: "planner" });
 	const lea = (await s.login("acme", "user", { issuer: "i", subject: "lea" })).handle;
 	const planner = (await s.login("acme", "agent", { enrolledHostPeerId: "host-1", agentId: "planner" })).handle;
 	const id = async (h: string) => (await s.issueOperationIds(h, 1))[0];

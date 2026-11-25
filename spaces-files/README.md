@@ -129,6 +129,13 @@ directory of its own, and FsContent names it (plan section 3, *Contents*). Files
   fit even that closes the tenant durably in the deployment state with its pending action, across restarts, until
   `reopenClosedTenant`. Tests: the opening journey, the retry after a revocation (`notFound`, then `permissionDenied`,
   never the version), validation, the final owner, denied admin audits, and the reserve (`tests/grants.test.ts`).
+- Step 5, the admin operations: `registerActor` through a session with an operation ID (the host-level form is
+  `provisionActor`), `disableActor`, `enableActor` and `deleteActor` with replacement owners per workspace (enabled
+  direct users or agents other than the actor, granted in the same transaction), `lastOwner` and `lastAdmin`, no-ops
+  and invalid transitions, tombstones that keep IDs and identity pairs from reuse; `deleteActor` beyond
+  `maxDeleteRelations` or one transaction's bytes is `capacityExceeded` and changes nothing (disable, remove in batches,
+  then delete); `grantTenantAdmin`, `revokeTenantAdmin` (a security action); `listWorkspaces`, `listActors`,
+  `listGroups`, `listGroupMembers`, each checked against `maxReplyBytes` on open (`tests/admin.test.ts`).
 
 ## Commands
 

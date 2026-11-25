@@ -39,7 +39,7 @@ test("a login binds the handle to the actor its identity resolves to, and the re
 		await s.withSession(acme.handle, (_, sp) => sp.write({ type: "Probe", fields: { n: 1 } }, null, FOREVER));
 		assert.equal(await s.withSession(globex.handle, (_, sp) => sp.readIfExists({ type: "Probe" }, 0)), null);
 
-		await s.registerActor("acme", LEA, "agent", "a1", "a1", { enrolledHostPeerId: "host-a", agentId: "conversation-1" });
+		await s.provisionActor("acme", LEA, "agent", "a1", "a1", { enrolledHostPeerId: "host-a", agentId: "conversation-1" });
 		const agent = await s.login("acme", "agent", { enrolledHostPeerId: "host-a", agentId: "conversation-1" });
 		assert.equal(await whoami(s, agent.handle), "acme/agent:a1");
 	} finally { await s.close(); }
@@ -89,7 +89,7 @@ test("the actor's current state is checked inside the queue on every request", a
 	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
 	try {
 		await s.createTenant("acme", ADMIN);
-		await s.registerActor("acme", LEA, "agent", "a1", "a1", { enrolledHostPeerId: "host-a", agentId: "conversation-1" });
+		await s.provisionActor("acme", LEA, "agent", "a1", "a1", { enrolledHostPeerId: "host-a", agentId: "conversation-1" });
 		const id = { enrolledHostPeerId: "host-a", agentId: "conversation-1" };
 		const { handle } = await s.login("acme", "agent", id);
 		assert.equal(await whoami(s, handle), "acme/agent:a1");

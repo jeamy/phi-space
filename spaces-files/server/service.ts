@@ -17,7 +17,7 @@ import { issueOperationIds, verifyOperationId, type VerifiedOpId } from "./opids
 import { lookupReceipt, receiptRow, reserveReceipt, type Outcome } from "./receipts.ts";
 import { checkContents, parsePath, pathString } from "./paths.ts";
 import { contentDigest, requestDigest } from "./digest.ts";
-import { atLeast, checkGrant, checkLastOwner, checkMembership, childNamed, resolve, spaceData, subjectRow, type NodeRow, type RelRow, type Subject } from "./policy.ts";
+import { atLeast, checkGrant, checkLastAdmin, checkLastOwner, checkMembership, checkTenantAdmin, childNamed, listGroups, membersOf, resolve, spaceData, subjectRow, type NodeRow, type RelRow, type Subject } from "./policy.ts";
 import type { BlobRef } from "./blobs.ts";
 import { assertSeparateDirs, prepareDataDir } from "./dirs.ts";
 import * as schema from "./schema.ts";
@@ -242,13 +242,13 @@ export class FilesService {
 	}
 
 	/**
-	 * Registers an actor (an admin operation, section 5): the enabled FsActor, its private home root and the home's first
-	 * direct owner relation commit in one transaction together with the audit row, then a user's tenant goes into the
-	 * login index. `by` is the calling administrator, which must be an enabled user holding `tenant#admin`. An existing
-	 * (kind, actorId) (tombstones included: IDs are never reused), home name or identity pair gives `alreadyExists` and
-	 * creates nothing. Operation IDs and receipts arrive with phase 3.
+	 * Registers an actor on behalf of the administrator `by`, without a session or an operation ID: the host-level form
+	 * for provisioning and test fixtures. The admin adapter uses `registerActor`, which carries both. The enabled
+	 * FsActor, its private home root and the home's first direct owner relation commit in one transaction together with
+	 * the audit row, then a user's tenant goes into the login index. An existing (kind, actorId) (tombstones included:
+	 * IDs are never reused), home name or identity pair gives `alreadyExists` and creates nothing.
 	 */
-	async registerActor(tenantId: string, by: { actorKind: schema.ActorKind; actorId: string }, kind: schema.ActorKind, actorId: string, homeName: string, identity: schema.UserIdentity | schema.AgentIdentity): Promise<{ actorId: string; homeNodeId: string }> {
+	async provisionActor(tenantId: string, by: { actorKind: schema.ActorKind; actorId: string }, kind: schema.ActorKind, actorId: string, homeName: string, identity: schema.UserIdentity | schema.AgentIdentity): Promise<{ actorId: string; homeNodeId: string }> {
 		const ident = schema.identityOf(kind, identity);
 		const id = schema.actorId(actorId);
 		const name = schema.canonicalName(homeName, this.limits.maxNameBytes);
@@ -577,6 +577,200 @@ export class FilesService {
 		});
 	}
 
+	// ---------------------------------------------------------------- admin operations (sections 3 and 5)
+
+	/**
+	 * Registers an actor (an admin operation, section 5): like `provisionActor`, with the caller's session and an
+	 * operation ID, its receipt and audit row in the same transaction.
+	 */
+	async registerActor(handle: unknown, kind: unknown, actorId: unknown, homeName: unknown, identity: unknown, operationId: unknown): Promise<{ actorId: string; homeNodeId: string }> {
+		if (kind !== "user" && kind !== "agent") throw new schema.InvalidInput(`unknown actor kind ${JSON.stringify(kind)}`);
+		const ident = schema.identityOf(kind, identity);
+		const aid = schema.actorId(actorId);
+		const name = schema.canonicalName(homeName, this.limits.maxNameBytes);
+		let tenant = "";
+		const r = await this.withSession(handle, async (s, space) => {
+			tenant = s.tenantId;
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			await this.#requireAdmin(s, space, "registerActor", id);
+			const digest = requestDigest("registerActor", { kind, actorId: aid, homeName: name, identity: ident as Record<string, string> });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return { actorId: aid, homeNodeId: done.homeNodeId as string };
+			if (await space.readIfExists({ type: schema.T.actor, fields: { actorKind: kind, actorId: aid } }, 0)) throw new schema.AlreadyExists(`actor ${kind}:${aid} exists`);
+			if (await childNamed(spaceData(space), schema.WORKSPACES, name)) throw new schema.AlreadyExists("a workspace of that name exists");
+			if (await space.readIfExists(schema.identityTemplate(kind, ident), 0)) throw new schema.AlreadyExists("that identity is bound to another actor");
+			const homeNodeId = await this.#freshNodeId(space);
+			const rows = [schema.actor(kind, aid, homeNodeId, ident), schema.node(homeNodeId, schema.WORKSPACES, name, "dir"), schema.relation("node", homeNodeId, "owner", kind, aid), receiptRow(s, id, digest, { homeNodeId })];
+			await this.#admitRows(s, space, { id, operation: "registerActor", targets: [homeNodeId], rows, demand: { actors: 1, workspaces: 1, nodes: 1, relations: 1 } });
+			await this.#commitMutation(s, space, id, "registerActor", [homeNodeId], rows, null);
+			return { actorId: aid, homeNodeId };
+		});
+		if (kind === "user") this.state.addLogin((ident as schema.UserIdentity).issuer, (ident as schema.UserIdentity).subject, tenant);
+		return r;
+	}
+
+	/**
+	 * Disables an actor (section 3, actor lifecycle): its relations stay but become inert. It refuses with `lastOwner`
+	 * while the actor is the last enabled direct owner of a workspace root, unless `replacementOwners` names, per such
+	 * workspace, an enabled direct user or agent other than the actor, granted owner in the same transaction; and with
+	 * `lastAdmin` while it is the last enabled administrator. Disabling a disabled actor with no replacements is a
+	 * successful no-op; with replacements it is `invalidInput`, as is an unknown or deleted actor. A security action.
+	 */
+	disableActor(handle: unknown, actor: unknown, replacementOwners: unknown, operationId: unknown): Promise<{ status: "disabled" | "unchanged" }> {
+		return this.#lifecycle("disableActor", handle, actor, replacementOwners, operationId) as Promise<{ status: "disabled" | "unchanged" }>;
+	}
+
+	/** Deletes an actor: its relations are removed and the row stays as a tombstone, in one transaction (section 3). The
+	 *  owner and admin rules are those of `disableActor`; relations beyond one transaction's budget are `capacityExceeded`
+	 *  and change nothing: disable the actor first and revoke them in batches. */
+	deleteActor(handle: unknown, actor: unknown, replacementOwners: unknown, operationId: unknown): Promise<{ status: "deleted" }> {
+		return this.#lifecycle("deleteActor", handle, actor, replacementOwners, operationId) as Promise<{ status: "deleted" }>;
+	}
+
+	/** Enables a disabled actor; an enabled one is a successful no-op, an unknown or deleted one `invalidInput`. */
+	enableActor(handle: unknown, actor: unknown, operationId: unknown): Promise<{ status: "enabled" | "unchanged" }> {
+		return this.#lifecycle("enableActor", handle, actor, undefined, operationId) as Promise<{ status: "enabled" | "unchanged" }>;
+	}
+
+	#lifecycle(op: "disableActor" | "deleteActor" | "enableActor", handle: unknown, actor: unknown, replacementOwners: unknown, operationId: unknown): Promise<{ status: string }> {
+		return this.withSession(handle, async (s, space) => {
+			const target = parseSubject(actor, this.limits.maxNameBytes);
+			if (target.kind === "group") throw new schema.InvalidInput("an actor is a user or an agent");
+			const replacements = parseReplacements(replacementOwners, this.limits.maxNameBytes);
+			if (op === "enableActor" && replacements.length) throw new schema.InvalidInput("enableActor takes no replacement owners");
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			await this.#requireAdmin(s, space, op, id);
+			const d = spaceData(space);
+			const digest = requestDigest(op, { actor: subjectRow(target), replacementOwners: replacements.map((r) => ({ workspace: r.workspace, owner: subjectRow(r.owner) })) });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return { status: done.status as string };
+			const row = await space.readIfExists({ type: schema.T.actor, fields: { actorKind: target.kind, actorId: target.id } }, 0);
+			if (row === null || row.fields.state === "deleted") throw new schema.InvalidInput("unknown or deleted actor");
+			const state = row.fields.state as string;
+			const key = { actorKind: target.kind, actorId: target.id };
+			const successor = (next: string) => ({ type: schema.T.actor, fields: { ...row.fields, state: next } });
+			const noop = async (status: string) => {
+				const rows = [receiptRow(s, id, digest, { status })];
+				await this.#admitRows(s, space, { id, operation: op, targets: [], rows });
+				await this.#commitMutation(s, space, id, op, [], rows, null);
+				return { status };
+			};
+
+			if (op === "enableActor") {
+				if (state === "enabled") return noop("unchanged");
+				const rows = [successor("enabled"), receiptRow(s, id, digest, { status: "enabled" })];
+				await this.#admitRows(s, space, { id, operation: op, targets: [], rows, replaced: [{ type: schema.T.actor, fields: row.fields }] });
+				await this.#commitMutation(s, space, id, op, [], rows, null, [{ type: schema.T.actor, fields: key }]);
+				return { status: "enabled" };
+			}
+			if (op === "disableActor" && state === "disabled") {
+				if (replacements.length) throw new schema.InvalidInput("the actor is already disabled: no replacement owners");
+				return noop("unchanged");
+			}
+
+			// the workspace roots it owns directly, each needing an enabled direct owner after the change
+			const own = await space.readAll({ type: schema.T.relation, fields: { objectKind: "node", relation: "owner", subjectKind: target.kind, subjectId: target.id, subjectRelation: schema.DIRECT } }, { limit: this.limits.maxWorkspaces + 1 });
+			const roots: NodeRow[] = [];
+			for (const r of own) { const n = await d.node(r.fields.objectId as string); if (n?.parentId === schema.WORKSPACES) roots.push(n); }
+			const add: RelRow[] = [];
+			for (const rep of replacements) {
+				const root = await childNamed(d, schema.WORKSPACES, rep.workspace);
+				if (root === null || !roots.some((x) => x.nodeId === root.nodeId)) throw new schema.InvalidInput("a replacement names a workspace the actor does not own");
+				if (rep.owner.kind === target.kind && rep.owner.id === target.id) throw new schema.InvalidInput("a replacement owner must be another actor");
+				const a = await d.actor(rep.owner.kind, rep.owner.id);
+				if (a?.state !== "enabled") throw new schema.InvalidInput("a replacement owner must be enabled");
+				add.push({ objectKind: "node", objectId: root.nodeId, relation: "owner", ...subjectRow(rep.owner) });
+			}
+			const ref = { actorKind: target.kind, actorId: target.id };
+			const removing = op === "deleteActor"
+				? (await space.readAll({ type: schema.T.relation, fields: { subjectKind: target.kind, subjectId: target.id, subjectRelation: schema.DIRECT } }, { limit: this.limits.maxDeleteRelations + 1 })).map((e) => e.fields as unknown as RelRow)
+				: [];
+			if (removing.length > this.limits.maxDeleteRelations) throw new schema.CapacityExceeded(`the actor holds more than ${this.limits.maxDeleteRelations} relations: disable it and revoke them in batches first`);
+			for (const root of roots) await checkLastOwner(d, root.nodeId, { disable: [ref], remove: removing, add }, { limits: this.limits });
+			if (target.kind === "user") await checkLastAdmin(d, s.tenantId, { disable: [ref], remove: removing }, { limits: this.limits });
+			const next = op === "deleteActor" ? "deleted" : "disabled";
+			const newRels = [];
+			for (const r of add) { const rel = schema.relation("node", r.objectId, "owner", r.subjectKind, r.subjectId); if (!(await this.#has(space, rel))) newRels.push(rel); }
+			const rows = [successor(next), ...newRels, receiptRow(s, id, digest, { status: next })];
+			const takes = [{ type: schema.T.actor, fields: key }, ...removing.map((r) => ({ type: schema.T.relation, fields: { ...r } }))];
+			// the whole state transition must fit one transaction, or nothing changes (section 3, actor lifecycle)
+			const commit = rows.reduce((n, r) => n + encodedBytes(r.fields) + 256, 0) + takes.reduce((n, t) => n + encodedBytes(t.fields) + 256, 0) + 4096;
+			if (commit > DEFAULT_LIMITS.maxCommitBytes || takes.length + rows.length > this.limits.maxDeleteRelations + 64)
+				throw new schema.CapacityExceeded("the state transition does not fit one transaction: disable first, then revoke in batches");
+			const spec: AdmitSpec = { id, operation: op, targets: roots.map((r) => r.nodeId), rows, demand: newRels.length ? { relations: newRels.length } : {}, replaced: [{ type: schema.T.actor, fields: row.fields }] };
+			if (op === "disableActor") await this.#securityAdmit(s, space, spec, { operation: op, actor: subjectRow(target) });
+			else await this.#admitRows(s, space, spec);
+			await this.#commitMutation(s, space, id, op, spec.targets, rows, null, takes);
+			return { status: next };
+		});
+	}
+
+	/** Grants or revokes `tenant#admin` for an existing non-deleted user (idempotent both). A revoke keeps the last
+	 *  enabled administrator and is a security action. */
+	grantTenantAdmin(handle: unknown, user: unknown, operationId: unknown): Promise<{ status: "granted" | "unchanged" }> {
+		return this.#tenantAdmin("grantTenantAdmin", handle, user, operationId) as Promise<{ status: "granted" | "unchanged" }>;
+	}
+	revokeTenantAdmin(handle: unknown, user: unknown, operationId: unknown): Promise<{ status: "revoked" | "unchanged" }> {
+		return this.#tenantAdmin("revokeTenantAdmin", handle, user, operationId) as Promise<{ status: "revoked" | "unchanged" }>;
+	}
+
+	#tenantAdmin(op: "grantTenantAdmin" | "revokeTenantAdmin", handle: unknown, user: unknown, operationId: unknown): Promise<{ status: string }> {
+		return this.withSession(handle, async (s, space) => {
+			const uid = schema.actorId(user, "user ID");
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			await this.#requireAdmin(s, space, op, id);
+			const d = spaceData(space);
+			const digest = requestDigest(op, { user: uid });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return { status: done.status as string };
+			const tuple = await checkTenantAdmin(d, s.tenantId, uid);
+			const row = schema.relation("tenant", s.tenantId, "admin", "user", uid);
+			const present = await this.#has(space, row);
+			if (op === "grantTenantAdmin") {
+				const status = present ? "unchanged" : "granted";
+				const rows = [...(present ? [] : [row]), receiptRow(s, id, digest, { status })];
+				await this.#admitRows(s, space, { id, operation: op, targets: [], rows, demand: present ? {} : { relations: 1 } });
+				await this.#commitMutation(s, space, id, op, [], rows, null);
+				return { status };
+			}
+			const status = present ? "revoked" : "unchanged";
+			const rows = [receiptRow(s, id, digest, { status })];
+			if (present) {
+				await checkLastAdmin(d, s.tenantId, { remove: [tuple] }, { limits: this.limits });
+				await this.#securityAdmit(s, space, { id, operation: op, targets: [], rows }, { operation: op, user: uid });
+			} else await this.#admitRows(s, space, { id, operation: op, targets: [], rows });
+			await this.#commitMutation(s, space, id, op, [], rows, null, present ? [{ type: schema.T.relation, fields: { ...tuple } }] : []);
+			return { status };
+		});
+	}
+
+	/** Admin inspection (section 5), in deterministic order and bounded like `list`; no file rights needed or given. */
+	listWorkspaces(handle: unknown): Promise<Array<{ name: string; nodeId: string }>> {
+		return this.#adminRead(handle, "listWorkspaces", async (space) => {
+			const roots = await space.readAll({ type: schema.T.node, fields: { parentId: schema.WORKSPACES } }, { limit: this.limits.maxWorkspaces + 1 });
+			if (roots.length > this.limits.maxWorkspaces) throw new schema.CapacityExceeded(`more than ${this.limits.maxWorkspaces} workspaces`);
+			return roots.map((r) => ({ name: r.fields.name as string, nodeId: r.fields.nodeId as string })).sort((a, b) => byName(a.name, b.name));
+		});
+	}
+	listActors(handle: unknown): Promise<Array<{ kind: schema.ActorKind; id: string; state: string; homeNodeId: string }>> {
+		return this.#adminRead(handle, "listActors", async (space) => {
+			const rows = await space.readAll({ type: schema.T.actor }, { limit: this.limits.maxActors + 1 });
+			if (rows.length > this.limits.maxActors) throw new schema.CapacityExceeded(`more than ${this.limits.maxActors} actors`);
+			return rows.map((r) => ({ kind: r.fields.actorKind as schema.ActorKind, id: r.fields.actorId as string, state: r.fields.state as string, homeNodeId: r.fields.homeNodeId as string }))
+				.sort((a, b) => byName(a.kind, b.kind) || byName(a.id, b.id));
+		});
+	}
+	listGroups(handle: unknown): Promise<string[]> {
+		return this.#adminRead(handle, "listGroups", (space) => listGroups(space, { limits: this.limits }));
+	}
+	listGroupMembers(handle: unknown, group: unknown): Promise<Subject[]> {
+		return this.#adminRead(handle, "listGroupMembers", (space) => membersOf(spaceData(space), schema.groupId(group, this.limits.maxNameBytes), { limits: this.limits }));
+	}
+
+	#adminRead<T>(handle: unknown, op: string, read: (space: PhiSpaces) => Promise<T>): Promise<T> {
+		return this.withSession(handle, async (s, space) => { await this.#requireAdmin(s, space, op, null); return read(space); });
+	}
+
 	/** The budgets of a security action; one that does not fit even the security reserve closes the tenant. */
 	async #securityAdmit(s: Session, space: PhiSpaces, m: AdmitSpec, action: Record<string, unknown>): Promise<void> {
 		try { await this.#admitRows(s, space, { ...m, pool: "security" }); }
@@ -687,7 +881,9 @@ export class FilesService {
 			for (const t of takes)
 				if ((await space.take(t, 0, { txn })) === null) throw new InconsistentState(`tenant ${s.tenantId}: a ${t.type} row vanished under the queue`);
 			for (const e of all) {
-				const replacing = save?.replace && e.type === schema.T.content;
+				// a successor of a row taken above is written without a uniqueness check: the check would find the
+				// reserved row it replaces (section 3, leases and uniqueness)
+				const replacing = (save?.replace && e.type === schema.T.content) || takes.some((t) => t.type === e.type && Object.entries(t.fields).every(([k, v]) => e.fields[k] === v));
 				await space.write(e, txn, FOREVER, replacing ? {} : { unique: schema.KEY[e.type as keyof typeof schema.KEY] });
 			}
 		} catch (e) {
@@ -848,3 +1044,18 @@ function parseSubject(v: unknown, maxNameBytes: number): Subject {
 }
 
 const subjectOf = (r: RelRow): Subject => r.subjectKind === "group" ? { kind: "group", id: r.subjectId, relation: "member" } : { kind: r.subjectKind as schema.ActorKind, id: r.subjectId };
+
+/** Replacement owners as a caller names them: `[{workspace, owner: {kind: "user" | "agent", id}}]`, at most one per
+ *  workspace, sorted by workspace name for the digest. */
+function parseReplacements(v: unknown, maxNameBytes: number): Array<{ workspace: string; owner: Subject }> {
+	if (v === undefined || v === null) return [];
+	if (!Array.isArray(v) || v.length > 64) throw new schema.InvalidInput("replacementOwners is a list of at most 64 {workspace, owner}");
+	const out = v.map((x) => {
+		const o = (x ?? {}) as { workspace?: unknown; owner?: unknown };
+		const owner = parseSubject(o.owner, maxNameBytes);
+		if (owner.kind === "group") throw new schema.InvalidInput("a replacement owner is a user or an agent, never a group");
+		return { workspace: schema.canonicalName(o.workspace, maxNameBytes), owner };
+	}).sort((a, b) => byName(a.workspace, b.workspace));
+	if (new Set(out.map((r) => r.workspace)).size !== out.length) throw new schema.InvalidInput("one replacement owner per workspace");
+	return out;
+}

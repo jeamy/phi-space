@@ -25,7 +25,7 @@ test("phase 1 exit: identities, homes, isolation and fail-closed sessions", asyn
 
 		// two conversations of one host and equal agent IDs on two hosts: distinct actors, distinct private homes
 		const ids = [conv("host-a", "conversation-1"), conv("host-a", "conversation-2"), conv("host-b", "conversation-1")];
-		for (const [i, id] of ids.entries()) await s.registerActor("acme", LEA, "agent", `agent-${i}`, `home-${i}`, id);
+		for (const [i, id] of ids.entries()) await s.provisionActor("acme", LEA, "agent", `agent-${i}`, `home-${i}`, id);
 		const seen = await Promise.all(ids.map(async (id) => me(s, (await s.login("acme", "agent", id)).handle)));
 		assert.deepEqual(seen.map((x) => x.actor), ["agent:agent-0", "agent:agent-1", "agent:agent-2"]);
 		assert.equal(new Set(seen.map((x) => x.home)).size, 3);
@@ -36,8 +36,8 @@ test("phase 1 exit: identities, homes, isolation and fail-closed sessions", asyn
 		// duplicate identity pairs fail without creating an actor or a home
 		const count = async () => (await new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias("acme") }).readAll()).length;
 		const before = await count();
-		await assert.rejects(s.registerActor("acme", LEA, "agent", "agent-x", "home-x", conv("host-a", "conversation-1")), AlreadyExists);
-		await assert.rejects(s.registerActor("acme", LEA, "user", "lea-x", "home-y", { issuer: ADMIN.issuer, subject: ADMIN.subject }), AlreadyExists);
+		await assert.rejects(s.provisionActor("acme", LEA, "agent", "agent-x", "home-x", conv("host-a", "conversation-1")), AlreadyExists);
+		await assert.rejects(s.provisionActor("acme", LEA, "user", "lea-x", "home-y", { issuer: ADMIN.issuer, subject: ADMIN.subject }), AlreadyExists);
 		assert.equal(await count(), before);
 
 		// two tenants stay isolated: the same user identity is a separate actor whose session sees only its own tenant

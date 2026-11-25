@@ -20,7 +20,7 @@ test("provisioned rows evaluate as the plan says, and tenants stay apart", async
 		const acme = await s.createTenant("acme", ADMIN);
 		const globex = await s.createTenant("globex", { ...ADMIN, actorId: "max" });
 		assert.ok(acme.status === "created" && globex.status === "created");
-		await s.registerActor("acme", LEA, "user", "max", "max", { issuer: "i", subject: "max" });
+		await s.provisionActor("acme", LEA, "user", "max", "max", { issuer: "i", subject: "max" });
 		await s.inTenant("acme", async (sp) => {
 			const d = spaceData(sp);
 			assert.equal((await resolve(d, LEA, "lea", [])).role, "owner", "the admin owns its home");
