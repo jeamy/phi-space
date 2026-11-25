@@ -85,7 +85,8 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		wild: job(async (live) => { await wildTick(space, live, msgLeaseMs); }),
 		epoch: async () => {
 			await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await roadTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();
-			await growthTick(space, w, msgLeaseMs);
+			// decided on the copy of the world first, without a lock (growth.ts); the copy is made below, before any job runs
+			await growthTick(space, w, msgLeaseMs, mirror ? { readAll: (t) => mirror.readAll(t), fresh: () => mirror.fresh() } : space);
 		},
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };

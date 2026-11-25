@@ -1,7 +1,8 @@
 //! The room and island locks (`server/engine/room-lock.ts`; docs/3d-welt-und-raster-plan-2026-11-21.en.md section 3,
 //! "Locks"): whoever changes the static occupancy of a room takes the room's lock in its transaction and writes it back
 //! with the commit; a command that meets a taken lock is refused, a job waits. Roads across rooms and growth take the
-//! island's lock first. Order: WORLD_LOCK, the island lock, the room locks in the order of their IDs.
+//! island's lock first. Order: WORLD_LOCK, the island lock, the room locks in the order of their IDs. A room's lock
+//! carries its occupancy version (`version`), counted up by every holder.
 use std::collections::{BTreeMap, BTreeSet};
 
 use phi_json::{obj, Json};
@@ -33,8 +34,20 @@ async fn hold(space: &Space, txn: &str, t: &Json, wait_ms: f64) -> Result<bool> 
 	Ok(true)
 }
 
+/// `lockVersion`: the occupancy version a room's lock carries (absent: 0).
+pub fn lock_version(f: &Json) -> f64 { j::no(f, "version").unwrap_or(0.0) }
+/// `holdRoomVersion`: the room's lock taken and written back with its version counted up; the version it had, or None
+/// when it is taken by another transaction now (or not there) within `wait_ms`.
+pub async fn hold_room_version(space: &Space, txn: &str, room: &str, wait_ms: f64) -> Result<Option<f64>> {
+	let Some(e) = space.take_if_exists(&room_lock(room), wait_ms, Some(txn)).await? else { return Ok(None) };
+	let version = lock_version(fields(&e));
+	let mut f = fields(&e).clone();
+	j::set(&mut f, "version", Json::from(version + 1.0));
+	space.write(&obj! { "type" => j::at(&e, "type").clone(), "fields" => f }, Some(txn), FOREVER).await?;
+	Ok(Some(version))
+}
 /// `holdRoom`: a job's take of the room's lock (`wait_ms`, LOCK_WAIT_MS by default).
-pub async fn hold_room(space: &Space, txn: &str, room: &str, wait_ms: f64) -> Result<bool> { hold(space, txn, &room_lock(room), wait_ms).await }
+pub async fn hold_room(space: &Space, txn: &str, room: &str, wait_ms: f64) -> Result<bool> { Ok(hold_room_version(space, txn, room, wait_ms).await?.is_some()) }
 /// `holdIsland`: the island's lock, then its rooms' in the order of their IDs.
 pub async fn hold_island(space: &Space, txn: &str, island: &str, rooms: &[&str], wait_ms: f64) -> Result<bool> {
 	if !hold(space, txn, &island_lock(island), wait_ms).await? { return Ok(false); }

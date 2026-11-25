@@ -152,26 +152,97 @@ fn moved(e: &Json, room: &str, before: &Json, step: &Json) -> Json {
 	f
 }
 
+/// `rectanglesOf`: the rectangles a seam may not cross (what has one in the room, and a Motion's zone).
+fn rectangles_of(room_id: &str, entries: &[Json]) -> Vec<Json> {
+	entries.iter().filter(|x| j::so(fields(x), "room") == Some(room_id)).filter_map(|x| {
+		let f = fields(x);
+		if is(x, "Motion") && j::opt(f, "zone").is_some_and(j::truthy) { Some(j::at(f, "zone").clone()) }
+		else if j::no(f, "w").is_some() && j::no(f, "h").is_some() { Some(f.clone()) } else { None }
+	}).collect()
+}
+
+/// `growthStep`: what growth decides for a room from its entries (its positioned entries and its exits): the step, or
+/// None (too little land taken, no candidate, none that crosses no rectangle and keeps the room joined).
+pub fn growth_step(w: &Json, room: &Json, entries: &[Json]) -> Option<Json> {
+	let d = j::at(w, "growth");
+	let room_id = j::s(room, "roomId");
+	let ground = rows(j::at(room, "ground"));
+	let exits: Vec<Json> = entries.iter().filter(|x| is(x, "Exit") && j::so(fields(x), "location") == Some(room_id)).map(|x| fields(x).clone()).collect();
+	let mut land: HashSet<String> = HashSet::new();
+	for (y, row) in ground.iter().enumerate() {
+		for x in 0..js::len16(row) {
+			let (xf, yf) = (x as f64, y as f64);
+			if walkable(w, &ground, xf, yf) && js::slice16(row, x as isize, Some(x as isize + 1)) != PATH && !is_passage(&exits, xf, yf) { land.insert(key(xf, yf)); }
+		}
+	}
+	let occupied: HashSet<String> = claimed(entries).into_iter().filter(|k| land.contains(k)).collect();
+	if land.is_empty() || (occupied.len() as f64) < land.len() as f64 * j::n(d, "fullShare") { return None; }
+	let rects = rectangles_of(room_id, entries);
+	let safe = seam_check(w, room, &ground, entries);
+	candidates(w, &ground, &exits).into_iter().find(|s| !rects.iter().any(|r| crosses(r, s)) && safe(s))
+}
+
+/// `growthKey`: everything `growth_step` reads of a room, as one text: the lock's version, the Room entry's id, and as
+/// values every rectangle, the footprints, the fires and the exits. Equal texts give the same decision.
+pub fn growth_key(room_entry: &Json, version: f64, entries: &[Json]) -> String {
+	let room_id = j::s(fields(room_entry), "roomId");
+	let mut parts: Vec<String> = Vec::new();
+	for e in entries {
+		let f = fields(e);
+		let (x, y) = (key_text(j::at(f, "x")), key_text(j::at(f, "y")));
+		if is(e, "Beacon") { parts.push(format!("b{x},{y}")); } else if is(e, "Exit") { parts.push(format!("e{x},{y}")); }
+		if j::so(f, "room") != Some(room_id) { continue; }
+		if is(e, "Motion") && j::opt(f, "zone").is_some_and(j::truthy) {
+			let z = j::at(f, "zone");
+			parts.push(format!("z{},{},{},{}", key_text(j::at(z, "x")), key_text(j::at(z, "y")), key_text(j::at(z, "w")), key_text(j::at(z, "h"))));
+		} else if j::no(f, "w").is_some() && j::no(f, "h").is_some() {
+			parts.push(format!("{}{x},{y},{},{}", if is(e, "Footprint") { "f" } else { "r" }, key_text(j::at(f, "w")), key_text(j::at(f, "h"))));
+		}
+	}
+	parts.sort();
+	format!("{} {} {}", phi_json::number_text(version), key_text(j::at(room_entry, "id")), parts.join(" "))
+}
+
+thread_local! {
+	/// Per space (`Space::key`) and room, the key of the room whose last decision was no step.
+	static NO_STEP: std::cell::RefCell<std::collections::HashMap<(usize, String), String>> = Default::default();
+}
+
 /// `growthTick`: a busy world defers growth; a room and every displaced position change in one transaction under the
-/// world lock. How many rooms grew.
-pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> {
+/// world lock. How many rooms grew. A room is decided first on `view` (the world's copy, or the space outside a transaction), without a
+/// lock: one held right now, one whose decision is kept and one with no step are passed over without taking anything.
+/// Only a room with a step takes the locks; its lock's version must still be the one the view showed, and the decision
+/// is made again on what the transaction reads.
+pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64, view: &Space) -> Result<f64> {
 	let Some(d) = j::opt(w, "growth") else { return Ok(0.0) };
 	let strip = j::n(d, "strip");
 	if strip.fract() != 0.0 || strip.is_nan() || strip < 1.0 { return Err(Error::Other("growth.strip must be a positive integer".into())); }
+	view.fresh().await?;
 	let mut grew = 0.0;
-	for entry in space.read_all(&obj! { "type" => "Room" }, None).await? {
+	for entry in view.read_all(&obj! { "type" => "Room" }, None).await? {
 		if super::interior::is_interior(j::s(fields(&entry), "roomId")) { continue; } // a building's inside keeps its walls
+		let rid = crate::fire::key_text(j::at(fields(&entry), "roomId"));
+		let Some(lock) = view.read_all(&crate::room_lock::room_lock(&rid), None).await?.into_iter().next() else { continue }; // held right now
+		let version = crate::room_lock::lock_version(fields(&lock));
+		let mut templates: Vec<Json> = POSITIONED.iter().map(|ty| tmpl(ty, obj! { "room" => rid.as_str() })).collect();
+		templates.push(tmpl("Exit", obj! { "location" => rid.as_str() }));
+		let reads = templates.iter().map(|t| Box::pin(view.read_all(t, None)) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Json>>> + '_>>).collect();
+		let mut seen: Vec<Json> = Vec::new();
+		for group in join_all(reads).await { seen.extend(group?); }
+		let k = growth_key(&entry, version, &seen);
+		let slot = (space.key(), rid.clone());
+		if NO_STEP.with(|m| m.borrow().get(&slot) == Some(&k)) { continue; }
+		if growth_step(w, fields(&entry), &seen).is_none() { NO_STEP.with(|m| m.borrow_mut().insert(slot, k)); continue; }
+		NO_STEP.with(|m| m.borrow_mut().remove(&slot));
 		let txn = space.create_transaction(30_000.0).await?;
 		let r: Result<Option<bool>> = async {
 			if space.take_if_exists(&world_lock(), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(None); }
 			// the island's lock after WORLD_LOCK, then the room's (room_lock.rs): a job that holds only the room's lock and no
 			// WORLD_LOCK would otherwise write a footprint where the room is shifting
-			let rid = crate::fire::key_text(j::at(fields(&entry), "roomId"));
-			let got = match j::at(fields(&entry), "island").as_str() {
-				Some(island) => crate::room_lock::hold_island(space, &txn, island, &[rid.as_str()], NO_WAIT).await?,
-				None => crate::room_lock::hold_room(space, &txn, &rid, NO_WAIT).await?,
-			};
-			if !got { return Ok(Some(false)); }
+			if let Some(island) = j::at(fields(&entry), "island").as_str() {
+				if !crate::room_lock::hold_island(space, &txn, island, &[], NO_WAIT).await? { return Ok(Some(false)); }
+			}
+			if crate::room_lock::hold_room_version(space, &txn, &rid, NO_WAIT).await? != Some(version) { return Ok(Some(false)); }
 			let Some(e) = space.take_if_exists(&obj! { "id" => j::at(&entry, "id").clone() }, NO_WAIT, Some(&txn)).await? else { return Ok(Some(false)) };
 			let room = fields(&e).clone();
 			let room_id = j::s(&room, "roomId").to_owned();
@@ -183,28 +254,7 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 			templates.push(obj! { "type" => "Exit" });
 			let reads = templates.iter().map(|t| Box::pin(space.read_all(t, Some(&txn))) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Json>>> + '_>>).collect();
 			for group in join_all(reads).await { entries.extend(group?); }
-			let exits: Vec<Json> = entries.iter().filter(|x| is(x, "Exit") && j::so(fields(x), "location") == Some(room_id.as_str())).map(|x| fields(x).clone()).collect();
-			let mut land: HashSet<String> = HashSet::new();
-			for (y, row) in ground.iter().enumerate() {
-				for x in 0..js::len16(row) {
-					let (xf, yf) = (x as f64, y as f64);
-					if walkable(w, &ground, xf, yf) && js::slice16(row, x as isize, Some(x as isize + 1)) != PATH && !is_passage(&exits, xf, yf) { land.insert(key(xf, yf)); }
-				}
-			}
-			let occupied: HashSet<String> = claimed(&entries).into_iter().filter(|k| land.contains(k)).collect();
-			if land.is_empty() || (occupied.len() as f64) < land.len() as f64 * j::n(d, "fullShare") { return Ok(Some(false)); }
-			let rects: Vec<Json> = entries.iter().filter(|x| j::so(fields(x), "room") == Some(room_id.as_str())).filter_map(|x| {
-				let f = fields(x);
-				if is(x, "Motion") && j::opt(f, "zone").is_some_and(j::truthy) { Some(j::at(f, "zone").clone()) }
-				else if j::no(f, "w").is_some() && j::no(f, "h").is_some() { Some(f.clone()) } else { None }
-			}).collect();
-			let mut step = None;
-			let safe = seam_check(w, &room, &ground, &entries);
-			for s in candidates(w, &ground, &exits) {
-				if rects.iter().any(|r| crosses(r, &s)) { continue; }
-				if safe(&s) { step = Some(s); break; }
-			}
-			let Some(step) = step else { return Ok(Some(false)) };
+			let Some(step) = growth_step(w, &room, &entries) else { return Ok(Some(false)) };
 			let was = space.take_if_exists(&tmpl("RoomGrowth", obj! { "roomId" => room_id.as_str() }), NO_WAIT, Some(&txn)).await?;
 			let before = was.map_or_else(|| obj! { "roomId" => room_id.as_str(), "east" => 0.0, "south" => 0.0 }, |x| fields(&x).clone());
 			let size = j::n(&step, "size");
@@ -353,5 +403,26 @@ mod tests {
 		}
 		assert!(safe * 10 > seams && safe * 10 < seams * 9, "both answers occur: {safe} of {seams} safe");
 	}
-}
 
+	/// `growth_key`: what is written without the room's lock or by hand changes the key (a fire, a zone, a footprint, an
+	/// exit, the room's entry, the version); a rewrite that keeps every rectangle (a bed watered, a new id) does not.
+	#[test]
+	fn the_key_names_every_input() {
+		let e = |id: &str, ty: &str, f: Json| obj! { "id" => id, "type" => ty, "types" => Json::Array(vec![Json::from(ty)]), "fields" => f };
+		let room = e("r1", "Room", obj! { "roomId" => "r", "ground" => Json::Array(vec![]) });
+		let bed = |id: &str| e(id, "Bed", obj! { "bedId" => "b", "room" => "r", "x" => 1.0, "y" => 2.0, "w" => 2.0, "h" => 2.0, "water" => if id == "e1" { 0.0 } else { 3.0 } });
+		let base = vec![bed("e1"), e("e2", "Footprint", obj! { "room" => "r", "of" => "b", "x" => 1.0, "y" => 2.0, "w" => 2.0, "h" => 2.0 })];
+		let key = |entries: &[Json]| growth_key(&room, 0.0, entries);
+		let k = key(&base);
+		assert_eq!(key(&[bed("e9"), base[1].clone()]), k, "a bed rewritten keeps its rectangle");
+		let with = |x: Json| { let mut v = base.clone(); v.push(x); key(&v) };
+		assert_ne!(with(e("e3", "Beacon", obj! { "beaconId" => "f", "room" => "r", "x" => 5.0, "y" => 5.0 })), k, "a fire");
+		assert_ne!(with(e("e4", "Zone", obj! { "zoneId" => "z", "room" => "r", "x" => 5.0, "y" => 5.0, "w" => 2.0, "h" => 2.0 })), k, "a zone");
+		assert_ne!(with(e("e5", "Motion", obj! { "motionId" => "m", "room" => "r", "zone" => obj! { "x" => 5.0, "y" => 5.0, "w" => 2.0, "h" => 2.0 } })), k, "a motion's zone");
+		assert_ne!(with(e("e6", "Footprint", obj! { "room" => "r", "of" => "c", "x" => 7.0, "y" => 2.0, "w" => 1.0, "h" => 1.0 })), k, "a footprint");
+		assert_ne!(with(e("e7", "Exit", obj! { "exitId" => "x", "location" => "r", "x" => 0.0, "y" => 3.0 })), k, "an exit");
+		assert_ne!(growth_key(&room, 1.0, &base), k, "the lock's version");
+		assert_ne!(growth_key(&e("r2", "Room", obj! { "roomId" => "r" }), 0.0, &base), k, "the room rewritten");
+		assert_ne!(key(&base[..1]), k, "a footprint taken");
+	}
+}

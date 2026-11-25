@@ -363,6 +363,28 @@ For TypeScript the script also times the lock itself, from its take to the commi
 - **Search.** The Rust search is slower than the TypeScript one. It keys cells by strings and reads every cell through `walkable` on UTF-16 slices. The shared `Grid` (plan section 3, "Performance strategy") replaces both. At scale 2 the search does 8 times the work, about 2.4 s per run with today's code, so it cannot stay as it is.
 - **Under load:** see below.
 
+**After growth steps 2 and 3 (phase 1 step 7, 2026-11-25).** A room's lock carries its occupancy version (`RoomLock.version`), which every holder counts up when it writes the lock back (`holdRoomVersion`, `room-lock.ts`, `room_lock.rs`). Growth decides each room first on a view, before it takes anything (`growthStep` in `commands/growth.ts`, `growth_step` in `growth.rs`). The view is the world worker's copy (`Mirror`; Rust: the copy behind `Space::with_mirror`, `world_host.rs`) after `fresh`, or the space outside a transaction.
+- A room whose lock is not visible (held right now), whose decision is kept, or that has no step is passed over: no lock, nothing sent to the change stream.
+- A decision of no step is kept with its key (`growthKey`). The key holds the version and the Room entry's id, plus as values every rectangle, the footprints, the fires and the exits: what is written without the room's lock (fires, zones, motions, mill loads, site orders) and what a test writes by hand. So a fire that goes out lets the room grow on the next run.
+- Only a room with a step takes WORLD_LOCK, its island's lock and its own. Its version must still be the one the view showed, else the room changed since and is left to the next run. Then the decision is made again on the transaction's reads, as before, and only that decision is executed.
+
+`tests/growth-gate.test.ts` holds this:
+- a run that grows nothing sends no revision;
+- a fire on the only way keeps the room from growing, and once it is out the room grows on the next run;
+- a version that changed between the view and the take leaves the room alone;
+- over 80 rounds of random changes written by hand (footprints, fires, zones), runs that keep their decisions grow exactly what runs without them grow.
+
+With the fires, or the version comparison, removed, these tests fail. `growth.rs` has a test that every input changes the key and that a rewrite keeping its rectangles does not.
+
+The same measurement (`tests/perf/growth-lock.ts`, now also with `cold`, a run with the kept decisions forgotten, `kept`, and samples of one room that grows), medians in ms on this machine. Here the view is the space outside a transaction, not the copy:
+
+| Space server | Lock held per run that grows nothing (reference) | Revisions per such run (reference) | Run, TS engine | Run, Rust engine (first, then kept) | One growing room: lock held, longest hold | Revisions of that run |
+| --- | --- | --- | --- | --- | --- | --- |
+| Rust | 0 (335 TS, 513 Rust) | 0 (53) | 69 | 108, 82 | 26, 35 | 11 |
+| TypeScript | 0 (400) | 0 (53) | 97 | 166, 113 | 69, 78 | 11 |
+
+A run still takes about as long as before step 2: it reads the rooms through the space. Keeping a decision saves the computation, not those reads; a run on the copy (the world worker) reads nothing from the space. What a run holds the lock for is now the room that grows, about one room's former share. A busy world no longer meets growth's lock unless a room has a step.
+
 **How often a run comes.** The world worker runs growth in the job `epoch`, every world hour (`epochs.checkWorldMs`). The world clock on big runs at rate 24 (`WorldClock.rate`, read on 2026-11-24). So a region's growth run comes every 150 s of real time, not once an hour.
 
 **What a run sends to the mirrors.** Growth takes the world lock and then the room in its transaction. Both disappear for plain readers until the transaction ends. When no seam is valid the transaction is aborted, and both come back. So every room a run reaches costs 4 revisions in the change stream (2 `del`, a `put` of the lock and a `put` of the whole `Room` entry), and nothing has changed in the end. Every mirror receives them: the gateway and the world worker. Measured with one run of the TypeScript engine on a TypeScript space:
@@ -372,7 +394,7 @@ For TypeScript the script also times the lock itself, from its take to the commi
 | the fixture alone | 13 | 53 | 16,901 | 11,962 |
 | the loaded world and the fixture | 50 | 201 | 77,759 | 58,345 |
 
-At scale 2 a `Room` entry carries four times the cells. Phase 1 should record this per run as well. With the occupancy version (plan section 3, growth step 1) a run that finds nothing changed would not take the room at all.
+At scale 2 a `Room` entry carries four times the cells. Phase 1 should record this per run as well. With the occupancy version (plan section 3, growth step 2) a run that finds nothing changed would not take the room at all; see "After growth steps 2 and 3" below.
 
 **Under load.** `node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/growth-load.ts` runs a stack as on the servers with the world loaded (world worker, npc process without model calls, web process) and the fixture beside it. It has four windows of 60 s:
 

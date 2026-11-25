@@ -1,6 +1,6 @@
 // Full rooms gain land at an edge or at a safe seam before the coast. Geometry and positions commit together.
-import { holdIsland, holdRoom } from "../room-lock.ts";
-import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
+import { holdIsland, holdRoomVersion, lockVersion, roomLock } from "../room-lock.ts";
+import { FOREVER, NO_WAIT, type SpaceLike, type Taken, type Template } from "phi-spaces";
 import { fieldsOf, WORLD_LOCK, type ExitFields, type FootprintFields, type RoomFields, type RoomGrowthFields, type RoomGrowthStep } from "../../model.ts";
 import { msgOptions } from "../context.ts";
 import { PATH } from "./build.ts";
@@ -95,21 +95,75 @@ function moved(e: Taken, room: string, before: RoomGrowthFields, step: RoomGrowt
 	return f as Taken["fields"];
 }
 
-/** A busy world defers growth; a room and every displaced position change in one transaction under the world lock. */
-export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<number> {
+/** The rectangles a seam may not cross: what has a rectangle in the room, and a Motion's zone. */
+const rectanglesOf = (roomId: string, entries: Taken[]): Rect[] => entries.filter((x) => x.fields.room === roomId).flatMap((x) => is(x, "Motion") && x.fields.zone ? [x.fields.zone as unknown as Rect] : typeof x.fields.w === "number" && typeof x.fields.h === "number" ? [x.fields as unknown as Rect] : []);
+
+/** What growth decides for a room from its entries (the room's positioned entries and its exits): the step, or null
+ *  (too little land taken, no candidate, none that crosses no rectangle and keeps the room joined). */
+export function growthStep(w: WorldDef, room: RoomFields, entries: Taken[]): RoomGrowthStep | null {
+	const d = w.growth!, exits = entries.filter((x) => is(x, "Exit") && x.fields.location === room.roomId).map(fieldsOf<ExitFields>);
+	const land = new Set<string>();
+	room.ground.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (walkable(w, room.ground, x, y) && row[x] !== PATH && !isPassage(exits, { x, y })) land.add(`${x},${y}`); });
+	const occupied = new Set(claimed(entries).filter((key) => land.has(key)));
+	if (!land.size || occupied.size < land.size * d.fullShare) return null;
+	const rectangles = rectanglesOf(room.roomId, entries);
+	const safe = seamCheck(w, room, entries);
+	return [...candidates(w, room, exits)].find((s) => !rectangles.some((r) => crosses(r, s)) && safe(s)) ?? null;
+}
+
+/** Everything growthStep reads of a room, as one text (plan section 3, growth step 2): the room's lock version (every
+ *  holder counts it up), the Room entry (rewritten whenever its ground or spawn changes), and, as values, what is
+ *  written without the lock and what a test may write by hand: every rectangle, the footprints, the fires and the
+ *  exits. Equal texts give the same decision, so a room that grew no step keeps its text and costs a comparison. */
+export function growthKey(roomEntry: Taken, version: number, entries: Taken[]): string {
+	const roomId = String(roomEntry.fields.roomId), parts: string[] = [];
+	for (const e of entries) {
+		const f = e.fields;
+		if (is(e, "Beacon")) parts.push(`b${f.x},${f.y}`);
+		else if (is(e, "Exit")) parts.push(`e${f.x},${f.y}`);
+		if (f.room === roomId && is(e, "Motion") && f.zone) { const z = f.zone as unknown as Rect; parts.push(`z${z.x},${z.y},${z.w},${z.h}`); }
+		else if (f.room === roomId && typeof f.w === "number" && typeof f.h === "number") parts.push(`${is(e, "Footprint") ? "f" : "r"}${f.x},${f.y},${f.w},${f.h}`);
+	}
+	return `${version} ${roomEntry.id} ${parts.sort().join(" ")}`;
+}
+
+/** What growth reads before it takes a lock: the process's copy of the world (server/space.ts Mirror; `fresh` waits
+ *  until it holds what the space has committed), or the space outside a transaction. */
+export type GrowthView = { readAll(tmpl: Template): Taken[] | Promise<Taken[]>; fresh?(): Promise<void> };
+/** Per space, the key (growthKey) of each room whose last decision was no step. */
+const noStep = new WeakMap<object, Map<string, string>>();
+
+/** A busy world defers growth; a room and every displaced position change in one transaction under the world lock.
+ *  A room is decided first on `view`, without a lock (plan section 3, growth step 3): one held by another transaction
+ *  (its lock not visible), one whose decision is kept (growthKey) and one with no step are passed over without taking
+ *  anything. Only a room with a step takes the locks; there its lock's version must still be the one the view showed
+ *  (else it changed since: left to the next run), and the decision is made again on what the transaction reads. */
+export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number, view: GrowthView = space): Promise<number> {
 	const d = w.growth;
 	if (!d) return 0;
 	if (!Number.isInteger(d.strip) || d.strip < 1) throw new RangeError("growth.strip must be a positive integer");
+	let kept = noStep.get(space);
+	if (!kept) noStep.set(space, (kept = new Map()));
+	await view.fresh?.();
 	let grew = 0;
-	for (const entry of await space.readAll({ type: "Room" })) {
+	for (const entry of await view.readAll({ type: "Room" })) {
 		if (isInterior(String(entry.fields.roomId))) continue; // a building's inside keeps its walls
+		const roomId = String(entry.fields.roomId);
+		const lock = (await view.readAll(roomLock(roomId)))[0];
+		if (!lock) continue; // held right now
+		const seen = (await Promise.all([...POSITIONED.map((type) => view.readAll({ type, fields: { room: roomId } })), view.readAll({ type: "Exit", fields: { location: roomId } })])).flat();
+		const key = growthKey(entry, lockVersion(lock.fields), seen);
+		if (kept.get(roomId) === key) continue;
+		if (!growthStep(w, fieldsOf<RoomFields>(entry), seen)) { kept.set(roomId, key); continue; }
+		kept.delete(roomId);
 		const txn = (await space.createTransaction(30_000)).id;
 		try {
 			if (!(await space.takeIfExists(WORLD_LOCK, NO_WAIT, { txn }))) { await space.abort(txn); break; }
 			// the island's lock after WORLD_LOCK, then the room's (room-lock.ts): a job that holds only the room's lock (a
 			// jetty moved, a sweep) and no WORLD_LOCK would otherwise write a footprint where the room is shifting
-			const island = entry.fields.island, roomId = String(entry.fields.roomId);
-			if (!(await (typeof island === "string" ? holdIsland(space, txn, island, [roomId], NO_WAIT) : holdRoom(space, txn, roomId, NO_WAIT)))) { await space.abort(txn); continue; }
+			const island = entry.fields.island;
+			if (typeof island === "string" && !(await holdIsland(space, txn, island, [], NO_WAIT))) { await space.abort(txn); continue; }
+			if ((await holdRoomVersion(space, txn, roomId, NO_WAIT)) !== lockVersion(lock.fields)) { await space.abort(txn); continue; }
 			const e = await space.takeIfExists({ id: entry.id }, NO_WAIT, { txn });
 			if (!e) { await space.abort(txn); continue; }
 			const room = fieldsOf<RoomFields>(e);
@@ -118,14 +172,8 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 				space.readAll({ type: "Item", fields: { location: room.roomId } }, { txn }),
 				space.readAll({ type: "Exit" }, { txn }),
 			]);
-			const entries = groups.flat(), exits = entries.filter((x) => is(x, "Exit") && x.fields.location === room.roomId).map(fieldsOf<ExitFields>);
-			const land = new Set<string>();
-			room.ground.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (walkable(w, room.ground, x, y) && row[x] !== PATH && !isPassage(exits, { x, y })) land.add(`${x},${y}`); });
-			const occupied = new Set(claimed(entries).filter((key) => land.has(key)));
-			if (!land.size || occupied.size < land.size * d.fullShare) { await space.abort(txn); continue; }
-			const rectangles = entries.filter((x) => x.fields.room === room.roomId).flatMap((x) => is(x, "Motion") && x.fields.zone ? [x.fields.zone as unknown as Rect] : typeof x.fields.w === "number" && typeof x.fields.h === "number" ? [x.fields as unknown as Rect] : []);
-			const safe = seamCheck(w, room, entries);
-			const step = [...candidates(w, room, exits)].find((s) => !rectangles.some((r) => crosses(r, s)) && safe(s));
+			const entries = groups.flat();
+			const step = growthStep(w, room, entries);
 			if (!step) { await space.abort(txn); continue; }
 			const was = await space.takeIfExists({ type: "RoomGrowth", fields: { roomId: room.roomId } }, NO_WAIT, { txn });
 			const before: RoomGrowthFields = was ? fieldsOf<RoomGrowthFields>(was) : { roomId: room.roomId, east: 0, south: 0 };
@@ -146,3 +194,6 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 	}
 	return grew;
 }
+
+/** Forgets the decisions growth kept for `space` (tests: the same runs without what was kept). */
+export const forgetGrowth = (space: SpaceLike): void => { noStep.delete(space); };

@@ -92,6 +92,8 @@ impl Space {
 	/// `bufferedTxn(space, txn)`: this space with the plain writes under `txn` (no `unique`) kept until its `commit`,
 	/// which sends them with the commit in one batch; any other call that names a transaction sends them first.
 	pub fn buffered(&self, txn: &str) -> Self { Self { remote: self.remote.clone(), mirror: self.mirror.clone(), buffer: Some(Rc::new(Buffer { txn: txn.to_owned(), waiting: Default::default() })) } }
+	/// Waits until the copy holds what the space has committed (`Mirror.fresh`); without a copy at once.
+	pub async fn fresh(&self) -> Result<()> { match &self.mirror { Some(m) => m.fresh().await, None => Ok(()) } }
 	/// The plain space (no copy, no buffer).
 	pub fn plain(&self) -> Self { Self::new(self.remote.clone()) }
 	pub fn remote(&self) -> &Rc<RemoteSpace> { &self.remote }

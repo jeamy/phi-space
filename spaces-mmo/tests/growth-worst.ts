@@ -26,7 +26,7 @@ export function largestRegionRooms(w: WorldDef): number {
 }
 
 /** Writes `rooms` worst-case rooms (ids `worst-<i>`) and their plots into `space`. */
-export async function writeWorstGrowth(space: SpaceLike, w: WorldDef, rooms = largestRegionRooms(w)): Promise<WorstGrowth> {
+export async function writeWorstGrowth(space: SpaceLike, w: WorldDef, rooms = largestRegionRooms(w), prefix = "worst"): Promise<WorstGrowth> {
 	const d = w.growth;
 	if (!d) throw new Error(`the world ${w.id} does not grow`);
 	const width = d.maxW - d.strip, height = d.maxH - d.strip;
@@ -35,7 +35,7 @@ export async function writeWorstGrowth(space: SpaceLike, w: WorldDef, rooms = la
 	const ids: string[] = [];
 	let plots = 0;
 	for (let i = 0; i < rooms; i++) {
-		const roomId = `worst-${i}`;
+		const roomId = `${prefix}-${i}`;
 		ids.push(roomId);
 		await space.write({ type: "Room", fields: { roomId, name: `Engpass ${i}`, desc: "", ground, spawn: { x: 0, y: 0 } } as never }, null, FOREVER);
 		await writeRoomLock(space, null, roomId);

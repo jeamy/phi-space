@@ -30,7 +30,7 @@ fn growth_cost() {
 		let (mut times, mut grew) = (Vec::new(), 0.0);
 		for _ in 0..runs {
 			let t = Instant::now();
-			grew += growth_tick(&space, &w, 60_000.0).await.expect("growth");
+			grew += growth_tick(&space, &w, 60_000.0, &space).await.expect("growth");
 			times.push(Json::Number(t.elapsed().as_secs_f64() * 1000.0));
 		}
 		println!("growth_cost {}", obj! { "runs" => Json::Array(times), "grew" => grew }.canonical().expect("finite"));

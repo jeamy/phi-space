@@ -6,11 +6,16 @@
 // WORLD_LOCK (shared through pinTerrain, exclusive for loader and growth), then the island lock, then the room locks in
 // the order of their IDs. The decisive overlap check reads the plots after taking, inside the transaction (`refusal`
 // with `locked`, `blockedIn` with the transaction), not from the process's copy of the world. A lock is written with its room (loader, `dig`, an inside) and goes with it.
+// A room's lock carries the room's occupancy version (`version`): every holder counts it up when it writes the lock back
+// (holdRoomVersion), so growth can tell that a room changed since it decided on it (commands/growth.ts).
 // The Rust engine has the same (rust/mmo-engine/src/room_lock.rs).
 import { NO_WAIT, FOREVER, type SpaceLike, type Template } from "phi-spaces";
 import { CommandError } from "./context.ts";
 
-export type RoomLockFields = { room: string };
+/** `version`: how often the lock was held and committed (absent: never), the room's occupancy version (plan section 3,
+ *  "Performance strategy", growth step 2): every holder counts it up when it writes the lock back, so a change of the
+ *  room's static occupancy changes it. */
+export type RoomLockFields = { room: string; version?: number };
 export type IslandLockFields = { island: string };
 export const roomLock = (room: string) => ({ type: "RoomLock", fields: { room } });
 export const islandLock = (island: string) => ({ type: "IslandLock", fields: { island } });
@@ -43,8 +48,19 @@ async function hold(space: SpaceLike, txn: string, tmpl: { type: string; fields:
 	return true;
 }
 
+/** The occupancy version a room's lock carries (RoomLockFields). */
+export const lockVersion = (fields: Record<string, unknown>): number => (typeof fields.version === "number" ? fields.version : 0);
+/** Takes the room's lock in `txn` and writes it back there with its version counted up; the version it had, or null
+ *  when it is taken by another transaction now (or not there) within `waitMs`. */
+export async function holdRoomVersion(space: SpaceLike, txn: string, room: string, waitMs = LOCK_WAIT_MS): Promise<number | null> {
+	const e = await space.takeIfExists(roomLock(room), waitMs, { txn });
+	if (!e) return null;
+	const version = lockVersion(e.fields);
+	await space.write({ type: e.type, fields: { ...e.fields, version: version + 1 } as never }, txn, FOREVER);
+	return version;
+}
 /** A job (sweep, loader, a tick): the room's lock, waiting up to LOCK_WAIT_MS. False: still taken; leave it to the next run. */
-export const holdRoom = (space: SpaceLike, txn: string, room: string, waitMs = LOCK_WAIT_MS) => hold(space, txn, roomLock(room), waitMs);
+export const holdRoom = async (space: SpaceLike, txn: string, room: string, waitMs = LOCK_WAIT_MS) => (await holdRoomVersion(space, txn, room, waitMs)) !== null;
 /** A job: an island's lock, then its rooms' locks in the order of their IDs. */
 export async function holdIsland(space: SpaceLike, txn: string, island: string, rooms: readonly string[] = [], waitMs = LOCK_WAIT_MS): Promise<boolean> {
 	if (!(await hold(space, txn, islandLock(island), waitMs))) return false;

@@ -305,7 +305,7 @@ impl Walk {
 	}
 	pub fn tick(&mut self, job: &str) {
 		let t = self.ts.call(obj! { "op" => "tick", "world" => "leuchtfeuer", "job" => job });
-		let r = self.run(run_job(&self.space, &self.w, job, 600_000.0));
+		let r = self.run(run_job(&self.space, &self.w, job, 600_000.0, &self.space));
 		assert_eq!(t.get("ok") == Some(&Json::Bool(true)), r.is_ok(), "{job}: TypeScript {}, Rust {:?}", t.to_json_text(), r.err());
 	}
 }

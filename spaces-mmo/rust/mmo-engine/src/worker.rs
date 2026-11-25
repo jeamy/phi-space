@@ -27,8 +27,9 @@ use crate::space::{Error, Result, Space};
 /// The jobs of `runs`.
 pub const JOBS: &[&str] = &["fire", "fog", "flood", "sweep", "orders", "market", "storm", "wind", "garden", "wild", "epoch"];
 
-/// Runs the recurring job `job` once.
-pub async fn run_job(space: &Space, w: &Json, job: &str, msg_lease_ms: f64) -> Result<()> {
+/// Runs the recurring job `job` once. `view`: what growth decides on before it takes a lock (the world's copy, or the
+/// space; `growthTick`'s `view`).
+pub async fn run_job(space: &Space, w: &Json, job: &str, msg_lease_ms: f64, view: &Space) -> Result<()> {
 	if !JOBS.contains(&job) { return Err(Error::Other(format!("unknown job {job}"))); }
 	let txn = stable_terrain(space).await?;
 	let r: Result<()> = async {
@@ -73,6 +74,6 @@ pub async fn run_job(space: &Space, w: &Json, job: &str, msg_lease_ms: f64) -> R
 	end_terrain(space, &txn).await?;
 	r?;
 	// the epoch job lets the rooms grow after its ticks, on the world as defined (growth takes the world lock itself)
-	if job == "epoch" { growth_tick(space, w, msg_lease_ms).await?; }
+	if job == "epoch" { growth_tick(space, w, msg_lease_ms, view).await?; }
 	Ok(())
 }

@@ -87,7 +87,7 @@ pub fn ms_until_world(clock: &Json, due: f64, real_now: f64) -> f64 {
 }
 
 /// What the world worker's schedules run with.
-pub struct Jobs { pub space: Space, pub w: Json, pub msg_lease_ms: f64 }
+pub struct Jobs { pub space: Space, pub w: Json, pub msg_lease_ms: f64, /** what growth decides on first (the copy) */ pub view: Space }
 
 /// `runSchedules` with `SCHEDULE_HANDLERS` and `tickHandler(runs)`: serves every due date; the real milliseconds until
 /// the next one (at most `max_wait_ms`).
@@ -128,7 +128,7 @@ pub async fn run_schedules(jobs: &Jobs, guard: &mut ClockGuard, txn_ms: f64, max
 			if kind == "tick" {
 				let job = key_text(j::at(j::at(&s, "payload"), "job"));
 				let t0 = std::time::Instant::now();
-				if let Err(err) = run_job(space, &jobs.w, &job, jobs.msg_lease_ms).await { eprintln!("[world] schedule {}: {err}", j::s(&s, "scheduleId")); }
+				if let Err(err) = run_job(space, &jobs.w, &job, jobs.msg_lease_ms, &jobs.view).await { eprintln!("[world] schedule {}: {err}", j::s(&s, "scheduleId")); }
 				if t0.elapsed() > Duration::from_secs(10) { eprintln!("[world] job {job} took {} s", t0.elapsed().as_secs()); }
 			}
 			Ok(Some(20.0))
@@ -326,6 +326,8 @@ pub async fn run_world(o: HostOptions, ready: impl FnOnce(), halt: watch::Receiv
 		let (m, halt) = (m.clone(), halt.clone());
 		tokio::task::spawn_local(async move { m.follow(halt, 20_000.0).await });
 	}
+	// growth decides on the copy first, without a lock (commands/growth.rs)
+	let view = mirror.as_ref().map_or_else(|| space.clone(), |m| space.with_mirror(m.clone()));
 	let worker = Rc::new(Worker { space: space.clone(), w: Rc::new(w.clone()), msg_lease_ms, txn_ms, mirror, elsewhere: others.clone(), batch: batching, spatial: Default::default() });
 	ready();
 
@@ -372,7 +374,7 @@ pub async fn run_world(o: HostOptions, ready: impl FnOnce(), halt: watch::Receiv
 	}
 	// the world's dates: whichever worker takes a due one serves it, once
 	{
-		let jobs = Jobs { space: space.clone(), w: w.clone(), msg_lease_ms };
+		let jobs = Jobs { space: space.clone(), w: w.clone(), msg_lease_ms, view: view.clone() };
 		let mut halt = halt.clone();
 		tasks.push(tokio::task::spawn_local(async move {
 			let mut guard = ClockGuard::new(env_ms("SPACES_MMO_CLOCK_TOLERANCE_MS", 5.0 * 60_000.0));
