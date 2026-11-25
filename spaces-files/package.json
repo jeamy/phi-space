@@ -1,0 +1,19 @@
+{
+  "name": "phi-spaces-files",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Zanzibar-style filesystem for people and agent instances on phi-spaces: workspaces, inherited roles, revocation that every later operation sees",
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "node --no-warnings --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "phi-spaces": "file:../spaces"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "5.9.3"
+  },
+  "license": "MIT"
+}

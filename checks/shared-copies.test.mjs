@@ -16,7 +16,7 @@ const across = (file, projects) => projects.map((p) => `${p}/${file}`);
 const COPIES = {
 	"client/lib/palettes.ts": [...across("client/lib/palettes.ts", ["help-site", "codemode-chat", "codemode-forum", "spaces-mmo"]), `${PACKAGE_PREFIX}src/dashboard/palettes.ts`],
 	"client/lib/markdown.ts": across("client/lib/markdown.ts", ["help-site", "codemode-chat", "codemode-forum", "spaces-mmo"]),
-	"server/env.ts": across("server/env.ts", ["codemode-chat", "codemode-forum", "spaces-mmo"]),
+	"server/env.ts": across("server/env.ts", ["codemode-chat", "codemode-forum", "spaces-files", "spaces-mmo"]),
 };
 
 /** The file without its leading `//` comment lines (each copy says where it comes from). */
