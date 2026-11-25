@@ -12,7 +12,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { APPS, PACKAGE_PREFIX, REPO } from "./roots.mjs";
 
 /** The package's directories and the applications' (paths from the repository root). */
-const DIRS = [...["src", "examples", "test", "scripts", "agent"].map((d) => `${PACKAGE_PREFIX}${d}`), "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "codemode-forum", "help-site", "spaces-mmo"];
+const DIRS = [...["src", "examples", "test", "scripts", "agent"].map((d) => `${PACKAGE_PREFIX}${d}`), "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "codemode-forum", "help-site", "spaces-files", "spaces-mmo"];
 const missing = [...DIRS.filter((d) => !existsSync(join(REPO, d))), ...APPS.filter((a) => !DIRS.some((d) => d === a || d.startsWith(`${a}/`)))];
 if (missing.length) { console.error(`durable imports: not found or not scanned: ${missing.join(", ")}`); process.exit(1); }
 const EXT = /\.(ts|tsx|mts|mjs|js)$/;

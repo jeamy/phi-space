@@ -5,11 +5,11 @@ teams share workspaces, roles are inherited from directories, and a revocation i
 after it. Files are UTF-8 text with versions; a save over a stale version is a conflict, never a silent overwrite.
 The plan, with its phases and exit evidence, is `docs/zanzibar-agent-filesystem-plan.en.md`.
 
-**Status: before phase 1 of that plan.** The directory has its manifest, its typecheck and test commands and the
+**Status: before phase 1 of that plan.** The directory is registered in the repository checks (`APPS` in
+`checks/roots.mjs`) and has the root script `npm run test:spaces-files`, its manifest, its typecheck and test commands and the
 `.env` loader the projects share (`server/env.ts`, kept the same as the others by `checks/shared-copies.test.mjs`).
 Phase 1 (storage and identity spike) brings the service, the tenant queues, tenant initialization, actors with their
-homes and the session adapter, and registers the application in the repository checks (`APPS` in `checks/roots.mjs`)
-and the root scripts.
+homes and the session adapter, and the root scripts `spaces-files` and `spaces-files:dev` once the service can start.
 
 The application is a directory of its own and depends on the library as `"phi-spaces": "file:../spaces"`, importing
 only `phi-spaces` and its exported subpaths. Unlike the other applications, the pilot embeds its Space host in the one
