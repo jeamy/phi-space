@@ -50,7 +50,7 @@ test("the data directory must not be reachable by group or others", async () => 
 type Run = { child: ChildProcess; ready: Promise<void>; exited: Promise<{ code: number | null; signal: NodeJS.Signals | null; err: string }> };
 
 function launch(dataDir: string): Run {
-	const child = spawn(process.execPath, ["--no-warnings", "--experimental-strip-types", LAUNCH], { env: { ...process.env, NODE_TEST_CONTEXT: "", FILES_DATA_DIR: dataDir, FILES_STATE_DIR: join(dataDir, "..", "state"), FILES_BLOB_DIR: join(dataDir, "..", "blobs"), FILES_MEM: "" }, stdio: ["ignore", "pipe", "pipe"] });
+	const child = spawn(process.execPath, ["--no-warnings", "--experimental-strip-types", LAUNCH], { env: { ...process.env, NODE_TEST_CONTEXT: "", FILES_DATA_DIR: dataDir, FILES_STATE_DIR: join(dataDir, "..", "state"), FILES_BLOB_DIR: join(dataDir, "..", "blobs"), FILES_MEM: "", FILES_TLS_CERT: join(dataDir, "no-cert.pem"), FILES_AGENT_SOCKETS: "" }, stdio: ["ignore", "pipe", "pipe"] });
 	let out = "", err = "";
 	const ready = new Promise<void>((resolve, reject) => {
 		child.stdout!.on("data", (d) => { out += d; if (out.includes("[files] ready")) resolve(); });

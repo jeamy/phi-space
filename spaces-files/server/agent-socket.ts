@@ -79,3 +79,12 @@ export async function serveAgentSocket(svc: FilesService, o: AgentSocketOptions)
 	chmodSync(o.path, 0o660);
 	return server;
 }
+
+/** The launcher's FILES_AGENT_SOCKETS: `hostPeer@tenant=/absolute/path;…`. */
+export function parseAgentSockets(spec: string): Array<{ hostPeerId: string; tenantId: string; path: string }> {
+	return spec.split(";").map((s) => s.trim()).filter(Boolean).map((s) => {
+		const m = /^([^@=\s]+)@([^@=\s]+)=(\/\S+)$/.exec(s);
+		if (!m) throw new Error(`FILES_AGENT_SOCKETS: "${s}" is not hostPeer@tenant=/absolute/path`);
+		return { hostPeerId: m[1], tenantId: m[2], path: m[3] };
+	});
+}

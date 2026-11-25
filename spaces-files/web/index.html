@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>phi-spaces files</title>
+<link rel="stylesheet" href="/app/style.css">
+<script type="module" src="/app/app.ts"></script>
+</head>
+<body>
+<header>
+	<strong>phi-spaces files</strong>
+	<span id="who"></span>
+	<nav id="account" hidden><a href="/auth/login">Switch tenant</a> <button id="logout" type="button">Sign out</button></nav>
+</header>
+<main id="signin" class="note" hidden>
+	<h1>Sign in</h1>
+	<p><a href="/auth/login">Sign in with your identity provider</a></p>
+</main>
+<main id="app" hidden>
+	<section id="browse">
+		<h2>Workspaces</h2>
+		<ul id="workspaces"></ul>
+		<h2 id="where"></h2>
+		<ul id="entries"></ul>
+		<form id="create" hidden>
+			<input id="create-name" placeholder="name" required>
+			<button name="kind" value="file">New file</button>
+			<button name="kind" value="dir">New directory</button>
+		</form>
+		<details id="grants-box" hidden>
+			<summary>Grants on this directory</summary>
+			<ul id="grants"></ul>
+			<form id="grant-form">
+				<select id="grant-relation"><option>viewer</option><option>editor</option><option>owner</option></select>
+				<select id="grant-kind"><option>user</option><option>agent</option><option value="group">group</option></select>
+				<input id="grant-id" placeholder="id" required>
+				<button name="action" value="grant">Grant</button>
+				<button name="action" value="revoke">Revoke</button>
+			</form>
+		</details>
+	</section>
+	<section id="editor" hidden>
+		<h2 id="editing"></h2>
+		<p id="status" role="status"></p>
+		<textarea id="text" spellcheck="false"></textarea>
+		<p>
+			<button id="save" type="button">Save</button>
+			<button id="theirs" type="button" hidden>Load their version</button>
+			<button id="close" type="button">Close</button>
+		</p>
+	</section>
+	<section id="admin" hidden>
+		<h2>Tenant administration</h2>
+		<p id="admin-status" role="status"></p>
+		<form id="register">
+			<h3>Register an actor</h3>
+			<select id="reg-kind"><option>user</option><option>agent</option></select>
+			<input id="reg-id" placeholder="actor ID" required>
+			<input id="reg-home" placeholder="home name" required>
+			<input id="reg-a" placeholder="issuer / host peer ID" required>
+			<input id="reg-b" placeholder="subject / agent ID" required>
+			<button>Register</button>
+		</form>
+		<form id="member">
+			<h3>Group membership</h3>
+			<input id="mem-group" placeholder="group" required>
+			<select id="mem-kind"><option>user</option><option>agent</option></select>
+			<input id="mem-id" placeholder="actor ID" required>
+			<button name="action" value="addMember">Add</button>
+			<button name="action" value="removeMember">Remove</button>
+		</form>
+		<form id="workspace">
+			<h3>Create a workspace</h3>
+			<input id="ws-name" placeholder="name" required>
+			<select id="ws-kind"><option>user</option><option>agent</option></select>
+			<input id="ws-owner" placeholder="owner's actor ID" required>
+			<button>Create</button>
+		</form>
+		<h3>Actors</h3>
+		<ul id="actors"></ul>
+		<h3>Groups</h3>
+		<ul id="groups"></ul>
+	</section>
+</main>
+</body>
+</html>
