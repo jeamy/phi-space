@@ -87,6 +87,19 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			if (r.island && !(await peek(space, islandLock(r.island), { txn }))) await writeIslandLock(space, txn, r.island);
 		}
 	});
+	// a room the game made before the locks were there (a dug room, an inside) gets its lock too. The room is taken first,
+	// so one being dropped (its lock taken in the dropper's transaction, interior.ts dropInterior) is left alone: taken
+	// already, it is passed over; not yet, the dropper finds it held and leaves it, with the one lock written here
+	const locked = new Set((await space.readAll({ type: "RoomLock" })).map((e) => String(e.fields.room)));
+	const lockless = (await space.readAll({ type: "Room" })).map((e) => String(e.fields.roomId)).filter((r) => !locked.has(r));
+	for (let i = 0; i < lockless.length; i += ROOMS_PER_TXN) await underLock(space, txnMs, async (txn) => {
+		for (const roomId of lockless.slice(i, i + ROOMS_PER_TXN)) {
+			const room = await space.takeIfExists({ type: "Room", fields: { roomId } }, NO_WAIT, { txn });
+			if (!room) continue;
+			await space.write({ type: room.type, types: room.types.slice(1), fields: room.fields as never }, txn, FOREVER);
+			if (!(await peek(space, roomLock(roomId), { txn }))) await writeRoomLock(space, txn, roomId);
+		}
+	});
 	for (let i = 0; i < w.exits.length; i += ROOMS_PER_TXN * 4) await underLock(space, txnMs, async (txn) => {
 		for (const e of w.exits.slice(i, i + ROOMS_PER_TXN * 4)) {
 			const { room, ...rest } = await at(txn, e.room, e);

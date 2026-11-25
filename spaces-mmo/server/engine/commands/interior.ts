@@ -93,10 +93,10 @@ const bedWords = (def: InteriorDef) => (def.beds ?? []).map((d) => (d.kind === "
 
 /** Takes the inside of a building that is gone: whoever is in it stands in front of where it stood (`at`, the ruin or
  *  the building's place), what lies on its floor goes to the owner's estate, the room, its exit and furnishings go. */
-export async function dropInterior(space: Space, txn: string, w: WorldDef, roomId: string, at: (Pick<BuildingFields, "room" | "x" | "y" | "w" | "h" | "accountId" | "ownerName" | "name">) | null): Promise<void> {
+export async function dropInterior(space: Space, txn: string, w: WorldDef, roomId: string, at: (Pick<BuildingFields, "room" | "x" | "y" | "w" | "h" | "accountId" | "ownerName" | "name">) | null): Promise<boolean> {
 	const buildId = buildIdOf(roomId)!;
-	// its lock first (room-lock.ts: the lock before what stands on the room), gone with the room
-	await dropRoomLock(space as SpaceLike, txn, roomId);
+	// its lock first (room-lock.ts: the lock before what stands on the room), gone with the room; still held: the next sweep
+	if (!(await dropRoomLock(space as SpaceLike, txn, roomId))) return false;
 	const front = at ? await frontOf(space, w, at) : null;
 	const start = w.rooms.find((r) => r.roomId === w.start)!;
 	const to = at && front ? { room: at.room, ...front } : { room: start.roomId, ...start.spawn };
@@ -123,6 +123,7 @@ export async function dropInterior(space: Space, txn: string, w: WorldDef, roomI
 	for (const e of await space.readAll({ type: "Spot", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 	await space.takeIfExists({ type: "Exit", fields: { exitId: exitIdOf(buildId) } }, NO_WAIT, { txn });
 	await space.takeIfExists({ type: "Room", fields: { roomId } }, NO_WAIT, { txn });
+	return true;
 }
 
 /** Every sweep: a building of a plan with an inside gets its room, an inside whose building is gone goes. */
@@ -142,7 +143,7 @@ export async function interiorSweep(space: SpaceLike, w: WorldDef | undefined, i
 		// without a ruin the building went by a way that logs itself (torn down, voted down, destroyed: "building gone"); a
 		// line here without such a line before it is a building that went unaccounted for
 		if (!b && !ruin) console.error(`[world] inside ${roomId} taken: its building is gone without a ruin (${JSON.stringify(kept.get(roomId)?.building ?? null)})`);
-		await inTxn(async (txn) => { await dropInterior(space, txn, w, roomId, at); return true; });
+		await inTxn((txn) => dropInterior(space, txn, w, roomId, at));
 	}
 }
 

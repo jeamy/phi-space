@@ -143,6 +143,20 @@ pub async fn load_into_space(space: &Space, w: &Json, o: LoadOptions) -> Result<
 			}
 		});
 	}
+	// a room the game made before the locks were there (a dug room, an inside) gets its lock too, the room taken first
+	// (loader.ts: one being dropped is left alone)
+	let locked: std::collections::BTreeSet<String> = space.read_all(&tmpl("RoomLock", obj! {}), None).await?.iter().map(|e| j::s(fields(e), "room").to_owned()).collect();
+	let lockless: Vec<String> = space.read_all(&tmpl("Room", obj! {}), None).await?.iter().map(|e| j::s(fields(e), "roomId").to_owned()).filter(|r| !locked.contains(r)).collect();
+	for chunk in lockless.chunks(ROOMS_PER_TXN) {
+		under_lock!(space, txn_ms, |txn| {
+			for room_id in chunk {
+				let Some(room) = space.take_if_exists(&tmpl("Room", obj! { "roomId" => room_id.as_str() }), NO_WAIT, Some(txn)).await? else { continue };
+				let types: Vec<Json> = j::a(&room, "types").iter().skip(1).cloned().collect();
+				space.write(&obj! { "type" => j::at(&room, "type").clone(), "types" => Json::Array(types), "fields" => fields(&room).clone() }, Some(txn), FOREVER).await?;
+				if space.peek(&crate::room_lock::room_lock(room_id), Some(txn)).await?.is_none() { crate::room_lock::write_room_lock(space, Some(txn), room_id).await?; }
+			}
+		});
+	}
 	for chunk in j::a(w, "exits").chunks(ROOMS_PER_TXN * 4) {
 		under_lock!(space, txn_ms, |txn| {
 			for e in chunk {

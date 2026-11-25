@@ -143,10 +143,10 @@ fn again(t: &Json, f: Json) -> Json {
 
 /// `dropInterior`: the inside of a building that is gone, taken; whoever is in it stands in front of where it stood
 /// (`at`), what lies on its floor goes to the owner's estate.
-pub async fn drop_interior(space: &Space, txn: &str, w: &Json, room_id: &str, at: Option<&Json>) -> Result<()> {
+pub async fn drop_interior(space: &Space, txn: &str, w: &Json, room_id: &str, at: Option<&Json>) -> Result<bool> {
 	let build_id = build_id_of(room_id).unwrap_or("").to_owned();
-	// its lock first (room_lock.rs: the lock before what stands on the room), gone with the room
-	crate::room_lock::drop_room_lock(space, txn, room_id).await?;
+	// its lock first (room_lock.rs: the lock before what stands on the room), gone with the room; still held: the next sweep
+	if !crate::room_lock::drop_room_lock(space, txn, room_id).await? { return Ok(false); }
 	let front = match at { Some(a) => front_of(space, w, a).await?, None => None };
 	let to = match (at, front) {
 		(Some(a), Some(f)) => (txt(j::at(a, "room")), f.0, f.1),
@@ -190,7 +190,7 @@ pub async fn drop_interior(space: &Space, txn: &str, w: &Json, room_id: &str, at
 	}
 	space.take_if_exists(&tmpl("Exit", obj! { "exitId" => exit_id_of(&build_id) }), NO_WAIT, Some(txn)).await?;
 	space.take_if_exists(&tmpl("Room", obj! { "roomId" => room_id }), NO_WAIT, Some(txn)).await?;
-	Ok(())
+	Ok(true)
 }
 
 /// `interiorSweep`: a building of a plan with an inside gets its room, an inside whose building is gone goes.
@@ -220,7 +220,7 @@ pub async fn interior_sweep(space: &Space, w: &Json) -> Result<()> {
 		// line here without such a line before it is a building that went unaccounted for
 		if b.is_none() && ruin.is_none() { eprintln!("[world] inside {room_id} taken: its building is gone without a ruin ({})", j::opt(r, "building").map_or_else(|| "null".to_owned(), |x| x.to_json_text())); }
 		let at: Option<Json> = b.cloned().or(ruin).or_else(|| j::opt(r, "building").cloned());
-		super::build::in_txn(space, |txn| { let at = at.as_ref(); async move { drop_interior(space, &txn, w, room_id, at).await?; Ok(true) } }).await?;
+		super::build::in_txn(space, |txn| { let at = at.as_ref(); async move { drop_interior(space, &txn, w, room_id, at).await } }).await?;
 	}
 	Ok(())
 }

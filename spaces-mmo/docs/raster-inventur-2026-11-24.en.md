@@ -554,7 +554,7 @@ The decision of 2026-11-25 (plan section 3, "Locks"): step 6 does not read the o
 
 ### 7.4 The room and island locks (step 5)
 
-One `RoomLock` {room} per room and one `IslandLock` {island} per island (`server/engine/room-lock.ts`, `rust/mmo-engine/src/room_lock.rs`). The loader writes them with the rooms, `dig` with a dug room and `makeInterior` with an inside; `dropInterior` takes the inside's lock away. A holder takes the lock in its transaction and writes it back there, so the lock is held until the commit and comes back by the space's rules on an abort or an expired lease. Order: WORLD_LOCK, the island lock, then the room locks by ID.
+One `RoomLock` {room} per room and one `IslandLock` {island} per island (`server/engine/room-lock.ts`, `rust/mmo-engine/src/room_lock.rs`). The loader writes them with the rooms, `dig` with a dug room and `makeInterior` with an inside. On every start the loader also gives each Room entry of the store that has no lock its lock, so dug rooms and insides from before step 5 get one. It takes the Room first, so a room being dropped is left alone. `dropInterior` takes the inside's lock away first; if the lock is still held after `LOCK_WAIT_MS`, the drop is aborted and left to the next sweep. Otherwise a holder committing later would write the lock back for a room that is gone. A holder takes the lock in its transaction and writes it back there, so the lock is held until the commit and comes back by the space's rules on an abort or an expired lease. Order: WORLD_LOCK, the island lock, then the room locks by ID.
 
 | Who | Lock | When it is held |
 | --- | --- | --- |
@@ -564,7 +564,9 @@ One `RoomLock` {room} per room and one `IslandLock` {island} per island (`server
 | the road tick | island and its rooms, waits | before the take |
 | growth | island, `NO_WAIT` after WORLD_LOCK | held: this round leaves the island alone |
 
-Beacons, people and items are still read from the process's copy: a transaction read of them would hold up steps and fires. Every test stack checks one lock per room and per island when it closes (`lockReport`), the engine walks on every state; `tests/room-lock.test.ts` holds a room's lock from the test and sees `bau`, `umgraben` and `abriss` refused, a step go through, and `bau` go through once the lock is free (with the refusal removed it fails).
+Settlers (`server/npc/settlers.ts`) set `later(plan, …)` before each `bau`, `umgraben` and `straße plane` and do not read the answer, so a `LOCK_HELD` refusal is tried again after that many rounds. It is a `CommandError`, not a line the model is asked to understand.
+
+Beacons, people and items are still read from the process's copy: a transaction read of them would hold up steps and fires. Every test stack checks one lock per room and per island when it closes (`lockReport`), the engine walks on every state; `tests/room-lock.test.ts` holds a room's lock from the test and sees `bau`, `umgraben` and `abriss` refused, a step go through, and `bau` go through once the lock is free. With the refusal removed it fails, against the TypeScript world and against the Rust one (`SPACES_MMO_WORLD_CMD=rust/target/release/mmo-world`). A second test loads the world into a store with lockless rooms (an inside, a world room whose lock is gone) and finds one lock per room.
 
 Two gaps that remain:
 

@@ -10,7 +10,8 @@ import type { ServerFrame } from "../server/gateway.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { LOCK_HELD, roomLock } from "../server/engine/room-lock.ts";
-import { eventually, lightFire, Player, startServer } from "./stack.ts";
+import { loadIntoSpace } from "../server/engine/loader.ts";
+import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
 
 const ROOM = "graue-bucht";
 const w = await loadWorld();
@@ -80,5 +81,25 @@ test("a held room lock refuses building and digging, not a step; free again, the
 		assert.equal((await s.readAll(roomLock(ROOM))).length, 1);
 	} finally {
 		await srv.close();
+	}
+});
+
+test("a store from before the locks: the loader gives every room its one lock, a world room's and one the game made", { timeout: 120_000 }, async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space;
+		await loadIntoSpace(s, w);
+		// as a store before step 5 left them: an inside without its lock, a world room whose lock is not there
+		await s.write({ type: "Room", fields: { roomId: "in-alt", name: "Innen", desc: "", ground: ["...."], spawn: { x: 0, y: 0 } } as never }, null, FOREVER);
+		assert.ok(await s.takeIfExists(roomLock(ROOM), 0));
+		await loadIntoSpace(s, w);
+		assert.equal((await s.readAll(roomLock("in-alt"))).length, 1);
+		assert.equal((await s.readAll(roomLock(ROOM))).length, 1);
+		// a second load writes nothing more
+		await loadIntoSpace(s, w);
+		assert.equal((await s.readAll(roomLock("in-alt"))).length, 1);
+		assert.equal((await s.readAll({ type: "RoomLock" })).length, (await s.readAll({ type: "Room" })).length);
+	} finally {
+		await stack.close();
 	}
 });

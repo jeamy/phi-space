@@ -4,8 +4,8 @@
 // an aborted transaction or a lease that runs out brings it back by the space's rules. A command that meets a taken lock
 // is refused (`held`, try again), a job waits. Roads across rooms and growth take the island's lock first. Order:
 // WORLD_LOCK (shared through pinTerrain, exclusive for loader and growth), then the island lock, then the room locks in
-// the order of their IDs. The decisive overlap check reads after taking, inside the transaction (`authoritative`), not
-// from the process's copy of the world. A lock is written with its room (loader, `dig`, an inside) and goes with it.
+// the order of their IDs. The decisive overlap check reads the plots after taking, inside the transaction (`refusal`
+// with `locked`, `blockedIn` with the transaction), not from the process's copy of the world. A lock is written with its room (loader, `dig`, an inside) and goes with it.
 // The Rust engine has the same (rust/mmo-engine/src/room_lock.rs).
 import { NO_WAIT, FOREVER, type SpaceLike, type Template } from "phi-spaces";
 import { CommandError } from "./context.ts";
@@ -28,9 +28,10 @@ export async function writeRoomLock(space: SpaceLike, txn: string | null, room: 
 export async function writeIslandLock(space: SpaceLike, txn: string | null, island: string): Promise<void> {
 	await space.write({ type: "IslandLock", fields: { island } satisfies IslandLockFields as never }, txn, FOREVER, { unique: ["island"] });
 }
-/** Takes a room's lock away with its room, waiting for a holder up to LOCK_WAIT_MS. */
-export async function dropRoomLock(space: SpaceLike, txn: string, room: string): Promise<void> {
-	await space.takeIfExists(roomLock(room), LOCK_WAIT_MS, { txn });
+/** Takes a room's lock away with its room, waiting for a holder up to LOCK_WAIT_MS. False: still held (or not there);
+ *  the room stays, for the next run (a holder committing later would write the lock back for a room that is gone). */
+export async function dropRoomLock(space: SpaceLike, txn: string, room: string): Promise<boolean> {
+	return !!(await space.takeIfExists(roomLock(room), LOCK_WAIT_MS, { txn }));
 }
 
 /** Takes `tmpl` (a lock) in `txn` and writes it back there: held until the commit. False: taken by another
@@ -58,21 +59,6 @@ export async function holdRoomOrRefuse(c: { space: SpaceLike; txn: string }, roo
 /** A command: an island's lock and its rooms', or refused. */
 export async function holdIslandOrRefuse(c: { space: SpaceLike; txn: string }, island: string, rooms: readonly string[]): Promise<void> {
 	if (!(await holdIsland(c.space, c.txn, island, rooms, NO_WAIT))) throw new CommandError(LOCK_HELD);
-}
-
-/** `space` read inside `txn`: what readAll, count, readIfExists and peek-like reads see after a lock was taken is the
- *  space's current state, not the process's copy (server/space.ts bufferedTxn reads from the copy without a txn). */
-export function authoritative(space: SpaceLike, txn: string): SpaceLike {
-	return new Proxy(space, {
-		get(target, key, receiver) {
-			const v = Reflect.get(target, key, receiver);
-			if (typeof v !== "function") return v;
-			if (key === "readAll") return (tmpl: Template = null, o: { limit?: number; txn?: string | null } = {}) => v.call(target, tmpl, { ...o, txn: o.txn ?? txn });
-			if (key === "count") return (tmpl: Template = null, t: string | null = null) => v.call(target, tmpl, t ?? txn);
-			if (key === "readIfExists" || key === "read") return (tmpl: Template, ms: number, o: { txn?: string | null } = {}) => v.call(target, tmpl, ms, { ...o, txn: o.txn ?? txn });
-			return v.bind(target);
-		},
-	});
 }
 
 /** What differs from one lock per room and one per island (the start check of plan section 5, made by the tests' stack

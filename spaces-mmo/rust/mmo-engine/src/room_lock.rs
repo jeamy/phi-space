@@ -23,8 +23,9 @@ pub const LOCK_HELD: &str = "Hier wird gerade gebaut oder abgeräumt; bitte glei
 pub async fn write_room_lock(space: &Space, txn: Option<&str>, room: &str) -> Result<()> { space.write_unique(&room_lock(room), txn, FOREVER, &["room"]).await.map(|_| ()) }
 /// `writeIslandLock`.
 pub async fn write_island_lock(space: &Space, txn: Option<&str>, island: &str) -> Result<()> { space.write_unique(&island_lock(island), txn, FOREVER, &["island"]).await.map(|_| ()) }
-/// `dropRoomLock`: taken away with its room, waiting for a holder up to LOCK_WAIT_MS.
-pub async fn drop_room_lock(space: &Space, txn: &str, room: &str) -> Result<()> { space.take_if_exists(&room_lock(room), LOCK_WAIT_MS, Some(txn)).await.map(|_| ()) }
+/// `dropRoomLock`: taken away with its room, waiting for a holder up to LOCK_WAIT_MS; false: still held (or not there),
+/// the room stays for the next run.
+pub async fn drop_room_lock(space: &Space, txn: &str, room: &str) -> Result<bool> { Ok(space.take_if_exists(&room_lock(room), LOCK_WAIT_MS, Some(txn)).await?.is_some()) }
 
 async fn hold(space: &Space, txn: &str, t: &Json, wait_ms: f64) -> Result<bool> {
 	let Some(e) = space.take_if_exists(t, wait_ms, Some(txn)).await? else { return Ok(false) };
