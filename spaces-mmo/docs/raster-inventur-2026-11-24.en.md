@@ -93,6 +93,7 @@ These should take one named reach (`BESIDE`) from the table rather than 30 liter
 
 - `commands/build.ts:185`: candidate places for moving a building, tested within `distTo > 3` of the old one, over a window of `±2`. Length: 6 and `±4`.
 - `npc/settlers.ts:91`: a settler's new place keeps Chebyshev `<= 2` from exits and fires. Length: 4.
+- `npc/economy.ts:540` (found with the rule table): an idle NPC wanders up to `±4` across and `±3` down. Length: 8 and 6. Its target is clamped to `1…22` and `1…14`, the inner edge of the base room of 24 × 16. That clamp is not a length (at scale 2 it is `1…46`, `1…30`, or better the room's own size, since a grown room is larger): *open for phase 2*. The Rust engine has the same at `npc/economy.rs:694`.
 - `commands/garden.ts:297`: crossing of flowers needs a neighbouring plant, Manhattan `=== 1`. *Open question for phase 1:* plants are cell points in a bed whose capacity is `w·h/gridScale²` (plan section 2.1). At scale 2 two plants of a converted bed stand two cells apart. The rule becomes Manhattan `<= 2`, plants not on the same cell.
 
 **Not cells or not scaled.**
@@ -125,6 +126,8 @@ The client mirrors several server rules to show and pre-check actions. It takes 
 | `client/cellActions.ts:255`, `client/MapView.tsx:351` | `<= 2` | length → 4 | "near a road / own figure" in the menu |
 | `client/Atlas.tsx:92` | `=== 1` on `Room.map` | atlas steps, stays | |
 
+Found with the rule table, beside these: `client/cellActions.ts:62` (the `±2` window of "Hier möglich", the site reach), `:198` (a cell's reach, `<= 1`), `:304,309,310,316` (scenery, trees, sites from two cells, buildings from beside), `client/App.tsx:595` (a site's orders from two cells) and `:1032` (the action button's things within reach). They take `SITE_REACH`, `REACH_POINT` and `BESIDE`.
+
 ### 1.6 Generator
 
 `worlds/leuchtfeuer/islands.ts:72,84,105,108` (rings and the one-cell clearance of plants from paths and doors): with `derivedFrom: 1` the generator runs with scale-1 values and is resampled (plan section 2.1). Its numbers stay. They become physical units only for a later native design (plan section 2.4).
@@ -132,6 +135,10 @@ The client mirrors several server rules to show and pre-check actions. It takes 
 ### 1.7 Result for the plan
 
 The table of plan section 2.4 gets the values of 1.1–1.3 and 1.5 by name. The 30 "beside" literals and the eight reach literals go through two named entries (`BESIDE`, `REACH_POINT`), so the switch changes two numbers instead of 38.
+
+**Done in phase 1 (86881a5, on master).** The table is `shared/rules.ts`, with 22 rows: name, scale-1 value, kind, places. The Rust engine's copy is `rust/mmo-engine/src/rules.rs`, and `tests/rules.test.ts` holds the two together and holds every value to the literal it replaced. The reach to a fire is a row of its own (`FEED_FIRE`), apart from `REACH_POINT`, because at scale 2 it measures to the fire's footprint. The same goes for `FIRE_CLEARANCE` and `PASSAGE`. The ring beside and the flower's neighbour are "1 to the reach" (`onRing`, `flowerNeighbour`). `findPath`, `freeCellNear`, `stepBeside`, `besideOf` and `chooseTarget` take their bound as an argument without a default. `tests/semantic-examples.test.ts` takes the scale-2 bounds from the table (`ROW`) and holds each rule's scale-1 bound to its row. Not in the table: the values of the world definition (1.1), the client's search budget of `nextStep` (cells looked at, becomes the room area in phase 2) and the step check.
+
+**Rust, line by line.** Every TS place has its Rust counterpart with the same rule. The only difference in number is fishing: the four TS checks are one helper and the drop-off in Rust (1.4), so 28 Rust places for 30. The spawn scatter is in `rust/mmo-web/src/accounts.rs`, which takes it from the engine's table. No difference in value was found.
 
 <a id="betreten"></a>
 

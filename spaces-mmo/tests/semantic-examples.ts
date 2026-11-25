@@ -6,9 +6,11 @@
 // holds the engine's helpers to them at scale 1 and the conversion of plan section 2.2 at scale 2: every legacy point
 // becomes (2x, 2y), every area its position and footprint × 2, a fire or exit point a 2 × 2 area; a length doubles, a
 // ring "beside" becomes "within the doubled reach and not on the footprint", Manhattan "=== 1" between bed plants
-// becomes "<= 2". The answer must stay the same. In phase 1 the scale-2 side is taken from the engine's rule table.
+// becomes "<= 2". The answer must stay the same. The bounds at scale 2 are those of the engine's rule table
+// (shared/rules.ts, `ROW`); the reaches of the world definition are scaled by world:json, here value × scale.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ruleAt, type RuleName } from "../shared/rules.ts";
 
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Cell = { x: number; y: number };
@@ -42,6 +44,14 @@ export const RULES: Rule[] = [
 	{ name: "FLOWER_CROSS", places: "garden.ts:297", metric: "manhattan", target: "point", test: { op: "manhattan1" } },
 ];
 
+/** The row of the rule table (shared/rules.ts) each rule takes its bound from; the others are values of the world
+ *  definition (wild.scareReach, wild.scarecrowReach, garden.greenhouse.reach) or on the footprint (no bound). */
+export const ROW: Partial<Record<string, RuleName>> = {
+	BESIDE: "BESIDE", REACH_POINT: "REACH_POINT", FEED_FIRE: "FEED_FIRE", SITE_REACH: "SITE_REACH", EXIT_REACH: "EXIT_REACH",
+	FIRE_CLEARANCE: "FIRE_CLEARANCE", PASSAGE: "PASSAGE", RING_BESIDE: "BESIDE", SETTLER_CLEARANCE: "SETTLER_CLEARANCE",
+	MOVE_BUILDING: "MOVE_BUILDING", FLOWER_CROSS: "FLOWER_NEIGHBOUR",
+};
+
 /** The target of every rule at scale 1: an area of 3 × 2 at (10, 8), or the cell (10, 8). */
 const AREA: Rect = { x: 10, y: 8, w: 3, h: 2 }, POINT: Cell = { x: 10, y: 8 };
 
@@ -60,12 +70,13 @@ export function distance(rule: Rule, actor: Cell, target: Rect, scale: number): 
 
 /** The rule's answer for a distance, at `scale`. */
 export function answer(rule: Rule, d: number, scale: number): boolean {
-	const t = rule.test;
-	if (t.op === "le") return d <= t.value * scale;
-	if (t.op === "gt") return d > t.value * scale;
-	if (t.op === "eq1") return d >= 1 && d <= scale;
+	const t = rule.test, row = ROW[rule.name];
+	const bound = (v: number) => (row ? ruleAt(row, scale) : v * scale);
+	if (t.op === "le") return d <= bound(t.value);
+	if (t.op === "gt") return d > bound(t.value);
+	if (t.op === "eq1") return d >= 1 && d <= bound(1); // the ring beside: 1 to the reach (inventory 1.3)
 	if (t.op === "zero") return d === 0;
-	return scale === 1 ? d === 1 : d >= 1 && d <= scale; // FLOWER_CROSS: phase 1 decision, Manhattan <= 2, not the same cell
+	return d >= 1 && d <= bound(1); // FLOWER_CROSS: Manhattan within the reach, not the same cell
 }
 
 /** The target at scale 1 and its conversion to `scale` (plan section 2.2). */

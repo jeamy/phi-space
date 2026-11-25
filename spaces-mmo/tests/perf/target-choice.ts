@@ -11,6 +11,7 @@
 // and the median time of TARGET_RUNS choices (default 20) on this machine. The phone's time is recorded on the phone.
 import { chooseTarget, nextStep } from "../../client/walk.ts";
 import { loadWorld } from "../../server/engine/world.ts";
+import { TARGET_RINGS } from "../../shared/rules.ts";
 
 type Cell = { x: number; y: number };
 const RUNS = Number(process.env.TARGET_RUNS ?? 20);
@@ -56,8 +57,8 @@ for (const c of cases) {
 	for (let i = 0; i < RUNS; i++) { const t = performance.now(); choose(free, c.start, c.goal); times.push(performance.now() - t); }
 	times.sort((a, b) => a - b);
 	const { free: f2, counter: c2 } = room(c.wall, c.taken);
-	const end2 = chooseTarget(f2, c.start, c.goal, W, H), looks2 = c2.looks, times2: number[] = [];
-	for (let i = 0; i < RUNS; i++) { const t = performance.now(); chooseTarget(f2, c.start, c.goal, W, H); times2.push(performance.now() - t); }
+	const end2 = chooseTarget(f2, c.start, c.goal, W, H, TARGET_RINGS), looks2 = c2.looks, times2: number[] = [];
+	for (let i = 0; i < RUNS; i++) { const t = performance.now(); chooseTarget(f2, c.start, c.goal, W, H, TARGET_RINGS); times2.push(performance.now() - t); }
 	times2.sort((a, b) => a - b);
 	if (JSON.stringify(end2) !== JSON.stringify(result.end ?? null)) throw new Error(`${c.name}: the one search chose ${JSON.stringify(end2)}, the legacy choice ${JSON.stringify(result.end)}`);
 	const ms = (t: number[]) => Math.round(t[Math.floor(t.length / 2)]! * 1000) / 1000;

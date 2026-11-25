@@ -6,12 +6,21 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { distTo } from "../server/engine/commands/build.ts";
 import { reach } from "../server/engine/context.ts";
-import { answer, distance, examples, FILE, targetAt, type Examples } from "./semantic-examples.ts";
+import { RULE_TABLE } from "../shared/rules.ts";
+import { answer, distance, examples, FILE, ROW, RULES, targetAt, type Examples } from "./semantic-examples.ts";
 
 const kept = JSON.parse(readFileSync(FILE, "utf8")) as Examples;
 
 test("the recorded examples are those the rules give (node tests/semantic-examples.ts --write)", () => {
 	assert.deepEqual(kept, examples());
+});
+
+test("each rule's bound at scale 1 is its row of the rule table (shared/rules.ts)", () => {
+	for (const r of RULES) {
+		const row = ROW[r.name], t = r.test;
+		if (!row) { assert.ok(t.op === "zero" || r.places.includes("wild.") || r.places.includes("garden.greenhouse"), `${r.name} has a row or is a value of the world definition`); continue; }
+		assert.equal(RULE_TABLE[row].value, t.op === "le" || t.op === "gt" ? t.value : 1, r.name);
+	}
 });
 
 test("every rule has examples on both sides of its edge", () => {
