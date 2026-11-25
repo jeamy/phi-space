@@ -7,11 +7,13 @@ import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
-import { FOREVER, UniqueConflict } from "phi-spaces/core";
+import { DEFAULT_LIMITS, FOREVER, UniqueConflict } from "phi-spaces/core";
+import { assertLimitsFit, DEFAULT_FS_LIMITS, type FsLimits } from "./limits.ts";
 import { Admission, Unavailable, type AdmissionOptions } from "./admission.ts";
 import { DeploymentState, type DeploymentOptions } from "./deployment.ts";
 import { assertSeparateDirs, prepareDataDir } from "./dirs.ts";
 import * as schema from "./schema.ts";
+import { InconsistentState } from "./schema.ts";
 
 export { prepareDataDir } from "./dirs.ts";
 
@@ -31,11 +33,7 @@ export class TenantProvisioning extends Unavailable {
 	constructor(tenantId: string) { super(`tenant ${tenantId} is not initialized`); this.name = "TenantProvisioning"; }
 }
 
-/** A durable schema invariant does not hold: an unknown version, or rows where a fresh initialization expects none. */
-export class InconsistentState extends Error {
-	readonly code = "inconsistentState";
-	constructor(message: string) { super(message); this.name = "InconsistentState"; }
-}
+export { InconsistentState } from "./schema.ts";
 
 /** The first administrator of a new tenant, as the host operator supplies it: a user with its verified identity. */
 export type FirstAdmin = { actorId: string; homeName: string; issuer: string; subject: string };
@@ -59,6 +57,8 @@ export type FilesServiceOptions = AdmissionOptions & {
 	stateDir: string | null;
 	now?: () => number;
 	state?: Omit<DeploymentOptions, "dir">;
+	/** The filesystem's limits (section 3); checked against the tenant Spaces' limits on open. */
+	limits?: Partial<FsLimits>;
 };
 
 export class FilesService {
@@ -66,6 +66,7 @@ export class FilesService {
 	readonly host: OwnStoreHost;
 	readonly storePath: string | null;
 	readonly state: DeploymentState;
+	readonly limits: FsLimits;
 	readonly #stopService: () => Promise<void>;
 	readonly #now: () => number;
 	/** Tenants whose FsMeta this process has seen committed; FsMeta is never removed while the store is open. */
@@ -81,10 +82,13 @@ export class FilesService {
 		this.#stopService = stopService;
 		this.admission = new Admission(o);
 		this.#now = o.now ?? Date.now;
+		this.limits = { ...DEFAULT_FS_LIMITS, ...o.limits };
 	}
 
 	static async open(o: FilesServiceOptions): Promise<FilesService> {
 		if (o.dataDir !== null && o.stateDir !== null) assertSeparateDirs(o.dataDir, o.stateDir);
+		// the tenant Spaces run with the default Space limits
+		assertLimitsFit({ ...DEFAULT_FS_LIMITS, ...o.limits }, DEFAULT_LIMITS);
 		// the deployment state first: it decides about sessions and keys before any tenant is served
 		const state = await DeploymentState.open({ clock: o.now, ...o.state, dir: o.stateDir });
 		let host: OwnStoreHost | undefined, storePath: string | null = null, service: FilesService;
