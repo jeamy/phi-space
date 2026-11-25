@@ -30,8 +30,16 @@ export type AgentSocketOptions = {
 /** The frame bound: the largest write (base64 of `maxFileBytes`) with room for its arguments. */
 export const agentFrameBytes = (maxFileBytes: number) => base64Chars(maxFileBytes) + 64 * 1024;
 
+/** A unix socket's path is bounded by the kernel (108 bytes on Linux, 104 on macOS); a longer one fails late and obscurely. */
+export const MAX_SOCKET_PATH_BYTES = 103;
+export function checkSocketPath(path: string): void {
+	const n = Buffer.byteLength(path);
+	if (n > MAX_SOCKET_PATH_BYTES) throw new Error(`the socket path is ${n} bytes, more than a unix socket allows (${MAX_SOCKET_PATH_BYTES}): ${path}`);
+}
+
 /** Refuses a socket directory that others can reach (mode bits for "other"), or that is no directory. */
 export function checkSocketDir(path: string): void {
+	checkSocketPath(path);
 	const dir = dirname(path);
 	const st = lstatSync(dir);
 	if (!st.isDirectory()) throw new Error(`the agent socket's directory is not a directory: ${dir}`);

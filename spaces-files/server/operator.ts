@@ -11,11 +11,13 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { serveSpace, socketTransport, type SpaceServer } from "phi-spaces";
 import type { FilesService } from "./service.ts";
+import { checkSocketPath } from "./agent-socket.ts";
 import { isObj, wireError } from "./wire.ts";
 
 export const OPERATOR_SOCKET = "operator.sock";
 
 export async function serveOperator(svc: FilesService, stateDir: string): Promise<SpaceServer> {
+	checkSocketPath(join(stateDir, OPERATOR_SOCKET));
 	let chain: Promise<unknown> = Promise.resolve();
 	const run = async (msg: unknown) => {
 		if (!isObj(msg) || typeof msg.op !== "string") throw Object.assign(new Error("a call is {op, args}"), { code: "invalidInput" });

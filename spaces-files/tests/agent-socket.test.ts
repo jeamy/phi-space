@@ -122,5 +122,6 @@ test("a socket directory others can reach is refused", async () => {
 		chmodSync(dir, 0o750);
 		const s = await serveAgentSocket(svc, { path: join(dir, "s.sock"), hostPeerId: "h", tenantId: "acme" });
 		await s.close();
+		await assert.rejects(serveAgentSocket(svc, { path: join(dir, "x".repeat(120) + ".sock"), hostPeerId: "h", tenantId: "acme" }), /more than a unix socket allows/);
 	} finally { await svc.close(); rmSync(dir, { recursive: true, force: true }); }
 });
