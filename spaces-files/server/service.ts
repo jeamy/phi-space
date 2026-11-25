@@ -13,6 +13,7 @@ import { checkQuotas } from "./quotas.ts";
 import { Admission, Unavailable, type AdmissionOptions } from "./admission.ts";
 import { DeploymentState, type DeploymentOptions } from "./deployment.ts";
 import { BlobStore } from "./blobs.ts";
+import { issueOperationIds } from "./opids.ts";
 import { assertSeparateDirs, prepareDataDir } from "./dirs.ts";
 import * as schema from "./schema.ts";
 import { InconsistentState } from "./schema.ts";
@@ -259,6 +260,14 @@ export class FilesService {
 			const a = await this.#enabledActor(space, view.actorKind, view.actorId);
 			return op({ tenantId: view.tenantId, actorKind: view.actorKind, actorId: view.actorId, homeNodeId: a.fields.homeNodeId as string, expiresAt: view.expiresAt }, space);
 		});
+	}
+
+	/**
+	 * Signs `count` operation IDs for the session's actor (section 5, `issueOperationIds`): a valid session suffices, and
+	 * the call writes nothing but the time floor. A count outside 1..maxOperationIdsPerCall is `invalidInput`.
+	 */
+	issueOperationIds(handle: unknown, count: unknown): Promise<string[]> {
+		return this.withSession(handle, async (s) => issueOperationIds(this.state, s, count, this.limits));
 	}
 
 	/** Ends a session (logout); an unknown handle is no error. */

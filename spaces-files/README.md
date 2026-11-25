@@ -99,7 +99,17 @@ directory of its own, and FsContent names it (plan section 3, *Contents*). Files
   signing keys never touches them. The sweep removes, in bounded batches, blobs no content row names and leftover
   temporary files, nothing else, and nothing while a backup holds deletion. FsContent now holds `blobId`, `size`
   and `keyGeneration`; `maxFileBytes` (16 MiB) and `maxContentBytes` (1 GiB per tenant) bound the contents
-  (`tests/blobs.test.ts`).
+  (`tests/blobs.test.ts`). `sweepBlobs` runs the sweep in the tenant queue and only while the tenant Space holds no
+  open transaction, reservation or uncommitted write: a save's taken content row is invisible to a read, and its blob
+  must outlive the abort, also across a crash before the reaper resolves it.
+- Step 2, operation IDs and receipts (`server/opids.ts`, `server/receipts.ts`): `issueOperationIds` signs IDs
+  (HMAC-SHA-256 with the current signing generation over tenant, actor kind and ID, issue time, generation and a
+  nonce) for a valid session; verification rejects another actor or tenant, a forged or malformed ID, a retired
+  generation, an issue time beyond the clock skew and, from the exact expiry instant on, an expired one, persisting
+  the time floor first. A receipt answers a retry with the same digest and gives `requestMismatch` for another;
+  `reserveReceipt` bounds the ordinary pool (`maxReceipts`) and the security reserve, prunes expired receipts (earliest
+  first, floor persisted before) and never evicts a live one. Defaults: retry window one hour, skew two minutes
+  (`tests/opids.test.ts`).
 
 ## Commands
 

@@ -42,6 +42,13 @@ export type FsLimits = {
 	auditReserveBytes: number;
 	/** Lookups one decision (a resolution plus its rights) may make. */
 	maxWorkPerDecision: number;
+	/** Operation IDs (section 6.2): the published retry window, the allowed clock skew, IDs per `issueOperationIds` call. */
+	retryWindowMs: number;
+	clockSkewMs: number;
+	maxOperationIdsPerCall: number;
+	/** Receipts per tenant for ordinary mutations, and the extra ones only security actions may use (section 3). */
+	maxReceipts: number;
+	securityReceiptReserve: number;
 };
 
 /** Pilot defaults. */
@@ -62,6 +69,11 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxTenantBytes: 56 * 1024 * 1024,
 	auditReserveBytes: 4 * 1024 * 1024,
 	maxWorkPerDecision: 512,
+	retryWindowMs: 3600_000,
+	clockSkewMs: 120_000,
+	maxOperationIdsPerCall: 64,
+	maxReceipts: 20_000,
+	securityReceiptReserve: 1000,
 };
 
 /** The worst-case JSON size of a string of `bytes` UTF-8 bytes, quotes included. */
@@ -88,6 +100,8 @@ export function assertLimitsFit(fs: FsLimits, space: Pick<Limits, "maxEntryBytes
 	if (fs.maxPathBytes < fs.maxNameBytes) fail("a path of one segment", fs.maxNameBytes, fs.maxPathBytes);
 	const stored = fs.maxTenantBytes + fs.auditReserveBytes;
 	if (stored > space.maxSpaceBytes) fail("the tenant's rows with the audit reserve", stored, space.maxSpaceBytes);
+	if (!(fs.retryWindowMs > 0) || !(fs.clockSkewMs >= 0) || fs.clockSkewMs >= fs.retryWindowMs) throw new Error("limits: the retry window must be positive and longer than the clock skew");
+	if (!(fs.maxOperationIdsPerCall >= 1)) throw new Error("limits: maxOperationIdsPerCall must be at least 1");
 	if (fs.maxFileBytes > fs.maxContentBytes) fail("one file inside the content quota", fs.maxFileBytes, fs.maxContentBytes);
 }
 
