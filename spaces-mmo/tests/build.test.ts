@@ -14,7 +14,7 @@ import type { CommandCtx } from "../server/engine/context.ts";
 import { initialClock } from "../server/engine/worldtime.ts";
 import type { BuildingFields, SiteFields } from "../server/model.ts";
 import { saveSettings } from "../server/settings.ts";
-import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
+import { cellsOfObject, eventually, heldCells, lightFire, placeFootprint, Player, startServer, startStack } from "./stack.ts";
 
 const w = await loadWorld();
 type P = { p: Player; me: string; name: string };
@@ -67,7 +67,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		let staked = "";
 		for (let i = 0; i < 5 && !staked.includes("steckt"); i++) { await clear(s, foot); staked = await does(boss.p, "baue eine hütte 16 12", /steckt eine Baustelle ab|passt keine?/); }
 		assert.match(staked, /Baumeisterin steckt eine Baustelle ab: Hütte\. Es fehlen 6 Treibholz, 2 Tangseil, 20 Arbeit/);
-		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !/^(?:graue-)?bucht-/.test(String(e.fields.of))).length, 4);
+		assert.equal((await heldCells(s, "graue-bucht", (of) => !/^(?:graue-)?bucht-/.test(of))).size, 4);
 		assert.match(await does(boss.p, "bau hütte", "offene Baustelle"), /offene Baustelle: Hütte in .+ \(16 12\); bau sie erst fertig/);
 		// nobody walks into it
 		assert.match(await does(boss.p, "step 0 1", "Bau"), /Dort steht ein Bau/);
@@ -105,7 +105,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		const hut = (await s.readAll({ type: "Building" }))[0]!.fields as Record<string, any>;
 		assert.equal(hut.ownerName, "Baumeisterin");
 		assert.equal(Object.values(hut.by as Record<string, number>).reduce((a, b) => a + b, 0), 6 + 2 + 20, "every piece and point counted once");
-		assert.deepEqual((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).map((e) => e.fields.of).filter((x) => x === hut.buildId).length, 4, "the cells are the hut's now");
+		assert.deepEqual((await cellsOfObject(s, hut.buildId)).length, 4, "the cells are the hut's now");
 		await boss.p.until((f) => f.t === "msg" && f.m.text.startsWith("Die Hütte von Baumeisterin steht!"), 10_000);
 		// the page sees it as a building of 2×2 cells
 		await boss.p.until((f) => f.t === "obj" && f.o.kind === "building" && f.o.w === 2 && f.o.h === 2, 10_000);
@@ -144,13 +144,13 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		/** A hut of Siedlerin at 16,12 as a finished build leaves it. */
 		const hut = async (buildId: string) => {
 			const now = await worldNowOf(s);
-			for (const [x, y] of [[16, 12], [17, 12], [16, 13], [17, 13]]) await s.write({ type: "Plot", fields: { room: "graue-bucht", x, y, of: buildId } }, null, FOREVER);
+			await placeFootprint(s, "graue-bucht", buildId, { x: 16, y: 12, w: 2, h: 2 });
 			await s.takeIfExists({ type: "LightUse", fields: { beaconId: "feuer-bucht" } }, 0);
 			await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 1 } }, null, FOREVER);
 			await s.write({ type: "Building", fields: { buildId, plan: "huette", name: "Hütte", room: "graue-bucht", x: 16, y: 12, w: 2, h: 2, owner: boss.me, ownerName: "Siedlerin", accountId, beaconId: "feuer-bucht", points: 1, by: { Siedlerin: 28 }, untilWorldMs: now + 7 * 24 * 3600_000, builtAt: now } as never }, null, FOREVER);
 		};
 		const light = async () => Number((await s.readAll({ type: "LightUse", fields: { beaconId: "feuer-bucht" } }))[0]?.fields.used ?? 0);
-		const plots = async () => (await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !/^(?:graue-)?bucht-/.test(String(e.fields.of))).length;
+		const plots = async () => (await heldCells(s, "graue-bucht", (of) => !/^(?:graue-)?bucht-/.test(of))).size;
 		await hut("b1");
 		await give(s, boss.me, "muschel", 3);
 		// the chest: the owner's alone
@@ -197,7 +197,7 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		assert.equal(await pack(s, boss.me, "treibholz"), 3);
 		assert.equal(await pack(s, boss.me, "muschel"), 3);
 		// a ruin need not wait out its days: anyone registered beside it clears it; the owner's estate stays
-		for (const [x, y] of [[16, 12], [17, 12], [16, 13], [17, 13]]) await s.write({ type: "Plot", fields: { room: "graue-bucht", x, y, of: "b3" } }, null, FOREVER);
+		await placeFootprint(s, "graue-bucht", "b3", { x: 16, y: 12, w: 2, h: 2 });
 		await s.write({ type: "Ruin", fields: { buildId: "b3", plan: "huette", name: "Hütte", room: "graue-bucht", x: 16, y: 12, w: 2, h: 2, owner: boss.me, ownerName: "Siedlerin", accountId, untilWorldMs: (await worldNowOf(s)) + 10 * 24 * 3600_000 } as never }, null, FOREVER);
 		await s.write({ type: "Estate", fields: { estateId: "est-b3", accountId, ownerName: "Siedlerin", room: "graue-bucht", name: "Hütte", untilWorldMs: (await worldNowOf(s)) + 30 * 24 * 3600_000 } as never }, null, FOREVER);
 		assert.match(await does(other.p, "abriss ruine hütte", "Ruine"), /Nachbar räumt die Ruine ab \(Hütte von Siedlerin\); die Fläche ist frei\. Der Nachlass wartet hier weiter auf Siedlerin/);

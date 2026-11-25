@@ -1,6 +1,7 @@
 // The start check of the grid format (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 5, "Start condition"): before a
 // process writes to a world or region space it reads the store's GridFormat entry and the entry types it holds and
-// refuses a store this binary cannot run. It only reads; until the cut nothing writes a GridFormat entry.
+// refuses a store this binary cannot run. It only reads; the loader writes an empty store's GridFormat entry (loader.ts),
+// the migration a migrated one's (scripts/migrate-footprints.ts).
 import type { SpaceLike } from "phi-spaces";
 import { gridRefusal, type GridFormatFields } from "../../shared/grid-format.ts";
 import type { WorldDef } from "./world.ts";

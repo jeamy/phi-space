@@ -53,7 +53,6 @@ pub fn advance_tree(d: &Json, t: &mut Json, now: f64, fog: f64, patient: f64, fr
 }
 
 fn trees(c: &Ctx) -> Result<Json> { match j::opt(c.w(), "trees") { Some(d) => Ok(d.clone()), None => refuse("In dieser Welt pflanzt niemand Bäume.") } }
-fn unique_or(e: Error, why: &str) -> Result<()> { if e.to_string().contains("unique entry already exists") { refuse(why) } else { Err(e) } }
 
 /// `plantTree`: `pflanze <samen> [x y]` with a tree's seed; false when the line names no tree seed one carries.
 pub async fn plant_tree(c: &mut Ctx, arg: &str) -> Result<bool> {
@@ -100,7 +99,7 @@ pub async fn plant_tree(c: &mut Ctx, arg: &str) -> Result<bool> {
 	let tree_id = format!("tree-{}", hex(&random_bytes(6)));
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let room_id = j::s(&room, "roomId").to_owned();
-	if let Err(e) = c.space.write_unique(&tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => rect.x, "y" => rect.y, "of" => tree_id.as_str() }), c.txn(), FOREVER, &["room", "x", "y"]).await { unique_or(e, "Dort hat gerade jemand anderes gegraben.")?; }
+	crate::occupancy::write_footprint(&c.space, &c.txn, crate::occupancy::footprint(&room_id, &tree_id, &rect.json()), false).await?;
 	use_light(c, &light, points).await?;
 	let due = next_date(&sort, 0.0, now, fog_of(&c.space, &room_id).await?, patience_of(&c.space, c.txn()).await?);
 	let mut t = obj! {};

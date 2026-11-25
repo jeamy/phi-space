@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
 import { loadWorld, sceneryText, walkable } from "../server/engine/world.ts";
-import { eventually, Player, startServer } from "./stack.ts";
+import { cellsOfObject, eventually, Player, startServer } from "./stack.ts";
 import type { CharacterFields, ItemFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 
@@ -49,7 +49,7 @@ test("a piece is cleared work by work; its cells are free, its wood in the pack,
 	try {
 		const s = srv.stack.space;
 		const piece = await eventually(async () => (await s.readAll({ type: "Scenery", fields: { sceneryId: "bucht-boot" } }))[0], 10_000, "scenery");
-		assert.ok((await s.readAll({ type: "Plot", fields: { room: "graue-bucht", of: "bucht-boot" } })).length === 3);
+		assert.ok((await cellsOfObject(s, "bucht-boot")).length === 3);
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Raeumer", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
@@ -68,7 +68,7 @@ test("a piece is cleared work by work; its cells are free, its wood in the pack,
 		assert.ok(p.frames.some((f: ServerFrame) => f.t === "obj" && f.o.id === "bucht-boot" && f.o.left === 3), "the piece comes back with the work left");
 		assert.equal(p.frames.findLastIndex((f: ServerFrame) => f.t === "objgone" && f.id === "bucht-boot") > p.frames.findLastIndex((f: ServerFrame) => f.t === "obj" && f.o.id === "bucht-boot"), true, "gone only at the end");
 		assert.equal((await s.readAll({ type: "Scenery", fields: { sceneryId: "bucht-boot" } })).length, 0);
-		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht", of: "bucht-boot" } })).length, 0);
+		assert.equal((await cellsOfObject(s, "bucht-boot")).length, 0);
 		assert.equal((await s.readAll({ type: "SceneryGone", fields: { sceneryId: "bucht-boot" } })).length, 1);
 		assert.equal((await s.readAll({ type: "Item", fields: { location: me } })).map((e) => e.fields as unknown as ItemFields).filter((i) => i.proto === "treibholz").length, 2);
 		await p.leave();

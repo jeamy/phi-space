@@ -208,7 +208,7 @@ pub async fn step_beside(n: &Npc, l: &Look, r: &Rect, reach: f64) -> Result<bool
 	let w = n.w();
 	let ground = ground_of(&w, l.room());
 	let mut busy: Vec<String> = n.space.read_all(&tmpl("Character", obj! { "room" => l.room() }), None).await?.iter().map(|e| format!("{},{}", nt(j::n(fields(e), "x")), nt(j::n(fields(e), "y")))).collect();
-	busy.extend(n.space.read_all(&tmpl("Plot", obj! { "room" => l.room() }), None).await?.iter().map(|e| format!("{},{}", nt(j::n(fields(e), "x")), nt(j::n(fields(e), "y")))));
+	busy.extend(crate::occupancy::claimed_in(&n.space, l.room(), None).await?.into_keys());
 	let mut y = r.y - 1.0;
 	while y <= r.y + r.h {
 		let mut x = r.x - 1.0;

@@ -310,7 +310,7 @@ pub async fn wild_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<(f64, f
 			let ts = targets(space, w, k, &room, &s).await?;
 			let i = (random() * ts.len() as f64).floor() as usize % ts.len().max(1);
 			let Some((id, r, name)) = ts.get(i).cloned() else { continue };
-			let covered: Vec<String> = space.read_all(&tmpl("Plot", obj! { "room" => room.as_str() }), None).await?.iter().map(|e| format!("{},{}", txt(j::at(fields(e), "x")), txt(j::at(fields(e), "y")))).collect();
+			let covered: Vec<String> = crate::occupancy::claimed_in(space, &room, None).await?.into_keys().collect();
 			let Some((x, y)) = beside(w, &room, r, &covered) else { continue };
 			let mut a = obj! { "animalId" => format!("{key}-{}", hex(&random_bytes(5))), "kind" => key.as_str(), "name" => j::at(k, "name").clone(), "room" => room.as_str(), "x" => x, "y" => y };
 			j::set(&mut a, if key == "hase" { "bedId" } else { "target" }, id);

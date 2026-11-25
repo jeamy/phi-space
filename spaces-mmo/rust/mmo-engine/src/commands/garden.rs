@@ -175,9 +175,7 @@ async fn dig(c: &mut Ctx, arg: &str) -> Result<()> {
 	let bed_id = format!("bed-{}", hex(&random_bytes(6)));
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let room_id = j::s(&room, "roomId").to_owned();
-	for p in cells(rect) {
-		if let Err(e) = c.space.write_unique(&tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => p.0, "y" => p.1, "of" => bed_id.as_str() }), c.txn(), FOREVER, &["room", "x", "y"]).await { unique_or(e, "Dort hat gerade jemand anderes umgegraben.")?; }
-	}
+	crate::occupancy::write_footprint(&c.space, &c.txn, crate::occupancy::footprint(&room_id, &bed_id, &rect.json()), false).await?;
 	if kind == Some("gemein") {
 		if let Err(e) = c.space.write_unique(&tmpl("BedCommons", obj! { "beaconId" => light.beacon_id.as_str(), "bedId" => bed_id.as_str() }), c.txn(), FOREVER, &["beaconId"]).await { unique_or(e, "Im Licht dieses Feuers hat gerade jemand ein Gemeinschaftsbeet angelegt.")?; }
 	}

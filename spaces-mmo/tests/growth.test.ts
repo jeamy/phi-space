@@ -10,9 +10,10 @@ import { loadWorld } from "../server/engine/world.ts";
 import { initialClock } from "../server/engine/worldtime.ts";
 import type { CharacterFields, RoomFields, RoomGrowthFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
+import { eventually, lightFire, placeFootprint, Player, startServer, startStack } from "./stack.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
-import { writeWorstGrowth } from "./growth-worst.ts";
+import { worstOf, writeWorstGrowth } from "./growth-worst.ts";
+import { writeRoomLock } from "../server/engine/room-lock.ts";
 
 const w = await loadWorld();
 const room = (ground: string[]): RoomFields => ({ roomId: "r", name: "Testwiese", desc: "", ground });
@@ -35,8 +36,9 @@ test("a full room grows once, what it grew stays in its entry, and the next coun
 		const s = stack.space;
 		await s.write({ type: "WorldClock", fields: initialClock(w.id, 12, Date.now(), 1) as never }, null, FOREVER);
 		await s.write({ type: "Room", fields: room(grass(24, 16)) as never }, null, FOREVER);
+		await writeRoomLock(s, null, "r");
 		assert.equal(await growthTick(s, w, 60_000), 0, "empty: nothing grows");
-		for (let i = 0; i < 270; i++) await s.write({ type: "Plot", fields: { room: "r", x: i % 24, y: Math.floor(i / 24), of: "b" } as never }, null, FOREVER);
+		for (let i = 0; i < 270; i++) await placeFootprint(s, "r", `b-${i}`, { x: i % 24, y: Math.floor(i / 24) });
 		const both = await Promise.all([growthTick(s, w, 60_000), growthTick(s, w, 60_000)]);
 		assert.equal(both[0]! + both[1]!, 1, "two workers grow it once");
 		const r = (await s.readAll({ type: "Room", fields: { roomId: "r" } }))[0]!.fields as unknown as RoomFields;
@@ -56,7 +58,7 @@ test("the worst case (tests/growth-worst.ts): every room full, every seam tried,
 		assert.equal(await growthTick(s, w, 60_000), 0, "no seam is valid");
 		assert.equal((await s.readAll({ type: "RoomGrowth" })).length, 0);
 		// the first row free to the east edge: the outermost x seam reaches the free part, and that room grows
-		for (let x = 0; x < worst.width; x++) await s.takeIfExists({ type: "Plot", fields: { room: worst.rooms[0]!, x, y: 0 } }, NO_WAIT);
+		for (let x = 0; x < worst.width; x++) await s.takeIfExists({ type: "Footprint", fields: { room: worst.rooms[0]!, of: worstOf(x, 0) } }, NO_WAIT);
 		assert.equal(await growthTick(s, w, 60_000), 1);
 	} finally { await stack.close(); }
 });

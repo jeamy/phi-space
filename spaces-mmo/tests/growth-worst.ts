@@ -3,15 +3,19 @@
 // grow, and no seam valid, so the search under the world lock runs every candidate to its end and grows nothing.
 //
 // A room is all grass, (maxW − strip) × (maxH − strip) cells. Only its upper left part below half its width and height
-// is free (the spawn in its corner); everything else is plots. Every seam lies at or beyond half the room, so the cells on
-// both sides of it are plots: the strip would be cut off from the free part, and `connected` runs both of its searches
-// before it says no. Nothing crosses a seam, so no candidate is dropped before that check.
+// is free (the spawn in its corner); everything else is occupied, one 1×1 footprint a cell (the plots of old). Every
+// seam lies at or beyond half the room, so the cells on both sides of it are occupied: the strip would be cut off from
+// the free part, and `connected` runs both of its searches before it says no. Nothing crosses a seam, so no candidate is dropped before that check.
 //
 // The sizes follow the world definition (w.growth), so the same fixture serves the finer grid after the switch.
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import type { WorldDef } from "../server/engine/world.ts";
 import { WORLD_LOCK } from "../server/model.ts";
 import { regionsOf, regionWorld } from "../server/engine/regions.ts";
+import { writeRoomLock } from "../server/engine/room-lock.ts";
+
+/** The ID of the worst case's object on a cell. */
+export const worstOf = (x: number, y: number) => `worst-${x}-${y}`;
 
 export type WorstGrowth = { rooms: string[]; width: number; height: number; free: number; plots: number; candidates: number };
 
@@ -34,10 +38,12 @@ export async function writeWorstGrowth(space: SpaceLike, w: WorldDef, rooms = la
 		const roomId = `worst-${i}`;
 		ids.push(roomId);
 		await space.write({ type: "Room", fields: { roomId, name: `Engpass ${i}`, desc: "", ground, spawn: { x: 0, y: 0 } } as never }, null, FOREVER);
+		await writeRoomLock(space, null, roomId);
 		const batch: Promise<unknown>[] = [];
 		for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
 			if (x < freeW && y < freeH) continue;
-			batch.push(space.write({ type: "Plot", fields: { room: roomId, x, y, of: "worst" } as never }, null, FOREVER));
+			// one object a cell (the cells of old, one Plot each): a footprint crosses no seam, only the ways decide
+			batch.push(space.write({ type: "Footprint", fields: { room: roomId, of: worstOf(x, y), x, y, w: 1, h: 1 } as never }, null, FOREVER));
 			if (batch.length >= 256) await Promise.all(batch.splice(0));
 		}
 		await Promise.all(batch);

@@ -11,6 +11,7 @@
 // - The field tick (in the garden job) writes a field only when its date comes: it ripens, its window passes (each share
 //   then loses a part), the crop is lost; and a field nobody worked for its time goes back to grass.
 import { holdRoom, holdRoomOrRefuse } from "../room-lock.ts";
+import { footprint, writeFootprint } from "../occupancy.ts";
 import { needRank } from "./settlement.ts";
 import { needEpoch } from "./epoch.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
@@ -138,10 +139,7 @@ async function stake(c: CommandCtx, at: string): Promise<void> {
 	const again = await refusal(c, room, rect, false, true, undefined, true);
 	if (again) throw new CommandError(`Hier passt kein Acker hin (${d.w}×${d.h}): ${again}`);
 	const fieldId = `field-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
-	for (const p of cells(rect)) {
-		try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: p.x, y: p.y, of: fieldId } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
-		catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Dort hat gerade jemand anderes umgebrochen."); throw e; }
-	}
+	await writeFootprint(c.space, c.txn, footprint(room.roomId, fieldId, rect));
 	await useLight(c, light.beaconId, light.use, d.points, light.fresh);
 	const f: FieldFields = { fieldId, room: room.roomId, ...rect, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId, beaconId: light.beaconId, points: d.points,
 		stage: "brach", crop: null, seeds: 0, seedNeed: 0, work: 0, workNeed: 0, yields: [], soil: 1, by: {}, human: 0, other: 0, lastGroup: null, tired: 0, lastHarvestWorldMs: 0,

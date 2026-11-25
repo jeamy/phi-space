@@ -20,6 +20,7 @@ import { startServer as startInProcess } from "../server/index.ts";
 import type { Accounts } from "../server/accounts.ts";
 import { connectSpace } from "../server/space.ts";
 import { FOREVER, type SpaceLike } from "phi-spaces";
+import type { FootprintFields } from "../shared/model.ts";
 import { readClock } from "../server/engine/clock.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { worldNow } from "../server/engine/worldtime.ts";
@@ -91,35 +92,38 @@ const freePort = () => new Promise<number>((ok, fail) => {
 const stop = (c: ChildProcess, sig: NodeJS.Signals = "SIGTERM") => new Promise<void>((r) => { if (c.exitCode !== null || c.signalCode !== null) return r(); c.once("exit", () => r()); c.kill(sig); });
 
 /** The occupancy check every stack makes when it closes (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 3,
- *  "Occupancy"; shared/footprints.ts): with the workers stopped, the objects' footprints give the plots' occupancy in
- *  every room. Not after a worker was killed (its open transaction holds its objects taken, their plots stay readable,
- *  until the lease runs out). A difference is written to stderr and fails the test file (the exit code), so it does not
+ *  "Occupancy"; shared/footprints.ts): with the workers stopped, the objects' footprints give the occupancy of their
+ *  Footprint entries in every room, and every room and island has its one lock. Not after a worker was killed (its open
+ *  transaction holds its objects taken, their Footprint entries stay readable, until the lease runs out). A difference is written to stderr and fails the test file (the exit code), so it does not
  *  hide a failure the test itself threw. */
 async function checkOccupancy(space: SpaceLike, what: string, byHand: ByHand): Promise<void> {
 	const entries = (await space.readAll({})) as unknown as OccupancyEntry[];
 	const plotted = new Set<string>(), objects = new Set<string>();
-	for (const e of entries) { const id = occupancyId(e); if (id !== null) (e.type === "Plot" ? plotted : objects).add(id); }
-	// a fixture's object without any plot, or plots (written or left by taking the object) without any object: only
-	// those are the fixture's; an object the game keeps plots for is checked even when the test touched it
+	for (const e of entries) { const id = occupancyId(e); if (id !== null) (e.type === "Footprint" ? plotted : objects).add(id); }
+	// a fixture's object without a Footprint entry, or a Footprint entry (written or left by taking the object) without
+	// its object: only those are the fixture's; an object the game keeps a footprint for is checked even when the test
+	// touched it
 	const skip = (id: string) => (byHand.objects.has(id) && !plotted.has(id)) || (byHand.loose.has(id) && !objects.has(id));
 	const report = [...storeOccupancyReport(entries, { skip }), ...lockReport(entries, (room) => byHand.rooms.has(room))];
 	if (!report.length) return;
 	process.exitCode = 1;
-	console.error(`[occupancy] ${what}: footprints and plots differ (${report.length})\n  ${report.slice(0, 20).join("\n  ")}`);
+	console.error(`[occupancy] ${what}: objects, Footprint entries and locks differ (${report.length})\n  ${report.slice(0, 20).join("\n  ")}`);
 }
 
-/** What a test wrote or took itself: `objects` written, `loose` plots written and objects taken. */
+/** What a test wrote or took itself: `objects` written, `loose` Footprint entries written and objects taken. */
 type ByHand = { objects: Set<string>; loose: Set<string>; rooms: Set<string> };
 const byHandOf = (): ByHand => ({ objects: new Set(), loose: new Set(), rooms: new Set() });
 
 /** The test's own connection, noting in `byHand` the objects it writes or takes itself (a fixture that places a
- *  building without its plots, a site taken without them): such differences are the fixture's, not the game's, and the
- *  occupancy check leaves them out (checkOccupancy). What the game does through the workers is checked. */
+ *  building without its Footprint entry, a site taken without it): such differences are the fixture's, not the game's,
+ *  and the occupancy check leaves them out (checkOccupancy). What the game does through the workers is checked. A
+ *  `Plot` written by a test throws: the game reads Footprint entries only, so a plot would be an obstacle that is not. */
 function noting(space: SpaceLike, byHand: ByHand): SpaceLike {
 	const id = (e: unknown) => (e && typeof e === "object" && "fields" in e ? occupancyId(e as OccupancyEntry) : null);
 	const note = (e: unknown) => {
 		const k = id(e);
-		if (k !== null) ((e as OccupancyEntry).type === "Plot" ? byHand.loose : byHand.objects).add(k);
+		if (e && typeof e === "object" && (e as OccupancyEntry).type === "Plot") throw new Error("a test wrote a Plot entry: the occupancy is in Footprint entries now (shared/footprints.ts)");
+		if (k !== null) ((e as OccupancyEntry).type === "Footprint" ? byHand.loose : byHand.objects).add(k);
 		// a room, or a room's lock, written by hand (a fixture's room without the loader): its locks are the fixture's
 		const f = e && typeof e === "object" && "fields" in e ? (e as OccupancyEntry).fields : null;
 		if (f && typeof f.roomId === "string" && ((e as OccupancyEntry).type === "Room" || (e as OccupancyEntry).types?.includes("Room"))) byHand.rooms.add(f.roomId);
@@ -335,6 +339,30 @@ export async function eventually<T>(check: () => Promise<T | null | undefined | 
 }
 
 /** A fire that burns for `realMs` of real time (the world's rate turns that into the world time it burns until). */
+/** The cells objects stand on in a room, as "x,y" (their Footprint entries; shared/footprints.ts). `of`: only those of
+ *  objects whose ID passes. */
+export async function heldCells(space: SpaceLike, room: string, of: (id: string) => boolean = () => true): Promise<Set<string>> {
+	const out = new Set<string>();
+	for (const e of await space.readAll({ type: "Footprint", fields: { room } })) {
+		const f = e.fields as unknown as FootprintFields;
+		if (of(f.of)) for (let y = f.y; y < f.y + f.h; y++) for (let x = f.x; x < f.x + f.w; x++) out.add(`${x},${y}`);
+	}
+	return out;
+}
+/** The cells of one object, as sorted "x,y" (its Footprint entry; none: empty). */
+export async function cellsOfObject(space: SpaceLike, of: string): Promise<string[]> {
+	const out: string[] = [];
+	for (const e of await space.readAll({ type: "Footprint", fields: { of } })) {
+		const f = e.fields as unknown as FootprintFields;
+		for (let y = f.y; y < f.y + f.h; y++) for (let x = f.x; x < f.x + f.w; x++) out.push(`${x},${y}`);
+	}
+	return out.sort();
+}
+/** A fixture's object on cells (or an obstacle of its own: `of` names nothing): its Footprint entry. */
+export async function placeFootprint(space: SpaceLike, room: string, of: string, r: { x: number; y: number; w?: number; h?: number }): Promise<void> {
+	await space.write({ type: "Footprint", fields: { room, of, x: r.x, y: r.y, w: r.w ?? 1, h: r.h ?? 1 } satisfies FootprintFields as never }, null, FOREVER, { unique: ["room", "of"] });
+}
+
 export async function lightFire(space: SpaceLike, realMs: number, beaconId = "feuer-bucht"): Promise<void> {
 	const clock = await readClock(space), now = worldNow(clock);
 	await space.write({ type: "Flame", fields: { beaconId, until: now + realMs * clock.rate, litAt: now } as never }, null, FOREVER);

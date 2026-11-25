@@ -5,6 +5,7 @@
 // out or came back, the fog tick moves each covered room's fog one step, the tide spawns flotsam that the sweep takes away
 // when its world time is up.
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
+import { claimedIn } from "./occupancy.ts";
 import { fieldsOf, type BeaconFields, type BuildingFields, type ContributionFields, type FireChainFields, type FlameFields, type FogFields, type ItemFields } from "../model.ts";
 import { CommandError, msg, msgOptions, type CommandCtx } from "./context.ts";
 import { resolvePrototype, spawn } from "./prototypes.ts";
@@ -212,7 +213,8 @@ export async function fogOf(space: SpaceLike, room: string): Promise<number> {
 /** Free cells of `tile` in a room (no thing, exit or fire on them). */
 async function freeCells(space: SpaceLike, w: WorldDef, roomId: string, tile: string): Promise<Array<{ x: number; y: number }>> {
 	const room = w.rooms.find((r) => r.roomId === roomId)!;
-	const taken = new Set([...(await space.readAll({ type: "Item", fields: { location: roomId } })), ...(await space.readAll({ type: "Exit", fields: { location: roomId } })), ...(await space.readAll({ type: "Beacon", fields: { room: roomId } })), ...(await space.readAll({ type: "Plot", fields: { room: roomId } }))].map((e) => `${e.fields.x},${e.fields.y}`));
+	const taken = new Set([...(await space.readAll({ type: "Item", fields: { location: roomId } })), ...(await space.readAll({ type: "Exit", fields: { location: roomId } })), ...(await space.readAll({ type: "Beacon", fields: { room: roomId } }))].map((e) => `${e.fields.x},${e.fields.y}`));
+	for (const k of (await claimedIn(space, roomId)).keys()) taken.add(k);
 	const cells: Array<{ x: number; y: number }> = [];
 	room.ground.forEach((row, y) => [...row].forEach((t, x) => { if (t === tile && walkable(w, room.ground, x, y) && !taken.has(`${x},${y}`)) cells.push({ x, y }); }));
 	return cells;

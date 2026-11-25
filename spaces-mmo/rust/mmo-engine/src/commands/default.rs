@@ -30,10 +30,11 @@ pub async fn move_to(c: &mut Ctx, to: (f64, f64), path: bool, room: Option<Json>
 	let room_id = j::s(&room, "roomId").to_owned();
 	let solid = blocked_in(&c.space, &room_id).await?;
 	let at = cell_key(to.0, to.1);
-	let plots: Vec<Json> = if solid.contains(&at) { c.space.read_all(&tmpl("Plot", obj! { "room" => room_id.as_str() }), None).await?.iter().map(|e| fields(e).clone()).collect() } else { vec![] };
+	// who stands on a bed or field dug under their feet walks off over it
+	let claimed = if solid.contains(&at) { crate::occupancy::claimed_in(&c.space, &room_id, None).await? } else { Default::default() };
 	let me = xy(&c.actor);
-	let inside = plots.iter().find(|p| xy(p) == me).map(|p| j::at(p, "of").clone());
-	let through = inside.as_ref().is_some_and(|i| j::truthy(i) && plots.iter().any(|p| j::at(p, "of") == i && xy(p) == to));
+	let inside = claimed.get(&cell_key(me.0, me.1));
+	let through = inside.is_some_and(|i| !i.is_empty() && claimed.get(&at) == Some(i));
 	if solid.contains(&at) && !through {
 		let fire = j::a(c.w(), "beacons").iter().any(|b| j::s(b, "room") == room_id && xy(b) == to);
 		return refuse(if fire { "Dort brennt das Leuchtfeuer; da läuft man nicht hinein." } else { "Dort steht ein Bau; da geht man außen herum." });

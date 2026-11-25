@@ -303,18 +303,9 @@ async fn versetze(c: &mut Ctx, arg: &str) -> Result<()> {
 	let Some(t) = c.space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, c.txn()).await? else { return refuse("Das ist gerade in Benutzung; bitte gleich noch einmal.") };
 	let room_id = j::s(&room, "roomId").to_owned();
 	let txn = c.txn().unwrap_or("").to_owned();
-	// the cells it leaves go, the ones it comes onto are written; those it keeps stay
-	let to: std::collections::HashSet<String> = super::build::cells(rect).iter().map(|p| format!("{},{}", nt(p.0), nt(p.1))).collect();
-	let mut had = std::collections::HashSet::new();
-	for p in c.space.read_all(&tmpl("Plot", obj! { "room" => room_id.as_str(), "of" => id.as_str() }), None).await? {
-		let k = format!("{},{}", nt(j::n(fields(&p), "x")), nt(j::n(fields(&p), "y")));
-		if to.contains(&k) { had.insert(k); } else { c.space.take_if_exists(&obj! { "id" => j::at(&p, "id").clone() }, NO_WAIT, Some(&txn)).await?; }
-	}
-	for p in super::build::cells(rect) {
-		if had.contains(&format!("{},{}", nt(p.0), nt(p.1))) { continue; }
-		let r = c.space.write_unique(&tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => p.0, "y" => p.1, "of" => id.as_str() }), c.txn(), FOREVER, &["room", "x", "y"]).await;
-		match r { Err(e) if e.to_string().contains("unique entry already exists") => return refuse("Dort hat gerade jemand anderes abgesteckt."), Err(e) => return Err(e), Ok(_) => {} }
-	}
+	// its footprint moves with it (the room's lock is held, above)
+	crate::occupancy::take_footprint(&c.space, &txn, &room_id, &id).await?;
+	crate::occupancy::write_footprint(&c.space, &txn, crate::occupancy::footprint(&room_id, &id, &rect.json()), true).await?;
 	let mut moved = fields(&t).clone();
 	j::set(&mut moved, "x", x);
 	j::set(&mut moved, "y", y);

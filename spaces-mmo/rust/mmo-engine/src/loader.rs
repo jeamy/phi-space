@@ -114,6 +114,16 @@ pub async fn load_into_space(space: &Space, w: &Json, o: LoadOptions) -> Result<
 	let tile = j::so(j::at(w, "growth"), "tile").unwrap_or(",").to_owned();
 	let replace: bool = under_lock!(space, txn_ms, |txn| {
 		let marker = space.peek(&tmpl("WorldLoaded", obj! { "worldId" => wid }), Some(txn)).await?;
+		// an empty store takes this binary's grid format (grid_format.rs; the start check refused any other)
+		if marker.is_none() && space.peek(&obj! { "type" => "GridFormat" }, Some(txn)).await?.is_none() {
+			let mut f = Object::new();
+			f.insert("worldId", Json::from(wid));
+			f.insert("gridScale", Json::from(crate::grid_format::SUPPORTED_SCALE));
+			if let Some(d) = j::opt(w, "derivedFrom").filter(|d| !d.is_null()) { f.insert("derivedFrom", d.clone()); }
+			f.insert("occupancy", Json::from(crate::grid_format::SUPPORTED_OCCUPANCY));
+			f.insert("state", Json::from("complete"));
+			space.write(&obj! { "type" => "GridFormat", "fields" => Json::Object(f) }, Some(txn), FOREVER).await?;
+		}
 		o.replace || marker.map_or(0.0, |m| j::n(fields(&m), "version")) < version
 	});
 	let rooms = j::a(w, "rooms");
@@ -244,24 +254,27 @@ pub async fn load_into_space(space: &Space, w: &Json, o: LoadOptions) -> Result<
 			f.insert("lit", Json::Bool(old.as_ref().is_some_and(|o| j::b(fields(o), "lit"))));
 			space.write(&obj! { "type" => "Beacon", "fields" => Json::Object(f) }, Some(txn), FOREVER).await?;
 		}
+		// what stands on cells of its own is placed under its room's lock (loader.ts), checked against the footprints as the
+		// space holds them; a lock held past LOCK_WAIT_MS leaves it to the next start
+		let mut held: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
 		for base in j::a(w, "scenery") {
 			let sc = at_point(space, txn, j::s(base, "room"), base).await?;
 			let sid = j::at(&sc, "sceneryId").clone();
 			if space.read_if_exists(&tmpl("Scenery", obj! { "sceneryId" => sid.clone() }), 2_000.0, Some(txn)).await?.is_some()
 				|| space.read_if_exists(&tmpl("SceneryGone", obj! { "sceneryId" => sid.clone() }), 2_000.0, Some(txn)).await?.is_some() { continue; }
-			let (x, y, sw, sh) = (j::n(&sc, "x"), j::n(&sc, "y"), j::n(&sc, "w"), j::n(&sc, "h"));
-			let cells: Vec<(f64, f64)> = (0..(sw * sh) as usize).map(|i| (x + (i as f64 % sw), y + (i as f64 / sw).floor())).collect();
 			let through = j::b(&sc, "through");
-			let plots = if through { vec![] } else { space.read_all(&tmpl("Plot", obj! { "room" => j::at(&sc, "room").clone() }), Some(txn)).await? };
-			if plots.iter().any(|p| cells.iter().any(|(cx, cy)| j::at(fields(p), "x").as_f64() == Some(*cx) && j::at(fields(p), "y").as_f64() == Some(*cy))) { continue; }
+			let sroom = j::s(&sc, "room").to_owned();
+			if !through {
+				if !held.contains_key(&sroom) { let got = crate::room_lock::hold_room(space, txn, &sroom, crate::room_lock::LOCK_WAIT_MS).await?; held.insert(sroom.clone(), got); }
+				if !held[&sroom] { continue; }
+				let claimed = crate::occupancy::claimed_in(space, &sroom, Some(txn)).await?;
+				if crate::occupancy::footprint_cells(&sc).iter().any(|(cx, cy)| claimed.contains_key(&crate::occupancy::cell_key(*cx, *cy))) { continue; }
+			}
+			let print = crate::occupancy::footprint(&sroom, &crate::fire::key_text(&sid), &sc);
 			let mut f = j::object(&sc);
 			f.insert("left", j::at(&sc, "work").clone());
 			space.write(&obj! { "type" => "Scenery", "fields" => Json::Object(f) }, Some(txn), FOREVER).await?;
-			if !through {
-				for (cx, cy) in &cells {
-					space.write_unique(&obj! { "type" => "Plot", "fields" => obj! { "room" => j::at(&sc, "room").clone(), "x" => *cx, "y" => *cy, "of" => sid.clone() } }, Some(txn), FOREVER, &["room", "x", "y"]).await?;
-				}
-			}
+			if !through { crate::occupancy::write_footprint(space, txn, print, false).await?; }
 		}
 		let mut fog_rooms: Vec<&str> = Vec::new();
 		for b in j::a(w, "beacons") { for c in j::a(b, "covers") { if let Some(c) = c.as_str() { if !fog_rooms.contains(&c) { fog_rooms.push(c); } } } }

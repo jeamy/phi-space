@@ -178,19 +178,19 @@ impl Walk {
 		let ts = self.ts.call(obj! { "op" => "dump" });
 		let rust = self.run(dump(&self.space));
 		compare(step, &ts, &rust);
-		// the objects' footprints give the plots' occupancy (src/footprints.rs, the stack's check in tests/stack.ts): both
-		// spaces hold the same entries, so this holds the Rust query on every state a walk reaches
+		// the objects' footprints give the occupancy of their Footprint entries (src/footprints.rs, the stack's check in
+		// tests/stack.ts): both spaces hold the same entries, so this holds the Rust query on every state a walk reaches
 		let all = self.run(self.space.read_all(&obj! {}, None)).expect("readAll");
-		// what the walk wrote or took by hand (`write`, `take`: a fixture's object without its plots) is left out
-		// as tests/stack.ts: only a fixture's object without any plot, or plots without any object, is left out
+		// what the walk wrote or took by hand (`write`, `take`) is left out as tests/stack.ts does: only a fixture's object
+		// without a Footprint entry, or a Footprint entry without its object
 		let (mut plotted, mut objects) = (std::collections::HashSet::new(), std::collections::HashSet::new());
-		for e in &all { if let Some(id) = mmo_engine::footprints::occupancy_id(e) { if mmo_engine::j::s(e, "type") == "Plot" { plotted.insert(id); } else { objects.insert(id); } } }
+		for e in &all { if let Some(id) = mmo_engine::footprints::occupancy_id(e) { if mmo_engine::j::s(e, "type") == "Footprint" { plotted.insert(id); } else { objects.insert(id); } } }
 		let (written, loose) = (&self.by_hand.0, &self.by_hand.1);
-		let mut report = mmo_engine::footprints::store_occupancy_report(&all, false, &|id| (written.contains(id) && !plotted.contains(id)) || (loose.contains(id) && !objects.contains(id)));
+		let mut report = mmo_engine::footprints::store_occupancy_report(&all, false, &|id| (written.contains(id) && !plotted.contains(id)) || (loose.contains(id) && !objects.contains(id)), false);
 		// one lock per room and island (room_lock.rs), but for rooms the walk wrote by hand
 		let rooms = &self.by_hand.2;
 		report.extend(mmo_engine::room_lock::lock_report(&all, &|r| rooms.contains(r)));
-		assert!(report.is_empty(), "{step}: footprints and plots differ\n  {}", report.iter().take(20).cloned().collect::<Vec<_>>().join("\n  "));
+		assert!(report.is_empty(), "{step}: objects, Footprint entries and locks differ\n  {}", report.iter().take(20).cloned().collect::<Vec<_>>().join("\n  "));
 	}
 	pub fn load(&mut self, replace: bool) {
 		let t = self.ts.call(obj! { "op" => "load", "world" => "leuchtfeuer", "replace" => replace });
@@ -222,7 +222,9 @@ impl Walk {
 	}
 	/// An entry written alike on both sides (FOREVER).
 	pub fn write(&mut self, entry: Json) {
-		if let Some(id) = mmo_engine::footprints::occupancy_id(&entry) { if mmo_engine::j::s(&entry, "type") == "Plot" { self.by_hand.1.insert(id); } else { self.by_hand.0.insert(id); } }
+		// the game reads Footprint entries only: a plot would be an obstacle that is not (tests/stack.ts throws the same)
+		assert!(mmo_engine::j::s(&entry, "type") != "Plot", "a walk wrote a Plot entry: the occupancy is in Footprint entries now");
+		if let Some(id) = mmo_engine::footprints::occupancy_id(&entry) { if mmo_engine::j::s(&entry, "type") == "Footprint" { self.by_hand.1.insert(id); } else { self.by_hand.0.insert(id); } }
 		let f = mmo_engine::j::at(&entry, "fields");
 		if mmo_engine::j::s(&entry, "type") == "Room" { if let Some(r) = mmo_engine::j::so(f, "roomId") { self.by_hand.2.insert(r.to_owned()); } }
 		if mmo_engine::j::s(&entry, "type") == "RoomLock" { if let Some(r) = mmo_engine::j::so(f, "room") { self.by_hand.2.insert(r.to_owned()); } }

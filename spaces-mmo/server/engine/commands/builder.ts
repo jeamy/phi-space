@@ -14,6 +14,7 @@ import { randomBytes } from "../source.ts";
 import { cells, logGone, planOf, refusal, touchesWater } from "./build.ts";
 import { exitIdOf, interiorOf, isInterior } from "./interior.ts";
 import { holdRoomOrRefuse, writeRoomLock } from "../room-lock.ts";
+import { footprint, takeFootprint, writeFootprint } from "../occupancy.ts";
 
 const BUILDER = "cmd:perm(Builder)";
 const ADMIN = "cmd:perm(Admin)";
@@ -259,18 +260,9 @@ const versetze: Command = {
 		if (no) throw new CommandError(`Dorthin lässt sich ${name} nicht versetzen: ${no}`);
 		const t = await c.space.takeIfExists({ id: e.id }, NO_WAIT, { txn: c.txn });
 		if (!t) throw new CommandError("Das ist gerade in Benutzung; bitte gleich noch einmal.");
-		// the cells it leaves go, the ones it comes onto are written; those it keeps stay (a cell taken in this transaction
-		// still holds its place for `unique`)
-		const to = new Set(cells(rect).map((p) => `${p.x},${p.y}`)), had = new Set<string>();
-		for (const p of await c.space.readAll({ type: "Plot", fields: { room: room.roomId, of: id } })) {
-			const k = `${p.fields.x},${p.fields.y}`;
-			if (to.has(k)) had.add(k); else await c.space.takeIfExists({ id: p.id }, NO_WAIT, { txn: c.txn });
-		}
-		for (const p of cells(rect)) {
-			if (had.has(`${p.x},${p.y}`)) continue;
-			try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: p.x, y: p.y, of: id } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
-			catch (err) { if (/unique entry already exists/.test((err as Error).message)) throw new CommandError("Dort hat gerade jemand anderes abgesteckt."); throw err; }
-		}
+		// its footprint moves with it (the room's lock is held, above)
+		await takeFootprint(c.space, c.txn, room.roomId, id);
+		await writeFootprint(c.space, c.txn, footprint(room.roomId, id, rect), true);
 		await c.space.write({ type: t.type, types: t.types.slice(1), fields: { ...t.fields, x, y, ...(f.plants ? { plants: f.plants.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) } : {}) } as never }, c.txn, FOREVER);
 		// a building with an inside: the inside knows where it stands, and its door leads out in front of it
 		if (kind.type === "Building") {

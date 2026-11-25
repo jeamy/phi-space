@@ -14,7 +14,7 @@ import { readClock, worldNowOf } from "../server/engine/clock.ts";
 import { initialClock, worldNow } from "../server/engine/worldtime.ts";
 import type { AnimalFields, BuildingFields, FieldFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer, startStack } from "./stack.ts";
+import { eventually, placeFootprint, Player, startServer, startStack } from "./stack.ts";
 
 const w = await loadWorld();
 const wd = w.wild!, fd = w.fields!;
@@ -198,7 +198,7 @@ test("a dog and a cat as a player keeps them; scheuche reh; a fence round the ow
 		}
 		assert.ok(spot);
 		const hut: BuildingFields = house({ buildId: "huette-ida", room: "graue-bucht", ...spot, owner: a.me, ownerName: "Ida", accountId, beaconId: "feuer-bucht" });
-		for (let y = hut.y; y < hut.y + 2; y++) for (let x = hut.x; x < hut.x + 2; x++) await s.write({ type: "Plot", fields: { room: hut.room, x, y, of: hut.buildId } as never }, null, FOREVER);
+		await placeFootprint(s, hut.room, hut.buildId, hut);
 		await s.write({ type: "Building", fields: hut as never }, null, FOREVER);
 		const f = field({ fieldId: "flur-ida", room: "graue-bucht", x: spot.x + 3, y: spot.y, owner: a.me, ownerName: "Ida", accountId, beaconId: "feuer-bucht" });
 		await s.write({ type: "Field", fields: f as never }, null, FOREVER);

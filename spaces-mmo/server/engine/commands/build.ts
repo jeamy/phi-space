@@ -19,14 +19,14 @@ import { zoneRefusal } from "./townhall.ts";
 import { satedFactor } from "./food.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type EstateFields, type FreightFields, type FireBuilderFields, type IntentFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type EstateFields, type FreightFields, type FireBuilderFields, type IntentFields, type ItemFields, type LightUseFields, type MillLoadFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, exitsHere, inventory, msg, NotUnderstood, roomOf, type CommandCtx, itemsNamed } from "../context.ts";
 import { coversOf, flameOf, isLit } from "../fire.ts";
-import { blockedIn, cellKey, isPassage, occupiedIn } from "../occupancy.ts";
+import { blockedIn, cellKey, footprint, footprintCells, footprintsIn, isPassage, occupiedIn, takeFootprint, writeFootprint } from "../occupancy.ts";
 import { placeIn, relocate } from "./default.ts";
 import { walkable, type PlanDef, type WorldDef } from "../world.ts";
 import { setting, workRestMs } from "../../settings.ts";
@@ -90,7 +90,8 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 	if (zoned) return zoned;
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
 	const blocked = await blockedIn(c.space, c.world, room.roomId, locked ? c.txn : null);
-	if (own) for (const e of await c.space.readAll({ type: "Plot", fields: { room: room.roomId, of: own } }, locked ? { txn: c.txn } : {})) blocked.delete(cellKey(e.fields as never));
+	const mine = own ? (await footprintsIn(c.space, room.roomId, locked ? c.txn : null)).find((f) => f.of === own) : undefined;
+	if (mine) for (const p of footprintCells(mine)) blocked.delete(cellKey(p));
 	// the builder is no one in the way: it steps off the site it staked out (bau); beds and fields are dug under anyone's feet
 	const people = await occupiedIn(c.space, room.roomId, c.actor.charId);
 	const things = new Set((await c.space.readAll({ type: "Item", fields: { location: room.roomId } })).map((e) => cellKey(e.fields as never)));
@@ -197,7 +198,7 @@ async function jettyToWater(space: SpaceLike, w: WorldDef, txn: string, type: "B
 		const e = await space.takeIfExists({ type, fields: { buildId: b.buildId } }, NO_WAIT, { txn });
 		if (!e) return false;
 		await freeCells(space, txn, b.room, b.buildId);
-		for (const p of cells(r)) await space.write({ type: "Plot", fields: { room: b.room, x: p.x, y: p.y, of: b.buildId } as never }, txn, FOREVER, { unique: ["room", "x", "y"] });
+		await writeFootprint(space, txn, footprint(b.room, b.buildId, r), true);
 		await space.write({ type, fields: { ...e.fields, x: r.x, y: r.y, w: r.w, h: r.h } as never }, txn, FOREVER);
 		return true;
 	}
@@ -284,8 +285,10 @@ export async function takeNear<F extends Rect>(c: CommandCtx, type: string, idKe
 		if (!e) throw new CommandError("Das ist gerade nicht greifbar; bitte noch einmal.");
 		return { f: fieldsOf<F>(e) };
 	}
-	const plots = (await c.space.readAll({ type: "Plot", fields: { room: c.actor.room } })).map((e) => fieldsOf<PlotFields>(e));
-	const held = new Set(plots.filter((p) => distTo(c.actor, { x: p.x, y: p.y, w: 1, h: 1 }) <= reach && !all.some((f) => String(f[idKey]) === p.of)).map((p) => p.of));
+	// what is held by another transaction now: its footprint is there (only a holder of the room's lock takes that), the
+	// object is not to be read
+	const prints = await footprintsIn(c.space, c.actor.room);
+	const held = new Set(prints.filter((p) => distTo(c.actor, p) <= reach && !all.some((f) => String(f[idKey]) === p.of)).map((p) => p.of));
 	for (const id of held) {
 		const e = await c.space.takeIfExists({ type, fields: { [idKey]: id } }, 5_000, { txn: c.txn });
 		if (!e) continue; // cells of something else, or it is gone meanwhile
@@ -395,10 +398,7 @@ export const bau: Command = {
 		const again = plan.water ? await waterRefusal(c, room, rect, c.txn) : await refusal(c, room, rect, !!plan.green, !!plan.green, undefined, true);
 		if (again) throw new CommandError(`Hier passt ${plan.dative?.startsWith("einem ") ? "kein" : "keine"} ${plan.name} hin: ${again}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
-		for (const p of cells(rect)) {
-			try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: p.x, y: p.y, of: buildId } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
-			catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Dort hat gerade jemand anderes abgesteckt."); throw e; }
-		}
+		await writeFootprint(c.space, c.txn, footprint(room.roomId, buildId, rect));
 		await useLight(c, light.beaconId, light.use, plan.points, light.fresh);
 		const s: SiteFields = { buildId, plan: plan.key, name: plan.name, room: room.roomId, ...rect, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId,
 			needs: plan.needs.map((n) => ({ proto: n.proto, name: c.world.prototypes.find((x) => x.key === n.proto)?.name ?? n.proto, count: n.count, have: 0 })), work: 0, workNeed: plan.work, human: 0, other: 0, beaconId: light.beaconId, points: plan.points, by: {},
@@ -1028,7 +1028,8 @@ export async function stopLoads(space: SpaceLike, txn: string, buildId: string, 
 	}
 	return n;
 }
-/** Takes the cells of a site or building. */
+/** Takes the footprint of an object (a site, building, ruin, bed, field, tree, scenery), in a transaction that holds
+ *  its room's lock (room-lock.ts). */
 export async function freeCells(space: SpaceLike, txn: string, room: string, of: string): Promise<void> {
-	for (const p of await space.readAll({ type: "Plot", fields: { room, of } })) await space.takeIfExists({ id: p.id }, NO_WAIT, { txn });
+	await takeFootprint(space, txn, room, of);
 }

@@ -4,7 +4,7 @@
 // no lock on its room and steps in one room run side by side. Only online characters (a live Session) block a cell;
 // the Spot of one that went offline is taken over by whoever steps there, and the world worker sweeps the rest.
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type SessionFields, type SpotFields } from "../model.ts";
+import { fieldsOf, type FootprintFields, type SessionFields, type SpotFields } from "../model.ts";
 import { peek } from "../space.ts";
 import { walkable, type WorldDef } from "./world.ts";
 import { PASSAGE } from "../../shared/rules.ts";
@@ -40,12 +40,43 @@ export async function releaseSpot(space: SpaceLike, txn: string, charId: string)
 	await space.takeIfExists({ type: "Spot", fields: { charId } }, NO_WAIT, { txn });
 }
 
-/** Cells nobody walks onto: persisted fires and the cells claimed by sites and buildings. `txn`: the claimed cells as
- *  the space holds them now, read inside a transaction that holds the room's lock (room-lock.ts; the fires stay read
- *  from the copy: a read in the transaction would keep their own changes waiting). */
+/** The Footprint entry of an object (model.ts FootprintFields). */
+export const footprint = (room: string, of: string, r: { x: number; y: number; w?: number; h?: number }): FootprintFields => ({ room, of, x: r.x, y: r.y, w: r.w ?? 1, h: r.h ?? 1 });
+/** The cells of a footprint, row by row. */
+export function footprintCells(f: { x: number; y: number; w: number; h: number }): Cell[] {
+	const out: Cell[] = [];
+	for (let y = f.y; y < f.y + f.h; y++) for (let x = f.x; x < f.x + f.w; x++) out.push({ x, y });
+	return out;
+}
+/** Writes an object's footprint, in a transaction that holds its room's lock (room-lock.ts; `unique` on room and `of`:
+ *  an object has one). `moved`: its old one was taken in this transaction (a footprint taken there still holds its
+ *  place for `unique` until the commit), so it is written without; the stack and walk checks hold one per object. */
+export async function writeFootprint(space: SpaceLike, txn: string, f: FootprintFields, moved = false): Promise<void> {
+	await space.write({ type: "Footprint", fields: f as never }, txn, FOREVER, moved ? {} : { unique: ["room", "of"] });
+}
+/** Takes an object's footprint, in a transaction that holds its room's lock; null: it has none. */
+export async function takeFootprint(space: SpaceLike, txn: string, room: string, of: string): Promise<FootprintFields | null> {
+	const e = await space.takeIfExists({ type: "Footprint", fields: { room, of } }, NO_WAIT, { txn });
+	return e ? fieldsOf<FootprintFields>(e) : null;
+}
+/** The footprints of a room. `txn`: as the space holds them now, read inside a transaction that holds the room's lock;
+ *  without, from the process's copy. */
+export async function footprintsIn(space: SpaceLike, room: string, txn: string | null = null): Promise<FootprintFields[]> {
+	return (await space.readAll({ type: "Footprint", fields: { room } }, txn ? { txn } : {})).map((e) => fieldsOf<FootprintFields>(e));
+}
+/** Every cell of a room an object stands on, with the object's ID (the first footprint keeps a cell). */
+export async function claimedIn(space: SpaceLike, room: string, txn: string | null = null): Promise<Map<string, string>> {
+	const out = new Map<string, string>();
+	for (const f of await footprintsIn(space, room, txn)) for (const c of footprintCells(f)) if (!out.has(cellKey(c))) out.set(cellKey(c), f.of);
+	return out;
+}
+
+/** Cells nobody walks onto: persisted fires and the cells objects stand on. `txn`: the footprints as the space holds
+ *  them now, read inside a transaction that holds the room's lock (room-lock.ts; the fires stay read from the copy: a
+ *  read in the transaction would keep their own changes waiting). */
 export async function blockedIn(space: SpaceLike, _w: WorldDef, room: string, txn: string | null = null): Promise<Set<string>> {
 	const out = new Set((await space.readAll({ type: "Beacon", fields: { room } })).map((e) => cellKey(e.fields as unknown as Cell)));
-	for (const e of await space.readAll({ type: "Plot", fields: { room } }, txn ? { txn } : {})) out.add(cellKey(e.fields as unknown as Cell));
+	for (const k of (await claimedIn(space, room, txn)).keys()) out.add(k);
 	return out;
 }
 

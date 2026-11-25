@@ -13,6 +13,7 @@
 //   the guards: fed, the geese keep hares and foxes from their room, a dog hares, deer and foxes, a cat the mice.
 // - Gulls (step 7) come by day to the rack of a smokehouse (its chest) for fish; a net laid on it keeps them off.
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
+import { claimedIn } from "../occupancy.ts";
 import { fieldsOf, type AnimalFields, type BedFields, type BedPlant, type BuildingFields, type FieldFields, type ItemFields } from "../../model.ts";
 import { decayNowOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
@@ -263,7 +264,7 @@ export async function wildTick(space: SpaceLike, w: WorldDef, leaseMs: number, r
 		if (rnd() >= (k.chance[Math.min(3, fog)] ?? 0) * (isNight ? k.nightFactor : (k.dayFactor ?? 1))) continue;
 		const target = pick(await targets(space, w, k, room, s), rnd);
 		if (!target) continue;
-		const covered = new Set((await space.readAll({ type: "Plot", fields: { room } })).map((e) => `${e.fields.x},${e.fields.y}`));
+		const covered = new Set((await claimedIn(space, room)).keys());
 		const at = beside(w, room, target.r, covered, rnd);
 		if (!at) continue;
 		const a: AnimalFields = { animalId: `${k.key}-${randomBytes(5).toString("hex")}`, kind: k.key, name: k.name, room, ...at, ...(k.key === "hase" ? { bedId: target.id } : { target: target.id }), eatsAtWorldMs: now + k.eatAfterWorldMs, at: now };

@@ -1,11 +1,11 @@
 // The occupancy of a room from the objects' footprints (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 3,
 // "Occupancy"): one query that gives per cell the object on it and what it does there (blocks a step, blocks building,
-// counts for the growth share), in the form of the shared grid (shared/grid.ts: index y·w + x). It replaces the single
-// Plot entries; until the switch (phase 1, step 6 of the plan) it is only compared with them (`plotOccupancy`,
-// `occupancyDiff`), cell by cell, and the migration from plots to footprints uses the same comparison (plan section 5).
-// The readers still read the plots until then: an object taken in an open transaction is not read by others, its plots
-// are, and the room lock that takes their place comes first (plan section 3, "Locks"). The Rust engine has the same
-// (rust/mmo-engine/src/footprints.rs).
+// counts for the growth share), in the form of the shared grid (shared/grid.ts: index y·w + x). The game reads the
+// objects' Footprint entries (one per object, model.ts FootprintFields; `footprintOccupancy`), which stay readable while
+// another transaction holds the object; the objects' own rectangles give the same (`occupancyOf`), and the two are
+// compared cell by cell (`occupancyDiff`) by every test stack and walk. The migration from the legacy Plot entries
+// (scripts/migrate-footprints.ts) compares the plots with the objects in the same way (`plotOccupancy`). The Rust engine
+// has the same (rust/mmo-engine/src/footprints.rs).
 
 /** A step onto the cell is refused. */
 export const MOVE = 1;
@@ -16,7 +16,7 @@ export const SHARE = 4;
 
 /** The ID an occupancy gives an entry (its object's for a footprint, `of` for a plot, the fire's), or null. */
 export function occupancyId(e: OccupancyEntry): string | null {
-	if (typeOf(e, "Plot")) return String(e.fields.of);
+	if (typeOf(e, "Plot") || typeOf(e, "Footprint")) return String(e.fields.of);
 	if (typeOf(e, "Beacon")) return String(e.fields.beaconId);
 	const kind = (Object.keys(FOOTPRINTS) as FootprintType[]).find((t) => typeOf(e, t));
 	return kind ? String(e.fields[FOOTPRINTS[kind]]) : null;
@@ -71,6 +71,19 @@ export function occupancyOf(w: number, h: number, entries: Iterable<OccupancyEnt
 	return o;
 }
 
+/** The same from the Footprint entries (`of` the object, the rectangle) and the Beacons. */
+export function footprintOccupancy(w: number, h: number, entries: Iterable<OccupancyEntry>): Occupancy {
+	const o = empty(w, h), index = new Map<string, number>();
+	for (const e of entries) {
+		const f = e.fields;
+		if (typeOf(e, "Footprint")) {
+			const x0 = num(f.x, NaN), y0 = num(f.y, NaN), fw = num(f.w, 1), fh = num(f.h, 1);
+			for (let y = y0; y < y0 + fh; y++) for (let x = x0; x < x0 + fw; x++) claim(o, index, String(f.of), x, y, MOVE | BUILD | SHARE);
+		} else if (typeOf(e, "Beacon")) claim(o, index, String(f.beaconId), num(f.x, NaN), num(f.y, NaN), MOVE | BUILD);
+	}
+	return o;
+}
+
 /** The same from the legacy cells: a room's Plot entries (`of` the object) and its Beacons. */
 export function plotOccupancy(w: number, h: number, entries: Iterable<OccupancyEntry>): Occupancy {
 	const o = empty(w, h), index = new Map<string, number>();
@@ -97,40 +110,48 @@ export function occupancyDiff(plots: Occupancy, footprints: Occupancy): Occupanc
 
 /** What differs in a room, as lines for a report (room, cell, the objects): the overlaps and cells outside of both, then
  *  the cells where they differ. Empty: the footprints give the plots' occupancy. */
-export function occupancyReport(room: string, plots: Occupancy, footprints: Occupancy, skip: (id: string) => boolean = () => false): string[] {
+export function occupancyReport(room: string, plots: Occupancy, footprints: Occupancy, skip: (id: string) => boolean = () => false, kept = "plots"): string[] {
 	const name = (id: string | null) => id ?? "nothing";
 	const any = (...ids: Array<string | null>) => ids.some((id) => id !== null && skip(id));
 	// a cell an overlap of a left-out object lies on is left out too (its flags are the two objects')
 	const passed = new Set([...plots.overlaps, ...footprints.overlaps].filter((c) => any(c.first, c.second)).map((c) => c.y * plots.w + c.x));
 	return [
-		...plots.overlaps.filter((c) => !any(c.first, c.second)).map((c) => `${room} ${c.x},${c.y}: plots of ${c.first} and ${c.second}`),
-		...plots.outside.filter((c) => !any(c.id)).map((c) => `${room} ${c.x},${c.y}: a plot of ${c.id} outside the room`),
-		...footprints.overlaps.filter((c) => !any(c.first, c.second)).map((c) => `${room} ${c.x},${c.y}: footprints of ${c.first} and ${c.second} overlap`),
-		...footprints.outside.filter((c) => !any(c.id)).map((c) => `${room} ${c.x},${c.y}: the footprint of ${c.id} reaches outside the room`),
-		...occupancyDiff(plots, footprints).filter((d) => !any(d.plots, d.footprints) && !passed.has(d.y * plots.w + d.x)).map((d) => `${room} ${d.x},${d.y}: plots say ${name(d.plots)}, footprints ${name(d.footprints)}${d.plots === d.footprints ? ` (flags ${d.plotFlags} and ${d.footprintFlags})` : ""}`),
+		...plots.overlaps.filter((c) => !any(c.first, c.second)).map((c) => `${room} ${c.x},${c.y}: ${kept} of ${c.first} and ${c.second}`),
+		...plots.outside.filter((c) => !any(c.id)).map((c) => `${room} ${c.x},${c.y}: ${kept} of ${c.id} outside the room`),
+		...footprints.overlaps.filter((c) => !any(c.first, c.second)).map((c) => `${room} ${c.x},${c.y}: objects ${c.first} and ${c.second} overlap`),
+		...footprints.outside.filter((c) => !any(c.id)).map((c) => `${room} ${c.x},${c.y}: object ${c.id} reaches outside the room`),
+		...occupancyDiff(plots, footprints).filter((d) => !any(d.plots, d.footprints) && !passed.has(d.y * plots.w + d.x)).map((d) => `${room} ${d.x},${d.y}: ${kept} say ${name(d.plots)}, objects ${name(d.footprints)}${d.plots === d.footprints ? ` (flags ${d.plotFlags} and ${d.footprintFlags})` : ""}`),
 	];
 }
 
-/** The rooms' sizes and the report over a whole store's entries (the comparison of plan section 5 and of the tests):
- *  every room by its `ground`, every room's plots against its footprints. A room without its Room entry (a test that
- *  loads no world) is compared on a grid as large as what lies in it; `rooms: "required"` reports it instead.
- *  `skip`: objects whose differences are not reported (what a test placed or took by hand, tests/stack.ts). */
-export function storeOccupancyReport(entries: readonly OccupancyEntry[], o: { rooms?: "required"; skip?: (id: string) => boolean } = {}): string[] {
+/** The rooms' sizes and the report over a whole store's entries (the check of the tests and the walks, and of the
+ *  migration, plan section 5): every room by its `ground`, every room's Footprint entries (`against: "plots"`: its
+ *  legacy plots) against its objects' footprints. A room without its Room entry (a test that loads no world) is compared
+ *  on a grid as large as what lies in it; `rooms: "required"` reports it instead. `skip`: objects whose differences are
+ *  not reported (what a test placed or took by hand, tests/stack.ts). */
+export function storeOccupancyReport(entries: readonly OccupancyEntry[], o: { rooms?: "required"; skip?: (id: string) => boolean; against?: "plots" | "footprints" } = {}): string[] {
+	const plots = o.against === "plots", kept = plots ? "Plot" : "Footprint";
 	const rooms = new Map<string, OccupancyEntry[]>(), size = new Map<string, { w: number; h: number }>();
 	for (const e of entries) {
 		if (typeOf(e, "Room")) { const g = e.fields.ground as string[] | undefined; size.set(String(e.fields.roomId), { w: g?.[0]?.length ?? 0, h: g?.length ?? 0 }); continue; }
-		if (!typeOf(e, "Plot") && !typeOf(e, "Beacon") && !(Object.keys(FOOTPRINTS) as FootprintType[]).some((t) => typeOf(e, t))) continue;
+		if (!typeOf(e, kept) && !typeOf(e, "Beacon") && !(Object.keys(FOOTPRINTS) as FootprintType[]).some((t) => typeOf(e, t))) continue;
 		const room = String(e.fields.room);
 		let list = rooms.get(room);
 		if (!list) rooms.set(room, (list = []));
 		list.push(e);
 	}
 	const out: string[] = [];
+	// an object has one Footprint entry (a move writes it without `unique`, occupancy.ts writeFootprint)
+	if (!plots) {
+		const seen = new Map<string, number>();
+		for (const e of entries) if (typeOf(e, "Footprint")) { const k = `${String(e.fields.room)} ${String(e.fields.of)}`; seen.set(k, (seen.get(k) ?? 0) + 1); }
+		for (const [k, n] of [...seen].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) if (n > 1 && !o.skip?.(k.slice(k.indexOf(" ") + 1))) out.push(`${k}: ${n} footprint entries`);
+	}
 	for (const [room, list] of [...rooms].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
 		let s = size.get(room);
 		if (!s && o.rooms === "required") { out.push(`${room}: occupied cells in a room that is not there`); continue; }
 		s ??= list.reduce((m, e) => ({ w: Math.max(m.w, num(e.fields.x, 0) + num(e.fields.w, 1)), h: Math.max(m.h, num(e.fields.y, 0) + num(e.fields.h, 1)) }), { w: 0, h: 0 });
-		out.push(...occupancyReport(room, plotOccupancy(s.w, s.h, list), occupancyOf(s.w, s.h, list), o.skip));
+		out.push(...occupancyReport(room, (plots ? plotOccupancy : footprintOccupancy)(s.w, s.h, list), occupancyOf(s.w, s.h, list), o.skip, plots ? "plots" : "footprint entries"));
 	}
 	return out;
 }

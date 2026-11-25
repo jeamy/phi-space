@@ -1,10 +1,10 @@
 // Full rooms gain land at an edge or at a safe seam before the coast. Geometry and positions commit together.
-import { holdIsland } from "../room-lock.ts";
+import { holdIsland, holdRoom } from "../room-lock.ts";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { fieldsOf, WORLD_LOCK, type ExitFields, type RoomFields, type RoomGrowthFields, type RoomGrowthStep } from "../../model.ts";
+import { fieldsOf, WORLD_LOCK, type ExitFields, type FootprintFields, type RoomFields, type RoomGrowthFields, type RoomGrowthStep } from "../../model.ts";
 import { msgOptions } from "../context.ts";
 import { PATH } from "./build.ts";
-import { isPassage } from "../occupancy.ts";
+import { footprintCells, isPassage } from "../occupancy.ts";
 import { grownPoint, insertStrip } from "../room-growth.ts";
 import { walkable, type WorldDef } from "../world.ts";
 import { timeNow } from "../source.ts";
@@ -12,7 +12,9 @@ import { components, gridOf } from "../../../shared/grid.ts";
 import { isInterior } from "./interior.ts";
 export { grownGround, grownDecor } from "../room-growth.ts";
 
-const POSITIONED = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Plot", "Zone", "Motion", "Animal", "Tree"];
+const POSITIONED = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Footprint", "Zone", "Motion", "Animal", "Tree"];
+/** The cells of the footprints among `entries` (model.ts FootprintFields). */
+const claimed = (entries: Taken[]) => entries.filter((e) => is(e, "Footprint")).flatMap((e) => footprintCells(e.fields as unknown as FootprintFields).map((c) => `${c.x},${c.y}`));
 const is = (e: Taken, type: string) => e.types.includes(type);
 type Rect = { x: number; y: number; w?: number; h?: number };
 const crosses = (r: Rect, s: RoomGrowthStep) => r[s.axis] < s.at && r[s.axis] + (s.axis === "x" ? r.w ?? 1 : r.h ?? 1) > s.at;
@@ -56,7 +58,7 @@ export function freeSide(w: WorldDef, room: RoomFields, exits: Array<{ x: number
  *  this against the two searches over the grown room it replaced. */
 export function seamCheck(w: WorldDef, room: RoomFields, entries: Taken[]): (s: RoomGrowthStep) => boolean {
 	const ground = room.ground, width = ground[0]?.length ?? 0, height = ground.length;
-	const blocked = new Set(entries.filter((e) => is(e, "Plot") || is(e, "Beacon")).map((e) => `${e.fields.x},${e.fields.y}`));
+	const blocked = new Set([...entries.filter((e) => is(e, "Beacon")).map((e) => `${e.fields.x},${e.fields.y}`), ...claimed(entries)]);
 	const grid = gridOf(width, height, (x, y) => walkable(w, ground, x, y) && !blocked.has(`${x},${y}`));
 	let start = room.spawn && walkable(w, ground, room.spawn.x, room.spawn.y) && !blocked.has(`${room.spawn.x},${room.spawn.y}`) ? room.spawn : undefined;
 	if (!start) { const first = grid.open.indexOf(1); if (first >= 0) start = { x: first % width, y: Math.floor(first / width) }; }
@@ -104,9 +106,10 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 		const txn = (await space.createTransaction(30_000)).id;
 		try {
 			if (!(await space.takeIfExists(WORLD_LOCK, NO_WAIT, { txn }))) { await space.abort(txn); break; }
-			// the island's lock after WORLD_LOCK, to keep one order (room-lock.ts); held by nobody while WORLD_LOCK is taken
-			const island = entry.fields.island;
-			if (typeof island === "string" && !(await holdIsland(space, txn, island, [], NO_WAIT))) { await space.abort(txn); break; }
+			// the island's lock after WORLD_LOCK, then the room's (room-lock.ts): a job that holds only the room's lock (a
+			// jetty moved, a sweep) and no WORLD_LOCK would otherwise write a footprint where the room is shifting
+			const island = entry.fields.island, roomId = String(entry.fields.roomId);
+			if (!(await (typeof island === "string" ? holdIsland(space, txn, island, [roomId], NO_WAIT) : holdRoom(space, txn, roomId, NO_WAIT)))) { await space.abort(txn); continue; }
 			const e = await space.takeIfExists({ id: entry.id }, NO_WAIT, { txn });
 			if (!e) { await space.abort(txn); continue; }
 			const room = fieldsOf<RoomFields>(e);
@@ -118,7 +121,7 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 			const entries = groups.flat(), exits = entries.filter((x) => is(x, "Exit") && x.fields.location === room.roomId).map(fieldsOf<ExitFields>);
 			const land = new Set<string>();
 			room.ground.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (walkable(w, room.ground, x, y) && row[x] !== PATH && !isPassage(exits, { x, y })) land.add(`${x},${y}`); });
-			const occupied = new Set(entries.filter((x) => is(x, "Plot")).map((x) => `${x.fields.x},${x.fields.y}`).filter((key) => land.has(key)));
+			const occupied = new Set(claimed(entries).filter((key) => land.has(key)));
 			if (!land.size || occupied.size < land.size * d.fullShare) { await space.abort(txn); continue; }
 			const rectangles = entries.filter((x) => x.fields.room === room.roomId).flatMap((x) => is(x, "Motion") && x.fields.zone ? [x.fields.zone as unknown as Rect] : typeof x.fields.w === "number" && typeof x.fields.h === "number" ? [x.fields as unknown as Rect] : []);
 			const safe = seamCheck(w, room, entries);
@@ -131,7 +134,7 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 			let busy = false;
 			for (const change of changes) if (!(await space.takeIfExists({ id: change.e.id }, NO_WAIT, { txn }))) { busy = true; break; }
 			if (busy) { await space.abort(txn); continue; }
-			for (const { e: old, fields } of changes) await space.write({ type: old.type, types: old.types.slice(1), fields }, txn, FOREVER, (is(old, "Plot") || is(old, "Spot")) ? { unique: ["room", "x", "y"] } : {});
+			for (const { e: old, fields } of changes) await space.write({ type: old.type, types: old.types.slice(1), fields }, txn, FOREVER, is(old, "Spot") ? { unique: ["room", "x", "y"] } : {});
 			await space.write({ type: "RoomGrowth", fields: after as never }, txn, FOREVER);
 			const g = { east: 0, south: 0, steps: [step] };
 			await space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, ground: insertStrip(room.ground, step), ...(room.decor ? { decor: insertStrip(room.decor, step, true) } : {}), ...(room.spawn ? { spawn: grownPoint(room.spawn, g) } : {}) } as never }, txn, FOREVER);

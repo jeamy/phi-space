@@ -8,7 +8,7 @@ import { loadWorld } from "../server/engine/world.ts";
 import type { CharacterFields, FireChainFields, SatedFields, WorkRestFields } from "../server/model.ts";
 import { workRestMs } from "../server/settings.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, Player, startServer } from "./stack.ts";
+import { cellsOfObject, eventually, lightFire, placeFootprint, Player, startServer } from "./stack.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
 import { buildSweep } from "../server/engine/commands/build.ts";
@@ -126,13 +126,18 @@ test("a jetty is built on the water from the shore, clear of the ship's berth, a
 		const old = { x: pier!.x - 2, y: pier!.y, w: 2, h: 1 };
 		if (land(old.x, old.y) && land(old.x + 1, old.y)) {
 			for (const e of await s.readAll({ type: "Site" })) await s.takeIfExists({ id: e.id }, 0);
-			for (const e of await s.readAll({ type: "Plot", fields: { room: c.room } })) if (e.fields.of !== "old-jetty" && wet(Number(e.fields.x), Number(e.fields.y))) await s.takeIfExists({ id: e.id }, 0);
-			for (const x of [old.x, old.x + 1]) await s.write({ type: "Plot", fields: { room: c.room, x, y: old.y, of: "old-jetty" } as never }, null, FOREVER);
+			for (const e of await s.readAll({ type: "Footprint", fields: { room: c.room } })) {
+				const f = e.fields as { of: string; x: number; y: number; w: number; h: number };
+				let onWater = false;
+				for (let y = f.y; y < f.y + f.h; y++) for (let x = f.x; x < f.x + f.w; x++) onWater ||= wet(x, y);
+				if (f.of !== "old-jetty" && onWater) await s.takeIfExists({ id: e.id }, 0);
+			}
+			await placeFootprint(s, c.room, "old-jetty", old);
 			await s.write({ type: "Building", fields: { buildId: "old-jetty", plan: "steg", name: "Steg", room: c.room, ...old, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
 			await buildSweep(s, w);
 			const moved = (await s.readAll({ type: "Building", fields: { buildId: "old-jetty" } }))[0]!.fields as unknown as { x: number; y: number; w: number; h: number };
 			for (let y = moved.y; y < moved.y + moved.h; y++) for (let x = moved.x; x < moved.x + moved.w; x++) assert.ok(wet(x, y), `moved: ${x} ${y} is water`);
-			const plots = (await s.readAll({ type: "Plot", fields: { of: "old-jetty" } })).map((e) => `${e.fields.x},${e.fields.y}`).sort();
+			const plots = await cellsOfObject(s, "old-jetty");
 			assert.equal(plots.length, 2);
 			assert.ok(plots.every((k) => { const [x, y] = k.split(",").map(Number); return wet(x!, y!); }), plots.join(" "));
 		} else assert.fail("the test wants two cells of beach before the pier");

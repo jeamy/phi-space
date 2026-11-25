@@ -105,9 +105,9 @@ pub async fn make_interior(space: &Space, txn: &str, w: &Json, b: &Json) -> Resu
 		};
 		if let Some(u) = j::opt(f, "use").filter(|u| j::truthy(u)) { j::set(&mut s, "use", u.clone()); }
 		j::set(&mut s, "desc", j::at(f, "desc").clone());
-		let sid = j::at(&s, "sceneryId").clone();
+		let print = crate::occupancy::footprint(&room_id, &crate::fire::key_text(j::at(&s, "sceneryId")), &s);
 		space.write(&tmpl("Scenery", s), Some(txn), FOREVER).await?;
-		space.write_unique(&tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone(), "of" => sid }), Some(txn), FOREVER, &["room", "x", "y"]).await?;
+		crate::occupancy::write_footprint(space, txn, print, false).await?;
 	}
 	// a greenhouse's beds: the owner's, no light taken, kept while the building stands (garden.rs goes by `of`)
 	let beds = j::a(def, "beds");
@@ -122,16 +122,7 @@ pub async fn make_interior(space: &Space, txn: &str, w: &Json, b: &Json) -> Resu
 			j::set(&mut bed, k, v);
 		}
 		space.write(&tmpl("Bed", bed), Some(txn), FOREVER).await?;
-		let (x0, y0, bw, bh) = (j::n(d, "x"), j::n(d, "y"), j::n(d, "w"), j::n(d, "h"));
-		let mut y = y0;
-		while y < y0 + bh {
-			let mut x = x0;
-			while x < x0 + bw {
-				space.write_unique(&tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => x, "y" => y, "of" => bed_id.as_str() }), Some(txn), FOREVER, &["room", "x", "y"]).await?;
-				x += 1.0;
-			}
-			y += 1.0;
-		}
+		crate::occupancy::write_footprint(space, txn, crate::occupancy::footprint(&room_id, &bed_id, d), false).await?;
 	}
 	Ok(Some(room))
 }
@@ -185,7 +176,7 @@ pub async fn drop_interior(space: &Space, txn: &str, w: &Json, room_id: &str, at
 		}
 		_ => { for it in &floor { space.take_if_exists(&obj! { "id" => j::at(it, "id").clone() }, NO_WAIT, Some(txn)).await?; } }
 	}
-	for ty in ["Scenery", "Bed", "Plot", "Spot"] {
+	for ty in ["Scenery", "Bed", "Footprint", "Spot"] {
 		for e in space.read_all(&tmpl(ty, obj! { "room" => room_id }), Some(txn)).await? { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, Some(txn)).await?; }
 	}
 	space.take_if_exists(&tmpl("Exit", obj! { "exitId" => exit_id_of(&build_id) }), NO_WAIT, Some(txn)).await?;

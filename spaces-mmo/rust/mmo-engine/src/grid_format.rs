@@ -9,9 +9,15 @@ use phi_json::{obj, Json};
 use crate::j;
 use crate::space::{Error, Result, Space};
 
-/// The format a store without a GridFormat entry has, and the one this binary runs (until the cut the same).
+/// The format this binary runs: scale 1, the occupancy in Footprint entries (phase 1, step 6). A store without a
+/// GridFormat entry that holds a world is of the legacy format (scale 1, plots) and refused; an empty one gets this
+/// format's entry from the loader's first transaction.
 pub const SUPPORTED_SCALE: f64 = 1.0;
-pub const SUPPORTED_OCCUPANCY: &str = "plots";
+pub const SUPPORTED_OCCUPANCY: &str = "footprints";
+/// `LEGACY_FORMAT`'s occupancy.
+pub const LEGACY_OCCUPANCY: &str = "plots";
+/// `FOOTPRINTS_MIGRATION`: how the migration from plots to footprints is run, named in a refusal.
+pub const FOOTPRINTS_MIGRATION: &str = "npm --prefix spaces-mmo run migrate:footprints -- --space <address>";
 
 /// `GRID_CLASSES`: every entry type a world or region space holds, with its coordinate fields.
 pub fn grid_classes() -> &'static Json {
@@ -47,7 +53,11 @@ pub fn grid_refusal(w: &Json, markers: &[Json], types: &[String]) -> Option<Stri
 		if ms != SUPPORTED_SCALE || mo != SUPPORTED_OCCUPANCY { return Some(format!("the store is in the grid format gridScale {}, occupancy {mo}; this binary runs gridScale {}, occupancy {SUPPORTED_OCCUPANCY} only (a store migrated by the grid switch needs the binaries of its cut)", phi_json::number_text(ms), phi_json::number_text(SUPPORTED_SCALE))); }
 		let (md, wd) = (j::opt(m, "derivedFrom").and_then(Json::as_f64), j::opt(w, "derivedFrom").and_then(Json::as_f64));
 		if md != wd { return Some(format!("the store's geometry is derived from scale {}, the world definition's from {}", scale_text(md), scale_text(wd))); }
+	} else if types.iter().any(|t| t == "WorldLoaded") {
+		// no marker: an empty store (the loader writes the marker with the world) or one of the legacy format
+		return Some(format!("the store is in the legacy grid format (gridScale {}, occupancy {LEGACY_OCCUPANCY}, no GridFormat entry); this binary runs occupancy {SUPPORTED_OCCUPANCY} only: migrate it first ({FOOTPRINTS_MIGRATION})", phi_json::number_text(SUPPORTED_SCALE)));
 	}
+	if types.iter().any(|t| t == "Plot") { return Some(format!("the store holds Plot entries of the legacy occupancy; this binary reads {SUPPORTED_OCCUPANCY} only: migrate it first ({FOOTPRINTS_MIGRATION})")); }
 	let typeclasses = j::at(w, "typeclasses");
 	let mut unknown: Vec<&String> = types.iter().filter(|t| class_row(t, typeclasses).is_none()).collect();
 	unknown.sort();
@@ -81,14 +91,17 @@ mod tests {
 	use phi_json::parse;
 
 	fn world() -> Json { parse(r#"{"id":"leuchtfeuer","typeclasses":{"Driftwood":"Item","Bundle":"Driftwood"}}"#).unwrap() }
-	fn marker(f: &str) -> Json { parse(&format!(r#"{{"worldId":"leuchtfeuer","gridScale":1,"occupancy":"plots","state":"complete"{f}}}"#)).unwrap() }
+	fn marker(f: &str) -> Json { parse(&format!(r#"{{"worldId":"leuchtfeuer","gridScale":1,"occupancy":"footprints","state":"complete"{f}}}"#)).unwrap() }
 
 	#[test]
-	fn legacy_starts_and_others_are_refused() {
+	fn an_empty_store_starts_and_others_are_refused() {
 		let w = world();
 		assert_eq!(grid_refusal(&w, &[], &["Character".into(), "Bundle".into()]), None);
 		assert_eq!(grid_refusal(&w, &[marker("")], &[]), None);
-		for f in [r#","gridScale":2"#, r#","occupancy":"footprints""#, r#","state":"running""#, r#","worldId":"x""#, r#","derivedFrom":1"#] {
+		// a world of before the switch (no marker), and plots beside a marker
+		assert!(grid_refusal(&w, &[], &["WorldLoaded".into()]).unwrap().contains(FOOTPRINTS_MIGRATION));
+		assert!(grid_refusal(&w, &[marker("")], &["Plot".into()]).unwrap().contains("Plot entries"));
+		for f in [r#","gridScale":2"#, r#","occupancy":"plots""#, r#","state":"running""#, r#","worldId":"x""#, r#","derivedFrom":1"#] {
 			assert!(grid_refusal(&w, &[marker(f)], &[]).is_some(), "{f}");
 		}
 		assert!(grid_refusal(&w, &[marker(""), marker("")], &[]).unwrap().contains("2 GridFormat entries"));

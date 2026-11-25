@@ -19,7 +19,7 @@ use crate::deeds::credit_deed;
 use crate::fire::{covers_of, flame_of, is_lit, key_text};
 use crate::j;
 use crate::js;
-use crate::occupancy::{blocked_in_txn, cell_key, cell_of, is_passage, occupied_in};
+use crate::occupancy::{blocked_in_txn, cell_key, cell_of, footprint, footprint_cells, footprints_in, is_passage, occupied_in, take_footprint, write_footprint};
 use crate::room_lock::{hold_room, hold_room_or_refuse, LOCK_WAIT_MS};
 use crate::pack::{fmt_load, load_at, load_of, pack_max};
 use crate::prototypes::{resolve_prototype, spawn, At};
@@ -39,7 +39,8 @@ pub struct Rect { pub x: f64, pub y: f64, pub w: f64, pub h: f64 }
 
 impl Rect {
 	pub fn of(f: &Json) -> Self { Self { x: j::n(f, "x"), y: j::n(f, "y"), w: j::n(f, "w"), h: j::n(f, "h") } }
-	fn cell(p: (f64, f64)) -> Self { Self { x: p.0, y: p.1, w: 1.0, h: 1.0 } }
+	/// The rectangle as fields (`x`, `y`, `w`, `h`), as a footprint takes it.
+	pub fn json(&self) -> Json { obj! { "x" => self.x, "y" => self.y, "w" => self.w, "h" => self.h } }
 }
 
 /// `cells`.
@@ -134,7 +135,9 @@ pub async fn refusal_locked(c: &Ctx, room: &Json, rect: Rect, green: bool, on_pe
 	if let Some(z) = zone_refusal(c, room_id, &cs, green).await? { return Ok(Some(z)); }
 	let exits = fields_of(exits_here(c, Some(room_id)).await?);
 	let mut blocked = blocked_in_txn(&c.space, room_id, at).await?;
-	if let Some(own) = own { for e in c.space.read_all(&tmpl("Plot", obj! { "room" => room_id, "of" => own.clone() }), at).await? { blocked.remove(&cell_of(fields(&e))); } }
+	if let Some(own) = own {
+		if let Some(f) = footprints_in(&c.space, room_id, at).await?.into_iter().find(|f| txt(j::at(f, "of")) == txt(own)) { for (x, y) in footprint_cells(&f) { blocked.remove(&cell_key(x, y)); } }
+	}
 	let people: HashSet<String> = occupied_in(&c.space, room_id, Some(c.char_id())).await?.into_iter().map(|(k, _)| k).collect();
 	let things: HashSet<String> = c.space.read_all(&tmpl("Item", obj! { "location" => room_id }), None).await?.iter().map(|e| cell_of(fields(e))).collect();
 	let fires: Vec<&Json> = j::a(c.w(), "beacons").iter().filter(|b| j::s(b, "room") == room_id).collect();
@@ -230,7 +233,7 @@ async fn jetty_to_water(space: &Space, w: &Json, txn: &str, ty: &str, b: &Json) 
 		if water_refusal(space, w, &room, r, Some(txn)).await?.is_some() { continue; }
 		let Some(e) = space.take_if_exists(&tmpl(ty, obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(txn)).await? else { return Ok(false) };
 		free_cells(space, txn, j::s(b, "room"), j::at(b, "buildId")).await?;
-		for p in cells(r) { space.write_unique(&tmpl("Plot", obj! { "room" => j::at(b, "room").clone(), "x" => p.0, "y" => p.1, "of" => j::at(b, "buildId").clone() }), Some(txn), FOREVER, &["room", "x", "y"]).await?; }
+		write_footprint(space, txn, footprint(j::s(b, "room"), &txt(j::at(b, "buildId")), &r.json()), true).await?;
 		let mut f = fields(&e).clone();
 		for (k, v) in [("x", r.x), ("y", r.y), ("w", r.w), ("h", r.h)] { j::set(&mut f, k, v); }
 		space.write(&tmpl(ty, f), Some(txn), FOREVER).await?;
@@ -405,11 +408,13 @@ pub async fn take_near(c: &Ctx, ty: &str, id_key: &str, reach: f64, named: &dyn 
 		let Some(e) = c.space.take(&tmpl(ty, key(j::at(f, id_key).clone())), 5_000.0, c.txn()).await? else { return refuse("Das ist gerade nicht greifbar; bitte noch einmal.") };
 		return Ok(Ok(fields(&e).clone()));
 	}
-	let plots = fields_of(c.space.read_all(&tmpl("Plot", obj! { "room" => c.room() }), None).await?);
+	// what another transaction holds now: its footprint is there (only a holder of the room's lock takes that), the
+	// object is not to be read
+	let prints = footprints_in(&c.space, c.room(), None).await?;
 	let mut held: Vec<Json> = Vec::new();
-	for p in &plots {
+	for p in &prints {
 		let of = j::at(p, "of");
-		if dist_to(me, Rect::cell(xy(p))) <= reach && !all.iter().any(|f| txt(j::at(f, id_key)) == txt(of)) && !held.contains(of) { held.push(of.clone()); }
+		if dist_to(me, Rect::of(p)) <= reach && !all.iter().any(|f| txt(j::at(f, id_key)) == txt(of)) && !held.contains(of) { held.push(of.clone()); }
 	}
 	for id in held {
 		let Some(e) = c.space.take_if_exists(&tmpl(ty, key(id)), 5_000.0, c.txn()).await? else { continue };
@@ -593,14 +598,7 @@ pub async fn bau(c: &mut Ctx, arg: &str) -> Result<()> {
 	let build_id = hex(&random_bytes(6));
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let room_id = j::s(&room, "roomId").to_owned();
-	for p in cells(rect) {
-		let e = tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => p.0, "y" => p.1, "of" => build_id.as_str() });
-		match c.space.write_unique(&e, c.txn(), FOREVER, &["room", "x", "y"]).await {
-			Err(e) if e.to_string().contains("unique entry already exists") => return refuse("Dort hat gerade jemand anderes abgesteckt."),
-			Err(e) => return Err(e),
-			Ok(_) => {}
-		}
-	}
+	write_footprint(&c.space, &c.txn, footprint(&room_id, &build_id, &rect.json()), false).await?;
 	use_light(c, &light, points).await?;
 	let needs: Vec<Json> = j::a(plan, "needs").iter().map(|n| obj! { "proto" => j::at(n, "proto").clone(), "name" => proto_name(&w, j::s(n, "proto")), "count" => j::at(n, "count").clone(), "have" => 0.0 }).collect();
 	let until = decay_now_of(&c.space, c.txn()).await? + j::n(def, "siteWorldMs");
@@ -1353,8 +1351,8 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 	for e in space.read_all(&obj! { "type" => "MillLoad" }, None).await? { if until_of(&e) <= now { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; } }
 	Ok(())
 }
-/// `freeCells`: takes the cells of a site or building.
+/// `freeCells`: takes the footprint of an object, in a transaction that holds its room's lock.
 pub async fn free_cells(space: &Space, txn: &str, room: &str, of: &Json) -> Result<()> {
-	for p in space.read_all(&tmpl("Plot", obj! { "room" => room, "of" => of.clone() }), None).await? { space.take_if_exists(&obj! { "id" => j::at(&p, "id").clone() }, NO_WAIT, Some(txn)).await?; }
+	take_footprint(space, txn, room, &txt(of)).await?;
 	Ok(())
 }

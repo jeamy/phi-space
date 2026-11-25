@@ -16,6 +16,7 @@
 // All of them answer trade offers by their price list, tell people who speak to them what they buy and sell, and the
 // traders and keepers offer people coins for what they want.
 import { randomInt } from "node:crypto";
+import { claimedIn } from "../engine/occupancy.ts";
 import { clockOf } from "../engine/clockcache.ts";
 import { counted, lotAsk, stockPrices } from "../engine/commands/trade.ts";
 import { stem } from "../engine/context.ts";
@@ -168,7 +169,7 @@ export const distTo = (p: { x: number; y: number }, r: Rect) => Math.max(Math.ma
 export async function stepBeside(n: Npc, l: Look, r: Rect, reach: number): Promise<boolean> {
 	if (distTo(l.me, r) <= reach && distTo(l.me, r) > 0) return false;
 	const ground = n.world.rooms.find((x) => x.roomId === l.me.room)?.ground ?? [];
-	const busy = new Set([...(await n.space.readAll({ type: "Character", fields: { room: l.me.room } })), ...(await n.space.readAll({ type: "Plot", fields: { room: l.me.room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
+	const busy = new Set([...(await n.space.readAll({ type: "Character", fields: { room: l.me.room } })).map((e) => `${e.fields.x},${e.fields.y}`), ...(await claimedIn(n.space, l.me.room)).keys()]);
 	for (let y = r.y - 1; y <= r.y + r.h; y++) for (let x = r.x - 1; x <= r.x + r.w; x++) {
 		if (!onRing(distTo({ x, y }, r)) || busy.has(`${x},${y}`) || !",.:".includes(ground[y]?.[x] ?? "~")) continue;
 		await n.act(`move ${x} ${y}`);

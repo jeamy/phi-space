@@ -4,12 +4,12 @@
 import { grownPoint } from "../room-growth.ts";
 import { settlementIn } from "./settlement.ts";
 import { cutText, FOREVER, NO_WAIT, type Taken } from "phi-spaces";
-import { fieldsOf, type PlotFields, type SceneryFields, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomGrowthFields, type RoomFields, type SessionFields } from "../../model.ts";
+import { fieldsOf, type SceneryFields, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomGrowthFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, pluralOf, reach, roomOf, stem, whereTo, type CommandCtx, itemsNamed } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, coversOf, feed, flameOf, fogOf } from "../fire.ts";
-import { blockedIn, cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot } from "../occupancy.ts";
+import { blockedIn, cellKey, claimedIn, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot } from "../occupancy.ts";
 import { findPath, sceneryText, walkable, wayTo, type WorldDef } from "../world.ts";
 import { handOff } from "../handover.ts";
 import { deedsOf, deedText } from "../deeds.ts";
@@ -42,9 +42,9 @@ async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: b
 	const room = o.room ?? (await roomOf(c));
 	const solid = await blockedIn(c.space, c.world, room.roomId);
 	// who stands on a bed or field dug under their feet walks off over it
-	const plots = solid.has(cellKey(to)) ? (await c.space.readAll({ type: "Plot", fields: { room: room.roomId } })).map((e) => fieldsOf<PlotFields>(e)) : [];
-	const inside = plots.find((p) => p.x === c.actor.x && p.y === c.actor.y)?.of;
-	if (solid.has(cellKey(to)) && !(inside && plots.some((p) => p.of === inside && p.x === to.x && p.y === to.y))) throw new CommandError(c.world.beacons.some((b) => b.room === room.roomId && b.x === to.x && b.y === to.y) ? "Dort brennt das Leuchtfeuer; da läuft man nicht hinein." : "Dort steht ein Bau; da geht man außen herum.");
+	const claimed = solid.has(cellKey(to)) ? await claimedIn(c.space, room.roomId) : new Map<string, string>();
+	const inside = claimed.get(cellKey(c.actor));
+	if (solid.has(cellKey(to)) && !(inside && claimed.get(cellKey(to)) === inside)) throw new CommandError(c.world.beacons.some((b) => b.room === room.roomId && b.x === to.x && b.y === to.y) ? "Dort brennt das Leuchtfeuer; da läuft man nicht hinein." : "Dort steht ein Bau; da geht man außen herum.");
 	// at a door nobody holds a cell (isPassage): one walks onto it and through whoever stands there
 	const passage = isPassage(exits, to);
 	if (o.path) {

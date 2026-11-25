@@ -24,7 +24,7 @@ async function fixture() {
 	const host = openOwnMemoryHost(), s = new PhiSpaces(host, BACKGROUND_CONTEXT), w = world();
 	await write(s, WORLD_LOCK.type, WORLD_LOCK.fields);
 	await loadIntoSpace(s, w);
-	await write(s, "Plot", { room: "r", x: 9, y: 2, of: "house" });
+	await write(s, "Footprint", { room: "r", of: "house", x: 9, y: 2, w: 1, h: 1 });
 	return { host, s, w };
 }
 
@@ -63,7 +63,7 @@ test("coastal growth moves absolute positions and reciprocal exits atomically, p
 		assert.equal(r.ground[4], ":".repeat(14), "the exit path crosses the new strip");
 		assert.deepEqual(r.map, coast().map);
 		assert.deepEqual(r.spawn, { x: 11, y: 4 }, "the spawn moves with its ground");
-		for (const type of ["Character", "Spot", "Beacon", "Building", "Site", "Scenery", "Ruin", "Field", "MillLoad", "SiteOrder", "Zone", "Bed", "Animal", "Plot"]) {
+		for (const type of ["Character", "Spot", "Beacon", "Building", "Site", "Scenery", "Ruin", "Field", "MillLoad", "SiteOrder", "Zone", "Bed", "Animal", "Footprint"]) {
 			const fields: Record<string, string> = type === "Character" ? { charId: "moved" } : {};
 			assert.equal((await get<{ x: number }>(s, type, fields)).x, 11, type);
 		}
@@ -112,7 +112,7 @@ test("growth defers while a command pins coordinates and rolls back a failed com
 		const failing = new Proxy(s, { get(target, prop) { if (prop === "commit") return async () => { throw new Error("injected commit failure"); }; const v = Reflect.get(target, prop); return typeof v === "function" ? v.bind(target) : v; } });
 		await assert.rejects(growthTick(failing, w, 60_000), /injected/);
 		assert.deepEqual((await get<RoomFields>(s, "Room", { roomId: "r" })).ground, coast().ground);
-		assert.equal((await get<{ x: number }>(s, "Plot")).x, 9);
+		assert.equal((await get<{ x: number }>(s, "Footprint")).x, 9);
 		assert.equal((await get<ExitFields>(s, "Exit", { exitId: "out" })).x, 11);
 		assert.equal(await s.count({ type: "RoomGrowth" }), 0);
 		assert.equal(await growthTick(s, w, 60_000), 1);
@@ -125,7 +125,7 @@ test("a strip never cuts a footprint or creates an unreachable island of buildin
 		await write(s, "Building", { room: "r", x: 5, y: 0, w: 7, h: 8 });
 		assert.equal(await growthTick(s, w, 60_000), 0, "all eligible eastern seams cross the building");
 		for (const e of await s.readAll({ type: "Building" })) await s.takeIfExists({ id: e.id }, 0);
-		for (let y = 0; y < 8; y++) await write(s, "Plot", { room: "r", x: 8, y, of: "wall" });
+		await write(s, "Footprint", { room: "r", of: "wall", x: 8, y: 0, w: 1, h: 8 });
 		assert.equal(await growthTick(s, w, 60_000), 1, "tries another seam when the outer strip is unreachable");
 		assert.equal((await get<RoomGrowthFields>(s, "RoomGrowth")).steps![0]!.at, 8, "inserts before the blocking wall");
 	} finally { await host.close(BACKGROUND_CONTEXT); }

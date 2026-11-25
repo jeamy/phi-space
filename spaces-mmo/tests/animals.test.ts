@@ -15,7 +15,7 @@ import { sweepTick } from "../server/engine/sweep.ts";
 import { packMax } from "../server/engine/pack.ts";
 import type { BedFields, BuildingFields, HerdFields, WorldClockFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer } from "./stack.ts";
+import { eventually, heldCells, placeFootprint, Player, startServer } from "./stack.ts";
 
 const w = await loadWorld();
 const d = w.animals!;
@@ -63,7 +63,7 @@ async function give(space: SpaceLike, charId: string, proto: string, count: numb
 const pack = async (space: SpaceLike, charId: string, proto: string) => (await space.readAll({ type: "Item", fields: { location: charId, proto } })).length;
 async function building(space: SpaceLike, f: Partial<BuildingFields> & Pick<BuildingFields, "buildId" | "plan" | "name" | "x" | "y" | "w" | "h">): Promise<BuildingFields> {
 	const b: BuildingFields = { room: "graue-bucht", owner: "o", ownerName: "O", accountId: "a", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0, ...f };
-	for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) await space.write({ type: "Plot", fields: { room: b.room, x, y, of: b.buildId } as never }, null, FOREVER);
+	await placeFootprint(space, b.room, b.buildId, b);
 	await space.write({ type: "Building", fields: b as never }, null, FOREVER);
 	return b;
 }
@@ -307,7 +307,7 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		// a hive of hers right beside her too: the hen goes into the coop, not "Hühner wohnen im Hühnerstall, nicht im Bienenstock"
 		const annaAt = (await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields as { x: number; y: number };
 		const room = w.rooms.find((r) => r.roomId === "graue-bucht")!, bertAt = (await s.readAll({ type: "Character", fields: { charId: bert.me } }))[0]!.fields as { x: number; y: number };
-		const plots = new Set((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).map((e) => `${e.fields.x},${e.fields.y}`));
+		const plots = await heldCells(s, "graue-bucht");
 		const spot = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]].map(([dx, dy]) => ({ x: annaAt.x + dx!, y: annaAt.y + dy! })).find((p) => walkable(w, room.ground, p.x, p.y) && !plots.has(`${p.x},${p.y}`) && !(p.x === bertAt.x && p.y === bertAt.y))!;
 		const hive = await building(s, { buildId: "stock-neben", plan: "bienenstock", name: "Bienenstock", x: spot.x, y: spot.y, w: 1, h: 1, owner: anna.me, ownerName: anna.name, accountId });
 		for (let i = 1; i <= 3; i++) await does(anna.p, "einstallen huhn", `(${i} ${i === 1 ? "Huhn" : "Hühner"})`);
@@ -324,7 +324,7 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		assert.match(await does(anna.p, "einsammeln 0 0", "Stall"), /Dort steht neben dir kein Stall von dir mit Tieren/);
 		for (const e of await s.readAll({ type: "Item", fields: { location: hive.buildId } })) await s.takeIfExists({ id: e.id }, 0);
 		await s.takeIfExists({ type: "Building", fields: { buildId: hive.buildId } }, 0);
-		await s.takeIfExists({ type: "Plot", fields: { room: "graue-bucht", x: spot.x, y: spot.y } }, 0);
+		await s.takeIfExists({ type: "Footprint", fields: { room: "graue-bucht", of: hive.buildId } }, 0);
 		assert.match(await does(anna.p, "stall", "Hühnerstall von"), /3 Hühner \(Platz für 6\), hungrig/);
 		assert.match(await does(anna.p, "einsammeln", "Noch kein"), /Noch kein Ei bereit; sie sind hungrig/);
 
@@ -402,7 +402,7 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		await give(s, anna.me, "treibholz", 1);
 		assert.match(await does(anna.p, "craft käse", "nur direkt"), /Käse macht man nur direkt neben einer Hütte/);
 		// right beside the figure, on a side where it lies on no other building (the stack's occupancy check)
-		const built = new Set((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).map((e) => `${e.fields.x},${e.fields.y}`));
+		const built = await heldCells(s, "graue-bucht");
 		const hut = [{ x: me.x - 2, y: me.y - 1 }, { x: me.x + 1, y: me.y - 1 }, { x: me.x - 1, y: me.y + 1 }, { x: me.x - 1, y: me.y - 2 }].find((r) => [[0, 0], [1, 0], [0, 1], [1, 1]].every(([dx, dy]) => !built.has(`${r.x + dx!},${r.y + dy!}`)))!;
 		await building(s, { buildId: "huette-1", plan: "huette", name: "Hütte", ...hut, w: 2, h: 2 });
 		await does(anna.p, "craft käse", "Käse her");

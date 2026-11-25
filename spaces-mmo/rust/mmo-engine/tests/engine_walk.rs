@@ -9,6 +9,9 @@ mod walk;
 use phi_json::{obj, Json};
 use walk::{Dice, Walk, START};
 
+/// A fixture's Footprint entry (model.ts FootprintFields), as the game writes one for an object on cells.
+fn print(room: &str, of: &str, x: f64, y: f64, w: f64, h: f64) -> Json { obj! { "type" => "Footprint", "fields" => obj! { "room" => room, "of" => of, "x" => x, "y" => y, "w" => w, "h" => h } } }
+
 #[test]
 fn loading_the_world() {
 	let mut w = Walk::new("load", 7, START);
@@ -231,15 +234,15 @@ fn building() {
 	give(&mut w, &a, "muschel", 3);
 	for (who, line) in [(&a, "verstaue muschel"), (&a, "verstaue muschel in hütte"), (&a, "verstaue muschel in 2"), (&a, "verstaue muschel in die hütte in den salzwiesen"), (&a, "verstaue muschel in die hütte in den dünen"), (&a, "verstaue muschel in die hütte am kai")] { run(&mut w, who, line); }
 	// a ruin of someone else with its estate, and a warehouse in a closed settlement
-	for x in [3.0, 4.0] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => x, "y" => 9.0, "of" => "r-1" } }); }
+	w.write(print("graue-bucht", "r-1", 3.0, 9.0, 2.0, 1.0));
 	w.write(obj! { "type" => "Ruin", "fields" => obj! { "buildId" => "r-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 3.0, "y" => 9.0, "w" => 2.0, "h" => 1.0, "owner" => "c-old", "ownerName" => "Alte", "accountId" => "a-walk1", "untilWorldMs" => 9e15 } });
 	w.write(obj! { "type" => "Estate", "fields" => obj! { "estateId" => "est-r-1", "accountId" => "a-walk1", "ownerName" => "Wanderer1", "room" => "graue-bucht", "name" => "Hütte", "untilWorldMs" => 9e15 } });
 	give(&mut w, "est-r-1", "muschel", 2);
-	for x in [19.0, 20.0, 21.0] { for y in [12.0, 13.0] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => x, "y" => y, "of" => "l-1" } }); } }
+	w.write(print("graue-bucht", "l-1", 19.0, 12.0, 3.0, 2.0));
 	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "l-1", "plan" => "lagerhaus", "name" => "Lagerhaus", "room" => "graue-bucht", "x" => 19.0, "y" => 12.0, "w" => 3.0, "h" => 2.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 3.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
 	give(&mut w, &b, "muenze", 3);
 	give(&mut w, &b, "treibholz", 6);
-	w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => 6.0, "y" => 11.0, "of" => "v-1" } });
+	w.write(print("graue-bucht", "v-1", 6.0, 11.0, 1.0, 1.0));
 	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "v-1", "plan" => "vogelscheuche", "name" => "Vogelscheuche", "room" => "graue-bucht", "x" => 6.0, "y" => 11.0, "w" => 1.0, "h" => 1.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
 	w.compare("ruin and warehouse");
 	for (who, line) in [
@@ -981,7 +984,7 @@ fn growing() {
 		let mut put = 0;
 		for (x, y) in cells {
 			if put >= want { break; }
-			if skip(x, y) || !used.insert(format!("{room} {x} {y}")) { continue; } plots += 1; put += 1; w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => room, "x" => x, "y" => y, "of" => format!("p-{plots}") } }); }
+			if skip(x, y) || !used.insert(format!("{room} {x} {y}")) { continue; } plots += 1; put += 1; w.write(print(room, &format!("p-{plots}"), x, y, 1.0, 1.0)); }
 	};
 	w.compare("setup");
 	w.tick("epoch");
@@ -1079,12 +1082,12 @@ fn moving_things() {
 	let b = w.player_as(2, "graue-bucht", (14.0, 12.0), true, false);
 	assert!(w.take(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk2" } }));
 	w.write(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk2", "name" => "Wanderer2", "guest" => false, "admin" => true, "perms" => Json::Array(vec![]), "createdAt" => START, "touchedAt" => START } });
-	for x in [15.0, 16.0] { for y in [12.0, 13.0] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => x, "y" => y, "of" => "h-w" } }); } }
+	w.write(print("graue-bucht", "h-w", 15.0, 12.0, 2.0, 2.0));
 	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-w", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 15.0, "y" => 12.0, "w" => 2.0, "h" => 2.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
-	for x in [20.0, 21.0] { for y in [12.0, 13.0] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => x, "y" => y, "of" => "bed-w" } }); } }
+	w.write(print("graue-bucht", "bed-w", 20.0, 12.0, 2.0, 2.0));
 	w.write(obj! { "type" => "Bed", "fields" => obj! { "bedId" => "bed-w", "room" => "graue-bucht", "x" => 20.0, "y" => 12.0, "w" => 2.0, "h" => 2.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 1.0, "sponsors" => Json::Array(vec![]),
 		"plants" => Json::Array(vec![obj! { "x" => 21.0, "y" => 12.0, "sort" => "strandnelke", "stage" => 1.0, "dueWorldMs" => 9e15 }]), "wateredWorldMs" => START, "weedy" => false, "dueWorldMs" => 9e15, "untilWorldMs" => 9e15, "at" => START } });
-	w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => 3.0, "y" => 14.0, "of" => "tree-w" } });
+	w.write(print("graue-bucht", "tree-w", 3.0, 14.0, 1.0, 1.0));
 	w.write(obj! { "type" => "Tree", "fields" => obj! { "treeId" => "tree-w", "sort" => "birke", "room" => "graue-bucht", "x" => 3.0, "y" => 14.0, "w" => 1.0, "h" => 1.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 1.0, "stage" => 0.0, "dueWorldMs" => 9e15, "at" => START } });
 	w.compare("setup");
 	let i = std::cell::Cell::new(0);
@@ -1903,8 +1906,8 @@ fn sweeping() {
 	for (id, at) in [("so-1", "b-5"), ("so-2", "b-gone")] { w.write(obj! { "type" => "ShopOrder", "fields" => obj! { "orderId" => id, "buildId" => at, "room" => "graue-bucht", "storeName" => "Kaufhaus", "ownerName" => "Wanderer1", "proto" => "muschel", "protoName" => "Muschel", "count" => 1.0, "reward" => 1.0 } }); }
 	w.write(building("b-2", 6.0, later.clone()));
 	w.write(building("b-3", 10.0, later.clone()));
-	// every cell of the 2×2 they stand on, as the game writes them (the walk's occupancy check, common/walk.rs)
-	for (at, of) in [((2.0, 13.0), "b-1"), ((14.0, 13.0), "site-1"), ((18.0, 13.0), "r-1")] { for (dx, dy) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => at.0 + dx, "y" => at.1 + dy, "of" => of } }); } }
+	// the 2×2 they stand on, as the game writes it (the walk's occupancy check, common/walk.rs)
+	for (at, of) in [((2.0, 13.0), "b-1"), ((14.0, 13.0), "site-1"), ((18.0, 13.0), "r-1")] { w.write(print("graue-bucht", of, at.0, at.1, 2.0, 2.0)); }
 	for e in [
 		obj! { "type" => "Site", "fields" => obj! { "buildId" => "site-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 14.0, "y" => 13.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "needs" => Json::Array(vec![]), "by" => obj! {}, "workNeed" => 0.0, "work" => 0.0, "human" => 0.0, "other" => 0.0, "untilWorldMs" => 0.0 } },
 		obj! { "type" => "Ruin", "fields" => obj! { "buildId" => "r-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 18.0, "y" => 13.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "untilWorldMs" => 0.0 } },

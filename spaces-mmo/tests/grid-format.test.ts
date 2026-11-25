@@ -8,7 +8,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FOREVER, PhiSpaces, openOwnMemoryHost } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { classRow, GRID_CLASSES, gridRefusal } from "../shared/grid-format.ts";
+import { classRow, FOOTPRINTS_MIGRATION, GRID_CLASSES, gridRefusal } from "../shared/grid-format.ts";
 import { checkGridFormat, GridFormatRefused } from "../server/engine/grid-format.ts";
 import { loadWorld } from "../server/engine/world.ts";
 
@@ -20,29 +20,41 @@ async function withSpace(f: (space: PhiSpaces) => Promise<void>): Promise<void> 
 	try { await f(space); } finally { await host.close(ctx); }
 }
 
-test("an empty and a legacy store start; nothing is written", async () => withSpace(async (space) => {
-	await checkGridFormat(space, w);
-	await space.write({ type: "Character", fields: { charId: "a", room: "graue-bucht", x: 3, y: 4 } }, null, FOREVER);
-	await space.write({ type: "Driftwood", fields: { itemId: "d", location: "graue-bucht", x: 1, y: 1 } }, null, FOREVER);
-	await space.write({ type: "Bundle", fields: { itemId: "b", location: "graue-bucht", x: 2, y: 1 } }, null, FOREVER);
-	const before = (await space.stats()).entries;
-	await checkGridFormat(space, w);
-	assert.equal((await space.stats()).entries, before);
-}));
+test("an empty store starts and nothing is written; a legacy store and one with plots are refused, named for the migration", async () => {
+	await withSpace(async (space) => {
+		await checkGridFormat(space, w);
+		await space.write({ type: "Character", fields: { charId: "a", room: "graue-bucht", x: 3, y: 4 } }, null, FOREVER);
+		await space.write({ type: "Driftwood", fields: { itemId: "d", location: "graue-bucht", x: 1, y: 1 } }, null, FOREVER);
+		await space.write({ type: "Bundle", fields: { itemId: "b", location: "graue-bucht", x: 2, y: 1 } }, null, FOREVER);
+		const before = (await space.stats()).entries;
+		await checkGridFormat(space, w);
+		assert.equal((await space.stats()).entries, before);
+	});
+	// a world loaded by a binary of before the switch: no marker, its plots
+	await withSpace(async (space) => {
+		await space.write({ type: "WorldLoaded", fields: { worldId: w.id, version: 1 } }, null, FOREVER);
+		await assert.rejects(checkGridFormat(space, w), (e: Error) => e instanceof GridFormatRefused && /legacy grid format/.test(e.message) && e.message.includes(FOOTPRINTS_MIGRATION));
+	});
+	await withSpace(async (space) => {
+		await space.write({ type: "GridFormat", fields: { worldId: w.id, gridScale: 1, occupancy: "footprints", state: "complete" } }, null, FOREVER);
+		await space.write({ type: "Plot", fields: { room: "graue-bucht", x: 1, y: 1, of: "h" } }, null, FOREVER);
+		await assert.rejects(checkGridFormat(space, w), (e: Error) => e instanceof GridFormatRefused && /Plot entries/.test(e.message));
+	});
+});
 
 test("a store of another grid format is refused, with the reason", async () => {
 	const marker = (f: object) => withSpace(async (space) => {
-		await space.write({ type: "GridFormat", fields: { worldId: w.id, gridScale: 1, occupancy: "plots", state: "complete", ...f } }, null, FOREVER);
+		await space.write({ type: "GridFormat", fields: { worldId: w.id, gridScale: 1, occupancy: "footprints", state: "complete", ...f } }, null, FOREVER);
 		await assert.rejects(checkGridFormat(space, w), GridFormatRefused);
 	});
-	await marker({ gridScale: 2, derivedFrom: 1, occupancy: "footprints" });
-	await marker({ occupancy: "footprints" });
+	await marker({ gridScale: 2, derivedFrom: 1 });
+	await marker({ occupancy: "plots" });
 	await marker({ state: "running" });
 	await marker({ worldId: "elsewhere" });
 	await marker({ derivedFrom: 1 });
 	await withSpace(async (space) => {
-		await space.write({ type: "GridFormat", fields: { worldId: w.id, gridScale: 1, occupancy: "plots", state: "complete" } }, null, FOREVER);
-		await checkGridFormat(space, w); // the legacy format written out is the legacy format
+		await space.write({ type: "GridFormat", fields: { worldId: w.id, gridScale: 1, occupancy: "footprints", state: "complete" } }, null, FOREVER);
+		await checkGridFormat(space, w); // this binary's format
 	});
 });
 

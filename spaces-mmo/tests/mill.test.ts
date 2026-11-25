@@ -13,7 +13,7 @@ import { loadWorld, walkable } from "../server/engine/world.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import type { BuildingFields, MillLoadFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer } from "./stack.ts";
+import { eventually, placeFootprint, Player, startServer } from "./stack.ts";
 
 const w = await loadWorld();
 const m = w.mill!;
@@ -39,7 +39,7 @@ const pack = async (space: SpaceLike, charId: string, proto: string) => (await s
 const loads = async (space: SpaceLike, buildId?: string) => (await space.readAll({ type: "MillLoad", ...(buildId ? { fields: { buildId } } : {}) })).map((e) => e.fields as unknown as MillLoadFields);
 async function building(space: SpaceLike, f: Partial<BuildingFields> & Pick<BuildingFields, "buildId" | "plan" | "name" | "x" | "y">): Promise<BuildingFields> {
 	const b: BuildingFields = { room: "graue-bucht", w: 2, h: 2, owner: "o", ownerName: "O", accountId: "a", beaconId: "feuer-bucht", points: 2, by: {}, untilWorldMs: FOREVER, builtAt: 0, ...f };
-	for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) await space.write({ type: "Plot", fields: { room: b.room, x, y, of: b.buildId } as never }, null, FOREVER);
+	await placeFootprint(space, b.room, b.buildId, b);
 	await space.write({ type: "Building", fields: b as never }, null, FOREVER);
 	return b;
 }

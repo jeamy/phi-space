@@ -12,6 +12,7 @@
 //   people who come still find building land.
 // - One command a round, then a rest at the pace of economy.ts (slower while no person is on the island).
 import { randomInt } from "node:crypto";
+import { claimedIn } from "../engine/occupancy.ts";
 import { PATH } from "../engine/commands/build.ts";
 import { roadLinks, roadPath } from "../engine/commands/cart.ts";
 import { epochOf } from "../engine/commands/epoch.ts";
@@ -86,7 +87,7 @@ const onPath = (w: WorldDef, r: Rect & { room: string }) => {
  *  it. Picked at random, so settlers spread over the room. */
 async function freeGround(n: Npc, room: string, w: number, h: number): Promise<{ x: number; y: number } | null> {
 	const ground = n.world.rooms.find((r) => r.roomId === room)?.ground ?? [];
-	const busy = new Set([...(await n.space.readAll({ type: "Plot", fields: { room } })), ...(await n.space.readAll({ type: "Item", fields: { location: room } })), ...(await n.space.readAll({ type: "Character", fields: { room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
+	const busy = new Set([...(await claimedIn(n.space, room)).keys(), ...[...(await n.space.readAll({ type: "Item", fields: { location: room } })), ...(await n.space.readAll({ type: "Character", fields: { room } }))].map((e) => `${e.fields.x},${e.fields.y}`)]);
 	const near = [...n.world.exits.filter((e) => e.room === room), ...n.world.beacons.filter((b) => b.room === room)];
 	const fits = (x0: number, y0: number, tile: string) => {
 		for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (ground[y]?.[x] !== tile || busy.has(`${x},${y}`) || near.some((e) => Math.max(Math.abs(e.x - x), Math.abs(e.y - y)) <= SETTLER_CLEARANCE)) return false;

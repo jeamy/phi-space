@@ -9,7 +9,9 @@ import { timeScale } from "./time.ts";
 import { ensureSchedule } from "./schedule.ts";
 import { worldSchedules } from "./worldevents.ts";
 import { DEFAULT_START_HOUR, initialClock, worldNow } from "./worldtime.ts";
-import { islandLock, roomLock, writeIslandLock, writeRoomLock } from "./room-lock.ts";
+import { holdRoom, islandLock, roomLock, writeIslandLock, writeRoomLock } from "./room-lock.ts";
+import { cellKey, claimedIn, footprint, footprintCells, writeFootprint } from "./occupancy.ts";
+import { SUPPORTED_FORMAT, type GridFormatFields } from "../../shared/grid-format.ts";
 import { actorToken, fieldsOf, WORLD_LOCK, type AccountFields, type BeaconFields, type CharacterFields, type ExitFields, type FogFields, type RoomFields, type RoomGrowthFields, type WorldClockFields, type WorldLoadedFields } from "../model.ts";
 import { grownDecor, grownGround, grownPoint } from "./room-growth.ts";
 import { readExisting, StillHeld, peek } from "../space.ts";
@@ -76,6 +78,11 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 	// off half way is done again in full by the next start)
 	const replace = await underLock(space, txnMs, async (txn) => {
 		const marker = await peek(space, { type: "WorldLoaded", fields: { worldId: w.id } }, { txn });
+		// an empty store takes this binary's grid format (shared/grid-format.ts; the start check refused any other)
+		if (!marker && !(await peek(space, { type: "GridFormat" }, { txn }))) {
+			const format: GridFormatFields = { worldId: w.id, gridScale: SUPPORTED_FORMAT.gridScale, ...(w.derivedFrom !== undefined ? { derivedFrom: w.derivedFrom } : {}), occupancy: SUPPORTED_FORMAT.occupancy, state: "complete" };
+			await space.write({ type: "GridFormat", fields: format as never }, txn, FOREVER);
+		}
 		return !!o.replace || (marker ? fieldsOf<WorldLoadedFields>(marker).version : 0) < w.version;
 	});
 	for (let i = 0; i < w.rooms.length; i += ROOMS_PER_TXN) await underLock(space, txnMs, async (txn) => {
@@ -163,15 +170,21 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			if (old) await space.take({ type: "Beacon", id: old.id }, NO_WAIT, { txn });
 			await space.write({ type: "Beacon", fields: { ...await at(txn, b.room, b), lit: old ? !!old.fields.lit : false } satisfies BeaconFields as never }, txn, FOREVER);
 		}
-		// the scenery: once, and never again what was cleared or on land someone built on meanwhile
+		// the scenery: once, and never again what was cleared or on land someone built on meanwhile. What stands on cells
+		// of its own is placed under its room's lock (room-lock.ts: a sweep of another worker may change the room), checked
+		// against the footprints as the space holds them; a lock held past LOCK_WAIT_MS leaves it to the next start
+		const held = new Map<string, boolean>();
 		for (const base of w.scenery ?? []) {
 			const s = await at(txn, base.room, base);
 			if (await space.readIfExists({ type: "Scenery", fields: { sceneryId: s.sceneryId } }, 2_000, { txn }) || await space.readIfExists({ type: "SceneryGone", fields: { sceneryId: s.sceneryId } }, 2_000, { txn })) continue;
-			const cells = Array.from({ length: s.w * s.h }, (_, i) => ({ x: s.x + (i % s.w), y: s.y + Math.floor(i / s.w) }));
-			const plots = s.through ? [] : await space.readAll({ type: "Plot", fields: { room: s.room } }, { txn });
-			if (plots.some((p) => cells.some((c) => c.x === p.fields.x && c.y === p.fields.y))) continue;
+			if (!s.through) {
+				if (!held.has(s.room)) held.set(s.room, await holdRoom(space, txn, s.room));
+				if (!held.get(s.room)) continue;
+				const claimed = await claimedIn(space, s.room, txn);
+				if (footprintCells(s).some((c) => claimed.has(cellKey(c)))) continue;
+			}
 			await space.write({ type: "Scenery", fields: { ...s, left: s.work } as never }, txn, FOREVER);
-			if (!s.through) for (const c of cells) await space.write({ type: "Plot", fields: { room: s.room, ...c, of: s.sceneryId } as never }, txn, FOREVER, { unique: ["room", "x", "y"] });
+			if (!s.through) await writeFootprint(space, txn, footprint(s.room, s.sceneryId, s));
 		}
 		for (const room of new Set(w.beacons.flatMap((b) => b.covers))) {
 			if (!(await space.readIfExists({ type: "Fog", fields: { room } }, 2_000, { txn }))) await space.write({ type: "Fog", fields: { room, level: w.fog.start } satisfies FogFields as never }, txn, FOREVER);

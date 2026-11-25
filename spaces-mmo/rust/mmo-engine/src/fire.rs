@@ -288,16 +288,17 @@ pub async fn fog_of(space: &Space, room: &str) -> Result<f64> {
 	Ok(space.peek(&tmpl("Fog", obj! { "room" => room }), None).await?.map_or(0.0, |e| j::n(fields(&e), "level")))
 }
 
-/// Free cells of `tile` in a room (no thing, exit, fire or plot on them).
+/// Free cells of `tile` in a room (no thing, exit, fire or footprint on them).
 async fn free_cells(space: &Space, w: &Json, room_id: &str, tile: &str) -> Result<Vec<(f64, f64)>> {
 	let room = j::by(j::a(w, "rooms"), "roomId", room_id).expect("a room of the world");
 	let mut taken: std::collections::HashSet<String> = std::collections::HashSet::new();
-	for (ty, key) in [("Item", "location"), ("Exit", "location"), ("Beacon", "room"), ("Plot", "room")] {
+	for (ty, key) in [("Item", "location"), ("Exit", "location"), ("Beacon", "room")] {
 		for e in space.read_all(&tmpl(ty, obj! { key => room_id }), None).await? {
 			let f = fields(&e);
 			taken.insert(format!("{},{}", key_text(j::at(f, "x")), key_text(j::at(f, "y"))));
 		}
 	}
+	taken.extend(crate::occupancy::claimed_in(space, room_id, None).await?.into_keys());
 	let ground = crate::room_growth::rows(j::at(room, "ground"));
 	let mut cells = Vec::new();
 	for (y, row) in ground.iter().enumerate() {

@@ -11,7 +11,7 @@ import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ItemFields, TreeFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, Player, startServer } from "./stack.ts";
+import { cellsOfObject, eventually, lightFire, Player, startServer } from "./stack.ts";
 
 const w = await loadWorld();
 const d = w.trees!;
@@ -87,7 +87,7 @@ test("a birch and an apple tree: planted with a spade in the light, felled with 
 		const birch = await treeAt(s, 16, 12);
 		assert.deepEqual([birch.sort, birch.stage, birch.owner], ["birke", 0, anna.me]);
 		assert.ok(birch.dueWorldMs < FOREVER, "it has a date to grow on");
-		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht", of: birch.treeId } })).length, 1, "it takes its cell");
+		assert.equal((await cellsOfObject(s, birch.treeId)).length, 1, "it takes its cell");
 		await anna.p.until((f) => f.t === "obj" && f.o.kind === "tree" && f.o.treeStage === 0 && f.o.name === "Birke", 10_000);
 		assert.match(await does(anna.p, "baum", "Birke von"), /Birke von Försterin \(16 12\): Setzling, ein junger Baum in etwa/);
 

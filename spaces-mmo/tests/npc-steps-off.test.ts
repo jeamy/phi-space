@@ -5,7 +5,7 @@ import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
-import { eventually, startServer } from "./stack.ts";
+import { eventually, placeFootprint, startServer } from "./stack.ts";
 
 test("a standing NPC takes its Spot when its role is taken up, and steps off a building put on its cell", { timeout: 120_000 }, async () => {
 	const srv = await startServer();
@@ -13,7 +13,7 @@ test("a standing NPC takes its Spot when its role is taken up, and steps off a b
 		const s = srv.stack.space;
 		const before = (await s.readAll({ type: "Character", fields: { charId: "npc-marta" } }))[0]!.fields;
 		// a rain barrel built on her cell while no process played her
-		await s.write({ type: "Plot", fields: { room: before.room, x: before.x, y: before.y, of: "tonne-x" } as never }, null, FOREVER);
+		await placeFootprint(s, String(before.room), "tonne-x", { x: Number(before.x), y: Number(before.y) });
 		await srv.stack.npcProcess({ SPACES_MMO_NPCS: "marta" });
 		const spot = await eventually(async () => (await s.readAll({ type: "Spot", fields: { charId: "npc-marta" } }))[0]?.fields, 20_000, "Marta's Spot");
 		const now = (await s.readAll({ type: "Character", fields: { charId: "npc-marta" } }))[0]!.fields;

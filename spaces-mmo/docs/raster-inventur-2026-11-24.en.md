@@ -558,17 +558,33 @@ One `RoomLock` {room} per room and one `IslandLock` {island} per island (`server
 
 | Who | Lock | When it is held |
 | --- | --- | --- |
-| `bau`, `abriss`, digging a bed (`umgraben`), staking a field (`stake`), giving up a bed or a field, planting a tree (`plantTree`), felling one (`treeHere`), clearing scenery (its last take), `versetze` | room, refused (`LOCK_HELD`) | before the decisive overlap check, which then reads the Plots inside the transaction (`refusal(..., locked)`, `blockedIn(..., txn)`) |
+| `bau`, `abriss`, digging a bed (`umgraben`), staking a field (`stake`), giving up a bed or a field, planting a tree (`plantTree`), felling one (`treeHere`), clearing scenery (its last take), `versetze` | room, refused (`LOCK_HELD`) | before the decisive overlap check, which then reads the plots (since step 6 the Footprint entries) inside the transaction (`refusal(..., locked)`, `blockedIn(..., txn)`) |
 | a jetty to the water, the sweep (a site lapses, a building on an old road, a ruin ends), the vote's demolition, a bed's or a field's tick when it lapses | room, waits `LOCK_WAIT_MS` | before the take; still held, the change waits for the next run |
 | a road's vote and plan | island and the rooms it crosses, refused | before the Route take, or after the trace (the cells are checked again inside the transaction) |
 | the road tick | island and its rooms, waits | before the take |
-| growth | island, `NO_WAIT` after WORLD_LOCK | held: this round leaves the island alone |
+| growth | island, `NO_WAIT` after WORLD_LOCK, then the grown room's lock, `NO_WAIT` (since step 6) | held: this round leaves the island, or that room, alone |
 
 Settlers (`server/npc/settlers.ts`) set `later(plan, …)` before each `bau`, `umgraben` and `straße plane` and do not read the answer, so a `LOCK_HELD` refusal is tried again after that many rounds. It is a `CommandError`, not a line the model is asked to understand.
 
 Beacons, people and items are still read from the process's copy: a transaction read of them would hold up steps and fires. Every test stack checks one lock per room and per island when it closes (`lockReport`), the engine walks on every state; `tests/room-lock.test.ts` holds a room's lock from the test and sees `bau`, `umgraben` and `abriss` refused, a step go through, and `bau` go through once the lock is free. With the refusal removed it fails, against the TypeScript world and against the Rust one (`SPACES_MMO_WORLD_CMD=rust/target/release/mmo-world`). A second test loads the world into a store with lockless rooms (an inside, a world room whose lock is gone) and finds one lock per room.
 
-Two gaps that remain:
+One gap remains: a delivery rewrites a road's parts, so a road is not visible to others during that transaction. It is the same visibility gap the objects had. Step 6 leaves roads as they are (their cells are a path, not a rectangle, and no overlap check reads them as an obstacle); a later step closes it in the same way, with an entry for the road cells that only a holder of the island lock writes. The inventory of step 5 also named a builder's `destroy` of a Building as leaving its plots behind: `destroy` never takes a Building (it refuses buildings, sites and ruins), so that gap was not there.
 
-- A delivery rewrites a road's parts, so a road is not visible to others during that transaction. This is the same visibility gap as for the objects; step 6 closes it in the same way (a Footprint-like entry for the road cells).
-- A builder's `destroy` of a Building leaves its plots behind. This was there before step 5; step 6 removes it together with the plots.
+### 7.5 One Footprint entry per object (step 6)
+
+Every place of 7.1 writes and takes one `Footprint` entry {room, of, x, y, w, h} (`shared/model.ts` `FootprintFields`; grid class "area") instead of one Plot per cell, in the transaction that holds the room's lock (7.4): `writeFootprint`, `takeFootprint`, `footprintsIn` and `claimedIn` in `server/engine/occupancy.ts` (`occupancy.rs` the same). `freeCells` (`build.ts`) takes it; `versetze` and `jettyToWater` take the old one and write the new one in the same transaction without `unique`, because a taken entry keeps its `unique` key until the commit. Every reader of 7.1 reads `claimedIn` (cell → object) in place of the plots: `blockedIn`, `refusal`, `takeNear` (an object whose footprint is there and which cannot be read is held), `moveTo`, the loader's scenery (under each room's lock now), `fire.ts`, `wild.ts`, growth (the share and the shift of the footprints with the room), the settlers and the economy. The stack check and the walk check compare the objects with their Footprint entries (`storeOccupancyReport`, the default `against: "footprints"`) and report a second Footprint entry for an object. A Plot written by a test or a walk fails it. The fixtures that placed bare plots as an obstacle place a footprint (`placeFootprint` in `tests/stack.ts`).
+
+The store's format (`shared/grid-format.ts`): `SUPPORTED_FORMAT` is {gridScale 1, occupancy "footprints"}. An empty store gets its `GridFormat` entry in the loader's first transaction. A store with a `WorldLoaded` entry but no `GridFormat` entry is legacy and refused at start, as is a store that holds Plot entries; both refusals name the migration.
+
+The migration, `npm --prefix spaces-mmo run migrate:footprints -- --space <address> [--check] [--drop-orphans] [--follow-objects]` (`scripts/migrate-footprints.ts`), runs with the world stopped, on each region's space, from a backup:
+
+1. `--check` writes nothing. It lists the cells where the plots and the objects differ, plots of no object, and rooms and islands without their lock.
+2. Without `--check`, a store whose plots differ from its objects is refused before anything is written. `--follow-objects` takes the objects' rectangles instead. Objects that overlap each other or reach outside their room are refused either way. `--drop-orphans` takes plots of no object.
+3. Then: the `GridFormat` entry with state "running"; the missing locks; one transaction per object (the room's lock, its Footprint entry written, its plots taken); the result checked (no plot left, every object's footprint, one lock per room and island); the entry "complete".
+4. A run that was cut off goes on where it stopped. A migrated store is left as it is. `tests/migrate-footprints.test.ts` covers this.
+
+The copies of the local test bed's region stores (2026-11-24) were run on copies in the scratchpad:
+- nord, ost and sued lacked only the locks. They migrated in 3 to 12 s each (101, 136 and 40 objects; 21, 28 and 8 locks), and the start check then let them start.
+- west is refused. The `test:play` huts and two test railway stations were written by hand without plots. One station, at graue-bucht 13,6, also overlaps the boat scenery and a bed; that overlap is left to the store's owner.
+
+Whether the stores on big and nano hold such objects is shown by a `--check` on a copy of each. new-world is not deployed, and a local store with data from before step 6 is refused until it is migrated.

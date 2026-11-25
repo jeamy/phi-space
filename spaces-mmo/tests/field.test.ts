@@ -12,7 +12,7 @@ import { worldNowOf } from "../server/engine/clock.ts";
 import { workRestMs } from "../server/settings.ts";
 import type { FieldFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, Player, startServer } from "./stack.ts";
+import { cellsOfObject, eventually, heldCells, lightFire, Player, startServer } from "./stack.ts";
 
 const w = await loadWorld();
 const d = w.fields!;
@@ -83,7 +83,7 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		}
 		assert.match(staked, /Bäuerin bricht einen Acker um \(4×4\)/);
 		const f0 = (await theField(s))!;
-		assert.equal((await s.readAll({ type: "Plot", fields: { of: f0.fieldId } })).length, 16, "one entry, sixteen cells");
+		assert.equal((await cellsOfObject(s, f0.fieldId)).length, 16, "one entry, sixteen cells");
 		assert.match(await does(boss.p, "flur anlegen", "Acker"), /Mehr als 1 Acker/);
 		await boss.p.until((f) => f.t === "obj" && f.o.kind === "field" && f.o.fieldStage === "brach" && f.o.w === 4, 10_000);
 
@@ -138,7 +138,7 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 
 		// ten hands around it, beside it and two cells away, harvest at once: eight points, every grain once
 		const room = w.rooms.find((r) => r.roomId === "graue-bucht")!;
-		const taken = new Set((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).map((e) => `${e.fields.x},${e.fields.y}`));
+		const taken = await heldCells(s, "graue-bucht");
 		const fire = w.beacons.find((b) => b.beaconId === "feuer-bucht")!;
 		const ring: Array<[number, number]> = [];
 		for (let y = f.y - 2; y < f.y + f.h + 2; y++) for (let x = f.x - 2; x < f.x + f.w + 2; x++)

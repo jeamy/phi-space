@@ -1,6 +1,7 @@
 //! The occupancy of a room from the objects' footprints (`shared/footprints.ts`; docs/3d-welt-und-raster-plan-2026-11-21.en.md
 //! section 3, "Occupancy"): per cell the object on it and what it does there, in the form of the shared grid (index
-//! y·w + x). Until the switch it is only compared with the Plot entries, cell by cell; the readers still read the plots.
+//! y·w + x). The game reads the objects' Footprint entries (`footprint_occupancy`); the objects' own rectangles give the
+//! same (`occupancy_of`), and every walk compares the two; the migration compares the legacy plots in the same way.
 use std::collections::HashMap;
 
 use phi_json::Json;
@@ -69,6 +70,17 @@ pub fn occupancy_of<'a>(w: usize, h: usize, entries: impl IntoIterator<Item = &'
 	o
 }
 
+/// `footprintOccupancy`: the same from a room's Footprint entries and Beacons.
+pub fn footprint_occupancy<'a>(w: usize, h: usize, entries: impl IntoIterator<Item = &'a Json>) -> Occupancy {
+	let mut o = Occupancy::new(w, h);
+	for e in entries {
+		let f = j::at(e, "fields");
+		if type_of(e, "Footprint") { o.rect(&id_text(j::at(f, "of")), f, MOVE | BUILD | SHARE); }
+		else if type_of(e, "Beacon") { o.claim(&id_text(j::at(f, "beaconId")), num(f, "x", f64::NAN), num(f, "y", f64::NAN), MOVE | BUILD); }
+	}
+	o
+}
+
 /// `plotOccupancy`: the same from a room's Plot entries and Beacons.
 pub fn plot_occupancy<'a>(w: usize, h: usize, entries: impl IntoIterator<Item = &'a Json>) -> Occupancy {
 	let mut o = Occupancy::new(w, h);
@@ -83,35 +95,37 @@ pub fn plot_occupancy<'a>(w: usize, h: usize, entries: impl IntoIterator<Item = 
 /// `occupancyId`: the ID an occupancy gives an entry (its object's, `of` for a plot, the fire's), if any.
 pub fn occupancy_id(e: &Json) -> Option<String> {
 	let f = j::at(e, "fields");
-	if type_of(e, "Plot") { return Some(id_text(j::at(f, "of"))); }
+	if type_of(e, "Plot") || type_of(e, "Footprint") { return Some(id_text(j::at(f, "of"))); }
 	if type_of(e, "Beacon") { return Some(id_text(j::at(f, "beaconId"))); }
 	FOOTPRINTS.iter().find(|(t, _)| type_of(e, t)).map(|(_, k)| id_text(j::at(f, k)))
 }
 
 /// `occupancyReport`: what differs in a room, as lines (the same text as the TypeScript); `skip`: objects whose
 /// differences are left out, with the cells of their overlaps.
-pub fn occupancy_report(room: &str, plots: &Occupancy, footprints: &Occupancy, skip: &dyn Fn(&str) -> bool) -> Vec<String> {
+pub fn occupancy_report(room: &str, plots: &Occupancy, footprints: &Occupancy, skip: &dyn Fn(&str) -> bool, kept: &str) -> Vec<String> {
 	let t = phi_json::number_text;
 	let any = |ids: &[Option<&str>]| ids.iter().any(|id| id.is_some_and(skip));
 	let passed: std::collections::HashSet<usize> = plots.overlaps.iter().chain(&footprints.overlaps).filter(|c| any(&[Some(&c.first), Some(&c.second)])).map(|c| c.y as usize * plots.w + c.x as usize).collect();
 	let mut out = Vec::new();
-	for c in plots.overlaps.iter().filter(|c| !any(&[Some(&c.first), Some(&c.second)])) { out.push(format!("{room} {},{}: plots of {} and {}", t(c.x), t(c.y), c.first, c.second)); }
-	for c in plots.outside.iter().filter(|c| !any(&[Some(&c.id)])) { out.push(format!("{room} {},{}: a plot of {} outside the room", t(c.x), t(c.y), c.id)); }
-	for c in footprints.overlaps.iter().filter(|c| !any(&[Some(&c.first), Some(&c.second)])) { out.push(format!("{room} {},{}: footprints of {} and {} overlap", t(c.x), t(c.y), c.first, c.second)); }
-	for c in footprints.outside.iter().filter(|c| !any(&[Some(&c.id)])) { out.push(format!("{room} {},{}: the footprint of {} reaches outside the room", t(c.x), t(c.y), c.id)); }
+	for c in plots.overlaps.iter().filter(|c| !any(&[Some(&c.first), Some(&c.second)])) { out.push(format!("{room} {},{}: {kept} of {} and {}", t(c.x), t(c.y), c.first, c.second)); }
+	for c in plots.outside.iter().filter(|c| !any(&[Some(&c.id)])) { out.push(format!("{room} {},{}: {kept} of {} outside the room", t(c.x), t(c.y), c.id)); }
+	for c in footprints.overlaps.iter().filter(|c| !any(&[Some(&c.first), Some(&c.second)])) { out.push(format!("{room} {},{}: objects {} and {} overlap", t(c.x), t(c.y), c.first, c.second)); }
+	for c in footprints.outside.iter().filter(|c| !any(&[Some(&c.id)])) { out.push(format!("{room} {},{}: object {} reaches outside the room", t(c.x), t(c.y), c.id)); }
 	for i in 0..plots.at.len() {
 		let (a, b) = (plots.id_at(i % plots.w, i / plots.w), footprints.id_at(i % plots.w, i / plots.w));
 		if (a != b || plots.flags[i] != footprints.flags[i]) && !any(&[a, b]) && !passed.contains(&i) {
 			let flags = if a == b { format!(" (flags {} and {})", plots.flags[i], footprints.flags[i]) } else { String::new() };
-			out.push(format!("{room} {},{}: plots say {}, footprints {}{flags}", i % plots.w, i / plots.w, a.unwrap_or("nothing"), b.unwrap_or("nothing")));
+			out.push(format!("{room} {},{}: {kept} say {}, objects {}{flags}", i % plots.w, i / plots.w, a.unwrap_or("nothing"), b.unwrap_or("nothing")));
 		}
 	}
 	out
 }
 
-/// `storeOccupancyReport`: every room's plots against its footprints over a whole store's entries (`rooms_required`:
-/// a room without its Room entry is reported, else compared on a grid as large as what lies in it).
-pub fn store_occupancy_report(entries: &[Json], rooms_required: bool, skip: &dyn Fn(&str) -> bool) -> Vec<String> {
+/// `storeOccupancyReport`: every room's Footprint entries (`against_plots`: its legacy plots) against its objects over a
+/// whole store's entries (`rooms_required`: a room without its Room entry is reported, else compared on a grid as large
+/// as what lies in it); an object with a second Footprint entry is reported first.
+pub fn store_occupancy_report(entries: &[Json], rooms_required: bool, skip: &dyn Fn(&str) -> bool, against_plots: bool) -> Vec<String> {
+	let kept = if against_plots { "Plot" } else { "Footprint" };
 	let mut size: HashMap<String, (usize, usize)> = HashMap::new();
 	let mut rooms: Vec<(String, Vec<&Json>)> = Vec::new();
 	for e in entries {
@@ -121,19 +135,30 @@ pub fn store_occupancy_report(entries: &[Json], rooms_required: bool, skip: &dyn
 			size.insert(id_text(j::at(f, "roomId")), (g.first().and_then(Json::as_str).map_or(0, |r| r.encode_utf16().count()), g.len()));
 			continue;
 		}
-		if !type_of(e, "Plot") && !type_of(e, "Beacon") && !FOOTPRINTS.iter().any(|(t, _)| type_of(e, t)) { continue; }
+		if !type_of(e, kept) && !type_of(e, "Beacon") && !FOOTPRINTS.iter().any(|(t, _)| type_of(e, t)) { continue; }
 		let room = id_text(j::at(f, "room"));
 		match rooms.iter_mut().find(|(r, _)| *r == room) { Some((_, l)) => l.push(e), None => rooms.push((room, vec![e])) }
 	}
 	rooms.sort_by(|a, b| a.0.cmp(&b.0));
 	let mut out = Vec::new();
+	if !against_plots {
+		let mut seen: Vec<(String, usize)> = Vec::new();
+		for e in entries.iter().filter(|e| type_of(e, "Footprint")) {
+			let f = j::at(e, "fields");
+			let k = format!("{} {}", id_text(j::at(f, "room")), id_text(j::at(f, "of")));
+			match seen.iter_mut().find(|(x, _)| *x == k) { Some(s) => s.1 += 1, None => seen.push((k, 1)) }
+		}
+		seen.sort_by(|a, b| a.0.cmp(&b.0));
+		for (k, n) in seen { if n > 1 && !skip(&k[k.find(' ').map_or(0, |i| i + 1)..]) { out.push(format!("{k}: {n} footprint entries")); } }
+	}
 	for (room, list) in &rooms {
 		let s = match size.get(room) {
 			Some(s) => *s,
 			None if rooms_required => { out.push(format!("{room}: occupied cells in a room that is not there")); continue; }
 			None => list.iter().fold((0, 0), |(w, h), e| { let f = j::at(e, "fields"); ((w as f64).max(num(f, "x", 0.0) + num(f, "w", 1.0)) as usize, (h as f64).max(num(f, "y", 0.0) + num(f, "h", 1.0)) as usize) }),
 		};
-		out.extend(occupancy_report(room, &plot_occupancy(s.0, s.1, list.iter().copied()), &occupancy_of(s.0, s.1, list.iter().copied()), skip));
+		let kept_occ = if against_plots { plot_occupancy(s.0, s.1, list.iter().copied()) } else { footprint_occupancy(s.0, s.1, list.iter().copied()) };
+		out.extend(occupancy_report(room, &kept_occ, &occupancy_of(s.0, s.1, list.iter().copied()), skip, if against_plots { "plots" } else { "footprint entries" }));
 	}
 	out
 }
@@ -153,12 +178,26 @@ mod tests {
 		let room = entry("Room", obj! { "roomId" => "r", "ground" => Json::Array(vec![Json::from("......"), Json::from("......"), Json::from("......")]) });
 		let mut all = vec![room.clone(), hut, through, fire];
 		for (x, y) in [(1, 1), (2, 1), (1, 2), (2, 2)] { all.push(entry("Plot", obj! { "room" => "r", "x" => x, "y" => y, "of" => "h" })); }
-		assert!(store_occupancy_report(&all, true, &|_| false).is_empty());
+		assert!(store_occupancy_report(&all, true, &|_| false, true).is_empty());
 		let o = occupancy_of(6, 3, all.iter());
 		assert_eq!((o.id_at(1, 1), o.flags[7], o.id_at(4, 0), o.flags[4], o.id_at(0, 0)), (Some("h"), MOVE | BUILD | SHARE, Some("f"), MOVE | BUILD, None));
 		all.pop();
 		all.push(entry("Plot", obj! { "room" => "r", "x" => 5, "y" => 2, "of" => "gone" }));
-		assert_eq!(store_occupancy_report(&all, true, &|_| false), vec!["r 2,2: plots say nothing, footprints h", "r 5,2: plots say gone, footprints nothing"]);
+		assert_eq!(store_occupancy_report(&all, true, &|_| false, true), vec!["r 2,2: plots say nothing, objects h", "r 5,2: plots say gone, objects nothing"]);
+	}
+
+	#[test]
+	fn footprint_entries_give_the_objects_occupancy_and_differences_are_named() {
+		let room = entry("Room", obj! { "roomId" => "r", "ground" => Json::Array(vec![Json::from("......"), Json::from("......"), Json::from("......")]) });
+		let hut = entry("Building", obj! { "buildId" => "h", "room" => "r", "x" => 1, "y" => 1, "w" => 2, "h" => 2 });
+		let fire = entry("Beacon", obj! { "beaconId" => "f", "room" => "r", "x" => 4, "y" => 0 });
+		let print = |of: &str, x: f64, y: f64, w: f64, h: f64| entry("Footprint", obj! { "room" => "r", "of" => of, "x" => x, "y" => y, "w" => w, "h" => h });
+		assert!(store_occupancy_report(&[room.clone(), hut.clone(), fire.clone(), print("h", 1.0, 1.0, 2.0, 2.0)], true, &|_| false, false).is_empty());
+		assert_eq!(store_occupancy_report(&[room, hut, fire, print("h", 1.0, 1.0, 2.0, 1.0), print("old", 4.0, 2.0, 1.0, 1.0), print("x", 2.0, 2.0, 1.0, 1.0)], true, &|_| false, false), vec![
+			"r 1,2: footprint entries say nothing, objects h",
+			"r 2,2: footprint entries say x, objects h",
+			"r 4,2: footprint entries say old, objects nothing",
+		]);
 	}
 
 	#[test]
@@ -170,14 +209,14 @@ mod tests {
 			entry("Field", obj! { "fieldId" => "f", "room" => "r", "x" => 3, "y" => 1, "w" => 2, "h" => 1 }),
 			entry("Ruin", obj! { "buildId" => "x", "room" => "elsewhere", "x" => 0, "y" => 0, "w" => 1, "h" => 1 }),
 		];
-		assert_eq!(store_occupancy_report(&all, true, &|_| false), vec![
+		assert_eq!(store_occupancy_report(&all, true, &|_| false, false), vec![
 			"elsewhere: occupied cells in a room that is not there",
-			"r 1,0: footprints of a and t overlap",
-			"r 4,1: the footprint of f reaches outside the room",
-			"r 0,0: plots say nothing, footprints a",
-			"r 1,0: plots say nothing, footprints a",
-			"r 3,1: plots say nothing, footprints f",
+			"r 1,0: objects a and t overlap",
+			"r 4,1: object f reaches outside the room",
+			"r 0,0: footprint entries say nothing, objects a",
+			"r 1,0: footprint entries say nothing, objects a",
+			"r 3,1: footprint entries say nothing, objects f",
 		]);
-		assert_eq!(store_occupancy_report(&all, false, &|_| false)[0], "elsewhere 0,0: plots say nothing, footprints x");
+		assert_eq!(store_occupancy_report(&all, false, &|_| false, false)[0], "elsewhere 0,0: footprint entries say nothing, objects x");
 	}
 }

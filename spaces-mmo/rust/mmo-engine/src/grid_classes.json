@@ -68,6 +68,9 @@
 	"Plot": {
 		"x,y": "point"
 	},
+	"Footprint": {
+		"x,y,w,h": "area"
+	},
 	"Route": {
 		"cells[].x,y": "path"
 	},

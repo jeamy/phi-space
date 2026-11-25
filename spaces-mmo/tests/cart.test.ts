@@ -11,7 +11,7 @@ import { loadWorld } from "../server/engine/world.ts";
 import type { CartFields, CharacterFields, ExitFields, RoadFields, RouteFields } from "../server/model.ts";
 import { roadTick } from "../server/engine/commands/road.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, Player, startServer } from "./stack.ts";
+import { cellsOfObject, eventually, heldCells, lightFire, placeFootprint, Player, startServer } from "./stack.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -64,7 +64,7 @@ test("a road is planned from plaza to plaza, the settlers of both rooms vote, it
 		assert.deepEqual(there[0], { room: to.roomId, x: x.arrive.x, y: x.arrive.y });
 		for (const leg of [here, there]) for (let i = 1; i < leg.length; i++) assert.equal(Math.abs(leg[i]!.x - leg[i - 1]!.x) + Math.abs(leg[i]!.y - leg[i - 1]!.y), 1);
 		assert.equal((await s.readAll({ type: "Road" })).length, 2, "a part for each room");
-		assert.equal(await s.count({ type: "Plot", fields: { room: c.room, x: here[0]!.x, y: here[0]!.y } }), 0, "its cells stay walkable");
+		assert.ok(!(await heldCells(s, c.room)).has(`${here[0]!.x},${here[0]!.y}`), "its cells stay walkable");
 		assert.match(await does(a, `straße plane ${to.name}`, "abgestimmt"), /schon abgestimmt/);
 		// nothing goes on the trace
 		const grass = here.find((q) => w.rooms.find((rr) => rr.roomId === c.room)!.ground[q.y]![q.x] !== ":") ?? here[0]!;
@@ -129,12 +129,12 @@ test("a vote that ends with as many no as yes drops the road; the single road ce
 		await roadTick(s, w, 60_000);
 		assert.equal(await s.count({ type: "Route" }), 0);
 		await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 5 } as never }, null, FOREVER, { unique: ["beaconId"] });
-		await s.write({ type: "Plot", fields: { room: "graue-bucht", x: 3, y: 12, of: "old-road" } as never }, null, FOREVER);
+		await placeFootprint(s, "graue-bucht", "old-road", { x: 3, y: 12 });
 		await s.write({ type: "Building", fields: { buildId: "old-road", plan: "strasse", name: "Straße", room: "graue-bucht", x: 3, y: 12, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
 		await buildSweep(s, w);
 		assert.equal(await s.count({ type: "Building", fields: { plan: "strasse" } }), 0, "gone");
 		assert.equal(await s.count({ type: "Ruin", fields: { buildId: "old-road" } }), 0, "no ruin");
-		assert.equal(await s.count({ type: "Plot", fields: { of: "old-road" } }), 0, "its cell is free");
+		assert.equal((await cellsOfObject(s, "old-road")).length, 0, "its cell is free");
 		assert.equal(Number((await s.readAll({ type: "LightUse", fields: { beaconId: "feuer-bucht" } }))[0]!.fields.used), 4, "its light is back");
 	} finally { await srv.close(); }
 });

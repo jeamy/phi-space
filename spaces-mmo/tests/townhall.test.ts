@@ -12,7 +12,7 @@ import { zoneRefusal } from "../server/engine/commands/townhall.ts";
 import { settlementTick } from "../server/engine/commands/settlement.ts";
 import type { BuildingFields, CharacterFields, MotionFields, ZoneFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, Player, startServer } from "./stack.ts";
+import { cellsOfObject, eventually, lightFire, placeFootprint, Player, startServer } from "./stack.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 
 const w = await loadWorld();
@@ -75,8 +75,9 @@ test("a town hall: a motion, one vote each with the last counting, and after a d
 		const hall = (await s.takeIfExists({ type: "Building", fields: { buildId: "hall" } }, 5_000))!;
 		await s.write({ type: "Building", fields: { ...hall.fields, x: cb!.x + 5, y: cb!.y } as never }, null, FOREVER);
 		const hutAt = { x: cb!.x + 1, y: cb!.y };
-		await s.write({ type: "Building", fields: building("shed", "huette", "Hütte", hutAt.x, hutAt.y, ca!) as never }, null, FOREVER);
-		await s.write({ type: "Plot", fields: { room, x: hutAt.x, y: hutAt.y, of: "shed" } as never }, null, FOREVER);
+		const shed = building("shed", "huette", "Hütte", hutAt.x, hutAt.y, ca!);
+		await s.write({ type: "Building", fields: shed as never }, null, FOREVER);
+		await placeFootprint(s, room, "shed", shed);
 		const inChest = (await resolvePrototype(s, "muschel"))!;
 		await spawn(s, null, w, inChest, { location: "shed", x: -1, y: -1 });
 		await does(b, "antrag abriss", "den Abriss der Hütte von Quirina");
@@ -102,7 +103,7 @@ test("a town hall: a motion, one vote each with the last counting, and after a d
 		assert.equal(await motionTick(s, w, 60_000), 1);
 		await a.until((f) => f.t === "msg" && /ist angenommen.*Die Fläche ist frei; was blieb, holt Quirina hier mit „nachlass“ ab/.test(f.m.text), 10_000, from);
 		assert.equal((await s.readAll({ type: "Building", fields: { buildId: "shed" } })).length, 0);
-		assert.equal((await s.readAll({ type: "Plot", fields: { room } })).filter((e) => e.fields.of === "shed").length, 0, "the area is free");
+		assert.equal((await cellsOfObject(s, "shed")).length, 0, "the area is free");
 		const estate = (await s.readAll({ type: "Estate", fields: { estateId: "est-shed" } }))[0]!;
 		const left = (await s.readAll({ type: "Item", fields: { location: "est-shed" } })).map((e) => String(e.fields.proto));
 		const half = planOf(w, "huette")!.needs.reduce((n, x) => n + Math.floor(x.count / 2), 0);

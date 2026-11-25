@@ -17,7 +17,7 @@ use crate::space::{fields, join_all, tmpl, Error, Result, Space, FOREVER, NO_WAI
 use crate::grid::Grid;
 use crate::world::walkable;
 
-const POSITIONED: [&str; 17] = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Plot", "Zone", "Motion", "Animal", "Tree"];
+const POSITIONED: [&str; 17] = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Footprint", "Zone", "Motion", "Animal", "Tree"];
 fn is(e: &Json, ty: &str) -> bool { j::a(e, "types").iter().any(|t| t.as_str() == Some(ty)) }
 fn key(x: f64, y: f64) -> String { format!("{},{}", phi_json::number_text(x), phi_json::number_text(y)) }
 fn key_of(p: &Json) -> String { format!("{},{}", key_text(j::at(p, "x")), key_text(j::at(p, "y"))) }
@@ -71,6 +71,11 @@ pub fn free_side(w: &Json, room: &Json, exits: &[Json]) -> Option<&'static str> 
 	candidates(w, &rows(j::at(room, "ground")), exits).first().map(|s| if j::s(s, "axis") == "x" { "east" } else { "south" })
 }
 
+/// The cells of the footprints among `entries` (model.ts FootprintFields).
+fn claimed(entries: &[Json]) -> Vec<String> {
+	entries.iter().filter(|e| is(e, "Footprint")).flat_map(|e| crate::occupancy::footprint_cells(fields(e)).into_iter().map(|(x, y)| key(x, y))).collect()
+}
+
 /// `seamCheck`: the seams of one room against its free cells (walkable land without a plot or a fire). A seam is safe
 /// when every run of the new strip that is building land (grass or path) joins the part of the room its start cell (the
 /// spawn, else the first free cell) lies in. One labelling of the room's parts serves every seam; a seam looks only at
@@ -78,7 +83,8 @@ pub fn free_side(w: &Json, room: &Json, exits: &[Json]) -> Option<&'static str> 
 /// is walkable (it takes grass or path where either has it, else the left one's land), so every way that crossed the
 /// seam still crosses it: only the new land has to join. The tests below hold it against the two searches it replaced.
 pub fn seam_check(w: &Json, room: &Json, ground: &[String], entries: &[Json]) -> impl Fn(&Json) -> bool {
-	let blocked: HashSet<String> = entries.iter().filter(|e| is(e, "Plot") || is(e, "Beacon")).map(|e| key_of(fields(e))).collect();
+	let mut blocked: HashSet<String> = entries.iter().filter(|e| is(e, "Beacon")).map(|e| key_of(fields(e))).collect();
+	blocked.extend(claimed(entries));
 	let free = |x: f64, y: f64| walkable(w, ground, x, y) && !blocked.contains(&key(x, y));
 	let (width, height) = (ground.first().map_or(0, |r| js::len16(r)), ground.len());
 	let grid = Grid::of(width, height, |x, y| free(x as f64, y as f64));
@@ -158,8 +164,14 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 		let txn = space.create_transaction(30_000.0).await?;
 		let r: Result<Option<bool>> = async {
 			if space.take_if_exists(&world_lock(), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(None); }
-			// the island's lock after WORLD_LOCK, to keep one order (room_lock.rs); held by nobody while WORLD_LOCK is taken
-			if let Some(island) = j::at(fields(&entry), "island").as_str() { if !crate::room_lock::hold_island(space, &txn, island, &[], NO_WAIT).await? { return Ok(None); } }
+			// the island's lock after WORLD_LOCK, then the room's (room_lock.rs): a job that holds only the room's lock and no
+			// WORLD_LOCK would otherwise write a footprint where the room is shifting
+			let rid = crate::fire::key_text(j::at(fields(&entry), "roomId"));
+			let got = match j::at(fields(&entry), "island").as_str() {
+				Some(island) => crate::room_lock::hold_island(space, &txn, island, &[rid.as_str()], NO_WAIT).await?,
+				None => crate::room_lock::hold_room(space, &txn, &rid, NO_WAIT).await?,
+			};
+			if !got { return Ok(Some(false)); }
 			let Some(e) = space.take_if_exists(&obj! { "id" => j::at(&entry, "id").clone() }, NO_WAIT, Some(&txn)).await? else { return Ok(Some(false)) };
 			let room = fields(&e).clone();
 			let room_id = j::s(&room, "roomId").to_owned();
@@ -179,7 +191,7 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 					if walkable(w, &ground, xf, yf) && js::slice16(row, x as isize, Some(x as isize + 1)) != PATH && !is_passage(&exits, xf, yf) { land.insert(key(xf, yf)); }
 				}
 			}
-			let occupied: HashSet<String> = entries.iter().filter(|x| is(x, "Plot")).map(|x| key_of(fields(x))).filter(|k| land.contains(k)).collect();
+			let occupied: HashSet<String> = claimed(&entries).into_iter().filter(|k| land.contains(k)).collect();
 			if land.is_empty() || (occupied.len() as f64) < land.len() as f64 * j::n(d, "fullShare") { return Ok(Some(false)); }
 			let rects: Vec<Json> = entries.iter().filter(|x| j::so(fields(x), "room") == Some(room_id.as_str())).filter_map(|x| {
 				let f = fields(x);
@@ -213,7 +225,7 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 			for (old, f) in changes {
 				let types: Vec<Json> = j::a(&old, "types").iter().skip(1).cloned().collect();
 				let entry = obj! { "type" => j::at(&old, "type").clone(), "types" => Json::Array(types), "fields" => f };
-				if is(&old, "Plot") || is(&old, "Spot") { space.write_unique(&entry, Some(&txn), FOREVER, &["room", "x", "y"]).await?; } else { space.write(&entry, Some(&txn), FOREVER).await?; }
+				if is(&old, "Spot") { space.write_unique(&entry, Some(&txn), FOREVER, &["room", "x", "y"]).await?; } else { space.write(&entry, Some(&txn), FOREVER).await?; }
 			}
 			space.write(&tmpl("RoomGrowth", after), Some(&txn), FOREVER).await?;
 			let g = obj! { "east" => 0.0, "south" => 0.0, "steps" => Json::Array(vec![step.clone()]) };
@@ -262,7 +274,7 @@ mod tests {
 
 	/// `connected`: all reachable free cells stay reachable, and the new building land connects to them.
 	pub(super) fn connected(w: &Json, room: &Json, ground: &[String], s: &Json, entries: &[Json]) -> Result<bool> {
-		let obstacles: Vec<&Json> = entries.iter().filter(|e| is(e, "Plot") || is(e, "Beacon")).map(fields).collect();
+		let obstacles: Vec<&Json> = entries.iter().filter(|e| is(e, "Footprint") || is(e, "Beacon")).map(fields).collect();
 		let blocked: HashSet<String> = obstacles.iter().map(|p| key_of(p)).collect();
 		let free = |x: f64, y: f64| walkable(w, ground, x, y) && !blocked.contains(&key(x, y));
 		let mut start = j::opt(room, "spawn").map(|p| (j::n(p, "x"), j::n(p, "y")));
@@ -323,8 +335,8 @@ mod tests {
 			let (water, plots) = (rnd() * 0.25, rnd() * 0.25);
 			let ground: Vec<String> = (0..height).map(|_| (0..width).map(|_| if rnd() < water { if rnd() < 0.7 { "~" } else { "#" } } else { tiles[(rnd() * tiles.len() as f64) as usize] }).collect()).collect();
 			let mut entries = Vec::new();
-			for y in 0..height { for x in 0..width { if rnd() < plots { let ty = if rnd() < 0.9 { "Plot" } else { "Beacon" }; entries.push(obj! { "type" => ty, "types" => Json::Array(vec![Json::from(ty)]), "fields" => obj! { "x" => x as f64, "y" => y as f64 } }); } } }
-			if rnd() < 0.3 { let x = (rnd() * width as f64) as usize; for y in 0..height { entries.push(obj! { "type" => "Plot", "types" => Json::Array(vec![Json::from("Plot")]), "fields" => obj! { "x" => x as f64, "y" => y as f64 } }); } }
+			for y in 0..height { for x in 0..width { if rnd() < plots { let ty = if rnd() < 0.9 { "Footprint" } else { "Beacon" }; entries.push(obj! { "type" => ty, "types" => Json::Array(vec![Json::from(ty)]), "fields" => obj! { "x" => x as f64, "y" => y as f64, "w" => 1.0, "h" => 1.0 } }); } } }
+			if rnd() < 0.3 { let x = (rnd() * width as f64) as usize; for y in 0..height { entries.push(obj! { "type" => "Footprint", "types" => Json::Array(vec![Json::from("Footprint")]), "fields" => obj! { "x" => x as f64, "y" => y as f64, "w" => 1.0, "h" => 1.0 } }); } }
 			let mut room = obj! { "roomId" => "r", "ground" => Json::Array(ground.iter().map(|r| Json::from(r.as_str())).collect()) };
 			if rnd() < 0.7 { j::set(&mut room, "spawn", obj! { "x" => (rnd() * width as f64).floor(), "y" => (rnd() * height as f64).floor() }); }
 			let check = seam_check(&w, &room, &ground, &entries);

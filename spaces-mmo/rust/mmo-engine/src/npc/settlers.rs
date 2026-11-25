@@ -92,8 +92,8 @@ fn on_path(w: &Json, f: &Json) -> bool {
 async fn free_ground(n: &Npc, room: &str, w: f64, h: f64) -> Result<Option<(f64, f64)>> {
 	let world = n.w();
 	let ground: Vec<String> = j::by(j::a(&world, "rooms"), "roomId", room).map(|x| j::a(x, "ground").iter().filter_map(Json::as_str).map(str::to_owned).collect()).unwrap_or_default();
-	let mut busy: Vec<String> = Vec::new();
-	for t in [tmpl("Plot", obj! { "room" => room }), tmpl("Item", obj! { "location" => room }), tmpl("Character", obj! { "room" => room })] {
+	let mut busy: Vec<String> = crate::occupancy::claimed_in(&n.space, room, None).await?.into_keys().collect();
+	for t in [tmpl("Item", obj! { "location" => room }), tmpl("Character", obj! { "room" => room })] {
 		busy.extend(n.space.read_all(&t, None).await?.iter().map(|e| format!("{},{}", nt(j::n(fields(e), "x")), nt(j::n(fields(e), "y")))));
 	}
 	let near: Vec<(f64, f64)> = j::a(&world, "exits").iter().filter(|e| j::s(e, "room") == room).chain(j::a(&world, "beacons").iter().filter(|b| j::s(b, "room") == room)).map(|e| (j::n(e, "x"), j::n(e, "y"))).collect();

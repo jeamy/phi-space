@@ -7,8 +7,9 @@ import { FOREVER } from "phi-spaces";
 import { startStack } from "./stack.ts";
 
 test("world, npc and web processes refuse a store of another grid format", { timeout: 240_000 }, async () => {
-	const stack = await startStack(); // a legacy store: the first world worker starts
+	const stack = await startStack(); // an empty store: the first world worker starts and writes this binary's format
 	try {
+		await stack.space.take({ type: "GridFormat" }, 5_000);
 		await stack.space.write({ type: "GridFormat", fields: { worldId: "leuchtfeuer", gridScale: 2, derivedFrom: 1, occupancy: "footprints", state: "complete" } }, null, FOREVER);
 		await assert.rejects(stack.worldProcess(), /grid format: the store is in the grid format gridScale 2/);
 		await assert.rejects(stack.npcProcess(), /grid format: the store is in the grid format gridScale 2/);

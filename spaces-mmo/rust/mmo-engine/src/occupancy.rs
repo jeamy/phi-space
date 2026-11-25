@@ -1,6 +1,6 @@
 //! Who stands where (`server/engine/occupancy.ts`): an online character holds its cell as a Spot, written with the
 //! space's unique check on room and cell; only online characters (a live Session) block a cell.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use phi_json::{obj, Json};
 
@@ -45,12 +45,47 @@ pub async fn release_spot(space: &Space, txn: &str, char_id: &str) -> Result<()>
 	Ok(())
 }
 
-/// `blockedIn`: the cells of persisted fires and of plots.
+/// `footprint`: the Footprint entry's fields of an object (`w`/`h` 1 when missing).
+pub fn footprint(room: &str, of: &str, r: &Json) -> Json {
+	let num = |k: &str, d: f64| j::opt(r, k).and_then(Json::as_f64).unwrap_or(d);
+	obj! { "room" => room, "of" => of, "x" => j::at(r, "x").clone(), "y" => j::at(r, "y").clone(), "w" => num("w", 1.0), "h" => num("h", 1.0) }
+}
+/// `footprintCells`: the cells of a footprint, row by row.
+pub fn footprint_cells(f: &Json) -> Vec<(f64, f64)> {
+	let (x0, y0, w, h) = (j::n(f, "x"), j::n(f, "y"), j::n(f, "w"), j::n(f, "h"));
+	let mut out = Vec::new();
+	let mut y = y0;
+	while y < y0 + h { let mut x = x0; while x < x0 + w { out.push((x, y)); x += 1.0; } y += 1.0; }
+	out
+}
+/// `writeFootprint`: in a transaction that holds the room's lock; `unique` on room and `of` unless `moved` (its old one
+/// was taken in this transaction).
+pub async fn write_footprint(space: &Space, txn: &str, f: Json, moved: bool) -> Result<()> {
+	let e = obj! { "type" => "Footprint", "fields" => f };
+	if moved { space.write(&e, Some(txn), FOREVER).await?; } else { space.write_unique(&e, Some(txn), FOREVER, &["room", "of"]).await?; }
+	Ok(())
+}
+/// `takeFootprint`.
+pub async fn take_footprint(space: &Space, txn: &str, room: &str, of: &str) -> Result<Option<Json>> {
+	Ok(space.take_if_exists(&tmpl("Footprint", obj! { "room" => room, "of" => of }), NO_WAIT, Some(txn)).await?.map(|e| fields(&e).clone()))
+}
+/// `footprintsIn`: a room's footprints' fields (`txn`: as the space holds them now).
+pub async fn footprints_in(space: &Space, room: &str, txn: Option<&str>) -> Result<Vec<Json>> {
+	Ok(space.read_all(&tmpl("Footprint", obj! { "room" => room }), txn).await?.iter().map(|e| fields(e).clone()).collect())
+}
+/// `claimedIn`: cell → the object standing there (the first footprint keeps a cell).
+pub async fn claimed_in(space: &Space, room: &str, txn: Option<&str>) -> Result<HashMap<String, String>> {
+	let mut out = HashMap::new();
+	for f in footprints_in(space, room, txn).await? { let of = key_text(j::at(&f, "of")); for (x, y) in footprint_cells(&f) { out.entry(cell_key(x, y)).or_insert_with(|| of.clone()); } }
+	Ok(out)
+}
+
+/// `blockedIn`: the cells of persisted fires and of footprints.
 pub async fn blocked_in(space: &Space, room: &str) -> Result<HashSet<String>> { blocked_in_txn(space, room, None).await }
-/// `blockedIn` with `txn`: the claimed cells read inside a transaction that holds the room's lock (the fires from the copy).
+/// `blockedIn` with `txn`: the footprints read inside a transaction that holds the room's lock (the fires from the copy).
 pub async fn blocked_in_txn(space: &Space, room: &str, txn: Option<&str>) -> Result<HashSet<String>> {
 	let mut out: HashSet<String> = space.read_all(&tmpl("Beacon", obj! { "room" => room }), None).await?.iter().map(|e| cell_of(fields(e))).collect();
-	for e in space.read_all(&tmpl("Plot", obj! { "room" => room }), txn).await? { out.insert(cell_of(fields(&e))); }
+	out.extend(claimed_in(space, room, txn).await?.into_keys());
 	Ok(out)
 }
 

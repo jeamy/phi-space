@@ -26,7 +26,7 @@ function reachable(w: WorldDef, ground: string[], blocked: Set<string>, start: {
 
 /** growth.ts `connected` before 2026-11-24. */
 function legacyConnected(w: WorldDef, room: RoomFields, s: RoomGrowthStep, entries: Taken[]): boolean {
-	const obstacles = entries.filter((e) => is(e, "Plot") || is(e, "Beacon")).map((e) => e.fields as unknown as { x: number; y: number });
+	const obstacles = entries.filter((e) => is(e, "Footprint") || is(e, "Beacon")).map((e) => e.fields as unknown as { x: number; y: number });
 	const blocked = new Set(obstacles.map((p) => `${p.x},${p.y}`));
 	const free = (p: { x: number; y: number }) => walkable(w, room.ground, p.x, p.y) && !blocked.has(`${p.x},${p.y}`);
 	let start = room.spawn;
@@ -69,11 +69,11 @@ test("the seam check gives the answer of the two searches over the grown room, o
 	for (let n = 0; n < 300; n++) {
 		const width = 3 + Math.floor(rnd() * 34), height = 3 + Math.floor(rnd() * 22), water = rnd() * 0.25;
 		const ground = Array.from({ length: height }, () => Array.from({ length: width }, () => (rnd() < water ? (rnd() < 0.7 ? "~" : "#") : tiles[Math.floor(rnd() * tiles.length)]!)).join(""));
-		// now and then a line of water or plots across the room
+		// now and then a line of water or footprints across the room
 		const entries: Taken[] = [];
 		const plots = rnd() * 0.25;
-		for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (rnd() < plots) entries.push({ id: `${x},${y}`, type: rnd() < 0.9 ? "Plot" : "Beacon", types: [rnd() < 0.9 ? "Plot" : "Beacon"], fields: { x, y } } as unknown as Taken);
-		if (rnd() < 0.3) { const x = Math.floor(rnd() * width); for (let y = 0; y < height; y++) entries.push({ id: `l${y}`, type: "Plot", types: ["Plot"], fields: { x, y } } as unknown as Taken); }
+		for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (rnd() < plots) entries.push({ id: `${x},${y}`, type: rnd() < 0.9 ? "Footprint" : "Beacon", types: [rnd() < 0.9 ? "Footprint" : "Beacon"], fields: { x, y, w: 1, h: 1 } } as unknown as Taken);
+		if (rnd() < 0.3) { const x = Math.floor(rnd() * width); for (let y = 0; y < height; y++) entries.push({ id: `l${y}`, type: "Footprint", types: ["Footprint"], fields: { x, y, w: 1, h: 1 } } as unknown as Taken); }
 		const room: RoomFields = { roomId: "r", name: "r", desc: "", ground, ...(rnd() < 0.7 ? { spawn: { x: Math.floor(rnd() * width), y: Math.floor(rnd() * height) } } : {}) };
 		const check = seamCheck(w, room, entries);
 		for (const axis of ["x", "y"] as const) {

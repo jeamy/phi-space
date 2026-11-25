@@ -9,6 +9,7 @@
 //   clock: a birch stands in three days whatever the world's rate. Fog slows it when the date is set, winter holds it.
 // - Felling and harvesting take the tree in the command's transaction: two at one tree, and its crop goes to one.
 import { holdRoomOrRefuse } from "../room-lock.ts";
+import { footprint, writeFootprint } from "../occupancy.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type TreeFields } from "../../model.ts";
 import { frozenUntil, patienceOf, worldNowOf } from "../clock.ts";
@@ -91,8 +92,7 @@ export async function plantTree(c: CommandCtx, arg: string): Promise<boolean> {
 	if (again) throw new CommandError(`Hier passt kein Baum hin: ${again}`);
 	if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: hit.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Der Samen ist gerade nicht greifbar; bitte noch einmal.");
 	const treeId = `tree-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
-	try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: rect.x, y: rect.y, of: treeId } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
-	catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Dort hat gerade jemand anderes gegraben."); throw e; }
+	await writeFootprint(c.space, c.txn, footprint(room.roomId, treeId, rect));
 	await useLight(c, light.beaconId, light.use, d.points, light.fresh);
 	const t: TreeFields = { treeId, sort: sort.key, room: room.roomId, x: rect.x, y: rect.y, w: 1, h: 1, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId, beaconId: light.beaconId, points: d.points,
 		stage: 0, dueWorldMs: nextDate(sort, 0, now, await fogOf(c.space, room.roomId), await patienceOf(c.space, c.txn)), at: now };

@@ -15,7 +15,7 @@ import { fieldsOf, type BedFields, type BuildingFields, type CharacterFields, ty
 import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, NotUnderstood, toPlayer, type CommandCtx } from "../context.ts";
 import { timeNow } from "../source.ts";
-import { blockedIn, cellKey, freeCellNear, releaseSpot } from "../occupancy.ts";
+import { blockedIn, cellKey, footprint, freeCellNear, releaseSpot, writeFootprint } from "../occupancy.ts";
 import { draftOf } from "../typeclasses.ts";
 import { walkable, type InteriorDef, type WorldDef } from "../world.ts";
 import { decayNowOf, worldNowOf } from "../clock.ts";
@@ -72,7 +72,7 @@ export async function makeInterior(space: Space, txn: string, w: WorldDef, b: Bu
 	for (const f of def.furniture) {
 		const s: SceneryFields = { sceneryId: furnishingId(b.buildId, f.kind), room: roomId, x: f.x, y: f.y, w: 1, h: 1, model: f.kind, name: f.name, fixed: true, work: 0, left: 0, yields: [], of: b.buildId, plan: b.plan, owner: b.owner, ...(f.use ? { use: f.use } : {}), desc: f.desc };
 		await space.write({ type: "Scenery", fields: s as never }, txn, FOREVER);
-		await space.write({ type: "Plot", fields: { room: roomId, x: f.x, y: f.y, of: s.sceneryId } as never }, txn, FOREVER, { unique: ["room", "x", "y"] });
+		await writeFootprint(space as SpaceLike, txn, footprint(roomId, s.sceneryId, s));
 	}
 	// a greenhouse's beds: the owner's, no light taken, kept while the building stands (garden.ts goes by `of`)
 	const beds = def.beds ?? [];
@@ -81,7 +81,7 @@ export async function makeInterior(space: Space, txn: string, w: WorldDef, b: Bu
 		const bed: BedFields = { ...(d.kind ? { kind: d.kind } : {}), of: b.buildId, bedId: bedIdOf(b.buildId, i), room: roomId, x: d.x, y: d.y, w: d.w, h: d.h, owner: b.owner, ownerName: b.ownerName, accountId: b.accountId, beaconId: "", points: 0,
 			sponsors: [], plants: [], wateredWorldMs: now, weedy: false, dueWorldMs: FOREVER, untilWorldMs: FOREVER, at: now };
 		await space.write({ type: "Bed", fields: bed as never }, txn, FOREVER);
-		for (let y = d.y; y < d.y + d.h; y++) for (let x = d.x; x < d.x + d.w; x++) await space.write({ type: "Plot", fields: { room: roomId, x, y, of: bed.bedId } as never }, txn, FOREVER, { unique: ["room", "x", "y"] });
+		await writeFootprint(space as SpaceLike, txn, footprint(roomId, bed.bedId, bed));
 	}
 	return room;
 }
@@ -119,7 +119,7 @@ export async function dropInterior(space: Space, txn: string, w: WorldDef, roomI
 	} else for (const it of floor) await space.takeIfExists({ id: it.id }, NO_WAIT, { txn });
 	for (const e of await space.readAll({ type: "Scenery", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 	for (const e of await space.readAll({ type: "Bed", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
-	for (const e of await space.readAll({ type: "Plot", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
+	for (const e of await space.readAll({ type: "Footprint", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 	for (const e of await space.readAll({ type: "Spot", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 	await space.takeIfExists({ type: "Exit", fields: { exitId: exitIdOf(buildId) } }, NO_WAIT, { txn });
 	await space.takeIfExists({ type: "Room", fields: { roomId } }, NO_WAIT, { txn });

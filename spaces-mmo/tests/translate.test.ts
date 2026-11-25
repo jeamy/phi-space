@@ -9,7 +9,7 @@ import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { gameFacts, isQuestion } from "../server/engine/facts.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer, startStack } from "./stack.ts";
+import { eventually, heldCells, placeFootprint, Player, startServer, startStack } from "./stack.ts";
 
 const w = await loadWorld();
 const view = { exits: [{ name: "ost", aliases: ["o", "osten", "east", "e", "klippenpfad"] }], listings: [{ nr: 1, itemName: "Muschel" }, { nr: 2, itemName: "Treibholz" }], carried: ["Treibholz"], people: ["Ines", "Bo"] };
@@ -170,10 +170,10 @@ test("a command that took a building and then did not understand leaves it stand
 		const a = await player(srv.url, "Truhenfrau");
 		const me = (await s.readAll({ type: "Character", fields: { charId: a.me } }))[0]!.fields as { room: string; x: number; y: number; accountId: string };
 		// beside the figure, on cells nothing stands on (a fire's or the bay's scenery's cells would overlap)
-		const held = new Set((await s.readAll({ type: "Plot", fields: { room: me.room } })).map((e) => `${e.fields.x},${e.fields.y}`));
+		const held = await heldCells(s, me.room);
 		const at = [{ x: me.x + 1, y: me.y }, { x: me.x - 2, y: me.y - 1 }, { x: me.x + 1, y: me.y - 1 }, { x: me.x - 1, y: me.y + 1 }, { x: me.x - 1, y: me.y - 2 }].find((r) => [[0, 0], [1, 0], [0, 1], [1, 1]].every(([dx, dy]) => !held.has(`${r.x + dx!},${r.y + dy!}`)))!;
 		const hut = { buildId: "huette-truhe", plan: "huette", name: "Hütte", room: me.room, x: at.x, y: at.y, w: 2, h: 2, owner: a.me, ownerName: "Truhenfrau", accountId: me.accountId, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: Number.MAX_SAFE_INTEGER, builtAt: 0 };
-		for (let y = hut.y; y < hut.y + 2; y++) for (let x = hut.x; x < hut.x + 2; x++) await s.write({ type: "Plot", fields: { room: hut.room, x, y, of: hut.buildId } as never }, null, Number.MAX_SAFE_INTEGER);
+		await placeFootprint(s, hut.room, hut.buildId, hut);
 		await s.write({ type: "Building", fields: hut as never }, null, Number.MAX_SAFE_INTEGER);
 		assert.match(await does(a.p, "entnimm kiesel aus der truhe", "einen Moment"), /versuche das zu verstehen/);
 		assert.equal((await s.readAll({ type: "Building", fields: { buildId: hut.buildId } })).length, 1, "the building is still there");

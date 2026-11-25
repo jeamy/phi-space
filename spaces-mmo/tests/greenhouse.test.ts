@@ -17,7 +17,7 @@ import { saveSettings } from "../server/settings.ts";
 import { initialClock, WORLD_DAY_MS } from "../server/engine/worldtime.ts";
 import { todosFor } from "../server/todos.ts";
 import type { BedFields, WorldClockFields } from "../server/model.ts";
-import { eventually, Player, startServer, startStack } from "./stack.ts";
+import { eventually, heldCells, Player, startServer, startStack } from "./stack.ts";
 
 const w = await loadWorld();
 const g = w.garden!;
@@ -57,7 +57,7 @@ test("inside a greenhouse: its three beds, planted by the owner and its guest, h
 		const beds = await bedsIn(s, inside);
 		assert.deepEqual(beds.map((b) => [b.bedId, b.kind ?? "", b.w * b.h]).sort(), [["bed-gh-0", "", 4], ["bed-gh-1", "zier", 4], ["bed-gh-2", "gemein", 9]]);
 		for (const b of beds) assert.deepEqual([b.of, b.owner, b.beaconId, b.points, b.untilWorldMs], ["gh", me, "", 0, FOREVER]);
-		assert.equal((await s.readAll({ type: "Plot", fields: { room: inside } })).length, 4 + 4 + 9 + 2);
+		assert.equal((await heldCells(s, inside)).size, 4 + 4 + 9 + 2);
 		assert.equal((await s.readAll({ type: "BedCommons" })).length, 0, "the community bed inside takes no fire's place");
 		assert.match(await does(host, "beet", "Gemeinschaftsbeet"), /Zierbeet von Gärtnerin/);
 
@@ -110,7 +110,7 @@ test("inside a greenhouse: its three beds, planted by the owner and its guest, h
 		await buildSweep(s, w);
 		assert.equal((await s.readAll({ type: "Room", fields: { roomId: inside } })).length, 0);
 		assert.equal((await bedsIn(s, inside)).length, 0);
-		assert.equal((await s.readAll({ type: "Plot", fields: { room: inside } })).length, 0);
+		assert.equal((await heldCells(s, inside)).size, 0);
 		assert.equal((await charOf(s, me)).room, c.room);
 		await host.leave(); await guest.leave();
 	} finally { await srv.close(); }

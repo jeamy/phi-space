@@ -287,12 +287,18 @@ export type RuinFields = { buildId: string; plan: string; name: string; room: st
 /** What lay in a chest of a building that fell into ruin: its things wait (location `estateId`) for their owner until
  *  `untilWorldMs`, then they are gone. */
 export type EstateFields = { estateId: string; accountId: string; ownerName: string; room: string; name: string; untilWorldMs: number };
-/** One cell a site or building stands on, written with the space's `unique` check on room and cell: two never share one. */
 /** A piece of the world's scenery (worlds/<id>/scenery.ts): `left` the work it still takes. */
 export type SceneryFields = { sceneryId: string; room: string; x: number; y: number; w: number; h: number; model: string; name: string; fixed?: boolean; through?: boolean; work: number; left: number; yields: Array<{ proto: string; count: number }>;
 	/** A furnishing of a building's inside (docs/innenraeume.en.md): the building, what it is for, what it says of itself. */
 	of?: string; plan?: string; owner?: string; use?: "cook" | "chest" | "sleep" | "water"; desc?: string };
+/** One cell an object stood on in the legacy occupancy format (one entry per cell, `unique` on room and cell). Only
+ *  the migration to footprints reads it (scripts/migrate-footprints.ts); a store that still holds one is refused. */
 export type PlotFields = { room: string; x: number; y: number; of: string };
+/** The cells an object stands on (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 3, "Occupancy"): one entry per
+ *  object, `of` its ID, the rectangle from `x`,`y` (top left) `w` wide and `h` high, `unique` on room and `of`. Written
+ *  and taken only by a holder of the room's lock (engine/room-lock.ts), never by what only changes the object (a
+ *  delivery, a watering, a tick), so it stays readable while another transaction holds the object. */
+export type FootprintFields = { room: string; of: string; x: number; y: number; w: number; h: number };
 /** How much of a fire's light the sites and buildings that use it take (engine/build.ts, "Lichtpunkte"). */
 export type LightUseFields = { beaconId: string; used: number };
 /** A character's work at a site makes it tired until `untilWorldMs` (the sweep removes it). */

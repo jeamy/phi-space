@@ -18,6 +18,7 @@
 // - A plant that reaches its next stage dry (no water for `thirstWorldMs`) wilts; a ripe plant wilts after its time.
 // - Harvesting takes the bed in the command's transaction: ten at one bed, and every ripe plant goes to exactly one.
 import { holdRoom, holdRoomOrRefuse } from "../room-lock.ts";
+import { footprint, writeFootprint } from "../occupancy.ts";
 import { needRank } from "./settlement.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BedFields, type BedPlant, type BuildingFields, type ItemFields, type SeedRestFields, type Variety, type VarietyFields } from "../../model.ts";
@@ -152,10 +153,7 @@ async function dig(c: CommandCtx, arg: string): Promise<void> {
 	const again = await refusal(c, room, rect, true, true, undefined, true);
 	if (again) throw new CommandError(`Hier passt kein Beet hin: ${again}`);
 	const bedId = `bed-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
-	for (const p of cells(rect)) {
-		try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: p.x, y: p.y, of: bedId } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
-		catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Dort hat gerade jemand anderes umgegraben."); throw e; }
-	}
+	await writeFootprint(c.space, c.txn, footprint(room.roomId, bedId, rect));
 	if (kind === "gemein") {
 		// one per fire: `unique` on the fire, so two digging at once do not both get one
 		try { await c.space.write({ type: "BedCommons", fields: { beaconId: light.beaconId, bedId } as never }, c.txn, FOREVER, { unique: ["beaconId"] }); }

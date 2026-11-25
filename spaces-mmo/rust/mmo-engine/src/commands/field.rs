@@ -3,7 +3,7 @@
 //! garden.rs); crop rotation tires the soil; `field_tick` (in the garden job) moves a field on when its date comes.
 use phi_json::{obj, Json};
 
-use super::build::{besides, cells, free_cells, give_back, human, light_for, no_article, plural, refusal, release_light, take_near, use_light, Rect, SITE_REACH};
+use super::build::{besides, free_cells, give_back, human, light_for, no_article, plural, refusal, release_light, take_near, use_light, Rect, SITE_REACH};
 use super::epoch::need_epoch;
 use super::food::sated_factor;
 use super::garden::grow_factor;
@@ -151,13 +151,7 @@ async fn stake(c: &mut Ctx, at: &str) -> Result<()> {
 	let field_id = format!("field-{}", hex(&random_bytes(6)));
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let room_id = j::s(&room, "roomId").to_owned();
-	for p in cells(rect) {
-		match c.space.write_unique(&tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => p.0, "y" => p.1, "of" => field_id.as_str() }), c.txn(), FOREVER, &["room", "x", "y"]).await {
-			Err(e) if e.to_string().contains("unique entry already exists") => return refuse("Dort hat gerade jemand anderes umgebrochen."),
-			Err(e) => return Err(e),
-			Ok(_) => {}
-		}
-	}
+	crate::occupancy::write_footprint(&c.space, &c.txn, crate::occupancy::footprint(&room_id, &field_id, &rect.json()), false).await?;
 	use_light(c, &light, points).await?;
 	let until = decay_now_of(&c.space, c.txn()).await? + j::n(&d, "keepWorldMs");
 	let f = obj! { "fieldId" => field_id.as_str(), "room" => room_id.as_str(), "x" => rect.x, "y" => rect.y, "w" => rect.w, "h" => rect.h, "owner" => c.char_id(), "ownerName" => j::at(&c.actor, "name").clone(), "accountId" => j::at(&account, "accountId").clone(), "beaconId" => light.beacon_id.as_str(), "points" => points,

@@ -15,7 +15,7 @@ import { readClock } from "../server/engine/clock.ts";
 import { initialClock, worldNow } from "../server/engine/worldtime.ts";
 import type { BedFields, BedPlant, BuildingFields, ItemFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
+import { eventually, heldCells, lightFire, placeFootprint, Player, startServer, startStack } from "./stack.ts";
 
 const w = await loadWorld();
 const g = w.garden!;
@@ -127,7 +127,7 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		// fenced: a hare from the fog would eat a seedling, and the counts below know only harvests (tests/wild.test.ts tests hares)
 		const fresh = (await s.take({ type: "Bed" }, 5_000))!;
 		await s.write({ type: "Bed", fields: { ...fresh.fields, fenced: true } as never }, null, FOREVER);
-		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => String(e.fields.of).startsWith("bed-")).length, 4);
+		assert.equal((await heldCells(s, "graue-bucht", (of) => of.startsWith("bed-"))).size, 4);
 		// the page sees it
 		await anna.p.until((f) => f.t === "obj" && f.o.kind === "bed" && f.o.w === 2, 10_000);
 
@@ -147,7 +147,7 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 
 		// the rain barrel beside the bed: one can at first, then empty
 		const barrel: BuildingFields = { buildId: "tonne-1", plan: "regentonne", name: "Regentonne", room: "graue-bucht", x: 15, y: 11, w: 1, h: 1, owner: anna.me, ownerName: anna.name, accountId: "x", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: worldNow(await readClock(s)) };
-		await s.write({ type: "Plot", fields: { room: "graue-bucht", x: 15, y: 11, of: "tonne-1" } as never }, null, FOREVER);
+		await placeFootprint(s, "graue-bucht", "tonne-1", { x: 15, y: 11 });
 		await s.write({ type: "Building", fields: barrel as never }, null, FOREVER);
 		assert.match(await does(anna.p, "schöpfe", "Kanne"), /Du füllst eine Kanne Wasser \(noch 0 in der Tonne\)/);
 		assert.match(await does(anna.p, "schöpfe", "leer"), /Regentonne ist leer/);
@@ -199,7 +199,7 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		const told = anna.p.frames.length;
 		assert.match(await does(boss.p, `beet aufgeben ja ${mineBed.x} ${mineBed.y}`, "gibt das"), /Betreiberin gibt das Beet auf/);
 		await anna.p.until((f) => f.t === "msg" && f.m.text.includes("Betreiberin hat dein Beet in") && f.m.text.includes("aufgelöst"), 10_000, told);
-		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => String(e.fields.of).startsWith("bed-")).length, 0);
+		assert.equal((await heldCells(s, "graue-bucht", (of) => of.startsWith("bed-"))).size, 0);
 	} finally { await srv.close(); }
 });
 
