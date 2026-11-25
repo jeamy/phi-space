@@ -191,6 +191,10 @@ Not yet there after phase 3: the transports (phase 4) and backup, restore and th
   on loopback that the service talks to like any IdP; it proves nothing, and the tests use it. The host operator's
   local socket (`server/operator.ts`, in the state directory: `create-tenant`, `tenants`, `mode`) carries no file
   operation. The launcher starts all of them (`tests/http.test.ts`, `tests/draft.test.ts`, `tests/launch.test.ts`).
+- After the first browser check (2026-11-25): `/api/session` tells the page whether the session is an enabled tenant
+  administrator (`sessionInfo`, read-only, never audited), and the page offers the administration only then; refused
+  admin calls of one actor and operation within `deniedAuditWindowMs` (one hour) share one audit row with a count, so
+  a caller cannot fill the audit by asking again and again (`tests/admin.test.ts`).
 
 | Claim (plan section 7, phase 4, and the acceptance case of phases 1 and 4) | Test |
 |---|---|

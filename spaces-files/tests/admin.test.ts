@@ -125,3 +125,21 @@ test("the admin listings: deterministic, bounded, administrators only", async ()
 		assert.equal(denied.length, 4, "each refusal is audited");
 	} finally { await s.close(); }
 });
+
+test("repeated refusals share one audit row per actor, operation and window", async () => {
+	const c = { t: Date.now() };
+	const { s, lea } = await tenant({ now: () => c.t });
+	try {
+		const denied = async () => (await raw(s).readAll({ type: T.audit })).filter((e) => e.fields.outcome === "denied");
+		for (let i = 0; i < 50; i++) await assert.rejects(s.listActors(lea), code("permissionDenied"));
+		await assert.rejects(s.listGroups(lea), code("permissionDenied"));
+		let rows = await denied();
+		assert.deepEqual(rows.map((r) => [r.fields.operation, r.fields.count]).sort(), [["listActors", 50], ["listGroups", 1]]);
+		c.t += 3600_000 + 1; // the next window starts a new row (a fresh session: the old one went idle)
+		const lea2 = (await s.login("acme", "user", { issuer: "i", subject: "lea" })).handle;
+		await assert.rejects(s.listActors(lea2), code("permissionDenied"));
+		rows = await denied();
+		assert.equal(rows.filter((r) => r.fields.operation === "listActors").length, 2);
+		assert.equal((await s.sessionInfo(lea2)).admin, false);
+	} finally { await s.close(); }
+});

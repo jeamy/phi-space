@@ -449,6 +449,13 @@ export class FilesService {
 	 * Signs `count` operation IDs for the session's actor (section 5, `issueOperationIds`): a valid session suffices, and
 	 * the call writes nothing but the time floor. A count outside 1..maxOperationIdsPerCall is `invalidInput`.
 	 */
+	/** What the browser shows for a session: its tenant, actor and whether it is an enabled tenant administrator.
+	 *  Reads only and audits nothing, so a page may ask on every load. Offered in maintenance mode like
+	 *  `issueOperationIds`. */
+	sessionInfo(handle: unknown): Promise<{ tenantId: string; actor: { kind: schema.ActorKind; id: string }; admin: boolean; expiresAt: number }> {
+		return this.#session("issue", handle, async (s, space) => ({ tenantId: s.tenantId, actor: { kind: s.actorKind, id: s.actorId }, admin: await this.#isAdmin(s, space), expiresAt: s.expiresAt }));
+	}
+
 	issueOperationIds(handle: unknown, count: unknown): Promise<string[]> {
 		return this.#session("issue", handle, async (s) => issueOperationIds(this.state, s, count, this.limits));
 	}
@@ -925,12 +932,32 @@ export class FilesService {
 	 * An admin operation needs an enabled user with `tenant#admin`. A refusal after authentication writes its audit row
 	 * in a transaction of its own, with no receipt and no other change (section 3), then answers `permissionDenied`.
 	 */
+	#isAdmin(s: Session, space: PhiSpaces): Promise<boolean> {
+		return s.actorKind === "user" ? this.#has(space, schema.relation("tenant", s.tenantId, "admin", "user", s.actorId)) : Promise.resolve(false);
+	}
+
 	async #requireAdmin(s: Session, space: PhiSpaces, operation: string, id: VerifiedOpId | null): Promise<void> {
-		if (s.actorKind === "user" && (await this.#has(space, schema.relation("tenant", s.tenantId, "admin", "user", s.actorId)))) return;
-		await this.#admitRows(s, space, { id: null, operation, targets: [], rows: [] });
-		const seq = (await this.#lastSeq(s.tenantId, space)) + 1;
-		await this.#writeAll(s.tenantId, space, [schema.audit(seq, this.state.now(), { kind: s.actorKind, id: s.actorId }, operation, [], id?.operationId ?? "", "denied")]);
-		this.#seq.set(s.tenantId, seq);
+		if (await this.#isAdmin(s, space)) return;
+		// refusals of one actor and operation within the window share one row: its count and last time grow, the
+		// audit does not (a caller asking again and again cannot fill it)
+		const now = this.state.now();
+		const recent = (await space.readAll({ type: schema.T.audit, fields: { outcome: "denied", actorKind: s.actorKind, actorId: s.actorId, operation } }))
+			.filter((r) => (r.fields.time as number) >= now - this.limits.deniedAuditWindowMs)
+			.sort((a, b) => (b.fields.seq as number) - (a.fields.seq as number))[0];
+		if (recent) {
+			const fields = { ...recent.fields, count: ((recent.fields.count as number | undefined) ?? 1) + 1, lastTime: now };
+			assertRowFits(fields, DEFAULT_LIMITS);
+			await space.batch([
+				{ op: "take", template: { type: schema.T.audit, fields: { seq: recent.fields.seq as number } } },
+				{ op: "write", entry: { type: schema.T.audit, fields }, lease: FOREVER },
+			]);
+		} else {
+			await this.#admitRows(s, space, { id: null, operation, targets: [], rows: [] });
+			const seq = (await this.#lastSeq(s.tenantId, space)) + 1;
+			const row = schema.audit(seq, now, { kind: s.actorKind, id: s.actorId }, operation, [], id?.operationId ?? "", "denied");
+			await this.#writeAll(s.tenantId, space, [{ ...row, fields: { ...row.fields, count: 1, lastTime: now } }]);
+			this.#seq.set(s.tenantId, seq);
+		}
 		throw new schema.PermissionDenied(`${operation} needs tenant#admin`);
 	}
 

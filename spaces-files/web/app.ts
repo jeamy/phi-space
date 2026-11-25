@@ -63,7 +63,10 @@ function showSignIn() { $("app").hidden = true; $("account").hidden = true; $("s
 async function start() {
 	const r = await fetch("/api/session");
 	if (!r.ok) return showSignIn();
-	const s = (await r.json()).value as { tenantId: string; actor: { kind: string; id: string }; csrf: string };
+	const reply = await r.json() as Reply<{ tenantId: string; actor: { kind: string; id: string }; admin: boolean; csrf: string }>;
+	if (!reply.ok) { $("signin").hidden = false; $("signin").querySelector("p")!.textContent = reply.error.message; return; }
+	const s = reply.value;
+	$("admin-open").hidden = !s.admin;
 	csrf = s.csrf;
 	$("who").textContent = `${s.actor.id} in ${s.tenantId}`;
 	$("account").hidden = false;
@@ -175,7 +178,7 @@ async function create(kind: string) {
 	await showDir();
 }
 
-// The administration loads on request only: a refused admin operation is audited, so the page never asks by itself.
+// The administration is offered to administrators only (the session says so) and loads on request.
 async function showAdmin() {
 	const actors = await call<Array<{ kind: string; id: string; state: string }>>("listActors");
 	$("admin").hidden = false;

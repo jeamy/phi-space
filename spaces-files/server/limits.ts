@@ -52,6 +52,9 @@ export type FsLimits = {
 	maxOperationIdsPerCall: number;
 	/** The audit retention age set by the host operator: no row is removed before it (section 3, budgets). */
 	maxAuditAgeMs: number;
+	/** Refused admin calls of one actor and operation within this window share one audit row with a count, so a caller
+	 *  cannot fill the audit by asking again and again. */
+	deniedAuditWindowMs: number;
 	/** Relations `deleteActor` removes in its one transaction; an actor with more is disabled and pruned in batches. */
 	maxDeleteRelations: number;
 	/** Receipts per tenant for ordinary mutations, and the extra ones only security actions may use (section 3). */
@@ -79,6 +82,7 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	securityReserveBytes: 256 * 1024,
 	maxWorkPerDecision: 512,
 	maxAuditAgeMs: 90 * 24 * 3600_000,
+	deniedAuditWindowMs: 3600_000,
 	maxDeleteRelations: 256,
 	retryWindowMs: 3600_000,
 	clockSkewMs: 120_000,

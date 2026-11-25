@@ -38,7 +38,7 @@ test("sign-in: one binding enters at once; the session cookie is __Host-, Secure
 		const set = ([] as string[]).concat(ok.headers["set-cookie"] ?? []).find((c) => c.startsWith("__Host-files="))!;
 		for (const attr of ["Path=/", "Secure", "HttpOnly", "SameSite=Strict"]) assert.ok(set.includes(attr), attr);
 		const s = await adm.session();
-		assert.deepEqual({ tenant: s.json!.value.tenantId, actor: s.json!.value.actor }, { tenant: "acme", actor: { kind: "user", id: "adm" } });
+		assert.deepEqual({ tenant: s.json!.value.tenantId, actor: s.json!.value.actor, admin: s.json!.value.admin }, { tenant: "acme", actor: { kind: "user", id: "adm" }, admin: true });
 		assert.deepEqual(await adm.must("workspaces"), ["adm"]);
 	} finally { await done(); }
 });
@@ -60,6 +60,7 @@ test("two tenants with the same user name: a choice among the bindings only, a f
 		const first = lea.jar.get("__Host-files")!;
 		assert.equal((await lea.session()).json!.value.tenantId, "acme");
 		assert.deepEqual(await lea.must("workspaces"), ["lea"]);
+		assert.equal((await lea.session()).json!.value.admin, false);
 		await lea.must("write", { workspace: "lea", path: "acme.txt", contents: Buffer.from("acme").toString("base64"), expectedVersion: 0, operationId: await lea.opId() });
 		// switching is a new sign-in, straight into the named tenant; the old session ends
 		await lea.signIn(web.idp, "lea", "globex");

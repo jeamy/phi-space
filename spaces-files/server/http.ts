@@ -196,9 +196,9 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			const h = jar.get(SESSION_COOKIE);
 			const site = req.headers["sec-fetch-site"];
 			if (site !== undefined && site !== "same-origin") return json(res, 403, { ok: false, error: { code: "permissionDenied", message: "a request from another origin" } });
-			const v = h ? svc.state.lookupSession(h) : null;
-			if (!h || !v) return json(res, 401, { ok: false, error: { code: "unauthenticated", message: "not signed in" } });
-			return json(res, 200, { ok: true, value: { tenantId: v.tenantId, actor: { kind: v.actorKind, id: v.actorId }, expiresAt: v.expiresAt, csrf: csrfFor(h) } });
+			if (!h) return json(res, 401, { ok: false, error: { code: "unauthenticated", message: "not signed in" } });
+			try { return json(res, 200, { ok: true, value: { ...(await svc.sessionInfo(h)), csrf: csrfFor(h) } }); }
+			catch (e) { const error = wireError(e); return json(res, error.code === "unauthenticated" ? 401 : 200, { ok: false, error }); }
 		}
 		if (route === "POST /api/call") {
 			const h = jar.get(SESSION_COOKIE);
