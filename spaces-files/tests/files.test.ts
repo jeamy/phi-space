@@ -191,6 +191,16 @@ test("an unknown commit outcome closes admission for every tenant until it is re
 			// the retry produces exactly one increment either way
 			assert.deepEqual(await f.s.write(f.lea, "lea", "f", bytes(`after ${p}`), before, op), { version: before + 1 });
 			assert.equal((await f.s.read(f.lea, "lea", "f")).version, before + 1);
+
+			// a mutation without a blob: its transaction is aborted too, so the retry does not meet its own reserved keys
+			const mk = await f.id(f.lea);
+			fail = p;
+			await assert.rejects(f.s.mkdir(f.lea, "lea", `dir-${p}`, mk), code("unavailable"));
+			assert.equal(await f.s.resolveOutcomes(), 1);
+			assert.deepEqual(await f.s.mkdir(f.lea, "lea", `dir-${p}`, mk), { status: "created" });
+			assert.equal((await f.s.list(f.lea, "lea", ".")).filter((e) => e.name === `dir-${p}`).length, 1);
+			assert.equal(f.s.admission.suspended("acme"), undefined);
+			assert.equal(await raw(f.s).count({ type: T.receipt, fields: { operationId: mk } }), 1);
 		}
 	} finally { await f.s.close(); rmSync(root, { recursive: true, force: true }); }
 });

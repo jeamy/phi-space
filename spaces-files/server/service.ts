@@ -82,8 +82,9 @@ export type FaultPoint = "beforeBlob" | "afterBlob" | "commit:before" | "commit:
 /** A directory entry as `list` returns it. */
 export type ListEntry = { name: string; kind: "dir" | "file" };
 
-/** A save whose commit outcome is unknown: the blobs it may need, until `resolveOutcomes` decides (section 6.1). */
-type Unresolved = { tenantId: string; txn: string; nodeId: string; newBlobId: string; oldBlobId: string | null };
+/** A mutation whose commit outcome is unknown, until `resolveOutcomes` aborts its transaction (section 6.1); a save also
+ *  names the blobs the content row then decides between. */
+type Unresolved = { tenantId: string; txn: string; save: { nodeId: string; newBlobId: string; oldBlobId: string | null } | null };
 
 export class FilesService {
 	readonly admission: Admission;
@@ -505,7 +506,7 @@ export class FilesService {
 			await this.#fault("commit:after");
 		} catch (e) {
 			// the commit may or may not have happened: stop every tenant until it is resolved (section 6.1)
-			if (save) this.#unresolved.push({ tenantId: s.tenantId, txn, nodeId: save.nodeId, newBlobId: save.newBlobId, oldBlobId: save.oldBlobId });
+			this.#unresolved.push({ tenantId: s.tenantId, txn, save: save && { nodeId: save.nodeId, newBlobId: save.newBlobId, oldBlobId: save.oldBlobId } });
 			this.#seq.delete(s.tenantId);
 			this.#contentBytes.delete(s.tenantId);
 			void this.admission.close();
@@ -532,10 +533,12 @@ export class FilesService {
 		const n = this.#unresolved.length;
 		for (const u of this.#unresolved.splice(0)) {
 			const space = new PhiSpaces(this.host, ctx, this.#now, undefined, undefined, { space: tenantAlias(u.tenantId) });
+			// an open transaction holds its uncommitted rows and their creation keys: a retry would collide with them
 			await space.abort(u.txn).catch(() => {});
-			const row = await space.readIfExists({ type: schema.T.content, fields: { nodeId: u.nodeId } }, 0);
-			if (row?.fields.blobId === u.newBlobId) { if (u.oldBlobId !== null) await this.blobs.delete(u.tenantId, u.oldBlobId); }
-			else await this.blobs.delete(u.tenantId, u.newBlobId);
+			if (u.save === null) continue;
+			const row = await space.readIfExists({ type: schema.T.content, fields: { nodeId: u.save.nodeId } }, 0);
+			if (row?.fields.blobId === u.save.newBlobId) { if (u.save.oldBlobId !== null) await this.blobs.delete(u.tenantId, u.save.oldBlobId); }
+			else await this.blobs.delete(u.tenantId, u.save.newBlobId);
 		}
 		this.admission.reopen();
 		return n;
