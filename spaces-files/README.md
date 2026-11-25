@@ -5,7 +5,7 @@ teams share workspaces, roles are inherited from directories, and a revocation i
 after it. Files are UTF-8 text with versions; a save over a stale version is a conflict, never a silent overwrite.
 The plan, with its phases and exit evidence, is `docs/zanzibar-agent-filesystem-plan.en.md`.
 
-**Status: phase 1 of that plan, steps 1 to 6.** The application is registered in the repository checks (`APPS` in
+**Status: phase 1 of that plan is complete** (exit evidence below). The application is registered in the repository checks (`APPS` in
 `checks/roots.mjs`) and the root scripts. The service process (`server/launch.ts`, `server/service.ts`) opens phi-spaces'
 own SQLite store in a data directory it refuses when group or others can reach it. The store's owner lock refuses a
 second process, and a crash releases it. The service runs the reaper (`startService`) and reserves one private named
@@ -37,6 +37,22 @@ The application is a directory of its own and depends on the library as `"phi-sp
 only `phi-spaces` and its exported subpaths. Unlike the other applications, the pilot embeds its Space host in the one
 service process and runs only on this machine: no Docker, no Rust Space server, no deployment on big or nano (the
 plan's section 2 and section 8). Its Spaces are never shown by the dashboard.
+
+## Phase 1 exit evidence
+
+Each claim of the plan's section 7, phase 1, and the test that holds it:
+
+| Claim | Test |
+|---|---|
+| A second service process is refused on the same store; killing the first releases the lock and the store reopens | `tests/service.test.ts` (child processes, SIGKILL) |
+| Two tenants stay isolated | `tests/service.test.ts`, `tests/sessions.test.ts`, `tests/phase1-exit.test.ts` |
+| An uninitialized named Space admits no session | `tests/tenant.test.ts`, `tests/sessions.test.ts`, `tests/phase1-exit.test.ts` |
+| Two conversations of one host and equal agent IDs on two hosts resolve to distinct actors and distinct private homes | `tests/actors.test.ts`, `tests/phase1-exit.test.ts` (through login and session) |
+| Duplicate identity pairs fail without creating an actor or home | `tests/actors.test.ts`, `tests/phase1-exit.test.ts` |
+| Disabled and unknown actors and old session epochs fail closed | `tests/sessions.test.ts`, `tests/phase1-exit.test.ts` |
+
+Not yet there, by the plan's order: operation IDs and receipts, the file and admin operations beyond `registerActor`
+(phase 3), and the transports that carry sessions (browser login, agent-host socket).
 
 ## Commands
 

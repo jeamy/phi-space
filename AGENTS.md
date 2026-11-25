@@ -69,7 +69,7 @@ so a relative path still means the repository root (`checks/root-scripts.mjs` ke
   `docs/zanzibar-agent-filesystem-plan.en.md`, state in `spaces-files/README.md`; one service process with an embedded Space host,
   its tenant Spaces never exposed, the dashboard does not list it): `npm run spaces-files` (`:dev` restarts on change;
   `FILES_DATA_DIR` and `FILES_STATE_DIR`, mode 700 each and apart, or `FILES_MEM=1`), tests `npm run test:spaces-files`, typecheck
-  `npm --prefix spaces-files run typecheck` (own tsconfig, not part of the root `tsc`). Phase 1 of its plan in progress (store, owner
+  `npm --prefix spaces-files run typecheck` (own tsconfig, not part of the root `tsc`). Phase 1 of its plan complete (store, owner
   lock, tenant queues, deployment state, two-commit tenant initialization with its provisioning gate, `registerActor` with actor plus home and the identity bindings, the session layer (`login`, `withSession`), in `server/schema.ts`/`server/service.ts`; no transport adapters yet); no Docker, no Rust space server; it runs on this machine only.
 - spaces-mmo (`spaces-mmo/`: MMORPG engine, first world Leuchtfeuer; processes space, world, web; PixiJS map; docs in
   `spaces-mmo/docs/`, plan and phases in `spaces-mmo/docs/phasen.en.md`): `npm --prefix spaces-mmo run build` (the page as static files in `spaces-mmo/out/` with `out/BUILD_ID`, which the web process serves, `server/pages.ts`; `--dev` keeps Next's dev server), then
