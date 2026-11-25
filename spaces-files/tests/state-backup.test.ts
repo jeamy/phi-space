@@ -86,7 +86,7 @@ test("a lost, older or foreign deployment state is refused; restore-state brings
 		await assert.rejects(FilesService.open(o), (e) => e instanceof StateLost && /restore the state/.test(e.message));
 		assert.throws(() => statSync(join(o.stateDir, "state.sqlite")));
 		// older: the backup put in place by hand is refused
-		extractArchive(join(dir, "s1.bk"), key, o.stateDir, (n) => n !== "backup.json");
+		extractArchive(join(dir, "s1.bk"), key, o.stateDir, (n) => n !== "backup.json" ? n : null);
 		await assert.rejects(FilesService.open(o), (e) => e instanceof StateLost && /older than the data/.test(e.message));
 		rmSync(o.stateDir, { recursive: true });
 		// foreign: another deployment's state
@@ -104,6 +104,8 @@ test("a lost, older or foreign deployment state is refused; restore-state brings
 		try {
 			assert.ok(svc.state.epoch() > epoch - 1 && svc.state.epoch() === r.epoch);
 			assert.equal(svc.state.lookupSession(lea), null, "the earlier session ended");
+			await assert.rejects(svc.setMode("normal"), /waits for the reconciliation of acme/);
+			svc.state.markReconciled("acme");
 			await svc.setMode("normal");
 			const fresh = (await svc.login("acme", "user", ID)).handle;
 			assert.deepEqual(svc.state.tenantsFor("i", "lea"), ["acme"], "the login index is rebuilt");
@@ -133,6 +135,7 @@ test("a new content key seals nothing until a state backup holds it", async () =
 		await restoreState(join(dir, "s2.bk"), key, o);
 		svc = await FilesService.open(o);
 		try {
+			svc.state.markReconciled("acme");
 			await svc.setMode("normal");
 			const h = (await svc.login("acme", "user", ID)).handle;
 			assert.equal((await svc.read(h, "lea", "before.txt")).bytes.toString(), "sealed with the old key");

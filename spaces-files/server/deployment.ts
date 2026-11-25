@@ -53,6 +53,11 @@ CREATE TABLE IF NOT EXISTS sessions (handle_hash TEXT PRIMARY KEY, tenant_id TEX
 	epoch INTEGER NOT NULL, created_at INTEGER NOT NULL, idle_until INTEGER NOT NULL, expires_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS closed_tenants (tenant_id TEXT PRIMARY KEY, reason TEXT NOT NULL, action TEXT NOT NULL, closed_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS logins (issuer TEXT NOT NULL, subject TEXT NOT NULL, tenant_id TEXT NOT NULL, PRIMARY KEY (issuer, subject, tenant_id));
+CREATE TABLE IF NOT EXISTS restore_journal (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL, info TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS roster (tenant_id TEXT NOT NULL, issuer TEXT NOT NULL, subject TEXT NOT NULL, added_at INTEGER NOT NULL, PRIMARY KEY (tenant_id, issuer, subject));
+CREATE TABLE IF NOT EXISTS reconcilers (tenant_id TEXT NOT NULL, epoch INTEGER NOT NULL, issuer TEXT NOT NULL, subject TEXT NOT NULL, PRIMARY KEY (tenant_id, epoch));
+CREATE TABLE IF NOT EXISTS reconciled (tenant_id TEXT NOT NULL, epoch INTEGER NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (tenant_id, epoch));
+CREATE TABLE IF NOT EXISTS operator_audit (seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL, operation TEXT NOT NULL, detail TEXT NOT NULL);
 `;
 
 const hashHandle = (handle: string) => createHash("sha256").update(handle, "utf8").digest("hex");
@@ -368,6 +373,79 @@ export class DeploymentState {
 		const to = this.pendingMode() ?? this.mode();
 		this.#tx(() => { this.#setText("admission_mode", to); this.#db.prepare("DELETE FROM meta WHERE key = 'mode_intent'").run(); });
 		return to;
+	}
+
+	// ---------------------------------------------------------------- restore (section 6.5)
+
+	/** The restore under way: its journal step and what it recorded, or null. */
+	restoreJournal(): { step: string; info: Record<string, unknown> } | null {
+		const r = this.#db.prepare("SELECT step, info FROM restore_journal WHERE id = 1").get() as { step: string; info: string } | undefined;
+		return r ? { step: r.step, info: JSON.parse(r.info) as Record<string, unknown> } : null;
+	}
+	/** Records a restore step durably before the next one starts; `info` is merged into what earlier steps recorded. */
+	journalRestore(step: string, info: Record<string, unknown> = {}): void {
+		const prev = this.restoreJournal()?.info ?? {};
+		this.#tx(() => this.#db.prepare("INSERT INTO restore_journal (id, step, info) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET step = excluded.step, info = excluded.info").run(step, JSON.stringify({ ...prev, ...info })));
+	}
+	/** The epoch of the restore whose reconciliation is open, or null: until every tenant is reconciled in it, normal
+	 *  admission stays closed and maintenance admits only each tenant's approved reconciler. */
+	restoreEpoch(): number | null {
+		const j = this.restoreJournal();
+		return j && typeof j.info.epoch === "number" ? j.info.epoch : null;
+	}
+	endRestore(): void { this.#tx(() => this.#db.prepare("DELETE FROM restore_journal").run()); }
+
+	/** The recovery roster: identities the host operator approved, per tenant, outside the restorable data. */
+	rosterAdd(tenantId: string, issuer: string, subject: string): void {
+		this.#tx(() => { this.#db.prepare("INSERT OR IGNORE INTO roster (tenant_id, issuer, subject, added_at) VALUES (?, ?, ?, ?)").run(tenantId, issuer, subject, this.#highWater || this.#clock()); this.#bump(); });
+		this.operatorAudit("rosterAdd", { tenantId, issuer, subject });
+	}
+	rosterRemove(tenantId: string, issuer: string, subject: string): void {
+		this.#tx(() => { this.#db.prepare("DELETE FROM roster WHERE tenant_id = ? AND issuer = ? AND subject = ?").run(tenantId, issuer, subject); this.#bump(); });
+		this.operatorAudit("rosterRemove", { tenantId, issuer, subject });
+	}
+	roster(tenantId?: string): Array<{ tenantId: string; issuer: string; subject: string }> {
+		return (this.#db.prepare("SELECT tenant_id, issuer, subject FROM roster WHERE ? IS NULL OR tenant_id = ? ORDER BY tenant_id, issuer, subject").all(tenantId ?? null, tenantId ?? null) as Array<{ tenant_id: string; issuer: string; subject: string }>)
+			.map((r) => ({ tenantId: r.tenant_id, issuer: r.issuer, subject: r.subject }));
+	}
+	/** Approves one rostered identity as the reconciler of a tenant for the open restore's epoch. */
+	approveReconciler(tenantId: string, issuer: string, subject: string): void {
+		const epoch = this.restoreEpoch();
+		if (epoch === null) throw new StateUnavailable("no restore is open");
+		if (!this.roster(tenantId).some((r) => r.issuer === issuer && r.subject === subject)) throw new StateUnavailable(`${issuer} ${subject} is not on the recovery roster of ${tenantId}`);
+		this.#tx(() => this.#db.prepare("INSERT INTO reconcilers (tenant_id, epoch, issuer, subject) VALUES (?, ?, ?, ?) ON CONFLICT(tenant_id, epoch) DO UPDATE SET issuer = excluded.issuer, subject = excluded.subject").run(tenantId, epoch, issuer, subject));
+		this.operatorAudit("approveReconciler", { tenantId, epoch, issuer, subject });
+	}
+	reconciler(tenantId: string): { issuer: string; subject: string } | null {
+		const epoch = this.restoreEpoch();
+		if (epoch === null) return null;
+		const r = this.#db.prepare("SELECT issuer, subject FROM reconcilers WHERE tenant_id = ? AND epoch = ?").get(tenantId, epoch) as { issuer: string; subject: string } | undefined;
+		return r ?? null;
+	}
+	/** The tenants whose approved reconciler is this identity, in the open restore. */
+	reconcilerTenants(issuer: string, subject: string): string[] {
+		const epoch = this.restoreEpoch();
+		if (epoch === null) return [];
+		return (this.#db.prepare("SELECT tenant_id FROM reconcilers WHERE epoch = ? AND issuer = ? AND subject = ? ORDER BY tenant_id").all(epoch, issuer, subject) as Array<{ tenant_id: string }>).map((r) => r.tenant_id);
+	}
+	/** The operator records a tenant reconciled in the open restore's epoch (after its reconciler reports completion). */
+	markReconciled(tenantId: string): void {
+		const epoch = this.restoreEpoch();
+		if (epoch === null) throw new StateUnavailable("no restore is open");
+		this.#tx(() => { this.#db.prepare("INSERT OR IGNORE INTO reconciled (tenant_id, epoch, at) VALUES (?, ?, ?)").run(tenantId, epoch, this.#highWater || this.#clock()); this.#bump(); });
+		this.operatorAudit("markReconciled", { tenantId, epoch });
+	}
+	isReconciled(tenantId: string, epoch: number): boolean {
+		return this.#db.prepare("SELECT 1 FROM reconciled WHERE tenant_id = ? AND epoch = ?").get(tenantId, epoch) !== undefined;
+	}
+
+	/** The external operator audit: what the host operator did, outside the restorable data. */
+	operatorAudit(operation: string, detail: Record<string, unknown>): void {
+		this.#tx(() => this.#db.prepare("INSERT INTO operator_audit (time, operation, detail) VALUES (?, ?, ?)").run(this.#highWater || this.#clock(), operation, JSON.stringify(detail)));
+	}
+	operatorAuditRows(limit = 100): Array<{ seq: number; time: number; operation: string; detail: Record<string, unknown> }> {
+		return (this.#db.prepare("SELECT seq, time, operation, detail FROM operator_audit ORDER BY seq DESC LIMIT ?").all(limit) as Array<{ seq: number; time: number; operation: string; detail: string }>)
+			.map((r) => ({ ...r, detail: JSON.parse(r.detail) as Record<string, unknown> }));
 	}
 
 	// ---------------------------------------------------------------- closed tenants (section 3, budgets)

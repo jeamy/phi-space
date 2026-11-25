@@ -372,6 +372,12 @@ export class FilesService {
 				if (cls === "file") throw new Unavailable("the service is in maintenance mode");
 				if (view.actorKind !== "user" || !(await this.#has(space, schema.relation("tenant", view.tenantId, "admin", "user", view.actorId))))
 					throw new Unavailable("the service is in maintenance mode");
+				// during a restore an administrator row from the backup proves nothing: only the identity the operator
+				// approved as this tenant's reconciler for the restore's epoch continues (section 6.5, step 3)
+				if (this.state.restoreEpoch() !== null) {
+					const r = this.state.reconciler(view.tenantId);
+					if (r === null || r.issuer !== a.fields.issuer || r.subject !== a.fields.subject) throw new Unavailable("the service is restoring; only the approved reconciler continues");
+				}
 			}
 			return op({ tenantId: view.tenantId, actorKind: view.actorKind, actorId: view.actorId, homeNodeId: a.fields.homeNodeId as string, expiresAt: view.expiresAt }, space);
 		});
@@ -384,10 +390,17 @@ export class FilesService {
 	 */
 	async setMode(to: "normal" | "maintenance"): Promise<void> {
 		if (this.#unresolved.length) throw new Unavailable("a commit outcome is unknown: resolve it first");
+		// leaving a restore's maintenance needs every tenant reconciled in its epoch (section 6.5, step 5)
+		const epoch = this.state.restoreEpoch();
+		if (to === "normal" && epoch !== null) {
+			const open = (await this.tenants()).filter((t) => !this.state.isReconciled(t, epoch));
+			if (open.length) throw new Unavailable(`the restore of epoch ${epoch} waits for the reconciliation of ${open.join(", ")}`);
+		}
 		this.state.beginModeTransition(to);
 		await this.admission.close();
 		if (this.#unresolved.length) throw new Unavailable("a commit outcome became unknown while draining: resolve it first");
 		this.state.completeModeTransition();
+		if (to === "normal" && epoch !== null) { this.state.operatorAudit("restoreComplete", { epoch }); this.state.endRestore(); }
 		this.admission.reopen();
 	}
 
@@ -1069,6 +1082,34 @@ export class FilesService {
 		this.state.raiseSeq(markerSeq + 1);
 		this.state.beginModeTransition("maintenance");
 		this.state.completeModeTransition();
+		// the state's loss opens a restore like a data restore: every tenant is reconciled before normal admission
+		this.state.journalRestore("checked", { archive: "deployment state", epoch: this.state.epoch(), tenants: [] });
+	}
+
+	/**
+	 * After a restore (section 6.5): every content row of every tenant must name a blob that exists, sealed with a
+	 * content-key generation the deployment state holds. A tenant that fails is closed durably as `inconsistentState`
+	 * (it stays closed across restarts until the operator repairs it); the others are untouched.
+	 */
+	async checkRestoredBlobs(): Promise<Array<{ tenantId: string; contents: number; missing: number }>> {
+		const out: Array<{ tenantId: string; contents: number; missing: number }> = [];
+		for (const t of await this.tenants()) {
+			let contents = 0, missing = 0;
+			await this.#inSpace(t, async (space) => {
+				for (const r of await space.readAll({ type: schema.T.content })) {
+					contents++;
+					const ok = this.state.contentKeyFor(r.fields.keyGeneration as number) !== undefined && (await this.blobs.exists(t, r.fields.blobId as string));
+					if (!ok) missing++;
+				}
+			});
+			if (missing > 0) {
+				console.error(`[files] tenant ${t} suspended after a restore: ${missing} of ${contents} contents lack their blob or key`);
+				this.state.closeTenant(t, "inconsistentState", { restoredBlobsMissing: missing });
+				this.admission.suspend(t, "inconsistentState");
+			}
+			out.push({ tenantId: t, contents, missing });
+		}
+		return out;
 	}
 
 	/** The operator reopens a tenant closed for its security reserve once the pending action has durably succeeded

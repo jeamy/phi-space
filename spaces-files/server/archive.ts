@@ -188,16 +188,18 @@ export function readEntry(path: string, key: Buffer, name: string): Buffer | nul
 }
 
 /**
- * Verifies the whole archive first, then writes the entries `accept` selects below `dest` (files mode 600, directories
- * 700), each flushed. Names are checked to stay inside `dest`.
+ * Verifies the whole archive first, then writes the entries `map` places (a relative target name, or null to skip;
+ * default: the entry's own name) below `dest` (files mode 600, directories 700), each flushed. Targets are checked to
+ * stay inside `dest`.
  */
-export function extractArchive(path: string, key: Buffer, dest: string, accept: (name: string) => boolean = () => true): string[] {
+export function extractArchive(path: string, key: Buffer, dest: string, map: (name: string) => string | null = (n) => n): string[] {
 	verifyArchive(path, key);
 	const written: string[] = [];
 	let fd: number | null = null;
 	walk(path, key, {
-		begin: (name) => {
-			if (!accept(name)) return;
+		begin: (entry) => {
+			const name = map(entry);
+			if (name === null) return;
 			const target = normalize(join(dest, name));
 			if (!target.startsWith(normalize(dest) + sep) || name.includes("\0")) throw new ArchiveInvalid(`an entry escapes the destination: ${name}`);
 			mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
