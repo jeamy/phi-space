@@ -13,6 +13,7 @@ import { peek } from "../../space.ts";
 import { randomBytes } from "../source.ts";
 import { cells, logGone, planOf, refusal, touchesWater } from "./build.ts";
 import { exitIdOf, interiorOf, isInterior } from "./interior.ts";
+import { holdRoomOrRefuse, writeRoomLock } from "../room-lock.ts";
 
 const BUILDER = "cmd:perm(Builder)";
 const ADMIN = "cmd:perm(Admin)";
@@ -77,6 +78,7 @@ const dig: Command = {
 		if (exitsHereNow.some((x) => x.x === c.actor.x && x.y === c.actor.y)) throw new CommandError("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle.");
 		const roomId = `r-${randomBytes(5).toString("hex")}`, d = c.world.dig;
 		await c.space.write(draftOf("Room", c.world.typeclasses, { roomId, name: a[0], desc: d.desc, ground: d.ground, spawn: d.spawn } satisfies RoomFields), c.txn, FOREVER);
+		await writeRoomLock(c.space, c.txn, roomId);
 		const backExit = back ? [{ x: d.spawn.x, y: d.spawn.y }] : [];
 		await writeExit(c, { exitId: `x-${randomBytes(5).toString("hex")}`, name: ways, aliases: [], desc: `Nach ${a[0]}.`, location: here.roomId, destination: roomId, x: c.actor.x, y: c.actor.y, arrive: arrivalNear(c, d.ground, d.spawn, backExit), locks: "" });
 		if (back) await writeExit(c, { exitId: `x-${randomBytes(5).toString("hex")}`, name: back, aliases: [], desc: `Zurück nach ${here.name}.`, location: roomId, destination: here.roomId, x: d.spawn.x, y: d.spawn.y, arrive: arrivalNear(c, here.ground, c.actor, [...exitsHereNow, { x: c.actor.x, y: c.actor.y }]), locks: "" });
@@ -251,7 +253,9 @@ const versetze: Command = {
 		const room = await roomOf(c);
 		const rect = { x, y, w: f.w, h: f.h };
 		const green = "green" in kind || !!plan?.green, people = green || "people" in kind;
-		const no = (await refusal(c, room, rect, green, people, id)) ?? (plan?.shore && !touchesWater(c.world, room, rect) ? "Das muss ans Wasser grenzen." : null);
+		// one place, no search: the room's lock first, then the check as the space holds it now, then the object (room-lock.ts)
+		await holdRoomOrRefuse(c, room.roomId);
+		const no = (await refusal(c, room, rect, green, people, id, true)) ?? (plan?.shore && !touchesWater(c.world, room, rect) ? "Das muss ans Wasser grenzen." : null);
 		if (no) throw new CommandError(`Dorthin lässt sich ${name} nicht versetzen: ${no}`);
 		const t = await c.space.takeIfExists({ id: e.id }, NO_WAIT, { txn: c.txn });
 		if (!t) throw new CommandError("Das ist gerade in Benutzung; bitte gleich noch einmal.");

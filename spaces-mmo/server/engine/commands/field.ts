@@ -10,6 +10,7 @@
 //   The counter stands on the field.
 // - The field tick (in the garden job) writes a field only when its date comes: it ripens, its window passes (each share
 //   then loses a part), the crop is lost; and a field nobody worked for its time goes back to grass.
+import { holdRoom, holdRoomOrRefuse } from "../room-lock.ts";
 import { needRank } from "./settlement.ts";
 import { needEpoch } from "./epoch.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
@@ -132,6 +133,10 @@ async function stake(c: CommandCtx, at: string): Promise<void> {
 	let rect: Rect | null = null, why = "";
 	for (const r of tries) { const no = await refusal(c, room, r, false, true); if (!no) { rect = r; break; } why ||= no; }
 	if (!rect) throw new CommandError(`Hier passt kein Acker hin (${d.w}×${d.h}): ${why}`);
+	// the search ran without the room's lock; with it the chosen place is checked again as the space holds it now
+	await holdRoomOrRefuse(c, room.roomId);
+	const again = await refusal(c, room, rect, false, true, undefined, true);
+	if (again) throw new CommandError(`Hier passt kein Acker hin (${d.w}×${d.h}): ${again}`);
 	const fieldId = `field-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
 	for (const p of cells(rect)) {
 		try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: p.x, y: p.y, of: fieldId } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
@@ -162,6 +167,7 @@ const flur: Command = {
 			return msg(c, "*", "info", open ? `${c.actor.name} öffnet den Acker: säen und ernten darf jetzt jeder, und jeder behält seinen Anteil.` : `${c.actor.name} schließt den Acker wieder für Fremde.`);
 		}
 		if (/^(?:aufgeben|weg|remove)$/i.test(word)) {
+			await holdRoomOrRefuse(c, c.actor.room); // the room's lock before the field (room-lock.ts): its cells may come free
 			const f = await fieldHere(c);
 			if (!mine(c, f)) throw new CommandError(`Das ist der ${fieldName(f)}; aufgeben kann ihn nur, wer ihn angelegt hat.`);
 			// what grows on it is lost: asked first, „flur aufgeben ja“ does it (the map's menu asks on the page and sends that)
@@ -308,9 +314,13 @@ export async function fieldTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 		if (f0.dueWorldMs > now && f0.untilWorldMs > kept) continue;
 		const txn = (await space.createTransaction(10_000)).id;
 		try {
+			// a field that goes back to grass frees its cells: the room's lock first (room-lock.ts), held: the next round
+			const lapses = f0.untilWorldMs <= kept;
+			if (lapses && !(await holdRoom(space, txn, f0.room))) { await space.abort(txn); continue; }
 			const t = await space.takeIfExists({ type: "Field", fields: { fieldId: f0.fieldId } }, NO_WAIT, { txn });
 			if (!t) { await space.abort(txn); continue; }
 			const f = fieldsOf<FieldFields>(t), crop = cropOf(d, f.crop)?.name ?? "Die Frucht";
+			if (f.untilWorldMs <= kept && !lapses) { await space.abort(txn); continue; } // lapsed since the read: the next round, with the lock
 			if (f.untilWorldMs <= kept) {
 				await freeCells(space, txn, f.room, f.fieldId);
 				await releaseLight(space, txn, f.beaconId, f.points);

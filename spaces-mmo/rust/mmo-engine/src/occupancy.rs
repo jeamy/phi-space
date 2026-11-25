@@ -46,9 +46,11 @@ pub async fn release_spot(space: &Space, txn: &str, char_id: &str) -> Result<()>
 }
 
 /// `blockedIn`: the cells of persisted fires and of plots.
-pub async fn blocked_in(space: &Space, room: &str) -> Result<HashSet<String>> {
+pub async fn blocked_in(space: &Space, room: &str) -> Result<HashSet<String>> { blocked_in_txn(space, room, None).await }
+/// `blockedIn` with `txn`: the claimed cells read inside a transaction that holds the room's lock (the fires from the copy).
+pub async fn blocked_in_txn(space: &Space, room: &str, txn: Option<&str>) -> Result<HashSet<String>> {
 	let mut out: HashSet<String> = space.read_all(&tmpl("Beacon", obj! { "room" => room }), None).await?.iter().map(|e| cell_of(fields(e))).collect();
-	for e in space.read_all(&tmpl("Plot", obj! { "room" => room }), None).await? { out.insert(cell_of(fields(&e))); }
+	for e in space.read_all(&tmpl("Plot", obj! { "room" => room }), txn).await? { out.insert(cell_of(fields(&e))); }
 	Ok(out)
 }
 

@@ -9,6 +9,7 @@ import { timeScale } from "./time.ts";
 import { ensureSchedule } from "./schedule.ts";
 import { worldSchedules } from "./worldevents.ts";
 import { DEFAULT_START_HOUR, initialClock, worldNow } from "./worldtime.ts";
+import { islandLock, roomLock, writeIslandLock, writeRoomLock } from "./room-lock.ts";
 import { actorToken, fieldsOf, WORLD_LOCK, type AccountFields, type BeaconFields, type CharacterFields, type ExitFields, type FogFields, type RoomFields, type RoomGrowthFields, type WorldClockFields, type WorldLoadedFields } from "../model.ts";
 import { grownDecor, grownGround, grownPoint } from "./room-growth.ts";
 import { readExisting, StillHeld, peek } from "../space.ts";
@@ -81,6 +82,9 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 		for (const r of w.rooms.slice(i, i + ROOMS_PER_TXN)) {
 			const grown = await peek(space, { type: "RoomGrowth", fields: { roomId: r.roomId } }, { txn }), g = grown ? fieldsOf<RoomGrowthFields>(grown) : { east: 0, south: 0 }, decor = grownDecor(r.decor, g); // what a room grew stays
 			await upsert(txn, replace, "Room", { roomId: r.roomId }, draftOf("Room", w.typeclasses, { roomId: r.roomId, name: r.name, desc: r.desc, ground: grownGround(r.ground, g, w.growth?.tile ?? ","), ...(decor ? { decor } : {}), spawn: grownPoint(r.spawn, g), ...(r.map ? { map: r.map } : {}), ...(r.island ? { island: r.island } : {}) } satisfies RoomFields));
+			// the room's lock (room-lock.ts), with the room; and its island's, once
+			if (!(await peek(space, roomLock(r.roomId), { txn }))) await writeRoomLock(space, txn, r.roomId);
+			if (r.island && !(await peek(space, islandLock(r.island), { txn }))) await writeIslandLock(space, txn, r.island);
 		}
 	});
 	for (let i = 0; i < w.exits.length; i += ROOMS_PER_TXN * 4) await underLock(space, txnMs, async (txn) => {

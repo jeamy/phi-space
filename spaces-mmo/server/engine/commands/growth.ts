@@ -1,4 +1,5 @@
 // Full rooms gain land at an edge or at a safe seam before the coast. Geometry and positions commit together.
+import { holdIsland } from "../room-lock.ts";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, WORLD_LOCK, type ExitFields, type RoomFields, type RoomGrowthFields, type RoomGrowthStep } from "../../model.ts";
 import { msgOptions } from "../context.ts";
@@ -103,6 +104,9 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 		const txn = (await space.createTransaction(30_000)).id;
 		try {
 			if (!(await space.takeIfExists(WORLD_LOCK, NO_WAIT, { txn }))) { await space.abort(txn); break; }
+			// the island's lock after WORLD_LOCK, to keep one order (room-lock.ts); held by nobody while WORLD_LOCK is taken
+			const island = entry.fields.island;
+			if (typeof island === "string" && !(await holdIsland(space, txn, island, [], NO_WAIT))) { await space.abort(txn); break; }
 			const e = await space.takeIfExists({ id: entry.id }, NO_WAIT, { txn });
 			if (!e) { await space.abort(txn); continue; }
 			const room = fieldsOf<RoomFields>(e);

@@ -112,6 +112,7 @@ async fn dig(c: &mut Ctx, arg: &str) -> Result<()> {
 	let d = j::at(c.w(), "dig").clone();
 	let spawn_at = xy(j::at(&d, "spawn"));
 	c.space.write(&draft_of("Room", j::at(c.w(), "typeclasses"), obj! { "roomId" => room_id.as_str(), "name" => a.0.as_str(), "desc" => j::at(&d, "desc").clone(), "ground" => j::at(&d, "ground").clone(), "spawn" => j::at(&d, "spawn").clone() })?, c.txn(), FOREVER).await?;
+	crate::room_lock::write_room_lock(&c.space, c.txn(), &room_id).await?;
 	let back_exit: Vec<(f64, f64)> = if back.is_empty() { vec![] } else { vec![spawn_at] };
 	let id = format!("x-{}", hex(&random_bytes(5)));
 	let arrive = arrival_near(c, &rows(j::at(&d, "ground")), spawn_at, &back_exit)?;
@@ -294,7 +295,9 @@ async fn versetze(c: &mut Ctx, arg: &str) -> Result<()> {
 	let rect = super::build::Rect { x, y, w: j::n(&f, "w"), h: j::n(&f, "h") };
 	let green = kind.3 || plan.as_ref().is_some_and(|p| j::b(p, "green"));
 	let people = green || kind.4;
-	let mut no = super::build::refusal_own(c, &room, rect, green, people, Some(&Json::from(id.as_str()))).await?;
+	// one place, no search: the room's lock first, then the check as the space holds it now, then the object (room_lock.rs)
+	crate::room_lock::hold_room_or_refuse(&c.space, &c.txn, j::s(&room, "roomId")).await?;
+	let mut no = super::build::refusal_locked(c, &room, rect, green, people, Some(&Json::from(id.as_str())), true).await?;
 	if no.is_none() && plan.as_ref().is_some_and(|p| j::b(p, "shore")) && !super::build::touches_water(c.w(), &rows(j::at(&room, "ground")), rect) { no = Some("Das muss ans Wasser grenzen.".into()); }
 	if let Some(no) = no { return refuse(format!("Dorthin lässt sich {name} nicht versetzen: {no}")); }
 	let Some(t) = c.space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, c.txn()).await? else { return refuse("Das ist gerade in Benutzung; bitte gleich noch einmal.") };

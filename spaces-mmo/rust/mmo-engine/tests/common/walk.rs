@@ -91,9 +91,9 @@ fn compare(step: &str, ts: &Json, rust: &[String]) {
 /// A region of a walk with regions: its Rust space, the copy of it, its part of the world.
 struct Region { id: String, space: Space, mirror: Option<Rc<mmo_engine::mirror::Mirror>>, w: Json }
 
-/// One comparison (`by_hand`: the objects written and the plots written or objects taken by `write`/`take`): the two spaces, the TypeScript driver, the Rust engine's space and clock. With regions a pair of
+/// One comparison (`by_hand`: the objects written, the plots written or objects taken, and the rooms written by `write`/`take`): the two spaces, the TypeScript driver, the Rust engine's space and clock. With regions a pair of
 /// spaces per region; `space`, `w` and the copy are the current region's (`region`).
-pub struct Walk { ts: Driver, _servers: Vec<Kill>, pub space: Space, pub clock: Rc<Cell<f64>>, pub w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet, intents: usize, mirror: Option<Rc<mmo_engine::mirror::Mirror>>, regions: Vec<Region>, full: Json, by_hand: (std::collections::HashSet<String>, std::collections::HashSet<String>) }
+pub struct Walk { ts: Driver, _servers: Vec<Kill>, pub space: Space, pub clock: Rc<Cell<f64>>, pub w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet, intents: usize, mirror: Option<Rc<mmo_engine::mirror::Mirror>>, regions: Vec<Region>, full: Json, by_hand: (std::collections::HashSet<String>, std::collections::HashSet<String>, std::collections::HashSet<String>) }
 
 impl Walk {
 	pub fn new(name: &str, seed: u32, start: f64) -> Self { Self::start(name, seed, start, &[]) }
@@ -186,7 +186,10 @@ impl Walk {
 		let (mut plotted, mut objects) = (std::collections::HashSet::new(), std::collections::HashSet::new());
 		for e in &all { if let Some(id) = mmo_engine::footprints::occupancy_id(e) { if mmo_engine::j::s(e, "type") == "Plot" { plotted.insert(id); } else { objects.insert(id); } } }
 		let (written, loose) = (&self.by_hand.0, &self.by_hand.1);
-		let report = mmo_engine::footprints::store_occupancy_report(&all, false, &|id| (written.contains(id) && !plotted.contains(id)) || (loose.contains(id) && !objects.contains(id)));
+		let mut report = mmo_engine::footprints::store_occupancy_report(&all, false, &|id| (written.contains(id) && !plotted.contains(id)) || (loose.contains(id) && !objects.contains(id)));
+		// one lock per room and island (room_lock.rs), but for rooms the walk wrote by hand
+		let rooms = &self.by_hand.2;
+		report.extend(mmo_engine::room_lock::lock_report(&all, &|r| rooms.contains(r)));
 		assert!(report.is_empty(), "{step}: footprints and plots differ\n  {}", report.iter().take(20).cloned().collect::<Vec<_>>().join("\n  "));
 	}
 	pub fn load(&mut self, replace: bool) {
@@ -220,6 +223,9 @@ impl Walk {
 	/// An entry written alike on both sides (FOREVER).
 	pub fn write(&mut self, entry: Json) {
 		if let Some(id) = mmo_engine::footprints::occupancy_id(&entry) { if mmo_engine::j::s(&entry, "type") == "Plot" { self.by_hand.1.insert(id); } else { self.by_hand.0.insert(id); } }
+		let f = mmo_engine::j::at(&entry, "fields");
+		if mmo_engine::j::s(&entry, "type") == "Room" { if let Some(r) = mmo_engine::j::so(f, "roomId") { self.by_hand.2.insert(r.to_owned()); } }
+		if mmo_engine::j::s(&entry, "type") == "RoomLock" { if let Some(r) = mmo_engine::j::so(f, "room") { self.by_hand.2.insert(r.to_owned()); } }
 		let t = self.ts.call(obj! { "op" => "write", "entry" => entry.clone() });
 		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "write: {}", t.to_json_text());
 		self.run(self.space.write(&entry, None, FOREVER)).expect("the write");

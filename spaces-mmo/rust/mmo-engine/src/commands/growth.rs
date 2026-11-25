@@ -158,6 +158,8 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 		let txn = space.create_transaction(30_000.0).await?;
 		let r: Result<Option<bool>> = async {
 			if space.take_if_exists(&world_lock(), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(None); }
+			// the island's lock after WORLD_LOCK, to keep one order (room_lock.rs); held by nobody while WORLD_LOCK is taken
+			if let Some(island) = j::at(fields(&entry), "island").as_str() { if !crate::room_lock::hold_island(space, &txn, island, &[], NO_WAIT).await? { return Ok(None); } }
 			let Some(e) = space.take_if_exists(&obj! { "id" => j::at(&entry, "id").clone() }, NO_WAIT, Some(&txn)).await? else { return Ok(Some(false)) };
 			let room = fields(&e).clone();
 			let room_id = j::s(&room, "roomId").to_owned();

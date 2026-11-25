@@ -24,6 +24,7 @@ import { readClock } from "../server/engine/clock.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { worldNow } from "../server/engine/worldtime.ts";
 import { occupancyId, storeOccupancyReport, type OccupancyEntry } from "../shared/footprints.ts";
+import { lockReport } from "../server/engine/room-lock.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let seq = 0;
@@ -101,22 +102,29 @@ async function checkOccupancy(space: SpaceLike, what: string, byHand: ByHand): P
 	// a fixture's object without any plot, or plots (written or left by taking the object) without any object: only
 	// those are the fixture's; an object the game keeps plots for is checked even when the test touched it
 	const skip = (id: string) => (byHand.objects.has(id) && !plotted.has(id)) || (byHand.loose.has(id) && !objects.has(id));
-	const report = storeOccupancyReport(entries, { skip });
+	const report = [...storeOccupancyReport(entries, { skip }), ...lockReport(entries, (room) => byHand.rooms.has(room))];
 	if (!report.length) return;
 	process.exitCode = 1;
 	console.error(`[occupancy] ${what}: footprints and plots differ (${report.length})\n  ${report.slice(0, 20).join("\n  ")}`);
 }
 
 /** What a test wrote or took itself: `objects` written, `loose` plots written and objects taken. */
-type ByHand = { objects: Set<string>; loose: Set<string> };
-const byHandOf = (): ByHand => ({ objects: new Set(), loose: new Set() });
+type ByHand = { objects: Set<string>; loose: Set<string>; rooms: Set<string> };
+const byHandOf = (): ByHand => ({ objects: new Set(), loose: new Set(), rooms: new Set() });
 
 /** The test's own connection, noting in `byHand` the objects it writes or takes itself (a fixture that places a
  *  building without its plots, a site taken without them): such differences are the fixture's, not the game's, and the
  *  occupancy check leaves them out (checkOccupancy). What the game does through the workers is checked. */
 function noting(space: SpaceLike, byHand: ByHand): SpaceLike {
 	const id = (e: unknown) => (e && typeof e === "object" && "fields" in e ? occupancyId(e as OccupancyEntry) : null);
-	const note = (e: unknown) => { const k = id(e); if (k !== null) ((e as OccupancyEntry).type === "Plot" ? byHand.loose : byHand.objects).add(k); };
+	const note = (e: unknown) => {
+		const k = id(e);
+		if (k !== null) ((e as OccupancyEntry).type === "Plot" ? byHand.loose : byHand.objects).add(k);
+		// a room, or a room's lock, written by hand (a fixture's room without the loader): its locks are the fixture's
+		const f = e && typeof e === "object" && "fields" in e ? (e as OccupancyEntry).fields : null;
+		if (f && typeof f.roomId === "string" && ((e as OccupancyEntry).type === "Room" || (e as OccupancyEntry).types?.includes("Room"))) byHand.rooms.add(f.roomId);
+		if (f && typeof f.room === "string" && ((e as OccupancyEntry).type === "RoomLock")) byHand.rooms.add(f.room);
+	};
 	const taken = (r: unknown) => { for (const e of Array.isArray(r) ? r : [r]) { const k = id(e); if (k !== null) byHand.loose.add(k); } return r; };
 	return new Proxy(space, {
 		get(target, key, receiver) {

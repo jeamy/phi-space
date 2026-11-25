@@ -40,10 +40,12 @@ export async function releaseSpot(space: SpaceLike, txn: string, charId: string)
 	await space.takeIfExists({ type: "Spot", fields: { charId } }, NO_WAIT, { txn });
 }
 
-/** Cells nobody walks onto: persisted fires and the cells claimed by sites and buildings. */
-export async function blockedIn(space: SpaceLike, _w: WorldDef, room: string): Promise<Set<string>> {
+/** Cells nobody walks onto: persisted fires and the cells claimed by sites and buildings. `txn`: the claimed cells as
+ *  the space holds them now, read inside a transaction that holds the room's lock (room-lock.ts; the fires stay read
+ *  from the copy: a read in the transaction would keep their own changes waiting). */
+export async function blockedIn(space: SpaceLike, _w: WorldDef, room: string, txn: string | null = null): Promise<Set<string>> {
 	const out = new Set((await space.readAll({ type: "Beacon", fields: { room } })).map((e) => cellKey(e.fields as unknown as Cell)));
-	for (const e of await space.readAll({ type: "Plot", fields: { room } })) out.add(cellKey(e.fields as unknown as Cell));
+	for (const e of await space.readAll({ type: "Plot", fields: { room } }, txn ? { txn } : {})) out.add(cellKey(e.fields as unknown as Cell));
 	return out;
 }
 

@@ -22,6 +22,7 @@ import { decayNowOf, worldNowOf } from "../clock.ts";
 import { describeRoom, dropOffers, placeIn, relocate } from "./default.ts";
 import { ARTICLE, atCell, distTo, planOf } from "./build.ts";
 import { wakeOutside } from "./sleep.ts";
+import { dropRoomLock, writeRoomLock } from "../room-lock.ts";
 import { BESIDE, FREE_CELL_RADIUS } from "../../../shared/rules.ts";
 
 export const INTERIOR = "in-";
@@ -64,6 +65,7 @@ export async function makeInterior(space: Space, txn: string, w: WorldDef, b: Bu
 	const room: RoomFields = { roomId, name: `${plan.name} von ${b.ownerName}`, desc: insideText(plan.name, plan.dative, def), ground: def.ground, spawn: def.spawn,
 		building: { buildId: b.buildId, name: b.name, room: b.room, x: b.x, y: b.y, w: b.w, h: b.h, accountId: b.accountId, ownerName: b.ownerName } };
 	await space.write(draftOf("Room", w.typeclasses, room), txn, FOREVER);
+	await writeRoomLock(space as SpaceLike, txn, roomId);
 	const outside = w.rooms.find((r) => r.roomId === b.room)?.name ?? "draußen";
 	const exit: ExitFields = { exitId: exitIdOf(b.buildId), name: "hinaus", aliases: ["raus", "tür", "tuer", "out"], desc: `Hinaus nach ${outside}.`, location: roomId, destination: b.room, x: def.door.x, y: def.door.y, arrive: front, locks: "", ...(revision ? { arriveGrowthRevision: revision } : {}) };
 	await space.write(draftOf("Exit", w.typeclasses, exit), txn, FOREVER);
@@ -93,6 +95,8 @@ const bedWords = (def: InteriorDef) => (def.beds ?? []).map((d) => (d.kind === "
  *  the building's place), what lies on its floor goes to the owner's estate, the room, its exit and furnishings go. */
 export async function dropInterior(space: Space, txn: string, w: WorldDef, roomId: string, at: (Pick<BuildingFields, "room" | "x" | "y" | "w" | "h" | "accountId" | "ownerName" | "name">) | null): Promise<void> {
 	const buildId = buildIdOf(roomId)!;
+	// its lock first (room-lock.ts: the lock before what stands on the room), gone with the room
+	await dropRoomLock(space as SpaceLike, txn, roomId);
 	const front = at ? await frontOf(space, w, at) : null;
 	const start = w.rooms.find((r) => r.roomId === w.start)!;
 	const to = at && front ? { room: at.room, ...front } : { room: start.roomId, ...start.spawn };

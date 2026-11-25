@@ -12,6 +12,7 @@ import type { ObjView, ServerFrame } from "../server/gateway.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import { buildSweep } from "../server/engine/commands/build.ts";
 import { gardenTick } from "../server/engine/commands/garden.ts";
+import { writeRoomLock } from "../server/engine/room-lock.ts";
 import { saveSettings } from "../server/settings.ts";
 import { initialClock, WORLD_DAY_MS } from "../server/engine/worldtime.ts";
 import { todosFor } from "../server/todos.ts";
@@ -130,6 +131,8 @@ test("a greenhouse's bed grows through the winter and does not decay; one outsid
 		await s.write({ type: "Bed", fields: bed({ bedId: "inside", room: "in-gh", of: "gh", beaconId: "", points: 0, wateredWorldMs: 22 * DAY, untilWorldMs: 0 }) as never }, null, FOREVER);
 		await s.write({ type: "Bed", fields: bed({ bedId: "outside", wateredWorldMs: 22 * DAY }) as never }, null, FOREVER);
 		await s.write({ type: "Bed", fields: bed({ bedId: "left", x: 20, untilWorldMs: 0, plants: [], dueWorldMs: FOREVER }) as never }, null, FOREVER);
+		// the room's lock, as the loader writes it with a room: a bed lapses only under it (room-lock.ts)
+		await writeRoomLock(s, null, "r");
 		await gardenTick(s, w);
 		const of = async (id: string) => (await s.readAll({ type: "Bed", fields: { bedId: id } }))[0]?.fields as unknown as BedFields | undefined;
 		assert.equal((await of("inside"))!.plants[0]!.stage, 2, "under glass it ripens in winter");

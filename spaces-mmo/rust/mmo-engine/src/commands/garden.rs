@@ -169,6 +169,9 @@ async fn dig(c: &mut Ctx, arg: &str) -> Result<()> {
 	let (mut rect, mut why) = (None, String::new());
 	for r in tries { match refusal(c, &room, r, true, true).await? { None => { rect = Some(r); break; } Some(n) => if why.is_empty() { why = n; } } }
 	let Some(rect) = rect else { return refuse(format!("Hier passt kein Beet hin: {why}")) };
+	// the search ran without the room's lock; with it the chosen place is checked again as the space holds it now
+	crate::room_lock::hold_room_or_refuse(&c.space, &c.txn, j::s(&room, "roomId")).await?;
+	if let Some(again) = super::build::refusal_locked(c, &room, rect, true, true, None, true).await? { return refuse(format!("Hier passt kein Beet hin: {again}")); }
 	let bed_id = format!("bed-{}", hex(&random_bytes(6)));
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let room_id = j::s(&room, "roomId").to_owned();
@@ -221,6 +224,9 @@ async fn beet(c: &mut Ctx, arg: &str) -> Result<()> {
 	let kw = js::re(KIND_WORD, "i").test(&word);
 	if js::re(r"^(?:anlegen|neu|new|umgraben|\d+)$", "i").test(&word) || kw { let a = if js::re(r"^\d+$", "").test(&word) || kw { arg.to_owned() } else { rest.join(" ") }; return dig(c, &a).await; }
 	if js::re(r"^(?:aufgeben|abreissen|abreißen|weg|remove)$", "i").test(&word) {
+		// the room's lock before the bed (room_lock.rs): its cells may come free
+		let here = j::s(&c.actor, "room").to_owned();
+		crate::room_lock::hold_room_or_refuse(&c.space, &c.txn, &here).await?;
 		// „beet aufgeben ja x y“ (the map's menu): the one of one's beds on that cell, not just the nearest
 		let num = |i: usize| rest.get(i).map_or(f64::NAN, |v| js::to_number(v));
 		let (cx, cy) = (num(1), num(2));
@@ -690,9 +696,13 @@ pub async fn garden_tick(space: &Space, w: &Json) -> Result<f64> {
 		if j::n(b, "dueWorldMs") > now && lasts(b) { continue; }
 		let txn = space.create_transaction(10_000.0).await?;
 		let r: Result<bool> = async {
+			// a bed that goes back to grass frees its cells: the room's lock first (room_lock.rs), held: the next tick
+			let lapses = !lasts(b);
+			if lapses && !crate::room_lock::hold_room(space, &txn, j::s(b, "room"), crate::room_lock::LOCK_WAIT_MS).await? { return Ok(false); }
 			let Some(t) = space.take_if_exists(&tmpl("Bed", obj! { "bedId" => j::at(b, "bedId").clone() }), NO_WAIT, Some(&txn)).await? else { return Ok(false) };
 			let mut bed = fields(&t).clone();
 			if j::n(&bed, "dueWorldMs") > now && lasts(&bed) { return Ok(false); }
+			if !lasts(&bed) && !lapses { return Ok(false); }
 			if !lasts(&bed) { free_bed(space, &txn, &bed).await?; } else {
 				let fog = fog_of(space, j::s(&bed, "room")).await?;
 				let reach = glass.map_or(f64::NAN, |gl| j::n(gl, "reach"));

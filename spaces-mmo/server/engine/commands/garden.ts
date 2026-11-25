@@ -17,6 +17,7 @@
 //   change), never by rewriting beds when the fog moves.
 // - A plant that reaches its next stage dry (no water for `thirstWorldMs`) wilts; a ripe plant wilts after its time.
 // - Harvesting takes the bed in the command's transaction: ten at one bed, and every ripe plant goes to exactly one.
+import { holdRoom, holdRoomOrRefuse } from "../room-lock.ts";
 import { needRank } from "./settlement.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BedFields, type BedPlant, type BuildingFields, type ItemFields, type SeedRestFields, type Variety, type VarietyFields } from "../../model.ts";
@@ -146,6 +147,10 @@ async function dig(c: CommandCtx, arg: string): Promise<void> {
 	let rect: Rect | null = null, why = "";
 	for (const r of tries) { const no = await refusal(c, room, r, true, true); if (!no) { rect = r; break; } why ||= no; }
 	if (!rect) throw new CommandError(`Hier passt kein Beet hin: ${why}`);
+	// the search ran without the room's lock; with it the chosen place is checked again as the space holds it now
+	await holdRoomOrRefuse(c, room.roomId);
+	const again = await refusal(c, room, rect, true, true, undefined, true);
+	if (again) throw new CommandError(`Hier passt kein Beet hin: ${again}`);
 	const bedId = `bed-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
 	for (const p of cells(rect)) {
 		try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: p.x, y: p.y, of: bedId } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
@@ -179,6 +184,8 @@ const beet: Command = {
 		const [word = "", ...rest] = arg.trim().split(/\s+/);
 		if (/^(?:anlegen|neu|new|umgraben|\d+)$/i.test(word) || KIND_WORD.test(word)) return dig(c, /^\d+$/.test(word) || KIND_WORD.test(word) ? arg : rest.join(" "));
 		if (/^(?:aufgeben|abreissen|abreißen|weg|remove)$/i.test(word)) {
+			// the room's lock before the bed (room-lock.ts): its cells may come free
+			await holdRoomOrRefuse(c, c.actor.room);
 			// „beet aufgeben ja x y“ (the map's menu): the one of one's beds on that cell, not just the nearest
 			const [cx, cy] = [Number(rest[1]), Number(rest[2])], at = Number.isInteger(cx) && Number.isInteger(cy) && rest.length >= 3;
 			// the operator (an admin) gives up anyone's bed beside it, a forsaken one in the way; its owner is told
@@ -527,10 +534,14 @@ export async function gardenTick(space: SpaceLike, w: WorldDef): Promise<number>
 		if (b.dueWorldMs > now && lasts(b)) continue;
 		const txn = (await space.createTransaction(10_000)).id;
 		try {
+			// a bed that goes back to grass frees its cells: the room's lock first (room-lock.ts), held: the next tick
+			const lapses = !lasts(b);
+			if (lapses && !(await holdRoom(space, txn, b.room))) { await space.abort(txn); continue; }
 			const t = await space.takeIfExists({ type: "Bed", fields: { bedId: b.bedId } }, NO_WAIT, { txn });
 			if (!t) { await space.abort(txn); continue; }
 			const bed = fieldsOf<BedFields>(t);
 			if (bed.dueWorldMs > now && lasts(bed)) { await space.abort(txn); continue; } // the read was older: done already
+			if (!lasts(bed) && !lapses) { await space.abort(txn); continue; } // it lapsed since the read: the next tick, with the lock
 			if (!lasts(bed)) await freeBed(space, txn, bed);
 			else {
 				advance(g, bed, now, await fogOf(space, bed.room), random, patient, bed.of || houses.some((h) => h.room === bed.room && Math.max(h.x - (bed.x + bed.w - 1), bed.x - (h.x + h.w - 1), h.y - (bed.y + bed.h - 1), bed.y - (h.y + h.h - 1)) <= glass!.reach) ? null : winter);

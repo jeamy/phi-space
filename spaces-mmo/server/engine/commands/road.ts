@@ -8,6 +8,7 @@
 //
 // One Route entry holds the whole road, a Road entry per room what the page draws (written together with it, roadSave).
 // The terms run on the decay clock; roadTick resolves votes and lets roads lapse.
+import { holdIsland, holdIslandOrRefuse } from "../room-lock.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type AccountFields, type CharacterFields, type ExitFields, type RoadFields, type RoomFields, type RouteFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
@@ -251,6 +252,11 @@ async function plan(c: CommandCtx, word: string): Promise<void> {
 	const legB = trace(c.world, there.ground, to.exit.arrive, middleOf(c.world, there, fire(there.roomId)).filter((p) => !blockedB.has(cellKey(p))), blockedB);
 	if (!legA || !legB) throw new CommandError(`Zwischen hier und ${to.name} ist kein freier Weg für eine Straße; etwas ist zugebaut.`);
 	const cells = [...legA.map((p) => ({ room: here.roomId, ...p })), ...legB.map((p) => ({ room: there.roomId, ...p }))];
+	// the trace was found without the locks; with the island's and both rooms' (room-lock.ts) its cells are checked again
+	// against what stands there now
+	await holdIslandOrRefuse(c, island, [here.roomId, there.roomId]);
+	const nowA = await blockedIn(c.space, c.world, here.roomId, c.txn), nowB = await blockedIn(c.space, c.world, there.roomId, c.txn);
+	if (cells.some((p) => (p.room === here.roomId ? nowA : nowB).has(cellKey(p)))) throw new CommandError(`Zwischen hier und ${to.name} ist kein freier Weg für eine Straße; etwas ist zugebaut.`);
 	const stone = c.world.prototypes.find((p) => p.key === def.stone)?.name ?? def.stone, wood = c.world.prototypes.find((p) => p.key === def.woodProto)?.name ?? def.woodProto;
 	const voters = await votersOf(c.space, c.world, [here.roomId, there.roomId], c.txn), now = await decayNowOf(c.space, c.txn);
 	const me = c.account.accountId, others = voters.filter((v) => v !== me);
@@ -276,6 +282,8 @@ async function vote(c: CommandCtx, yes: boolean, word: string): Promise<void> {
 	const w = word.trim().toLowerCase().replace(/^(?:nach|zu|zum|zur|to)\s+/, "");
 	const pick = w ? all.filter((r) => r.names.some((n) => n.toLowerCase().startsWith(w))) : all;
 	if (pick.length !== 1) throw new NotUnderstood(`Über welche Straße? ${all.map((r) => `„straße ${yes ? "ja" : "nein"} ${r.names[r.rooms[0] === c.actor.room ? 1 : 0]}“`).join(", ")}.`);
+	// a last vote may end the road (its cells come free): the island's lock and its rooms' before the road (room-lock.ts)
+	await holdIslandOrRefuse(c, pick[0]!.island, pick[0]!.rooms);
 	const e = await c.space.takeIfExists({ type: "Route", fields: { routeId: pick[0]!.routeId } }, NO_WAIT, { txn: c.txn });
 	if (!e) throw new CommandError("Die Abstimmung ist gerade vorbei; „straße“ zeigt, wie es steht.");
 	const r = fieldsOf<RouteFields>(e), me = c.account?.accountId ?? "";
@@ -344,6 +352,8 @@ export async function roadTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 		if (!due) continue;
 		const txn = (await space.createTransaction(10_000)).id;
 		try {
+			// a decision or a lapse may free its cells: the island's lock and its rooms' first (room-lock.ts), held: the next run
+			if (!(await holdIsland(space, txn, old.island, old.rooms))) { await space.abort(txn); continue; }
 			const e = await space.takeIfExists({ type: "Route", fields: { routeId: old.routeId } }, NO_WAIT, { txn });
 			if (!e) { await space.abort(txn); continue; }
 			const r = fieldsOf<RouteFields>(e);

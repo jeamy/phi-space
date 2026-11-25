@@ -145,6 +145,9 @@ async fn stake(c: &mut Ctx, at: &str) -> Result<()> {
 	let (mut rect, mut why) = (None, String::new());
 	for r in tries { match refusal(c, &room, r, false, true).await? { None => { rect = Some(r); break; } Some(n) => if why.is_empty() { why = n; } } }
 	let Some(rect) = rect else { return refuse(format!("Hier passt kein Acker hin ({}×{}): {why}", nt(fw), nt(fh))) };
+	// the search ran without the room's lock; with it the chosen place is checked again as the space holds it now
+	crate::room_lock::hold_room_or_refuse(&c.space, &c.txn, j::s(&room, "roomId")).await?;
+	if let Some(again) = super::build::refusal_locked(c, &room, rect, false, true, None, true).await? { return refuse(format!("Hier passt kein Acker hin ({}×{}): {again}", nt(fw), nt(fh))); }
 	let field_id = format!("field-{}", hex(&random_bytes(6)));
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let room_id = j::s(&room, "roomId").to_owned();
@@ -192,6 +195,8 @@ async fn flur(c: &mut Ctx, arg: &str) -> Result<()> {
 		return msg(c, "*", "info", &if open { format!("{me} öffnet den Acker: säen und ernten darf jetzt jeder, und jeder behält seinen Anteil.") } else { format!("{me} schließt den Acker wieder für Fremde.") }, MsgOpts::default()).await;
 	}
 	if re(r"^(?:aufgeben|weg|remove)$").test(&word) {
+		let here = j::s(&c.actor, "room").to_owned();
+		crate::room_lock::hold_room_or_refuse(&c.space, &c.txn, &here).await?; // the room's lock before the field (room_lock.rs)
 		let f = field_here(c).await?;
 		if !mine(c, &f) { return refuse(format!("Das ist der {}; aufgeben kann ihn nur, wer ihn angelegt hat.", field_name(&f))); }
 		// what grows on it is lost: asked first, „flur aufgeben ja“ does it
@@ -395,8 +400,12 @@ pub async fn field_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> {
 		if j::n(f0, "dueWorldMs") > now && j::n(f0, "untilWorldMs") > kept { continue; }
 		let txn = space.create_transaction(10_000.0).await?;
 		let r: Result<bool> = async {
+			// a field that goes back to grass frees its cells: the room's lock first (room_lock.rs), held: the next round
+			let lapses = j::n(f0, "untilWorldMs") <= kept;
+			if lapses && !crate::room_lock::hold_room(space, &txn, j::s(f0, "room"), crate::room_lock::LOCK_WAIT_MS).await? { return Ok(false); }
 			let Some(t) = space.take_if_exists(&tmpl("Field", obj! { "fieldId" => j::at(f0, "fieldId").clone() }), NO_WAIT, Some(&txn)).await? else { return Ok(false) };
 			let f = fields(&t).clone();
+			if j::n(&f, "untilWorldMs") <= kept && !lapses { return Ok(false); }
 			let crop = crop_of(d, j::at(&f, "crop")).map_or_else(|| "Die Frucht".to_owned(), |x| txt(j::at(x, "name")));
 			let room = j::s(&f, "room").to_owned();
 			let with = |pairs: Vec<(&str, Json)>| { let mut g = f.clone(); for (k, v) in pairs { j::set(&mut g, k, v); } g };

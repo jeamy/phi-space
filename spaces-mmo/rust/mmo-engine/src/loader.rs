@@ -134,6 +134,12 @@ pub async fn load_into_space(space: &Space, w: &Json, o: LoadOptions) -> Result<
 				if j::b(r, "map") { f.insert("map", j::at(r, "map").clone()); }
 				if j::b(r, "island") { f.insert("island", j::at(r, "island").clone()); }
 				upsert(space, txn, replace, "Room", obj! { "roomId" => rid }, draft_of("Room", tcs, Json::Object(f))?).await?;
+				// the room's lock (room_lock.rs), with the room; and its island's, once
+				if space.peek(&crate::room_lock::room_lock(rid), Some(txn)).await?.is_none() { crate::room_lock::write_room_lock(space, Some(txn), rid).await?; }
+				if j::b(r, "island") {
+					let island = j::s(r, "island");
+					if space.peek(&crate::room_lock::island_lock(island), Some(txn)).await?.is_none() { crate::room_lock::write_island_lock(space, Some(txn), island).await?; }
+				}
 			}
 		});
 	}

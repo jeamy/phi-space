@@ -38,6 +38,7 @@ import { baysOf, berth, SHIP_LENGTH } from "../liner.ts";
 import { roadCellsIn, routeDeliver, routeNear, routeWork } from "./road.ts";
 import { spendRested } from "./sleep.ts";
 import { interiorOf, interiorSweep, isInterior, makeInterior, nearBuildings } from "./interior.ts";
+import { holdRoom, holdRoomOrRefuse } from "../room-lock.ts";
 import { BESIDE, FIRE_CLEARANCE, SITE_REACH, EXIT_REACH, MOVE_BUILDING, MOVE_WINDOW, onRing } from "../../../shared/rules.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
@@ -80,15 +81,16 @@ export const PATH = ":";
 /** How far from an exit a plan `atExit` may lie: the cells right beside it stay free (isPassage). */
 
 /** Why `rect` cannot be built on, or null. `own`: the object being moved there (versetze, builder.ts): its own cells
- *  are no obstacle. */
-export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green = false, onPeople = false, own?: string): Promise<string | null> {
+ *  are no obstacle. `locked`: the room's lock is held (room-lock.ts); the occupied cells, and with them whether a way
+ *  stays open, are read inside the transaction, as the space holds them now (the decisive check after the search). */
+export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green = false, onPeople = false, own?: string, locked = false): Promise<string | null> {
 	const height = room.ground.length, width = room.ground[0]?.length ?? 0;
 	if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height) return "Dort ist der Raum zu Ende.";
 	const zoned = await zoneRefusal(c, room.roomId, cells(rect), green);
 	if (zoned) return zoned;
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
-	const blocked = await blockedIn(c.space, c.world, room.roomId);
-	if (own) for (const e of await c.space.readAll({ type: "Plot", fields: { room: room.roomId, of: own } })) blocked.delete(cellKey(e.fields as never));
+	const blocked = await blockedIn(c.space, c.world, room.roomId, locked ? c.txn : null);
+	if (own) for (const e of await c.space.readAll({ type: "Plot", fields: { room: room.roomId, of: own } }, locked ? { txn: c.txn } : {})) blocked.delete(cellKey(e.fields as never));
 	// the builder is no one in the way: it steps off the site it staked out (bau); beds and fields are dug under anyone's feet
 	const people = await occupiedIn(c.space, room.roomId, c.actor.charId);
 	const things = new Set((await c.space.readAll({ type: "Item", fields: { location: room.roomId } })).map((e) => cellKey(e.fields as never)));
@@ -154,13 +156,14 @@ export async function noteBuilder(c: CommandCtx, beaconId: string): Promise<void
 
 /** Why a jetty cannot go on `rect` (null: it can): it lies on water only, one of its cells beside the land (where one
  *  stands to fish, row and load), free of other things built and of the large ship's berth in a bay. */
-async function waterRefusal(c: Pick<CommandCtx, "space" | "world">, room: RoomFields, rect: Rect): Promise<string | null> {
+/** `txn`: the room's lock is held there; the occupied cells are read inside it (refusal `locked`). */
+async function waterRefusal(c: Pick<CommandCtx, "space" | "world">, room: RoomFields, rect: Rect, txn: string | null = null): Promise<string | null> {
 	const height = room.ground.length, width = room.ground[0]?.length ?? 0;
 	if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height) return "Dort ist der Raum zu Ende.";
 	const wet = (p: { x: number; y: number }) => room.ground[p.y]?.[p.x] !== undefined && !walkable(c.world, room.ground, p.x, p.y);
 	if (!cells(rect).every(wet)) return "Ein Steg reicht ins Wasser: er liegt ganz auf dem Wasser, mit einem Ende am Ufer.";
 	if (!cells(rect).some((p) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => walkable(c.world, room.ground, p.x + dx!, p.y + dy!)))) return "Ein Steg beginnt am Ufer.";
-	const blocked = await blockedIn(c.space, c.world, room.roomId);
+	const blocked = await blockedIn(c.space, c.world, room.roomId, txn);
 	if (cells(rect).some((p) => blocked.has(cellKey(p)))) return "Dort liegt schon ein Steg oder wird gebaut.";
 	const island = c.world.rooms.find((r) => r.roomId === room.roomId)?.island;
 	const bay = island && baysOf(c.world.allRooms ?? c.world.rooms).get(island)?.roomId === room.roomId && room.spawn ? berth(room.ground, room.spawn) : null;
@@ -174,6 +177,7 @@ async function waterRefusal(c: Pick<CommandCtx, "space" | "world">, room: RoomFi
  *  now: two cells out from the shore, the one end at the land; the nearest such place within two cells, the ones that
  *  stick out (touch the land at one cell only) first. Its plot moves with it. False when there is no place. */
 async function jettyToWater(space: SpaceLike, w: WorldDef, txn: string, type: "Building" | "Site", b: { buildId: string; room: string } & Rect): Promise<boolean> {
+	if (!(await holdRoom(space, txn, b.room))) return false; // the room's lock first; held: the next sweep
 	const roomE = (await space.readAll({ type: "Room", fields: { roomId: b.room } }, { txn }))[0];
 	if (!roomE) return false;
 	const room = fieldsOf<RoomFields>(roomE), g = room.ground;
@@ -189,7 +193,7 @@ async function jettyToWater(space: SpaceLike, w: WorldDef, txn: string, type: "B
 	const far = (r: Rect) => Math.min(...cells(r).map((p) => distTo(p, b)));
 	tries.sort((p, q) => touch(p) - touch(q) || far(p) - far(q));
 	for (const r of tries) {
-		if (await waterRefusal({ space, world: w }, room, r)) continue;
+		if (await waterRefusal({ space, world: w }, room, r, txn)) continue;
 		const e = await space.takeIfExists({ type, fields: { buildId: b.buildId } }, NO_WAIT, { txn });
 		if (!e) return false;
 		await freeCells(space, txn, b.room, b.buildId);
@@ -386,6 +390,10 @@ export const bau: Command = {
 		const exits = plan.atExit ? await exitsHere(c) : [];
 		for (const r of tries) { const no = plan.water ? await waterRefusal(c, room, r) : (await refusal(c, room, r, !!plan.green, !!plan.green)) ?? (plan.shore && !touchesWater(c.world, room, r) ? "Das muss ans Wasser grenzen." : plan.atExit && !exits.some((x) => distTo(x.f, r) <= EXIT_REACH) ? "Das gehört neben einen Ausgang." : null); if (!no) { rect = r; break; } why ||= no; }
 		if (!rect) throw new CommandError(`Hier passt ${plan.dative?.startsWith("einem ") ? "kein" : "keine"} ${plan.name} hin: ${why}`);
+		// the search ran without the room's lock; with it the chosen place is checked again as the space holds it now
+		await holdRoomOrRefuse(c, room.roomId);
+		const again = plan.water ? await waterRefusal(c, room, rect, c.txn) : await refusal(c, room, rect, !!plan.green, !!plan.green, undefined, true);
+		if (again) throw new CommandError(`Hier passt ${plan.dative?.startsWith("einem ") ? "kein" : "keine"} ${plan.name} hin: ${again}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
 		for (const p of cells(rect)) {
 			try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: p.x, y: p.y, of: buildId } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
@@ -800,6 +808,8 @@ const abriss: Command = {
 	key: "abriss", aliases: ["reisse", "reiße", "demolish"],
 	help: "abriss – deinen Bau oder deine Baustelle neben dir abreißen (reisse … ab): die Fläche wird frei, ein Teil des Materials kommt zurück; eine Ruine neben dir räumt jeder ab",
 	async func(c, arg) {
+		// the room's lock before the site, ruin or building it takes (room-lock.ts): its cells come free
+		await holdRoomOrRefuse(c, c.actor.room);
 		const name = arg.replace(/\s+ab$/i, "").replace(/^(?:die|den|das|meine?n?)\s+/i, "").replace(/^baustelle$/i, "");
 		const site = (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e)).find((s) => distTo(c.actor, s) <= BESIDE && s.accountId === c.account?.accountId);
 		if (site && (!name || /baustelle/i.test(arg) || planOf(c.world, name)?.key === site.plan)) {
@@ -895,7 +905,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 		const s = fieldsOf<SiteFields>(e);
 		if (s.untilWorldMs > now && s.plan !== oldRoad) continue;
 		await inTxn(async (txn) => {
-			if (!(await space.takeIfExists({ type: "Site", fields: { buildId: s.buildId } }, NO_WAIT, { txn }))) return false;
+			if (!(await holdRoom(space, txn, s.room)) || !(await space.takeIfExists({ type: "Site", fields: { buildId: s.buildId } }, NO_WAIT, { txn }))) return false;
 			await closeOrders(space, txn, s, now + (w?.building?.estateWorldMs ?? 30 * 24 * 3600_000));
 			await freeCells(space, txn, s.room, s.buildId);
 			await releaseLight(space, txn, s.beaconId, s.points ?? 1);
@@ -906,7 +916,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 		const b = fieldsOf<BuildingFields>(e);
 		if (b.plan === oldRoad) {
 			await inTxn(async (txn) => {
-				if (!(await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn }))) return false;
+				if (!(await holdRoom(space, txn, b.room)) || !(await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn }))) return false;
 				logGone(b, "a road of the old kind");
 				await freeCells(space, txn, b.room, b.buildId);
 				await releaseLight(space, txn, b.beaconId, b.points ?? 1);
@@ -969,7 +979,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 		const r = fieldsOf<RuinFields>(e);
 		if (r.untilWorldMs > now) continue;
 		await inTxn(async (txn) => {
-			if (!(await space.takeIfExists({ type: "Ruin", fields: { buildId: r.buildId } }, NO_WAIT, { txn }))) return false;
+			if (!(await holdRoom(space, txn, r.room)) || !(await space.takeIfExists({ type: "Ruin", fields: { buildId: r.buildId } }, NO_WAIT, { txn }))) return false;
 			await freeCells(space, txn, r.room, r.buildId);
 			return true;
 		});

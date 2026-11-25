@@ -7,6 +7,7 @@
 // `antrag steuer <n>` sets the coins per thing taken from the warehouse; they stay in it, for the settlement.
 // `antrag abriss` puts the building beside whoever puts it to the vote: carried, it comes down whoever owns it, and half of
 // its material with what lay in its chest waits for the owner as an estate. Not the hall, and no store the settlement filled.
+import { holdRoom } from "../room-lock.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type MotionFields, type MotionKind, type SettlementFields, type VoteFields, type ZoneFields } from "../../model.ts";
 import { decayNowOf } from "../clock.ts";
@@ -155,7 +156,8 @@ export async function motionTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 				if (carried && m.zone) await applyZone(space, m, txn);
 				let after = "";
 				if (carried && m.target) {
-					const standing = await space.takeIfExists({ type: "Building", fields: { buildId: m.target.buildId } }, NO_WAIT, { txn });
+					// the room's lock before the building (room-lock.ts); held by a builder now: as if the building were in use
+					const standing = (await holdRoom(space, txn, m.room)) ? await space.takeIfExists({ type: "Building", fields: { buildId: m.target.buildId } }, NO_WAIT, { txn }) : null;
 					const b = standing && fieldsOf<BuildingFields>(standing);
 					if (!b) after = (await space.count({ type: "Building", fields: { buildId: m.target.buildId } })) ? " Der Bau war gerade in Arbeit und bleibt stehen." : " Der Bau steht nicht mehr.";
 					else if (await holdsGoods(space, w, b)) { await space.write({ type: "Building", fields: b as never }, txn, FOREVER); after = " Im Lager liegt inzwischen wieder etwas; es bleibt stehen."; }

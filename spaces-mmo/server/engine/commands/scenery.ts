@@ -1,5 +1,6 @@
 // Scenery that stands in the way (docs/siedeln.en.md "Kulissen"): `räume` clears a piece beside one, work by work like a site; the
 // last stroke frees its cells, gives what was in it and leaves a mark so that no new world version brings it back.
+import { holdRoomOrRefuse } from "../room-lock.ts";
 import { FOREVER, NO_WAIT } from "phi-spaces";
 import { fieldsOf, type SceneryFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
@@ -24,8 +25,12 @@ const raeume: Command = {
 		const { now, rest } = await rested(c);
 		const s = await nearby(c, arg);
 		if (s.fixed) throw new CommandError(`${s.name} gehört fest hierher und bleibt stehen.`);
+		// the last work frees its cells: the room's lock before the piece (room-lock.ts)
+		const last = s.left <= 1;
+		if (last) await holdRoomOrRefuse(c, s.room);
 		const e = await c.space.takeIfExists({ type: "Scenery", fields: { sceneryId: s.sceneryId } }, NO_WAIT, { txn: c.txn });
 		if (!e) throw new CommandError(`Daran arbeitet gerade jemand; gleich noch einmal.`);
+		if (!last && Number(e.fields.left) <= 1) throw new CommandError(`Daran arbeitet gerade jemand; gleich noch einmal.`);
 		await tire(c, now, rest);
 		const left = s.left - 1;
 		if (left > 0) {

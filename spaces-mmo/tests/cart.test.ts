@@ -125,7 +125,7 @@ test("a vote that ends with as many no as yes drops the road; the single road ce
 	const srv = await startServer({ worldEnv: { SPACES_MMO_EPOCH_FORCE: "2" } });
 	try {
 		const s = srv.stack.space;
-		await s.write({ type: "Route", fields: { routeId: "road-x", pair: "a|b", island: "grau", rooms: ["graue-bucht", "klippenpfad"], names: ["Graue Bucht", "Klippenpfad"], cells: [], state: "vote", planner: "o", plannerName: "O", accountId: "o", voters: ["o", "p"], yes: ["o"], no: ["p"], voteUntil: 1, needs: [], work: 0, workNeed: 3, by: {}, untilWorldMs: 1, at: 0, points: 2 } satisfies RouteFields as never }, null, FOREVER);
+		await s.write({ type: "Route", fields: { routeId: "road-x", pair: "a|b", island: "Graue Insel", rooms: ["graue-bucht", "klippenpfad"], names: ["Graue Bucht", "Klippenpfad"], cells: [], state: "vote", planner: "o", plannerName: "O", accountId: "o", voters: ["o", "p"], yes: ["o"], no: ["p"], voteUntil: 1, needs: [], work: 0, workNeed: 3, by: {}, untilWorldMs: 1, at: 0, points: 2 } satisfies RouteFields as never }, null, FOREVER);
 		await roadTick(s, w, 60_000);
 		assert.equal(await s.count({ type: "Route" }), 0);
 		await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 5 } as never }, null, FOREVER, { unique: ["beaconId"] });

@@ -8,6 +8,7 @@
 //   when that date has come, and never otherwise. Its stages run on the world clock times the patience, so in the second
 //   clock: a birch stands in three days whatever the world's rate. Fog slows it when the date is set, winter holds it.
 // - Felling and harvesting take the tree in the command's transaction: two at one tree, and its crop goes to one.
+import { holdRoomOrRefuse } from "../room-lock.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type TreeFields } from "../../model.ts";
 import { frozenUntil, patienceOf, worldNowOf } from "../clock.ts";
@@ -84,6 +85,10 @@ export async function plantTree(c: CommandCtx, arg: string): Promise<boolean> {
 	let rect: Rect | null = null, why = "";
 	for (const r of tries) { const no = await refusal(c, room, r, true, true); if (!no) { rect = r; break; } why ||= no; }
 	if (!rect) throw new CommandError(`Hier passt kein Baum hin: ${why}`);
+	// the search ran without the room's lock; with it the chosen place is checked again as the space holds it now
+	await holdRoomOrRefuse(c, room.roomId);
+	const again = await refusal(c, room, rect, true, true, undefined, true);
+	if (again) throw new CommandError(`Hier passt kein Baum hin: ${again}`);
 	if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: hit.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Der Samen ist gerade nicht greifbar; bitte noch einmal.");
 	const treeId = `tree-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
 	try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: rect.x, y: rect.y, of: treeId } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }
@@ -141,6 +146,7 @@ const faelle: Command = {
 		const axe = (await inventory(c)).find((i) => i.f.proto === d.axe);
 		if (!axe) throw new CommandError(`Zum Fällen brauchst du eine ${protoName(c, d.axe)} („craft ${protoName(c, d.axe).toLowerCase()}“).`);
 		const { now, rest } = await rested(c);
+		await holdRoomOrRefuse(c, c.actor.room); // the room's lock before the tree (room-lock.ts): its cell may come free
 		const t = await treeHere(c, arg, levelOf(c.account) === "Admin");
 		const s = sortOfTree(d, t.sort);
 		if (!s) throw new CommandError("Diesen Baum kennt die Welt nicht mehr.");

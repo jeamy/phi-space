@@ -207,7 +207,9 @@ pub async fn motion_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 				let mut after = String::new();
 				if let (true, Some(t)) = (carried, j::opt(&m, "target")) {
 					let bid = j::at(t, "buildId").clone();
-					match space.take_if_exists(&tmpl("Building", obj! { "buildId" => bid.clone() }), NO_WAIT, Some(&txn)).await?.map(|e| fields(&e).clone()) {
+					// the room's lock before the building (room_lock.rs); held by a builder now: as if the building were in use
+					let standing = if crate::room_lock::hold_room(space, &txn, j::s(&m, "room"), crate::room_lock::LOCK_WAIT_MS).await? { space.take_if_exists(&tmpl("Building", obj! { "buildId" => bid.clone() }), NO_WAIT, Some(&txn)).await? } else { None };
+					match standing.map(|e| fields(&e).clone()) {
 						None => after = if space.count(&tmpl("Building", obj! { "buildId" => bid }), None).await? > 0.0 { " Der Bau war gerade in Arbeit und bleibt stehen.".into() } else { " Der Bau steht nicht mehr.".into() },
 						Some(b) if holds_goods(space, w, &b).await? => { space.write(&tmpl("Building", b), Some(&txn), FOREVER).await?; after = " Im Lager liegt inzwischen wieder etwas; es bleibt stehen.".into(); }
 						Some(b) => { demolish_by_vote(space, &txn, w, &b, now).await?; log_gone(&b, "voted down at the town hall"); after = format!(" Die Fläche ist frei; was blieb, holt {} hier mit „nachlass“ ab.", key_text(j::at(&b, "ownerName"))); }

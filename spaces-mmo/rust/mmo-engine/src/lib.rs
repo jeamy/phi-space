@@ -26,6 +26,7 @@ pub mod pack;
 pub mod prototypes;
 pub mod regions;
 pub mod room_growth;
+pub mod room_lock;
 pub mod rules;
 pub mod schedule;
 pub mod settings;

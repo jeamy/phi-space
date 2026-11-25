@@ -92,6 +92,9 @@ pub async fn plant_tree(c: &mut Ctx, arg: &str) -> Result<bool> {
 	let (mut rect, mut why) = (None, String::new());
 	for r in tries { match refusal(c, &room, r, true, true).await? { None => { rect = Some(r); break; } Some(n) => if why.is_empty() { why = n; } } }
 	let Some(rect) = rect else { return refuse(format!("Hier passt kein Baum hin: {why}")) };
+	// the search ran without the room's lock; with it the chosen place is checked again as the space holds it now
+	crate::room_lock::hold_room_or_refuse(&c.space, &c.txn, j::s(&room, "roomId")).await?;
+	if let Some(again) = super::build::refusal_locked(c, &room, rect, true, true, None, true).await? { return refuse(format!("Hier passt kein Baum hin: {again}")); }
 	let me = c.char_id().to_owned();
 	if c.space.take_if_exists(&tmpl("Item", obj! { "itemId" => j::at(&hf, "itemId").clone(), "location" => me.as_str() }), NO_WAIT, c.txn()).await?.is_none() { return refuse("Der Samen ist gerade nicht greifbar; bitte noch einmal."); }
 	let tree_id = format!("tree-{}", hex(&random_bytes(6)));
@@ -160,6 +163,8 @@ async fn faelle(c: &mut Ctx, arg: &str) -> Result<()> {
 	let Some(axe) = inventory(c).await?.into_iter().find(|i| j::s(fields(i), "proto") == axe_key).map(|i| fields(&i).clone()) else { let n = proto_name(c, &axe_key); return refuse(format!("Zum Fällen brauchst du eine {n} („craft {}“).", js::lower(&n))) };
 	let (now, rest) = rested(c).await?;
 	let admin = level_of(c.account.as_ref()) == "Admin";
+	let here = j::s(&c.actor, "room").to_owned();
+	crate::room_lock::hold_room_or_refuse(&c.space, &c.txn, &here).await?; // the room's lock before the tree (room_lock.rs)
 	let t = tree_here(c, &d, arg, admin).await?;
 	let Some(s) = sort_of_tree(&d, j::s(&t, "sort")).cloned() else { return refuse("Diesen Baum kennt die Welt nicht mehr.") };
 	if j::n(&t, "stage") < 2.0 { return refuse(format!("{}: noch zu jung zum Fällen; ausgewachsen in etwa {}.", txt(j::at(&s, "name")), span(0f64.max(j::n(&t, "dueWorldMs") - now)))); }

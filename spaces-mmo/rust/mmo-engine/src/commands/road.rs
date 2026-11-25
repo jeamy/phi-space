@@ -369,6 +369,12 @@ async fn plan(c: &mut Ctx, word: &str) -> Result<()> {
 	let leg_b = trace(c.w(), &gb, (j::n(arrive, "x"), j::n(arrive, "y")), &ends_b, &blocked_b);
 	let (Some(leg_a), Some(leg_b)) = (leg_a, leg_b) else { return refuse(format!("Zwischen hier und {to_name} ist kein freier Weg für eine Straße; etwas ist zugebaut.")) };
 	let cells: Vec<Json> = leg_a.iter().map(|p| obj! { "room" => here_id.as_str(), "x" => p.0, "y" => p.1 }).chain(leg_b.iter().map(|p| obj! { "room" => there_id.as_str(), "x" => p.0, "y" => p.1 })).collect();
+	// the trace was found without the locks; with the island's and both rooms' (room_lock.rs) its cells are checked again
+	// against what stands there now
+	crate::room_lock::hold_island_or_refuse(&c.space, &c.txn, &island, &[&here_id, &there_id]).await?;
+	let now_a = crate::occupancy::blocked_in_txn(&c.space, &here_id, c.txn()).await?;
+	let now_b = crate::occupancy::blocked_in_txn(&c.space, &there_id, c.txn()).await?;
+	if leg_a.iter().any(|p| now_a.contains(&cell_key(p.0, p.1))) || leg_b.iter().any(|p| now_b.contains(&cell_key(p.0, p.1))) { return refuse(format!("Zwischen hier und {to_name} ist kein freier Weg für eine Straße; etwas ist zugebaut.")); }
 	let n_cells = cells.len() as f64;
 	let stone = proto_name(c.w(), j::s(&def, "stone"));
 	let wood = proto_name(c.w(), j::s(&def, "woodProto"));
@@ -417,6 +423,9 @@ async fn vote(c: &mut Ctx, yes: bool, word: &str) -> Result<()> {
 	let w = strip_to(&js::trim(word).to_lowercase());
 	let pick: Vec<&Json> = if w.is_empty() { all.iter().collect() } else { all.iter().filter(|r| j::a(r, "names").iter().any(|n| txt(n).to_lowercase().starts_with(&w))).collect() };
 	if pick.len() != 1 { return not_understood(format!("Über welche Straße? {}.", all.iter().map(|r| format!("„straße {} {}“", if yes { "ja" } else { "nein" }, other_name(r, &room))).collect::<Vec<_>>().join(", "))); }
+	// a last vote may end the road (its cells come free): the island's lock and its rooms' before the road (room_lock.rs)
+	let rooms: Vec<&str> = j::a(pick[0], "rooms").iter().filter_map(Json::as_str).collect();
+	crate::room_lock::hold_island_or_refuse(&c.space, &c.txn, j::s(pick[0], "island"), &rooms).await?;
 	let Some(e) = c.space.take_if_exists(&tmpl("Route", obj! { "routeId" => j::at(pick[0], "routeId").clone() }), NO_WAIT, c.txn()).await? else { return refuse("Die Abstimmung ist gerade vorbei; „straße“ zeigt, wie es steht.") };
 	let mut r = fields(&e).clone();
 	let me = c.account.as_ref().map_or_else(String::new, |a| txt(j::at(a, "accountId")));
@@ -510,6 +519,9 @@ pub async fn road_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<()> {
 		if !due { continue; }
 		let txn = space.create_transaction(10_000.0).await?;
 		let r: Result<bool> = async {
+			// a decision or a lapse may free its cells: the island's lock and its rooms' first (room_lock.rs), held: the next run
+			let rooms: Vec<&str> = j::a(&old, "rooms").iter().filter_map(Json::as_str).collect();
+			if !crate::room_lock::hold_island(space, &txn, j::s(&old, "island"), &rooms, crate::room_lock::LOCK_WAIT_MS).await? { return Ok(false); }
 			let Some(e) = space.take_if_exists(&tmpl("Route", obj! { "routeId" => j::at(&old, "routeId").clone() }), NO_WAIT, Some(&txn)).await? else { return Ok(false) };
 			let mut r = fields(&e).clone();
 			let say = Say::Tick(lease_ms);

@@ -19,7 +19,8 @@ use crate::deeds::credit_deed;
 use crate::fire::{covers_of, flame_of, is_lit, key_text};
 use crate::j;
 use crate::js;
-use crate::occupancy::{blocked_in, cell_key, cell_of, is_passage, occupied_in};
+use crate::occupancy::{blocked_in_txn, cell_key, cell_of, is_passage, occupied_in};
+use crate::room_lock::{hold_room, hold_room_or_refuse, LOCK_WAIT_MS};
 use crate::pack::{fmt_load, load_at, load_of, pack_max};
 use crate::prototypes::{resolve_prototype, spawn, At};
 use crate::room_growth::rows;
@@ -120,7 +121,11 @@ pub use crate::rules::EXIT_REACH;
 /// anyone's feet.
 pub async fn refusal(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: bool) -> Result<Option<String>> { refusal_own(c, room, rect, green, on_people, None).await }
 /// `refusal` with `own`: the object being moved there (versetze, builder.rs): its own cells are no obstacle.
-pub async fn refusal_own(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: bool, own: Option<&Json>) -> Result<Option<String>> {
+pub async fn refusal_own(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: bool, own: Option<&Json>) -> Result<Option<String>> { refusal_locked(c, room, rect, green, on_people, own, false).await }
+/// `refusal` with `locked`: the room's lock is held; the occupied cells, and with them whether a way stays open, are
+/// read inside the transaction.
+pub async fn refusal_locked(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: bool, own: Option<&Json>, locked: bool) -> Result<Option<String>> {
+	let at = if locked { c.txn() } else { None };
 	let ground = rows(j::at(room, "ground"));
 	let (height, width) = (ground.len() as f64, ground.first().map_or(0, |r| js::len16(r)) as f64);
 	if rect.x < 0.0 || rect.y < 0.0 || rect.x + rect.w > width || rect.y + rect.h > height { return Ok(Some("Dort ist der Raum zu Ende.".into())); }
@@ -128,8 +133,8 @@ pub async fn refusal_own(c: &Ctx, room: &Json, rect: Rect, green: bool, on_peopl
 	let cs = cells(rect);
 	if let Some(z) = zone_refusal(c, room_id, &cs, green).await? { return Ok(Some(z)); }
 	let exits = fields_of(exits_here(c, Some(room_id)).await?);
-	let mut blocked = blocked_in(&c.space, room_id).await?;
-	if let Some(own) = own { for e in c.space.read_all(&tmpl("Plot", obj! { "room" => room_id, "of" => own.clone() }), None).await? { blocked.remove(&cell_of(fields(&e))); } }
+	let mut blocked = blocked_in_txn(&c.space, room_id, at).await?;
+	if let Some(own) = own { for e in c.space.read_all(&tmpl("Plot", obj! { "room" => room_id, "of" => own.clone() }), at).await? { blocked.remove(&cell_of(fields(&e))); } }
 	let people: HashSet<String> = occupied_in(&c.space, room_id, Some(c.char_id())).await?.into_iter().map(|(k, _)| k).collect();
 	let things: HashSet<String> = c.space.read_all(&tmpl("Item", obj! { "location" => room_id }), None).await?.iter().map(|e| cell_of(fields(e))).collect();
 	let fires: Vec<&Json> = j::a(c.w(), "beacons").iter().filter(|b| j::s(b, "room") == room_id).collect();
@@ -168,7 +173,7 @@ const DIRS4: [(f64, f64); 4] = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)
 
 /// `waterRefusal`: why a jetty cannot go on `rect` (None: it can): it lies on water only, one of its cells beside the
 /// land, free of other things built and of the large ship's berth in a bay.
-async fn water_refusal(space: &Space, w: &Json, room: &Json, rect: Rect) -> Result<Option<String>> {
+async fn water_refusal(space: &Space, w: &Json, room: &Json, rect: Rect, txn: Option<&str>) -> Result<Option<String>> {
 	let ground = rows(j::at(room, "ground"));
 	let (height, width) = (ground.len() as f64, ground.first().map_or(0, |r| js::len16(r)) as f64);
 	if rect.x < 0.0 || rect.y < 0.0 || rect.x + rect.w > width || rect.y + rect.h > height { return Ok(Some("Dort ist der Raum zu Ende.".into())); }
@@ -177,7 +182,7 @@ async fn water_refusal(space: &Space, w: &Json, room: &Json, rect: Rect) -> Resu
 	if !cs.iter().all(wet) { return Ok(Some("Ein Steg reicht ins Wasser: er liegt ganz auf dem Wasser, mit einem Ende am Ufer.".into())); }
 	if !cs.iter().any(|p| DIRS4.iter().any(|(dx, dy)| walkable(w, &ground, p.0 + dx, p.1 + dy))) { return Ok(Some("Ein Steg beginnt am Ufer.".into())); }
 	let room_id = j::s(room, "roomId");
-	let blocked = blocked_in(space, room_id).await?;
+	let blocked = blocked_in_txn(space, room_id, txn).await?;
 	if cs.iter().any(|p| blocked.contains(&cell_key(p.0, p.1))) { return Ok(Some("Dort liegt schon ein Steg oder wird gebaut.".into())); }
 	let island = j::by(j::a(w, "rooms"), "roomId", room_id).and_then(|r| j::so(r, "island")).filter(|i| !i.is_empty());
 	let all = j::ao(w, "allRooms").unwrap_or_else(|| j::a(w, "rooms"));
@@ -197,6 +202,7 @@ async fn water_refusal(space: &Space, w: &Json, room: &Json, rect: Rect) -> Resu
 /// lies on water with one end at the shore, the ones that stick out first; its plot moves with it. False when there is
 /// no place.
 async fn jetty_to_water(space: &Space, w: &Json, txn: &str, ty: &str, b: &Json) -> Result<bool> {
+	if !hold_room(space, txn, j::s(b, "room"), LOCK_WAIT_MS).await? { return Ok(false); } // the room's lock first; held: the next sweep
 	let Some(room_e) = space.read_all(&tmpl("Room", obj! { "roomId" => j::at(b, "room").clone() }), Some(txn)).await?.into_iter().next() else { return Ok(false) };
 	let room = fields(&room_e).clone();
 	let ground = rows(j::at(&room, "ground"));
@@ -221,7 +227,7 @@ async fn jetty_to_water(space: &Space, w: &Json, txn: &str, ty: &str, b: &Json) 
 	let far = |r: &Rect| cells(*r).iter().map(|p| dist_to(*p, br)).fold(f64::INFINITY, f64::min);
 	tries.sort_by(|p, q| touch(p).cmp(&touch(q)).then(far(p).partial_cmp(&far(q)).unwrap_or(std::cmp::Ordering::Equal)));
 	for r in tries {
-		if water_refusal(space, w, &room, r).await?.is_some() { continue; }
+		if water_refusal(space, w, &room, r, Some(txn)).await?.is_some() { continue; }
 		let Some(e) = space.take_if_exists(&tmpl(ty, obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(txn)).await? else { return Ok(false) };
 		free_cells(space, txn, j::s(b, "room"), j::at(b, "buildId")).await?;
 		for p in cells(r) { space.write_unique(&tmpl("Plot", obj! { "room" => j::at(b, "room").clone(), "x" => p.0, "y" => p.1, "of" => j::at(b, "buildId").clone() }), Some(txn), FOREVER, &["room", "x", "y"]).await?; }
@@ -571,7 +577,7 @@ pub async fn bau(c: &mut Ctx, arg: &str) -> Result<()> {
 	let exits = if j::b(plan, "atExit") { fields_of(exits_here(c, None).await?) } else { vec![] };
 	let (green, mut rect, mut why) = (j::b(plan, "green"), None, String::new());
 	for r in tries {
-		let no = if water { water_refusal(&c.space, &w, &room, r).await? } else { match refusal(c, &room, r, green, green).await? {
+		let no = if water { water_refusal(&c.space, &w, &room, r, None).await? } else { match refusal(c, &room, r, green, green).await? {
 			Some(n) => Some(n),
 			None if j::b(plan, "shore") && !touches_water(&w, &ground, r) => Some("Das muss ans Wasser grenzen.".to_owned()),
 			None if j::b(plan, "atExit") && !exits.iter().any(|x| dist_to(xy(x), r) <= EXIT_REACH) => Some("Das gehört neben einen Ausgang.".to_owned()),
@@ -580,6 +586,10 @@ pub async fn bau(c: &mut Ctx, arg: &str) -> Result<()> {
 		match no { None => { rect = Some(r); break; } Some(n) => if why.is_empty() { why = n; } }
 	}
 	let Some(rect) = rect else { return refuse(format!("Hier passt {} {pname} hin: {why}", if j::s(plan, "dative").starts_with("einem ") { "kein" } else { "keine" })) };
+	// the search ran without the room's lock; with it the chosen place is checked again as the space holds it now
+	hold_room_or_refuse(&c.space, &c.txn, j::s(&room, "roomId")).await?;
+	let again = if water { water_refusal(&c.space, &w, &room, rect, c.txn()).await? } else { refusal_locked(c, &room, rect, green, green, None, true).await? };
+	if let Some(again) = again { return refuse(format!("Hier passt {} {pname} hin: {again}", if j::s(plan, "dative").starts_with("einem ") { "kein" } else { "keine" })); }
 	let build_id = hex(&random_bytes(6));
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let room_id = j::s(&room, "roomId").to_owned();
@@ -1094,6 +1104,9 @@ pub async fn release_light(space: &Space, txn: &str, beacon_id: &Json, points: f
 fn points_of(f: &Json) -> f64 { j::no(f, "points").unwrap_or(1.0) }
 
 async fn abriss(c: &mut Ctx, arg: &str) -> Result<()> {
+	// the room's lock before the site, ruin or building it takes (room_lock.rs): its cells come free
+	let here = j::s(&c.actor, "room").to_owned();
+	hold_room_or_refuse(&c.space, &c.txn, &here).await?;
 	let name = js::re(r"^baustelle$", "i").replace(&js::re(r"^(?:die|den|das|meine?n?)\s+", "i").replace(&js::re(r"\s+ab$", "i").replace(arg, ""), ""), "");
 	let me = xy(&c.actor);
 	let actor = txt(j::at(&c.actor, "name"));
@@ -1232,7 +1245,7 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 	for (_, s) in all_of(space.read_all(&obj! { "type" => "Site" }, None).await?) {
 		if j::n(&s, "untilWorldMs") > now && old_road != Some(j::s(&s, "plan")) { continue; }
 		in_txn(space, |txn| { let s = &s; async move {
-			if space.take_if_exists(&tmpl("Site", obj! { "buildId" => j::at(s, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+			if !hold_room(space, &txn, j::s(s, "room"), LOCK_WAIT_MS).await? || space.take_if_exists(&tmpl("Site", obj! { "buildId" => j::at(s, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
 			close_orders(space, &txn, s, estate).await?;
 			free_cells(space, &txn, j::s(s, "room"), j::at(s, "buildId")).await?;
 			release_light(space, &txn, j::at(s, "beaconId"), j::no(s, "points").unwrap_or(1.0)).await?;
@@ -1242,7 +1255,7 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 	for (_, b) in all_of(space.read_all(&obj! { "type" => "Building" }, None).await?) {
 		if old_road == Some(j::s(&b, "plan")) {
 			in_txn(space, |txn| { let b = &b; async move {
-				if space.take_if_exists(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+				if !hold_room(space, &txn, j::s(b, "room"), LOCK_WAIT_MS).await? || space.take_if_exists(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
 				log_gone(b, "a road of the old kind");
 				free_cells(space, &txn, j::s(b, "room"), j::at(b, "buildId")).await?;
 				release_light(space, &txn, j::at(b, "beaconId"), j::no(b, "points").unwrap_or(1.0)).await?;
@@ -1314,7 +1327,7 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 	for (_, r) in all_of(space.read_all(&obj! { "type" => "Ruin" }, None).await?) {
 		if j::n(&r, "untilWorldMs") > now { continue; }
 		in_txn(space, |txn| { let r = &r; async move {
-			if space.take_if_exists(&tmpl("Ruin", obj! { "buildId" => j::at(r, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+			if !hold_room(space, &txn, j::s(r, "room"), LOCK_WAIT_MS).await? || space.take_if_exists(&tmpl("Ruin", obj! { "buildId" => j::at(r, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
 			free_cells(space, &txn, j::s(r, "room"), j::at(r, "buildId")).await?;
 			Ok(true)
 		} }).await?;

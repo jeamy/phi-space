@@ -28,7 +28,11 @@ pub async fn raeume(c: &mut Ctx, arg: &str) -> Result<()> {
 	let s = nearby(c, arg).await?;
 	let name = key_text(j::at(&s, "name"));
 	if j::truthy(j::at(&s, "fixed")) { return refuse(format!("{name} gehört fest hierher und bleibt stehen.")); }
-	if c.space.take_if_exists(&tmpl("Scenery", obj! { "sceneryId" => j::at(&s, "sceneryId").clone() }), NO_WAIT, c.txn()).await?.is_none() { return refuse("Daran arbeitet gerade jemand; gleich noch einmal."); }
+	// the last work frees its cells: the room's lock before the piece (room_lock.rs)
+	let last = j::n(&s, "left") <= 1.0;
+	if last { crate::room_lock::hold_room_or_refuse(&c.space, &c.txn, j::s(&s, "room")).await?; }
+	let Some(e) = c.space.take_if_exists(&tmpl("Scenery", obj! { "sceneryId" => j::at(&s, "sceneryId").clone() }), NO_WAIT, c.txn()).await? else { return refuse("Daran arbeitet gerade jemand; gleich noch einmal.") };
+	if !last && j::number(j::at(fields(&e), "left")) <= 1.0 { return refuse("Daran arbeitet gerade jemand; gleich noch einmal."); }
 	tire(c, now, rest.as_ref()).await?;
 	let left = j::n(&s, "left") - 1.0;
 	let actor = key_text(j::at(&c.actor, "name"));

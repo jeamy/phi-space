@@ -86,6 +86,7 @@ pub async fn make_interior(space: &Space, txn: &str, w: &Json, b: &Json) -> Resu
 		"ground" => j::at(def, "ground").clone(), "spawn" => j::at(def, "spawn").clone(), "building" => building
 	};
 	space.write(&draft_of("Room", j::at(w, "typeclasses"), room.clone())?, Some(txn), FOREVER).await?;
+	crate::room_lock::write_room_lock(space, Some(txn), &room_id).await?;
 	let outside = j::by(j::a(w, "rooms"), "roomId", j::s(b, "room")).map_or_else(|| "draußen".to_owned(), |r| txt(j::at(r, "name")));
 	let door = j::at(def, "door");
 	let mut exit = obj! {
@@ -144,6 +145,8 @@ fn again(t: &Json, f: Json) -> Json {
 /// (`at`), what lies on its floor goes to the owner's estate.
 pub async fn drop_interior(space: &Space, txn: &str, w: &Json, room_id: &str, at: Option<&Json>) -> Result<()> {
 	let build_id = build_id_of(room_id).unwrap_or("").to_owned();
+	// its lock first (room_lock.rs: the lock before what stands on the room), gone with the room
+	crate::room_lock::drop_room_lock(space, txn, room_id).await?;
 	let front = match at { Some(a) => front_of(space, w, a).await?, None => None };
 	let to = match (at, front) {
 		(Some(a), Some(f)) => (txt(j::at(a, "room")), f.0, f.1),

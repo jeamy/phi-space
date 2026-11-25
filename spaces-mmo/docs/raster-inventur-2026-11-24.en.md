@@ -549,3 +549,24 @@ Many fixtures write objects over the test's own connection without the plots a c
 ### 7.3 The readers stay on plots until step 6
 
 The query switches no reader. An object taken in an open transaction (a site during a delivery, a bed while it is watered, what `takeNear` picks) is not read by other transactions, but its plots are. `takeNear`'s `held` case and every overlap check of `refusal` and `blockedIn` rely on that. A reader moved onto footprints before the room lock (step 5) lets two buildings overlap in that window. Step 6 switches the readers and writers together, behind the room lock, and the migration removes the plots.
+
+The decision of 2026-11-25 (plan section 3, "Locks"): step 6 does not read the objects' own entries. Each object gets one `Footprint` entry {room, of, x, y, w, h}, written and taken only by a holder of the room's lock, so it stays visible while the object itself is taken. The footprint query reads the Footprint entries in place of the Plot entries.
+
+### 7.4 The room and island locks (step 5)
+
+One `RoomLock` {room} per room and one `IslandLock` {island} per island (`server/engine/room-lock.ts`, `rust/mmo-engine/src/room_lock.rs`). The loader writes them with the rooms, `dig` with a dug room and `makeInterior` with an inside; `dropInterior` takes the inside's lock away. A holder takes the lock in its transaction and writes it back there, so the lock is held until the commit and comes back by the space's rules on an abort or an expired lease. Order: WORLD_LOCK, the island lock, then the room locks by ID.
+
+| Who | Lock | When it is held |
+| --- | --- | --- |
+| `bau`, `abriss`, digging a bed (`umgraben`), staking a field (`stake`), giving up a bed or a field, planting a tree (`plantTree`), felling one (`treeHere`), clearing scenery (its last take), `versetze` | room, refused (`LOCK_HELD`) | before the decisive overlap check, which then reads the Plots inside the transaction (`refusal(..., locked)`, `blockedIn(..., txn)`) |
+| a jetty to the water, the sweep (a site lapses, a building on an old road, a ruin ends), the vote's demolition, a bed's or a field's tick when it lapses | room, waits `LOCK_WAIT_MS` | before the take; still held, the change waits for the next run |
+| a road's vote and plan | island and the rooms it crosses, refused | before the Route take, or after the trace (the cells are checked again inside the transaction) |
+| the road tick | island and its rooms, waits | before the take |
+| growth | island, `NO_WAIT` after WORLD_LOCK | held: this round leaves the island alone |
+
+Beacons, people and items are still read from the process's copy: a transaction read of them would hold up steps and fires. Every test stack checks one lock per room and per island when it closes (`lockReport`), the engine walks on every state; `tests/room-lock.test.ts` holds a room's lock from the test and sees `bau`, `umgraben` and `abriss` refused, a step go through, and `bau` go through once the lock is free (with the refusal removed it fails).
+
+Two gaps that remain:
+
+- A delivery rewrites a road's parts, so a road is not visible to others during that transaction. This is the same visibility gap as for the objects; step 6 closes it in the same way (a Footprint-like entry for the road cells).
+- A builder's `destroy` of a Building leaves its plots behind. This was there before step 5; step 6 removes it together with the plots.
