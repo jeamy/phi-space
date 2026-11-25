@@ -94,25 +94,36 @@ const stop = (c: ChildProcess, sig: NodeJS.Signals = "SIGTERM") => new Promise<v
  *  every room. Not after a worker was killed (its open transaction holds its objects taken, their plots stay readable,
  *  until the lease runs out). A difference is written to stderr and fails the test file (the exit code), so it does not
  *  hide a failure the test itself threw. */
-async function checkOccupancy(space: SpaceLike, what: string, byHand: ReadonlySet<string>): Promise<void> {
-	const report = storeOccupancyReport((await space.readAll({})) as unknown as OccupancyEntry[], { skip: (id) => byHand.has(id) });
+async function checkOccupancy(space: SpaceLike, what: string, byHand: ByHand): Promise<void> {
+	const entries = (await space.readAll({})) as unknown as OccupancyEntry[];
+	const plotted = new Set<string>(), objects = new Set<string>();
+	for (const e of entries) { const id = occupancyId(e); if (id !== null) (e.type === "Plot" ? plotted : objects).add(id); }
+	// a fixture's object without any plot, or plots (written or left by taking the object) without any object: only
+	// those are the fixture's; an object the game keeps plots for is checked even when the test touched it
+	const skip = (id: string) => (byHand.objects.has(id) && !plotted.has(id)) || (byHand.loose.has(id) && !objects.has(id));
+	const report = storeOccupancyReport(entries, { skip });
 	if (!report.length) return;
 	process.exitCode = 1;
 	console.error(`[occupancy] ${what}: footprints and plots differ (${report.length})\n  ${report.slice(0, 20).join("\n  ")}`);
 }
 
+/** What a test wrote or took itself: `objects` written, `loose` plots written and objects taken. */
+type ByHand = { objects: Set<string>; loose: Set<string> };
+const byHandOf = (): ByHand => ({ objects: new Set(), loose: new Set() });
+
 /** The test's own connection, noting in `byHand` the objects it writes or takes itself (a fixture that places a
- *  building without its plots, a site taken without them): their differences are the fixture's, not the game's, and
- *  the occupancy check leaves them out. What the game does through the workers is checked. */
-function noting(space: SpaceLike, byHand: Set<string>): SpaceLike {
-	const note = (e: unknown) => { const id = e && typeof e === "object" && "fields" in e ? occupancyId(e as OccupancyEntry) : null; if (id !== null) byHand.add(id); };
-	const taken = (r: unknown) => { for (const e of Array.isArray(r) ? r : [r]) note(e); return r; };
+ *  building without its plots, a site taken without them): such differences are the fixture's, not the game's, and the
+ *  occupancy check leaves them out (checkOccupancy). What the game does through the workers is checked. */
+function noting(space: SpaceLike, byHand: ByHand): SpaceLike {
+	const id = (e: unknown) => (e && typeof e === "object" && "fields" in e ? occupancyId(e as OccupancyEntry) : null);
+	const note = (e: unknown) => { const k = id(e); if (k !== null) ((e as OccupancyEntry).type === "Plot" ? byHand.loose : byHand.objects).add(k); };
+	const taken = (r: unknown) => { for (const e of Array.isArray(r) ? r : [r]) { const k = id(e); if (k !== null) byHand.loose.add(k); } return r; };
 	return new Proxy(space, {
 		get(target, key, receiver) {
 			const v = Reflect.get(target, key, receiver);
 			if (typeof v !== "function") return v;
 			if (key === "write") return (e: unknown, ...rest: unknown[]) => { note(e); return v.call(target, e, ...rest); };
-			if (typeof key === "string" && key.startsWith("take")) return async (...args: unknown[]) => { note(args[0]); return taken(await v.apply(target, args)); };
+			if (typeof key === "string" && key.startsWith("take")) return async (...args: unknown[]) => { taken(args[0]); return taken(await v.apply(target, args)); };
 			return v.bind(target);
 		},
 	});
@@ -144,7 +155,7 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 	const conn = connectSpace(world);
 	const procs: ChildProcess[] = [], models: ChildProcess[] = [];
 	let killed = false;
-	const byHand = new Set<string>();
+	const byHand = byHandOf();
 	const stack: Stack = {
 		world, accounts, space: noting(conn.space, byHand), worlds: [],
 		async restartSpace() {
@@ -206,7 +217,7 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 		procs.unshift(...spaces);
 	} catch (e) { await Promise.all([...spaces, ...procs].map((c) => stop(c))); throw e; }
 	const conns = new Map(ids.map((id) => [id, connectSpace(addr(id))]));
-	const byHand = new Set<string>(), spaceOf = new Map(ids.map((id) => [id, noting(conns.get(id)!.space, byHand)]));
+	const byHand = byHandOf(), spaceOf = new Map(ids.map((id) => [id, noting(conns.get(id)!.space, byHand)]));
 	return {
 		ids, accounts, list, space: (id: string) => spaceOf.get(id)!,
 		/** The world workers, one per region (started already unless `workers: false`). */

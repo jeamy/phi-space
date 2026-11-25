@@ -401,7 +401,10 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		await give(s, anna.me, "milch", 3);
 		await give(s, anna.me, "treibholz", 1);
 		assert.match(await does(anna.p, "craft käse", "nur direkt"), /Käse macht man nur direkt neben einer Hütte/);
-		await building(s, { buildId: "huette-1", plan: "huette", name: "Hütte", x: me.x - 2, y: me.y - 1, w: 2, h: 2 });
+		// right beside the figure, on a side where it lies on no other building (the stack's occupancy check)
+		const built = new Set((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).map((e) => `${e.fields.x},${e.fields.y}`));
+		const hut = [{ x: me.x - 2, y: me.y - 1 }, { x: me.x + 1, y: me.y - 1 }, { x: me.x - 1, y: me.y + 1 }, { x: me.x - 1, y: me.y - 2 }].find((r) => [[0, 0], [1, 0], [0, 1], [1, 1]].every(([dx, dy]) => !built.has(`${r.x + dx!},${r.y + dy!}`)))!;
+		await building(s, { buildId: "huette-1", plan: "huette", name: "Hütte", ...hut, w: 2, h: 2 });
 		await does(anna.p, "craft käse", "Käse her");
 		assert.equal(await pack(s, anna.me, "kaese"), 1);
 	} finally { await srv.close(); }

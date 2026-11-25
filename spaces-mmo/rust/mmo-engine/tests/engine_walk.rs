@@ -1903,7 +1903,8 @@ fn sweeping() {
 	for (id, at) in [("so-1", "b-5"), ("so-2", "b-gone")] { w.write(obj! { "type" => "ShopOrder", "fields" => obj! { "orderId" => id, "buildId" => at, "room" => "graue-bucht", "storeName" => "Kaufhaus", "ownerName" => "Wanderer1", "proto" => "muschel", "protoName" => "Muschel", "count" => 1.0, "reward" => 1.0 } }); }
 	w.write(building("b-2", 6.0, later.clone()));
 	w.write(building("b-3", 10.0, later.clone()));
-	for (_, at, of) in [("p-1", (2.0, 13.0), "b-1"), ("p-2", (14.0, 13.0), "site-1"), ("p-3", (18.0, 13.0), "r-1")] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => at.0, "y" => at.1, "of" => of } }); }
+	// every cell of the 2×2 they stand on, as the game writes them (the walk's occupancy check, common/walk.rs)
+	for (at, of) in [((2.0, 13.0), "b-1"), ((14.0, 13.0), "site-1"), ((18.0, 13.0), "r-1")] { for (dx, dy) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => at.0 + dx, "y" => at.1 + dy, "of" => of } }); } }
 	for e in [
 		obj! { "type" => "Site", "fields" => obj! { "buildId" => "site-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 14.0, "y" => 13.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "needs" => Json::Array(vec![]), "by" => obj! {}, "workNeed" => 0.0, "work" => 0.0, "human" => 0.0, "other" => 0.0, "untilWorldMs" => 0.0 } },
 		obj! { "type" => "Ruin", "fields" => obj! { "buildId" => "r-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 18.0, "y" => 13.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "untilWorldMs" => 0.0 } },
