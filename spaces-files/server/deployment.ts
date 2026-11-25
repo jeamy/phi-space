@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS key_generations (generation INTEGER PRIMARY KEY, crea
 CREATE TABLE IF NOT EXISTS content_key_generations (generation INTEGER PRIMARY KEY, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (handle_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, actor_kind TEXT NOT NULL, actor_id TEXT NOT NULL,
 	epoch INTEGER NOT NULL, created_at INTEGER NOT NULL, idle_until INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS closed_tenants (tenant_id TEXT PRIMARY KEY, reason TEXT NOT NULL, action TEXT NOT NULL, closed_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS logins (issuer TEXT NOT NULL, subject TEXT NOT NULL, tenant_id TEXT NOT NULL, PRIMARY KEY (issuer, subject, tenant_id));
 `;
 
@@ -287,6 +288,24 @@ export class DeploymentState {
 			const put = this.#db.prepare("INSERT OR IGNORE INTO logins (issuer, subject, tenant_id) VALUES (?, ?, ?)");
 			for (const e of entries) put.run(e.issuer, e.subject, e.tenantId);
 		});
+	}
+
+	// ---------------------------------------------------------------- closed tenants (section 3, budgets)
+
+	/** Closes a tenant durably with its pending security action: it stays closed across restarts until `reopenTenant`. */
+	closeTenant(tenantId: string, reason: string, action: Record<string, unknown>): void {
+		this.#tx(() => this.#db.prepare("INSERT INTO closed_tenants (tenant_id, reason, action, closed_at) VALUES (?, ?, ?, ?) ON CONFLICT(tenant_id) DO NOTHING")
+			.run(tenantId, reason, JSON.stringify(action), this.#highWater || this.#clock()));
+	}
+
+	closedTenants(): Array<{ tenantId: string; reason: string; action: Record<string, unknown> }> {
+		return (this.#db.prepare("SELECT tenant_id, reason, action FROM closed_tenants ORDER BY tenant_id").all() as Array<{ tenant_id: string; reason: string; action: string }>)
+			.map((r) => ({ tenantId: r.tenant_id, reason: r.reason, action: JSON.parse(r.action) as Record<string, unknown> }));
+	}
+
+	/** The operator's repair is done: the tenant may be admitted again. */
+	reopenTenant(tenantId: string): void {
+		this.#tx(() => this.#db.prepare("DELETE FROM closed_tenants WHERE tenant_id = ?").run(tenantId));
 	}
 
 	// ---------------------------------------------------------------- plumbing

@@ -120,6 +120,15 @@ directory of its own, and FsContent names it (plan section 3, *Contents*). Files
   of the earlier process have lapsed. An `inconsistentState` suspends that tenant alone. Tests on memory and on disk,
   races, budgets, injected failures, both kinds of unknown outcome, and SIGKILL at every point of a save in a child
   process (`tests/files.test.ts`, `tests/support/crash-driver.ts`).
+- Step 4, grants and memberships: `grant`, `revoke`, `listGrants` (owner on the target), `addMember`, `removeMember`
+  and `createWorkspace` (an enabled `tenant#admin` user; a refusal is audited in a transaction of its own, without a
+  receipt). Grants are validated (shape, no redundant viewer below the root, a live subject); identical grants and
+  absent revocations succeed idempotently with a receipt; a revocation keeps the final owner. Budgets: a mutation's rows
+  fit `maxTenantBytes`, with its audit row the audit reserve, less `securityReserveBytes`, which only revocations,
+  membership removals and (later) actor disablement may use, like the receipt reserve. A security action that does not
+  fit even that closes the tenant durably in the deployment state with its pending action, across restarts, until
+  `reopenClosedTenant`. Tests: the opening journey, the retry after a revocation (`notFound`, then `permissionDenied`,
+  never the version), validation, the final owner, denied admin audits, and the reserve (`tests/grants.test.ts`).
 
 ## Commands
 

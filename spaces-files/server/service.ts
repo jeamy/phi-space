@@ -9,7 +9,7 @@ import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 import { DEFAULT_LIMITS, FOREVER, UniqueConflict } from "phi-spaces/core";
 import { assertLimitsFit, assertRowFits, DEFAULT_FS_LIMITS, encodedBytes, type FsLimits } from "./limits.ts";
-import { checkQuotas, sumContentBytes } from "./quotas.ts";
+import { checkQuotas, sumContentBytes, type Demand } from "./quotas.ts";
 import { Admission, Unavailable, type AdmissionOptions } from "./admission.ts";
 import { DeploymentState, type DeploymentOptions } from "./deployment.ts";
 import { BlobStore } from "./blobs.ts";
@@ -17,7 +17,7 @@ import { issueOperationIds, verifyOperationId, type VerifiedOpId } from "./opids
 import { lookupReceipt, receiptRow, reserveReceipt, type Outcome } from "./receipts.ts";
 import { checkContents, parsePath, pathString } from "./paths.ts";
 import { contentDigest, requestDigest } from "./digest.ts";
-import { atLeast, childNamed, resolve, spaceData, type NodeRow } from "./policy.ts";
+import { atLeast, checkGrant, checkLastOwner, checkMembership, childNamed, resolve, spaceData, subjectRow, type NodeRow, type RelRow, type Subject } from "./policy.ts";
 import type { BlobRef } from "./blobs.ts";
 import { assertSeparateDirs, prepareDataDir } from "./dirs.ts";
 import * as schema from "./schema.ts";
@@ -78,6 +78,9 @@ export type FilesServiceOptions = AdmissionOptions & {
 /** Where a save can be interrupted: before the blob write, between it and the commit, around the commit call (its
  *  outcome then is unknown), and after the commit before the old blob's deletion. */
 export type FaultPoint = "beforeBlob" | "afterBlob" | "commit:before" | "commit:after" | "afterCommit";
+
+/** What `#admitRows` checks a mutation's budgets for. */
+type AdmitSpec = { id: VerifiedOpId | null; operation: string; targets: string[]; rows: ReturnType<typeof schema.meta>[]; demand?: Demand; replaced?: ReturnType<typeof schema.meta>[]; pool?: "ordinary" | "security" };
 
 /** A directory entry as `list` returns it. */
 export type ListEntry = { name: string; kind: "dir" | "file" };
@@ -143,6 +146,9 @@ export class FilesService {
 		} catch (e) { await host?.close(ctx); state.close(); throw e; }
 		// the login index is a lookup aid derived from the FsActor rows: rebuilt on every start (section 6.6)
 		try { await service.rebuildLoginIndex(); } catch (e) { await service.close(); throw e; }
+		// a tenant closed for a pending security action stays closed across restarts (section 6.6); the index above is
+		// only a lookup aid and is rebuilt for it too
+		for (const c of state.closedTenants()) service.admission.suspend(c.tenantId, c.reason);
 		return service;
 	}
 
@@ -376,7 +382,7 @@ export class FilesService {
 			if (await childNamed(spaceData(space), parent.nodeId, name)) throw new schema.AlreadyExists("a child of that name exists");
 			const nodeId = await this.#freshNodeId(space);
 			const rows = [schema.node(nodeId, parent.nodeId, name, "dir"), receiptRow(s, id, digest, {})];
-			await this.#admitRows(s.tenantId, space, rows, { nodes: 1, dirEntries: { parentId: parent.nodeId, n: 1 } });
+			await this.#admitRows(s, space, { id, operation: "mkdir", targets: [nodeId], rows, demand: { nodes: 1, dirEntries: { parentId: parent.nodeId, n: 1 } } });
 			await this.#commitMutation(s, space, id, "mkdir", [nodeId], rows, null);
 			return { status: "created" as const };
 		});
@@ -412,7 +418,7 @@ export class FilesService {
 				if (existing) throw new schema.VersionConflict((await this.#contentRow(s.tenantId, space, existing)).version);
 				const nodeId = await this.#freshNodeId(space);
 				const fresh = (ref: BlobRef) => [schema.node(nodeId, parent.nodeId, name, "file"), schema.content(nodeId, 1, ref), receiptRow(s, id, digest, { version: 1 })];
-				await this.#admitRows(s.tenantId, space, fresh(this.#sizing(data.length)), { nodes: 1, dirEntries: { parentId: parent.nodeId, n: 1 }, contentBytes: data.length });
+				await this.#admitRows(s, space, { id, operation: "write", targets: [nodeId], rows: fresh(this.#sizing(data.length)), demand: { nodes: 1, dirEntries: { parentId: parent.nodeId, n: 1 }, contentBytes: data.length } });
 				await this.#fault("beforeBlob");
 				const ref = await this.blobs.put({ tenantId: s.tenantId, nodeId, version: 1 }, data);
 				await this.#commitMutation(s, space, id, "write", [nodeId], fresh(ref), { nodeId, newBlobId: ref.blobId, oldBlobId: null, contentDelta: data.length });
@@ -428,12 +434,169 @@ export class FilesService {
 			if (cur.version !== expected) throw new schema.VersionConflict(cur.version);
 			const version = expected + 1, nodeId = r.node.nodeId;
 			const rows = (ref: BlobRef) => [schema.content(nodeId, version, ref), receiptRow(s, id, digest, { version })];
-			await this.#admitRows(s.tenantId, space, rows(this.#sizing(data.length)), { contentBytes: data.length - cur.ref.size }, [schema.content(nodeId, expected, cur.ref)]);
+			await this.#admitRows(s, space, { id, operation: "write", targets: [nodeId], rows: rows(this.#sizing(data.length)), demand: { contentBytes: data.length - cur.ref.size }, replaced: [schema.content(nodeId, expected, cur.ref)] });
 			await this.#fault("beforeBlob");
 			const ref = await this.blobs.put({ tenantId: s.tenantId, nodeId, version }, data);
 			await this.#commitMutation(s, space, id, "write", [nodeId], rows(ref), { nodeId, newBlobId: ref.blobId, oldBlobId: cur.ref.blobId, contentDelta: data.length - cur.ref.size, replace: { version: expected, blobId: cur.ref.blobId } });
 			return { version };
 		});
+	}
+
+	// ---------------------------------------------------------------- grants and memberships (sections 4 and 5)
+
+	/** Lists the direct relation tuples on a target, in a deterministic order (owner on it). Bounded, no partial list. */
+	listGrants(handle: unknown, workspace: unknown, path: unknown): Promise<Array<{ relation: string; subject: Subject }>> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, "listGrants", this.limits);
+			const r = await resolve(spaceData(space), s, ws, segs, { limits: this.limits });
+			if (!atLeast(r.role, "owner")) throw new schema.PermissionDenied("listGrants needs owner on the target");
+			const rels = await space.readAll({ type: schema.T.relation, fields: { objectKind: "node", objectId: r.node.nodeId } }, { limit: this.limits.maxGrantsPerTarget + 1 });
+			if (rels.length > this.limits.maxGrantsPerTarget) throw new schema.CapacityExceeded(`more than ${this.limits.maxGrantsPerTarget} grants on one target`);
+			return rels.map((e) => e.fields as unknown as RelRow).map((x) => ({ relation: x.relation, subject: subjectOf(x) }))
+				.sort((a, b) => byName(a.relation, b.relation) || byName(a.subject.kind, b.subject.kind) || byName(a.subject.id, b.subject.id));
+		});
+	}
+
+	/**
+	 * Adds (`grant`) or removes (`revoke`) one direct tuple on a target (owner on it, section 5). A grant is validated
+	 * (shape, no redundant viewer below the root, an existing non-deleted subject); an identical existing grant, like a
+	 * revoke of an absent tuple, succeeds idempotently with a receipt and audit row. A revoke preserves the final owner
+	 * and draws on the security reserve: if even that is full, the tenant closes until the operator completes it.
+	 */
+	grant(handle: unknown, workspace: unknown, path: unknown, relation: unknown, subject: unknown, operationId: unknown): Promise<{ status: "granted" | "unchanged" }> {
+		return this.#putGrant("grant", handle, workspace, path, relation, subject, operationId) as Promise<{ status: "granted" | "unchanged" }>;
+	}
+	revoke(handle: unknown, workspace: unknown, path: unknown, relation: unknown, subject: unknown, operationId: unknown): Promise<{ status: "revoked" | "unchanged" }> {
+		return this.#putGrant("revoke", handle, workspace, path, relation, subject, operationId) as Promise<{ status: "revoked" | "unchanged" }>;
+	}
+
+	#putGrant(op: "grant" | "revoke", handle: unknown, workspace: unknown, path: unknown, relation: unknown, subject: unknown, operationId: unknown): Promise<{ status: string }> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, op, this.limits);
+			if (relation !== "owner" && relation !== "editor" && relation !== "viewer") throw new schema.InvalidInput(`unknown relation ${JSON.stringify(relation)}`);
+			const subj = parseSubject(subject, this.limits.maxNameBytes);
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			const d = spaceData(space);
+			const r = await resolve(d, s, ws, segs, { limits: this.limits });
+			if (!atLeast(r.role, "owner")) throw new schema.PermissionDenied(`${op} needs owner on the target`);
+			const digest = requestDigest(op, { workspace: ws, path: pathString(segs), relation, subject: subjectRow(subj) });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return { status: done.status as string };
+			const target = r.node.nodeId;
+			const tuple: RelRow = op === "grant" ? await checkGrant(d, r.node, relation, subj) : { objectKind: "node", objectId: target, relation, ...subjectRow(subj) };
+			const present = await this.#has(space, schema.relation("node", target, tuple.relation, tuple.subjectKind, tuple.subjectId, tuple.subjectRelation));
+			if (op === "grant") {
+				const status = present ? "unchanged" : "granted";
+				const rows = [...(present ? [] : [schema.relation("node", target, tuple.relation, tuple.subjectKind, tuple.subjectId, tuple.subjectRelation)]), receiptRow(s, id, digest, { status })];
+				await this.#admitRows(s, space, { id, operation: op, targets: [target], rows, demand: present ? {} : { relations: 1, grantsOn: { nodeId: target, n: 1 }, groups: tuple.subjectKind === "group" ? [tuple.subjectId] : [] } });
+				await this.#commitMutation(s, space, id, op, [target], rows, null);
+				return { status };
+			}
+			if (!present) {
+				const rows = [receiptRow(s, id, digest, { status: "unchanged" })];
+				await this.#admitRows(s, space, { id, operation: op, targets: [target], rows });
+				await this.#commitMutation(s, space, id, op, [target], rows, null);
+				return { status: "unchanged" };
+			}
+			if (r.node.parentId === schema.WORKSPACES) await checkLastOwner(d, target, { remove: [tuple] }, { limits: this.limits });
+			const rows = [receiptRow(s, id, digest, { status: "revoked" })];
+			await this.#securityAdmit(s, space, { id, operation: op, targets: [target], rows }, { operation: op, target, relation: tuple.relation, subject: subjectRow(subj) });
+			await this.#commitMutation(s, space, id, op, [target], rows, null, [{ type: schema.T.relation, fields: { ...tuple } }]);
+			return { status: "revoked" };
+		});
+	}
+
+	/**
+	 * Adds or removes one group membership (an admin operation: an enabled `tenant#admin` user, section 5). Both are
+	 * idempotent; adding validates the subject (an existing non-deleted user or agent, no nested groups). Removing a
+	 * present membership is a security action on the security reserve. A caller without `tenant#admin` is refused with
+	 * `permissionDenied`, and the refusal is audited in a transaction of its own (section 3).
+	 */
+	addMember(handle: unknown, group: unknown, subject: unknown, operationId: unknown): Promise<{ status: "added" | "unchanged" }> {
+		return this.#putMember("addMember", handle, group, subject, operationId) as Promise<{ status: "added" | "unchanged" }>;
+	}
+	removeMember(handle: unknown, group: unknown, subject: unknown, operationId: unknown): Promise<{ status: "removed" | "unchanged" }> {
+		return this.#putMember("removeMember", handle, group, subject, operationId) as Promise<{ status: "removed" | "unchanged" }>;
+	}
+
+	#putMember(op: "addMember" | "removeMember", handle: unknown, group: unknown, subject: unknown, operationId: unknown): Promise<{ status: string }> {
+		return this.withSession(handle, async (s, space) => {
+			const g = schema.groupId(group, this.limits.maxNameBytes);
+			const subj = parseSubject(subject, this.limits.maxNameBytes);
+			if (subj.kind === "group") throw new schema.InvalidInput("groups have no nested groups in the pilot");
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			await this.#requireAdmin(s, space, op, id);
+			const d = spaceData(space);
+			const digest = requestDigest(op, { group: g, subject: subjectRow(subj) });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return { status: done.status as string };
+			const tuple: RelRow = op === "addMember" ? await checkMembership(d, g, subj) : { objectKind: "group", objectId: g, relation: "member", ...subjectRow(subj) };
+			const row = schema.relation("group", g, "member", tuple.subjectKind, tuple.subjectId);
+			const present = await this.#has(space, row);
+			if (op === "addMember") {
+				const status = present ? "unchanged" : "added";
+				const rows = [...(present ? [] : [row]), receiptRow(s, id, digest, { status })];
+				await this.#admitRows(s, space, { id, operation: op, targets: [], rows, demand: present ? {} : { relations: 1, groups: [g] } });
+				await this.#commitMutation(s, space, id, op, [], rows, null);
+				return { status };
+			}
+			const status = present ? "removed" : "unchanged";
+			const rows = [receiptRow(s, id, digest, { status })];
+			if (present) await this.#securityAdmit(s, space, { id, operation: op, targets: [], rows }, { operation: op, group: g, subject: subjectRow(subj) });
+			else await this.#admitRows(s, space, { id, operation: op, targets: [], rows });
+			await this.#commitMutation(s, space, id, op, [], rows, null, present ? [{ type: schema.T.relation, fields: { ...tuple } }] : []);
+			return { status };
+		});
+	}
+
+	/**
+	 * Creates an additional workspace root with its first enabled direct user or agent owner in one transaction (an admin
+	 * operation, section 5). An existing workspace name is `alreadyExists`; an unknown, deleted or disabled owner, or a
+	 * group, is `invalidInput`. The administrator gains no file rights by it.
+	 */
+	createWorkspace(handle: unknown, name: unknown, owner: unknown, operationId: unknown): Promise<{ nodeId: string }> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(name, this.limits.maxNameBytes);
+			const o = parseSubject(owner, this.limits.maxNameBytes);
+			if (o.kind === "group") throw new schema.InvalidInput("the first owner of a workspace is a user or an agent");
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			await this.#requireAdmin(s, space, "createWorkspace", id);
+			const digest = requestDigest("createWorkspace", { workspace: ws, owner: subjectRow(o) });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return { nodeId: done.nodeId as string };
+			const a = await spaceData(space).actor(o.kind, o.id);
+			if (a?.state !== "enabled") throw new schema.InvalidInput("the owner must be an enabled actor");
+			if (await childNamed(spaceData(space), schema.WORKSPACES, ws)) throw new schema.AlreadyExists("a workspace of that name exists");
+			const nodeId = await this.#freshNodeId(space);
+			const rows = [schema.node(nodeId, schema.WORKSPACES, ws, "dir"), schema.relation("node", nodeId, "owner", o.kind, o.id), receiptRow(s, id, digest, { nodeId })];
+			await this.#admitRows(s, space, { id, operation: "createWorkspace", targets: [nodeId], rows, demand: { workspaces: 1, nodes: 1, relations: 1 } });
+			await this.#commitMutation(s, space, id, "createWorkspace", [nodeId], rows, null);
+			return { nodeId };
+		});
+	}
+
+	/** The budgets of a security action; one that does not fit even the security reserve closes the tenant. */
+	async #securityAdmit(s: Session, space: PhiSpaces, m: AdmitSpec, action: Record<string, unknown>): Promise<void> {
+		try { await this.#admitRows(s, space, { ...m, pool: "security" }); }
+		catch (e) {
+			if (e instanceof schema.CapacityExceeded) this.#closeForSecurity(s.tenantId, { ...action, actorKind: s.actorKind, actorId: s.actorId }, e);
+			throw e;
+		}
+	}
+
+	/**
+	 * An admin operation needs an enabled user with `tenant#admin`. A refusal after authentication writes its audit row
+	 * in a transaction of its own, with no receipt and no other change (section 3), then answers `permissionDenied`.
+	 */
+	async #requireAdmin(s: Session, space: PhiSpaces, operation: string, id: VerifiedOpId | null): Promise<void> {
+		if (s.actorKind === "user" && (await this.#has(space, schema.relation("tenant", s.tenantId, "admin", "user", s.actorId)))) return;
+		await this.#admitRows(s, space, { id: null, operation, targets: [], rows: [] });
+		const seq = (await this.#lastSeq(s.tenantId, space)) + 1;
+		await this.#writeAll(s.tenantId, space, [schema.audit(seq, this.state.now(), { kind: s.actorKind, id: s.actorId }, operation, [], id?.operationId ?? "", "denied")]);
+		this.#seq.set(s.tenantId, seq);
+		throw new schema.PermissionDenied(`${operation} needs tenant#admin`);
 	}
 
 	/** The parent of a node to create: visible (else `notFound`), a directory (else `invalidInput`), editor (else
@@ -455,12 +618,41 @@ export class FilesService {
 		return { version: f.version as number, ref: { blobId: f.blobId as string, size: f.size as number, keyGeneration: f.keyGeneration as number } };
 	}
 
-	/** The budgets of a mutation before anything is written: quotas, the rows' stored bytes and a receipt slot. */
-	async #admitRows(tenantId: string, space: PhiSpaces, rows: ReturnType<typeof schema.meta>[], demand: Parameters<typeof checkQuotas>[2], replaced: ReturnType<typeof schema.meta>[] = []): Promise<void> {
-		for (const e of rows) assertRowFits(e.fields, DEFAULT_LIMITS);
-		const stored = rows.reduce((n, r) => n + encodedBytes(r.fields), 0) - replaced.reduce((n, r) => n + encodedBytes(r.fields), 0);
-		await checkQuotas(space, this.limits, { ...demand, storedBytes: stored }, await this.#tenantContentBytes(tenantId, space));
-		await reserveReceipt(space, this.state, this.limits, "ordinary");
+	/**
+	 * The budgets of a mutation before anything is written (section 3, budgets): its quotas, a receipt slot of its pool,
+	 * and its stored bytes. The rows an ordinary mutation adds must fit `maxTenantBytes`; together with its audit row
+	 * everything must fit the tenant's rows plus the audit reserve, less the security reserve, which only security
+	 * actions may use. A refusal is `capacityExceeded` and leaves admission open.
+	 */
+	async #admitRows(s: Session, space: PhiSpaces, m: AdmitSpec): Promise<void> {
+		const pool = m.pool ?? "ordinary";
+		for (const e of m.rows) assertRowFits(e.fields, DEFAULT_LIMITS);
+		const stored = m.rows.reduce((n, r) => n + encodedBytes(r.fields), 0) - (m.replaced ?? []).reduce((n, r) => n + encodedBytes(r.fields), 0);
+		const audit = schema.audit(Number.MAX_SAFE_INTEGER, this.state.now(), { kind: s.actorKind, id: s.actorId }, m.operation, m.targets, m.id?.operationId ?? "", "denied");
+		await checkQuotas(space, this.limits, { ...m.demand, storedBytes: pool === "ordinary" ? stored : undefined }, await this.#tenantContentBytes(s.tenantId, space));
+		const used = (await space.stats()).bytes?.entries ?? 0;
+		const bound = this.limits.maxTenantBytes + this.limits.auditReserveBytes - (pool === "ordinary" ? this.limits.securityReserveBytes : 0);
+		const need = used + Math.max(0, stored) + encodedBytes(audit.fields);
+		if (need > bound) throw new schema.CapacityExceeded(`stored bytes with the audit row: ${need} exceeds ${bound} (${pool} pool)`);
+		if (m.id !== null) await reserveReceipt(space, this.state, this.limits, pool);
+	}
+
+	/**
+	 * A security action that does not fit even its reserve (section 3, budgets): the tenant is closed durably with the
+	 * pending action, stays closed across restarts and answers `unavailable` until the operator's repair path reopens it.
+	 */
+	#closeForSecurity(tenantId: string, action: Record<string, unknown>, cause: Error): never {
+		this.state.closeTenant(tenantId, "securityReserve", action);
+		this.admission.suspend(tenantId, "securityReserve");
+		console.error(`[files] tenant ${tenantId} closed: a security action does not fit its reserve (${cause.message})`);
+		throw new Unavailable(`tenant ${tenantId} is closed until the operator completes a pending security action`);
+	}
+
+	/** The operator reopens a tenant closed for its security reserve once the pending action has durably succeeded
+	 *  (or after a repair that makes room for it). */
+	reopenClosedTenant(tenantId: string): void {
+		this.state.reopenTenant(tenantId);
+		this.admission.resume(tenantId);
 	}
 
 	async #tenantContentBytes(tenantId: string, space: PhiSpaces): Promise<number> {
@@ -477,7 +669,8 @@ export class FilesService {
 	 * `resolveOutcomes`. After a durable commit the old blob is deleted.
 	 */
 	async #commitMutation(s: Session, space: PhiSpaces, id: VerifiedOpId, operation: string, targets: string[], rows: ReturnType<typeof schema.meta>[],
-		save: { nodeId: string; newBlobId: string; oldBlobId: string | null; contentDelta: number; replace?: { version: number; blobId: string } } | null): Promise<void> {
+		save: { nodeId: string; newBlobId: string; oldBlobId: string | null; contentDelta: number; replace?: { version: number; blobId: string } } | null,
+		takes: Array<{ type: string; fields: Record<string, string> }> = []): Promise<void> {
 		const seq = (await this.#lastSeq(s.tenantId, space)) + 1;
 		const all = [...rows, schema.audit(seq, this.state.now(), { kind: s.actorKind, id: s.actorId }, operation, targets, id.operationId, "ok")];
 		let txn: string | null = null;
@@ -490,6 +683,9 @@ export class FilesService {
 				if (old === null || old.fields.version !== save.replace.version || old.fields.blobId !== save.replace.blobId)
 					throw new InconsistentState(`tenant ${s.tenantId}: the content row of ${save.nodeId} changed under the queue`);
 			}
+			// rows a removal takes: each must still be there, inside the queue nothing else removes them
+			for (const t of takes)
+				if ((await space.take(t, 0, { txn })) === null) throw new InconsistentState(`tenant ${s.tenantId}: a ${t.type} row vanished under the queue`);
 			for (const e of all) {
 				const replacing = save?.replace && e.type === schema.T.content;
 				await space.write(e, txn, FOREVER, replacing ? {} : { unique: schema.KEY[e.type as keyof typeof schema.KEY] });
@@ -642,3 +838,13 @@ export class FilesService {
 
 /** The deterministic order of names in listings: by UTF-16 code units of the canonical (NFC) form. */
 const byName = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/** A subject as a caller names it: `{kind: "user" | "agent", id}` or `{kind: "group", id}` (its members). */
+function parseSubject(v: unknown, maxNameBytes: number): Subject {
+	const o = (v ?? {}) as { kind?: unknown; id?: unknown };
+	if (o.kind === "user" || o.kind === "agent") return { kind: o.kind, id: schema.actorId(o.id, "subject ID") };
+	if (o.kind === "group") return { kind: "group", id: schema.groupId(o.id, maxNameBytes), relation: "member" };
+	throw new schema.InvalidInput("a subject is {kind: user | agent | group, id}");
+}
+
+const subjectOf = (r: RelRow): Subject => r.subjectKind === "group" ? { kind: "group", id: r.subjectId, relation: "member" } : { kind: r.subjectKind as schema.ActorKind, id: r.subjectId };

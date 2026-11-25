@@ -38,8 +38,12 @@ export type FsLimits = {
 	 * answers `capacityExceeded` before the Space refuses on its own.
 	 */
 	maxTenantBytes: number;
-	/** Stored bytes kept back for audit rows and the security pool (section 3, budgets); ordinary writes never use them. */
+	/** Stored bytes above `maxTenantBytes` kept for audit rows (section 3, budgets): a mutation's own rows must fit
+	 *  `maxTenantBytes`, its audit row the reserve. */
 	auditReserveBytes: number;
+	/** The part of the audit reserve only security actions (revocations, membership removal, actor disablement) may use,
+	 *  for their receipts and audit rows. */
+	securityReserveBytes: number;
 	/** Lookups one decision (a resolution plus its rights) may make. */
 	maxWorkPerDecision: number;
 	/** Operation IDs (section 6.2): the published retry window, the allowed clock skew, IDs per `issueOperationIds` call. */
@@ -59,7 +63,7 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxFileBytes: 16 * 1024 * 1024,
 	maxDirEntries: 256,
 	maxGrantsPerTarget: 64,
-	maxReplyBytes: 512 * 1024,
+	maxReplyBytes: 1024 * 1024,
 	maxActors: 1000,
 	maxGroups: 200,
 	maxWorkspaces: 500,
@@ -68,6 +72,7 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxContentBytes: 1024 * 1024 * 1024,
 	maxTenantBytes: 56 * 1024 * 1024,
 	auditReserveBytes: 4 * 1024 * 1024,
+	securityReserveBytes: 256 * 1024,
 	maxWorkPerDecision: 512,
 	retryWindowMs: 3600_000,
 	clockSkewMs: 120_000,
@@ -95,11 +100,14 @@ export function assertLimitsFit(fs: FsLimits, space: Pick<Limits, "maxEntryBytes
 	if (save > space.maxCommitBytes) fail("a save", save, space.maxCommitBytes);
 	const list = fs.maxDirEntries * (worstJsonString(fs.maxNameBytes) + ID_JSON + 64);
 	if (list > fs.maxReplyBytes) fail("a full directory listing", list, fs.maxReplyBytes);
+	const workspaces = fs.maxWorkspaces * (worstJsonString(fs.maxNameBytes) + 8);
+	if (workspaces > fs.maxReplyBytes) fail("a full workspace listing", workspaces, fs.maxReplyBytes);
 	const grants = fs.maxGrantsPerTarget * (2 * worstJsonString(fs.maxNameBytes) + 128);
 	if (grants > fs.maxReplyBytes) fail("a full grant listing", grants, fs.maxReplyBytes);
 	if (fs.maxPathBytes < fs.maxNameBytes) fail("a path of one segment", fs.maxNameBytes, fs.maxPathBytes);
 	const stored = fs.maxTenantBytes + fs.auditReserveBytes;
 	if (stored > space.maxSpaceBytes) fail("the tenant's rows with the audit reserve", stored, space.maxSpaceBytes);
+	if (fs.securityReserveBytes > fs.auditReserveBytes) fail("the security reserve inside the audit reserve", fs.securityReserveBytes, fs.auditReserveBytes);
 	if (!(fs.retryWindowMs > 0) || !(fs.clockSkewMs >= 0) || fs.clockSkewMs >= fs.retryWindowMs) throw new Error("limits: the retry window must be positive and longer than the clock skew");
 	if (!(fs.maxOperationIdsPerCall >= 1)) throw new Error("limits: maxOperationIdsPerCall must be at least 1");
 	if (fs.maxFileBytes > fs.maxContentBytes) fail("one file inside the content quota", fs.maxFileBytes, fs.maxContentBytes);
