@@ -60,25 +60,34 @@ function charged(d: PolicyData, w: Work): PolicyData {
 	};
 }
 
-export type Options = { limits?: Pick<FsLimits, "maxWorkPerDecision" | "maxPathDepth" | "maxGrantsPerTarget" | "maxGroups">; work?: Work };
+export type Options = { limits?: Partial<FsLimits>; work?: Work };
 const lim = (o: Options) => ({ ...DEFAULT_FS_LIMITS, ...o.limits });
 const workOf = (o: Options) => o.work ?? new Work(lim(o).maxWorkPerDecision);
+
+/** Reads at most `bound + 1` rows and refuses when the extra one came back: never a decision on a partial list. */
+async function bounded<R>(read: (limit: number) => Promise<R[]>, bound: number, what: string): Promise<R[]> {
+	const rows = await read(bound + 1);
+	if (rows.length > bound) throw new CapacityExceeded(`${what}: more than ${bound}`);
+	return rows;
+}
 
 /** The subject keys an actor acts as: itself and, while enabled, each group it belongs to. Empty when not enabled. */
 async function subjectsOf(d: PolicyData, a: ActorRef, o: Options): Promise<Set<string>> {
 	const row = await d.actor(a.actorKind, a.actorId);
 	if (row === null || row.state !== "enabled") return new Set();
 	const keys = new Set([`${a.actorKind}:${a.actorId}`]);
-	for (const g of await d.groupsOf(a.actorKind, a.actorId, lim(o).maxGroups + 1)) keys.add(`group:${g}#member`);
+	for (const g of await bounded((l) => d.groupsOf(a.actorKind, a.actorId, l), lim(o).maxGroups, "groups of one actor")) keys.add(`group:${g}#member`);
 	return keys;
 }
 
 const subjectKey = (r: RelRow): string => r.subjectKind === "group" ? `group:${r.subjectId}#${r.subjectRelation}` : `${r.subjectKind}:${r.subjectId}`;
 
+const grantsOn = (d: PolicyData, nodeId: string, o: Options) => bounded((l) => d.relationsOn("node", nodeId, l), lim(o).maxGrantsPerTarget, "grants on one target");
+
 /** The highest role the subjects hold by grants directly on one node. */
 async function directRole(d: PolicyData, nodeId: string, subjects: Set<string>, o: Options): Promise<Role | null> {
 	let role: Role | null = null;
-	for (const r of await d.relationsOn("node", nodeId, lim(o).maxGrantsPerTarget + 1))
+	for (const r of await grantsOn(d, nodeId, o))
 		if (r.relation in RANK && subjects.has(subjectKey(r))) role = max(role, r.relation as Role);
 	return role;
 }
@@ -136,7 +145,7 @@ export async function roleOn(data: PolicyData, actor: ActorRef, nodeId: string, 
 		if (n === null) throw new InconsistentState(chain.length === 0 ? `node ${id} is missing` : `the parent ${id} of node ${chain.at(-1)!.nodeId} is missing`);
 		if (chain.length > 0 && n.kind !== "dir") throw new InconsistentState(`the parent ${id} is not a directory`);
 		chain.push(n);
-		if (n.parentId === WORKSPACES) break;
+		if (n.parentId === WORKSPACES) { if (n.kind !== "dir") throw new InconsistentState(`workspace root ${n.nodeId} is not a directory`); break; }
 		if (chain.length > lim(o).maxPathDepth) throw new CapacityExceeded(`node ${nodeId} lies deeper than ${lim(o).maxPathDepth} levels`);
 		id = n.parentId;
 	}
@@ -210,7 +219,7 @@ async function enabledAfter(d: PolicyData, kind: string, id: string, c: Change):
 /** Every workspace root keeps a direct owner tuple whose subject is an enabled user or agent; group owners do not count. */
 export async function checkLastOwner(data: PolicyData, rootNodeId: string, c: Change, o: Options = {}): Promise<void> {
 	const d = charged(data, workOf(o));
-	const after = [...(await d.relationsOn("node", rootNodeId, lim(o).maxGrantsPerTarget + 1)).filter((r) => !c.remove?.some((x) => same(x, r))),
+	const after = [...(await grantsOn(d, rootNodeId, o)).filter((r) => !c.remove?.some((x) => same(x, r))),
 		...(c.add ?? []).filter((r) => r.objectKind === "node" && r.objectId === rootNodeId)];
 	for (const r of after)
 		if (r.relation === "owner" && r.subjectRelation === DIRECT && r.subjectKind !== "group" && (await enabledAfter(d, r.subjectKind, r.subjectId, c))) return;
@@ -220,7 +229,7 @@ export async function checkLastOwner(data: PolicyData, rootNodeId: string, c: Ch
 /** Every tenant keeps an enabled `tenant#admin` user. */
 export async function checkLastAdmin(data: PolicyData, tenantId: string, c: Change, o: Options = {}): Promise<void> {
 	const d = charged(data, workOf(o));
-	const after = [...(await d.relationsOn("tenant", tenantId, lim(o).maxGrantsPerTarget + 1)).filter((r) => !c.remove?.some((x) => same(x, r))), ...(c.add ?? [])];
+	const after = [...(await bounded((l) => d.relationsOn("tenant", tenantId, l), lim(o).maxActors, "tenant administrators")).filter((r) => !c.remove?.some((x) => same(x, r))), ...(c.add ?? [])];
 	for (const r of after)
 		if (r.objectKind === "tenant" && r.relation === "admin" && r.subjectKind === "user" && (await enabledAfter(d, "user", r.subjectId, c))) return;
 	throw new LastAdmin();
@@ -239,7 +248,8 @@ export function groupsIn(relations: Iterable<RelRow>): string[] {
 }
 
 export async function membersOf(data: PolicyData, group: string, o: Options = {}): Promise<Subject[]> {
-	const rows = await charged(data, workOf(o)).relationsOn("group", groupId(group), lim(o).maxGrantsPerTarget + 1);
+	const d = charged(data, workOf(o));
+	const rows = await bounded((l) => d.relationsOn("group", groupId(group), l), lim(o).maxActors, "members of one group");
 	return rows.map((r) => ({ kind: r.subjectKind as ActorKind, id: r.subjectId }))
 		.sort((a, b) => a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }

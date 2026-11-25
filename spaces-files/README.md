@@ -63,10 +63,13 @@ Not yet there, by the plan's order: operation IDs and receipts, the file and adm
   digest version, the operation name and the canonical arguments.
 - `server/limits.ts`: the filesystem's limits, checked on open in their worst case against the Space's limits (the
   Space counts the UTF-8 bytes of an entry's JSON, so a control character costs six bytes: text is 10 KiB by
-  default); each row is measured exactly before it is written.
+  default; the tenant's stored rows, 56 MiB, with a 4 MiB audit reserve must fit the Space's 64 MiB); each row is
+  measured exactly before it is written, and a worst-case save (take, successor, receipt, audit) fits one commit.
 - `server/policy.ts`: the typed relation validator, the evaluator (`resolve` down a path, `roleOn` up from a node ID
   along the recorded parent, both charged against a work budget), the final-owner and final-admin checks and the
-  derived groups; `spaceData` reads a tenant Space for it. `server/quotas.ts`: the live-data quotas.
+  derived groups; `spaceData` reads a tenant Space for it. Every bounded read asks for one row more than its bound and
+  refuses with `capacityExceeded` when it gets it, so no decision or listing rests on a partial list.
+  `server/quotas.ts`: the live-data quotas, `registerActor` checks them.
 
 | Claim (plan section 7, phase 2) | Test |
 |---|---|

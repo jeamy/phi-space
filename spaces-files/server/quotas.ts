@@ -20,6 +20,8 @@ export type Demand = {
 	dirEntries?: { parentId: string; n: number };
 	/** New direct grants on one node. */
 	grantsOn?: { nodeId: string; n: number };
+	/** Stored bytes the rows add (their encoded fields, minus what replaced rows free). */
+	storedBytes?: number;
 };
 
 export const textBytes = (text: string): number => Buffer.byteLength(text, "utf8");
@@ -46,4 +48,5 @@ export async function checkQuotas(space: PhiSpaces, limits: FsLimits, d: Demand,
 		over("groups", have.length, new Set(d.groups.filter((g) => !have.includes(g))).size, limits.maxGroups);
 	}
 	if (d.contentBytes) over("content bytes", contentBytesNow, d.contentBytes, limits.maxContentBytes);
+	if (d.storedBytes) over("stored bytes", (await space.stats()).bytes?.entries ?? 0, d.storedBytes, limits.maxTenantBytes);
 }

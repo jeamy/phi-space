@@ -194,3 +194,22 @@ test("corrupt graphs are inconsistentState, deep and costly ones capacityExceede
 	await assert.rejects(resolve(data(many), planner, "dispatch", ["inbox", "a.md"], { limits: { maxWorkPerDecision: 100, maxPathDepth: 32, maxGrantsPerTarget: 1000, maxGroups: 200 } }), CapacityExceeded);
 	assert.equal((await resolve(data(many), planner, "dispatch", ["inbox", "a.md"], { limits: { maxWorkPerDecision: 1000, maxPathDepth: 32, maxGrantsPerTarget: 1000, maxGroups: 200 } })).role, "owner");
 });
+
+test("a bounded read never decides on a partial list", async () => {
+	const L = { maxGrantsPerTarget: 4, maxActors: 70, maxWorkPerDecision: 10_000 };
+	// the actor's own grant comes last, after more grants than a target may hold
+	const crowded = world(NODES, [...BASE, ...Array.from({ length: 4 }, (_, i) => `node:lea#editor@user:u${i}`), "node:lea#viewer@user:max"], ACTORS);
+	await assert.rejects(resolve(data(crowded), ref("user:max"), "lea", [], { limits: L }), CapacityExceeded);
+	await assert.rejects(roleOn(data(crowded), ref("user:max"), idOf("lea"), { limits: L }), CapacityExceeded);
+	await assert.rejects(checkLastOwner(data(crowded), idOf("lea"), {}, { limits: L }), CapacityExceeded);
+	// a group may have more members than a target has grants, up to the actor bound
+	const members = Array.from({ length: 70 }, (_, i) => `group:big#member@user:m${i}`);
+	assert.equal((await membersOf(data(world(NODES, members, ACTORS)), "big", { limits: L })).length, 70);
+	await assert.rejects(membersOf(data(world(NODES, [...members, "group:big#member@user:one-more"], ACTORS)), "big", { limits: L }), CapacityExceeded);
+	// an actor in more groups than the tenant may have
+	const groups = world(NODES, [...BASE, ...Array.from({ length: 3 }, (_, i) => `group:g${i}#member@user:lea`)], ACTORS);
+	await assert.rejects(resolve(data(groups), ref("user:lea"), "lea", [], { limits: { maxGroups: 3 } }), CapacityExceeded);
+	// a root that is a file, reached by ID
+	const fileRoot = world(["dispatch", ...NODES.slice(1)], BASE, ACTORS);
+	await assert.rejects(roleOn(data(fileRoot), ref("agent:planner-17"), idOf("dispatch")), InconsistentState);
+});

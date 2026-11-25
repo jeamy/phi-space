@@ -8,7 +8,8 @@ import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 import { DEFAULT_LIMITS, FOREVER, UniqueConflict } from "phi-spaces/core";
-import { assertLimitsFit, DEFAULT_FS_LIMITS, type FsLimits } from "./limits.ts";
+import { assertLimitsFit, assertRowFits, DEFAULT_FS_LIMITS, encodedBytes, type FsLimits } from "./limits.ts";
+import { checkQuotas } from "./quotas.ts";
 import { Admission, Unavailable, type AdmissionOptions } from "./admission.ts";
 import { DeploymentState, type DeploymentOptions } from "./deployment.ts";
 import { assertSeparateDirs, prepareDataDir } from "./dirs.ts";
@@ -154,7 +155,7 @@ export class FilesService {
 	async createTenant(tenantId: string, admin: FirstAdmin): Promise<CreateTenantResult> {
 		tenantAlias(tenantId);
 		const id = schema.actorId(admin.actorId);
-		const homeName = schema.canonicalName(admin.homeName);
+		const homeName = schema.canonicalName(admin.homeName, this.limits.maxNameBytes);
 		const identity = { issuer: schema.identityPart(admin.issuer, "issuer"), subject: schema.identityPart(admin.subject, "subject") };
 		await this.reserveTenantSpace(tenantId);
 		const r = await this.#inSpace(tenantId, async (space): Promise<CreateTenantResult> => {
@@ -188,7 +189,7 @@ export class FilesService {
 	async registerActor(tenantId: string, by: { actorKind: schema.ActorKind; actorId: string }, kind: schema.ActorKind, actorId: string, homeName: string, identity: schema.UserIdentity | schema.AgentIdentity): Promise<{ actorId: string; homeNodeId: string }> {
 		const ident = schema.identityOf(kind, identity);
 		const id = schema.actorId(actorId);
-		const name = schema.canonicalName(homeName);
+		const name = schema.canonicalName(homeName, this.limits.maxNameBytes);
 		const r = await this.inTenant(tenantId, async (space) => {
 			const caller = await this.#enabledActor(space, by.actorKind, by.actorId);
 			if (caller.fields.actorKind !== "user" || !(await this.#has(space, schema.relation("tenant", tenantId, "admin", "user", by.actorId))))
@@ -198,10 +199,14 @@ export class FilesService {
 			if (await space.readIfExists(schema.identityTemplate(kind, ident), 0)) throw new schema.AlreadyExists("that identity is bound to another actor");
 			const homeNodeId = await this.#freshNodeId(space);
 			const seq = (await this.#lastSeq(tenantId, space)) + 1;
-			await this.#writeAll(tenantId, space, [
+			const rows = [
 				schema.actor(kind, id, homeNodeId, ident),
 				schema.node(homeNodeId, schema.WORKSPACES, name, "dir"),
 				schema.relation("node", homeNodeId, "owner", kind, id),
+			];
+			// the audit row draws on the reserve (section 3, budgets); the rows it records count against the tenant's bytes
+			await checkQuotas(space, this.limits, { actors: 1, workspaces: 1, nodes: 1, relations: 1, storedBytes: rows.reduce((n, r) => n + encodedBytes(r.fields), 0) }, 0);
+			await this.#writeAll(tenantId, space, [...rows,
 				schema.audit(seq, this.state.now(), { kind: by.actorKind, id: by.actorId }, "registerActor", [homeNodeId], "", "ok"),
 			]);
 			this.#seq.set(tenantId, seq);
@@ -282,6 +287,7 @@ export class FilesService {
 
 	/** Writes new rows in one commit, each with its type's creation key; a key collision is a corrupt state. */
 	async #writeAll(tenantId: string, space: PhiSpaces, entries: ReturnType<typeof schema.meta>[]): Promise<void> {
+		for (const e of entries) assertRowFits(e.fields, DEFAULT_LIMITS);
 		const ops = entries.map((entry) => ({ op: "write" as const, entry, lease: FOREVER, unique: schema.KEY[entry.type as keyof typeof schema.KEY] }));
 		try { await space.batch(ops); }
 		catch (e) { if (e instanceof UniqueConflict) throw new InconsistentState(`tenant ${tenantId}: ${e.message}`); throw e; }

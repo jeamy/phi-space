@@ -6,7 +6,7 @@ import { DEFAULT_LIMITS, FOREVER } from "phi-spaces/core";
 import { checkText, parsePath, pathString } from "../server/paths.ts";
 import { requestDigest } from "../server/digest.ts";
 import { assertLimitsFit, assertRowFits, DEFAULT_FS_LIMITS, encodedBytes } from "../server/limits.ts";
-import { CapacityExceeded, content, InvalidInput } from "../server/schema.ts";
+import { audit, CapacityExceeded, content, InvalidInput, receipt } from "../server/schema.ts";
 import { FilesService } from "../server/service.ts";
 
 const L = DEFAULT_FS_LIMITS;
@@ -64,6 +64,9 @@ test("the limits fit the Space's limits in their worst case, and rows are measur
 	assert.throws(() => assertLimitsFit({ ...L, maxTextBytes: 11 * 1024 }, DEFAULT_LIMITS), /FsContent row/);
 	assert.throws(() => assertLimitsFit({ ...L, maxDirEntries: 100_000 }, DEFAULT_LIMITS), /directory listing/);
 	assert.throws(() => assertLimitsFit(L, { ...DEFAULT_LIMITS, maxCommitBytes: 100 * 1024 }), /a save/);
+	assert.throws(() => assertLimitsFit({ ...L, maxTenantBytes: 62 * 1024 * 1024 }, DEFAULT_LIMITS), /audit reserve/);
+	assert.throws(() => assertLimitsFit({ ...L, maxContentBytes: L.maxTenantBytes + 1 }, DEFAULT_LIMITS), /content quota/);
+	await assert.rejects(FilesService.open({ dataDir: null, stateDir: null, limits: { maxTextBytes: 64 * 1024 } }), /FsContent row/);
 
 	// the worst text at the limit: only control characters, each six bytes of JSON
 	const worst = checkText("\u0007".repeat(L.maxTextBytes));
@@ -76,5 +79,16 @@ test("the limits fit the Space's limits in their worst case, and rows are measur
 	try {
 		await s.createTenant("acme", { actorId: "lea", homeName: "lea", issuer: "i", subject: "s" });
 		await s.inTenant("acme", (sp) => sp.write(row, null, FOREVER));
+		// a whole save in its worst case is one commit: take the row, write a worst successor, a receipt and an audit row
+		const results = await s.inTenant("acme", (sp) => sp.batch([
+			{ op: "begin" },
+			{ op: "take", template: { type: "FsContent", fields: { nodeId: "n".repeat(22) } }, txn: "$" },
+			{ op: "write", entry: content("n".repeat(22), 2, "\u0007".repeat(L.maxTextBytes)), txn: "$", lease: FOREVER },
+			{ op: "write", entry: receipt("agent", "a".repeat(128), "o".repeat(200), "d".repeat(64), { version: 2 }, Date.now()), txn: "$", lease: FOREVER },
+			{ op: "write", entry: audit(99, Date.now(), { kind: "agent", id: "a".repeat(128) }, "write", ["n".repeat(22)], "o".repeat(200), "ok"), txn: "$", lease: FOREVER },
+			{ op: "commit", txn: "$" },
+		]));
+		assert.equal(results.length, 6);
+		assert.equal((await s.inTenant("acme", (sp) => sp.readIfExists({ type: "FsContent" }, 0)))?.fields.version, 2);
 	} finally { await s.close(); }
 });

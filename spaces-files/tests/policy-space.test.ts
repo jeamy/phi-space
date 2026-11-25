@@ -45,7 +45,7 @@ test("provisioned rows evaluate as the plan says, and tenants stay apart", async
 });
 
 test("quotas refuse with capacityExceeded and leave admission open", async () => {
-	const limits = { maxActors: 3, maxWorkspaces: 3, maxNodes: 5, maxRelations: 6, maxGroups: 1, maxDirEntries: 2, maxGrantsPerTarget: 2, maxContentBytes: 10 };
+	const limits = { maxActors: 3, maxWorkspaces: 3, maxNodes: 5, maxRelations: 6, maxGroups: 1, maxDirEntries: 2, maxGrantsPerTarget: 2, maxContentBytes: 10, maxTenantBytes: 4000 };
 	const s = await FilesService.open({ dataDir: null, stateDir: null, limits });
 	try {
 		const r = await s.createTenant("acme", ADMIN);
@@ -58,6 +58,7 @@ test("quotas refuse with capacityExceeded and leave admission open", async () =>
 				["actors", { actors: 3 }], ["workspaces", { workspaces: 3 }], ["nodes", { nodes: 5 }], ["relations", { relations: 5 }],
 				["groups", { groups: ["north", "south"] }], ["directory entries", { dirEntries: { parentId: r.homeNodeId, n: 3 } }],
 				["grants on one target", { grantsOn: { nodeId: r.homeNodeId, n: 2 } }], ["content bytes", { contentBytes: 1 }, 10],
+				["stored bytes", { storedBytes: 4000 }],
 			];
 			for (const [what, d, bytes] of over) await assert.rejects(checkQuotas(sp, L, d, bytes ?? 0), (e: Error) => e instanceof CapacityExceeded && e.message.startsWith(what), what);
 			// a group already in the tenant costs nothing; a shorter save frees bytes
@@ -65,6 +66,10 @@ test("quotas refuse with capacityExceeded and leave admission open", async () =>
 			await checkQuotas(sp, L, { groups: ["north"] }, 0);
 			await assert.rejects(checkQuotas(sp, L, { groups: ["south"] }, 0), CapacityExceeded);
 			await checkQuotas(sp, L, { contentBytes: -4 }, 10);
+			const stored = (await sp.stats()).bytes!.entries;
+			assert.ok(stored > 0);
+			await checkQuotas(sp, L, { storedBytes: 4000 - stored }, 0);
+			await assert.rejects(checkQuotas(sp, L, { storedBytes: 4001 - stored }, 0), CapacityExceeded, "exactly at the stored-byte limit and one past it");
 			await put(sp, content("f", 1, "héllo"));
 			assert.equal(await sumContentBytes(sp), 6);
 		});

@@ -87,3 +87,15 @@ test("only an enabled tenant administrator registers, and input is checked first
 		await assert.rejects(s.registerActor("initech", LEA, "user", "a", "a", { issuer: "i", subject: "s" }), (e: Error & { code?: string }) => e.code === "unavailable");
 	} finally { await s.close(); }
 });
+
+test("registration respects the quotas and creates nothing past them", async () => {
+	const s = await FilesService.open({ dataDir: null, stateDir: null, limits: { maxActors: 2, maxNameBytes: 8 } });
+	try {
+		await s.createTenant("acme", ADMIN);
+		await assert.rejects(s.registerActor("acme", LEA, "user", "max", "123456789", { issuer: "i", subject: "max" }), (e: Error & { code?: string }) => e.code === "capacityExceeded", "the configured name limit");
+		await s.registerActor("acme", LEA, "user", "max", "max", { issuer: "i", subject: "max" });
+		const before = (await raw(s, "acme").readAll()).length;
+		await assert.rejects(s.registerActor("acme", LEA, "user", "eve", "eve", { issuer: "i", subject: "eve" }), (e: Error & { code?: string }) => e.code === "capacityExceeded");
+		assert.equal((await raw(s, "acme").readAll()).length, before);
+	} finally { await s.close(); }
+});

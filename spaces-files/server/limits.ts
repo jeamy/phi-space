@@ -29,7 +29,16 @@ export type FsLimits = {
 	maxWorkspaces: number;
 	maxNodes: number;
 	maxRelations: number;
+	/** The text bytes of all files. */
 	maxContentBytes: number;
+	/**
+	 * The stored bytes of all rows (the Space's own measure: the JSON of each entry's fields), checked exactly before each
+	 * write. With the audit reserve it must stay within the tenant Space's `maxSpaceBytes`, so that the filesystem
+	 * answers `capacityExceeded` before the Space refuses on its own.
+	 */
+	maxTenantBytes: number;
+	/** Stored bytes kept back for audit rows and the security pool (section 3, budgets); ordinary writes never use them. */
+	auditReserveBytes: number;
 	/** Lookups one decision (a resolution plus its rights) may make. */
 	maxWorkPerDecision: number;
 };
@@ -51,7 +60,9 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxWorkspaces: 500,
 	maxNodes: 20_000,
 	maxRelations: 20_000,
-	maxContentBytes: 64 * 1024 * 1024,
+	maxContentBytes: 32 * 1024 * 1024,
+	maxTenantBytes: 56 * 1024 * 1024,
+	auditReserveBytes: 4 * 1024 * 1024,
 	maxWorkPerDecision: 512,
 };
 
@@ -65,7 +76,7 @@ const ID_JSON = 24;
 export const encodedBytes = (v: unknown): number => Buffer.byteLength(JSON.stringify(v) ?? "");
 
 /** Refuses a configuration whose worst case does not fit the Space's limits (plan section 5, paths and text). */
-export function assertLimitsFit(fs: FsLimits, space: Pick<Limits, "maxEntryBytes" | "maxCommitBytes">): void {
+export function assertLimitsFit(fs: FsLimits, space: Pick<Limits, "maxEntryBytes" | "maxCommitBytes" | "maxSpaceBytes">): void {
 	const fail = (what: string, need: number, have: number) => { throw new Error(`limits: ${what} needs ${need} bytes in the worst case, the limit is ${have}`); };
 	const content = worstJsonString(fs.maxTextBytes) + ROW_OVERHEAD;
 	if (content > space.maxEntryBytes) fail("an FsContent row", content, space.maxEntryBytes);
@@ -79,6 +90,9 @@ export function assertLimitsFit(fs: FsLimits, space: Pick<Limits, "maxEntryBytes
 	const grants = fs.maxGrantsPerTarget * (2 * worstJsonString(fs.maxNameBytes) + 128);
 	if (grants > fs.maxReplyBytes) fail("a full grant listing", grants, fs.maxReplyBytes);
 	if (fs.maxPathBytes < fs.maxNameBytes) fail("a path of one segment", fs.maxNameBytes, fs.maxPathBytes);
+	const stored = fs.maxTenantBytes + fs.auditReserveBytes;
+	if (stored > space.maxSpaceBytes) fail("the tenant's rows with the audit reserve", stored, space.maxSpaceBytes);
+	if (fs.maxContentBytes > fs.maxTenantBytes) fail("the content quota inside the tenant's rows", fs.maxContentBytes, fs.maxTenantBytes);
 }
 
 /** The exact size of a row before it is written: an overrun is `capacityExceeded`, never the Space's own error. */
