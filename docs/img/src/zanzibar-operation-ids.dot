@@ -1,14 +1,13 @@
 digraph "Lifetime of an operation ID" {
 #include
-	issue [label="issueOperationIds\nsigned over tenant, actor, issue time,\nkey generation and a random nonce"];
-	use [label="Mutation with the ID\nreceipt expires at issue time + retry window", fillcolor="#d8eeea"];
-	retry [label="Retry inside the window\nthe receipt answers, no second write", fillcolor="#d8eeea"];
-	late [label="After the window\nID rejected before receipt lookup;\nmaintenance may delete the receipt", fillcolor="#fcf2d9"];
-	restore [label="Restore from backup\noperator installs a new signing key", fillcolor="#fcf2d9"];
-	dead [label="Every earlier ID is rejected\nrestored receipts cannot answer", fillcolor="#f8e9e5"];
-	issue -> use;
-	use -> retry [label="reply lost"];
-	use -> late [label="window ends"];
-	restore -> dead;
-	{rank=same; retry; late}
+  issue [label="Issue a signed ID for one tenant and actor\nExpiry = issue time + retry window"];
+  use [label="Commit mutation, receipt and audit together",fillcolor="#d8eeea"];
+  retry [label="Lost reply • retry with the same ID"];
+  verify [label="Verify session, signature, generation\nand expiry against nondecreasing time"];
+  auth [label="Check current authorization"];
+  result [label="Matching digest → recorded outcome\nDifferent digest → requestMismatch",fillcolor="#d8eeea"];
+  expired [label="Reject ID before lookup\nRestore invalidates prior generations",fillcolor="#fcf2d9"];
+  denied [label="Deny request\nKeep receipt contents private",fillcolor="#f8e9e5"];
+  issue -> use -> retry -> verify; verify -> expired [label="invalid"]; verify -> auth [label="valid"];
+  auth -> result [label="authorized"]; auth -> denied [label="access lost"];
 }

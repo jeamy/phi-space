@@ -1,0 +1,13 @@
+digraph "Who can authorize access after a restore?" {
+#include
+  close [label="Host operator closes admission\nDrain operations and persist restore intent"];
+  store [label="Restore the encrypted backup\nAdvance session epoch and signing generation"];
+  roster [label="Independent recovery roster\nVerify current tenant identities",fillcolor="#fcf2d9"];
+  bootstrap [label="Rostered recoverer signs in\nRepair admin bindings, including missing B"];
+  reconcile [label="Approved current admin B\nReconcile actors, memberships and grants"];
+  gate [label="All expected tenants verified?\nCheck epoch markers and drain repairs"];
+  wait [label="Keep normal admission closed\nResolve missing evidence",fillcolor="#f8e9e5"];
+  open [label="Persist normal mode\nAdmit new sessions",fillcolor="#d8eeea"];
+  close -> store -> bootstrap; roster -> bootstrap;
+  bootstrap -> reconcile -> gate; gate -> wait [label="no"]; gate -> open [label="yes"];
+}

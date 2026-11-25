@@ -5,7 +5,7 @@ digraph "Saving an existing file inside the tenant queue" {
 	auth [label="Resolve workspace and path,\ncheck current editor rights"];
 	receipt [label="Look up a receipt for the ID\nand compare its argument digest"];
 	version [label="Compare expected version\nwith stored version"];
-	commit [label="Reserve and verify old content,\nwrite successor and receipt,\ncommit together", fillcolor="#d8eeea"];
+	commit [label="Reserve and verify old content,\nwrite successor, receipt and audit,\ncommit together", fillcolor="#d8eeea"];
 	rejected [label="operationIdRejected", fillcolor="#f8e9e5"];
 	denied [label="notFound for invisible targets\npermissionDenied for visible ones", fillcolor="#f8e9e5"];
 	replay [label="Return recorded version\nNo second write", fillcolor="#d8eeea"];

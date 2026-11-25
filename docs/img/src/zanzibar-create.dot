@@ -1,0 +1,14 @@
+digraph "Creating a child in a workspace" {
+#include
+  request [label="mkdir or write with expectedVersion 0\nValid session, input and operation ID"];
+  parent [label="Resolve the parent directory\nCheck visibility and editor rights"];
+  reject [label="Absent or invisible → notFound\nRead-only directory → permissionDenied\nVisible non-directory → invalidInput",fillcolor="#f8e9e5"];
+  receipt [label="Check the operation receipt"];
+  replay [label="Match → recorded outcome\nOther digest → requestMismatch"];
+  name [label="Look up the final name"];
+  collision [label="Existing child → alreadyExists\nCreate-only write on a file → versionConflict",fillcolor="#fcf2d9"];
+  create [label="Commit node, receipt and audit\nInclude version 1 content for a file",fillcolor="#d8eeea"];
+  request -> parent; parent -> reject [label="cannot create"]; parent -> receipt [label="authorized"];
+  receipt -> replay [label="found"]; receipt -> name [label="new ID"];
+  name -> collision [label="occupied"]; name -> create [label="free"];
+}

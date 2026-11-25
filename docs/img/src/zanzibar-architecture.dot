@@ -5,16 +5,16 @@ digraph "Who can open the tenant store?" {
 	tadmin [label="Tenant administrator\nAdmin adapter"];
 	operator [label="Host operator\nLocal admin interface"];
 	subgraph cluster_host {
-		label="One service process • store owner lock"; labeljust=l; color="#648a85"; style=rounded;
-		service [label="Filesystem service\nBind session to tenant and actor\nSign and check operation IDs", fillcolor="#d8eeea"];
+		labelloc=b; label="Single host • store owner lock"; labeljust=l; color="#648a85"; style=rounded;
+		service [label="Filesystem service\nVerify browser or agent identity\nSign and check operation IDs", fillcolor="#d8eeea"];
 		qa [label="Tenant A queue"]; qb [label="Tenant B queue"];
 		subgraph cluster_db {
-			label="Embedded Space host • one SQLite store"; color="#95aab4"; style=rounded;
+			labelloc=b; label="SQLite and WAL • encrypted volume"; color="#95aab4"; style=rounded;
 			sa [label="Private Space A"]; sb [label="Private Space B"];
 		}
 	}
-	key [label="Signing key\noutside the data directory", fillcolor="#fcf2d9"];
-	human -> service; agent -> service; tadmin -> service;
+	key [label="Operation-ID key\noutside data backup", fillcolor="#fcf2d9"];
+	human -> service [label="HTTPS"]; agent -> service; tadmin -> service;
 	operator -> service [label="local, separate\nauthentication", style=dashed];
 	key -> service [style=dashed, arrowhead=none];
 	service -> qa; service -> qb; qa -> sa; qb -> sb;
