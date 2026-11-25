@@ -8,6 +8,7 @@ pub mod courier;
 pub mod deeds;
 pub mod execute;
 pub mod fire;
+pub mod footprints;
 pub mod grid;
 pub mod grid_format;
 pub mod funcparser;

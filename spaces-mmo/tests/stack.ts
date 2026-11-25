@@ -23,6 +23,7 @@ import { FOREVER, type SpaceLike } from "phi-spaces";
 import { readClock } from "../server/engine/clock.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { worldNow } from "../server/engine/worldtime.ts";
+import { occupancyId, storeOccupancyReport, type OccupancyEntry } from "../shared/footprints.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let seq = 0;
@@ -88,6 +89,35 @@ const freePort = () => new Promise<number>((ok, fail) => {
 });
 const stop = (c: ChildProcess, sig: NodeJS.Signals = "SIGTERM") => new Promise<void>((r) => { if (c.exitCode !== null || c.signalCode !== null) return r(); c.once("exit", () => r()); c.kill(sig); });
 
+/** The occupancy check every stack makes when it closes (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 3,
+ *  "Occupancy"; shared/footprints.ts): with the workers stopped, the objects' footprints give the plots' occupancy in
+ *  every room. Not after a worker was killed (its open transaction holds its objects taken, their plots stay readable,
+ *  until the lease runs out). A difference is written to stderr and fails the test file (the exit code), so it does not
+ *  hide a failure the test itself threw. */
+async function checkOccupancy(space: SpaceLike, what: string, byHand: ReadonlySet<string>): Promise<void> {
+	const report = storeOccupancyReport((await space.readAll({})) as unknown as OccupancyEntry[], { skip: (id) => byHand.has(id) });
+	if (!report.length) return;
+	process.exitCode = 1;
+	console.error(`[occupancy] ${what}: footprints and plots differ (${report.length})\n  ${report.slice(0, 20).join("\n  ")}`);
+}
+
+/** The test's own connection, noting in `byHand` the objects it writes or takes itself (a fixture that places a
+ *  building without its plots, a site taken without them): their differences are the fixture's, not the game's, and
+ *  the occupancy check leaves them out. What the game does through the workers is checked. */
+function noting(space: SpaceLike, byHand: Set<string>): SpaceLike {
+	const note = (e: unknown) => { const id = e && typeof e === "object" && "fields" in e ? occupancyId(e as OccupancyEntry) : null; if (id !== null) byHand.add(id); };
+	const taken = (r: unknown) => { for (const e of Array.isArray(r) ? r : [r]) note(e); return r; };
+	return new Proxy(space, {
+		get(target, key, receiver) {
+			const v = Reflect.get(target, key, receiver);
+			if (typeof v !== "function") return v;
+			if (key === "write") return (e: unknown, ...rest: unknown[]) => { note(e); return v.call(target, e, ...rest); };
+			if (typeof key === "string" && key.startsWith("take")) return async (...args: unknown[]) => { note(args[0]); return taken(await v.apply(target, args)); };
+			return v.bind(target);
+		},
+	});
+}
+
 export type Stack = {
 	world: string; accounts: string; space: SpaceLike;
 	/** The world workers started so far (the first one by startStack). */
@@ -113,8 +143,10 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 	let spaceProc = await startSpace();
 	const conn = connectSpace(world);
 	const procs: ChildProcess[] = [], models: ChildProcess[] = [];
+	let killed = false;
+	const byHand = new Set<string>();
 	const stack: Stack = {
-		world, accounts, space: conn.space, worlds: [],
+		world, accounts, space: noting(conn.space, byHand), worlds: [],
 		async restartSpace() {
 			await stop(spaceProc, "SIGKILL");
 			await rm(`${base}-world.sock`, { force: true }); await rm(`${base}-accounts.sock`, { force: true });
@@ -144,8 +176,11 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 			procs.push(c);
 			return { child: c, url: `http://127.0.0.1:${port}`, port };
 		},
-		kill: (c, sig) => stop(c, sig),
-		async close() { await Promise.all(procs.map((c) => stop(c))); conn.close(); await stop(spaceProc); await rm(`${base}-world.sock`, { force: true }); await rm(`${base}-accounts.sock`, { force: true }); },
+		kill: (c, sig) => { if (sig === "SIGKILL" && procs.includes(c)) killed = true; return stop(c, sig); },
+		async close() {
+			await Promise.all(procs.map((c) => stop(c)));
+			if (!killed && spaceProc.exitCode === null && spaceProc.signalCode === null) await checkOccupancy(conn.space, world, byHand).catch((e) => { process.exitCode = 1; console.error(`[occupancy] ${world}: not read: ${(e as Error).message}`); });
+			conn.close(); await stop(spaceProc); await rm(`${base}-world.sock`, { force: true }); await rm(`${base}-accounts.sock`, { force: true }); },
 	};
 	// a world that does not start must not leave the space behind: its child would keep this test file alive for good
 	try { for (let i = 0; i < (o.worlds ?? 1); i++) await stack.worldProcess(); } catch (e) { await stack.close(); throw e; }
@@ -160,18 +195,20 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 	const ids = (w.regions ?? []).map((g) => g.regionId);
 	const addr = (id: string) => `unix:${base}-${id}.sock`;
 	const list = ids.map((id) => `${id}=${addr(id)}`).join(",");
-	const procs: ChildProcess[] = [], models = new Map<string, ChildProcess>();
+	const procs: ChildProcess[] = [], spaces: ChildProcess[] = [], models = new Map<string, ChildProcess>();
 	const env = (id: string) => ({ SPACES_MMO_SPACE: addr(id), SPACES_MMO_REGION: id, SPACES_MMO_REGIONS: list, ...o.worldEnv });
 	const workers = async () => { for (const id of ids) procs.push(await run("server/world-host.ts", env(id), (l) => l.startsWith("[world] ready"))); };
 	try {
-		procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "accounts", SPACES_MMO_ACCOUNTS_LISTEN: accounts, SPACES_MMO_MEM: "1" }, (l) => l.startsWith("[space] ready")));
+		spaces.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "accounts", SPACES_MMO_ACCOUNTS_LISTEN: accounts, SPACES_MMO_MEM: "1" }, (l) => l.startsWith("[space] ready")));
 		const store: Record<string, string> = o.dataDir ? { SPACES_MMO_DATA: o.dataDir, SPACES_MMO_MEM: "" } : { SPACES_MMO_MEM: "1" };
-		for (const id of ids) procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "world", SPACES_MMO_LISTEN: addr(id), SPACES_MMO_REGION: id, ...store }, (l) => l.startsWith("[space] ready")));
+		for (const id of ids) spaces.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "world", SPACES_MMO_LISTEN: addr(id), SPACES_MMO_REGION: id, ...store }, (l) => l.startsWith("[space] ready")));
 		if (o.workers !== false) await workers();
-	} catch (e) { await Promise.all(procs.map((c) => stop(c))); throw e; }
+		procs.unshift(...spaces);
+	} catch (e) { await Promise.all([...spaces, ...procs].map((c) => stop(c))); throw e; }
 	const conns = new Map(ids.map((id) => [id, connectSpace(addr(id))]));
+	const byHand = new Set<string>(), spaceOf = new Map(ids.map((id) => [id, noting(conns.get(id)!.space, byHand)]));
 	return {
-		ids, accounts, list, space: (id: string) => conns.get(id)!.space,
+		ids, accounts, list, space: (id: string) => spaceOf.get(id)!,
 		/** The world workers, one per region (started already unless `workers: false`). */
 		workers,
 		/** One world worker of the region `id` with `extra` over its environment (rejects when it ends before ready). */
@@ -182,7 +219,12 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 			if (all.SPACES_MMO_LLM === "1" && !models.has(id)) models.set(id, await withAgentStore(`${base}-${id}-model`, (store) => run("server/model-host.ts", { ...store, ...all }, (l) => l.startsWith("[model] ready"))).then((c) => (procs.push(c), c)));
 			const c = await run("server/npc-host.ts", all, (l) => l.startsWith("[npc] ready")); procs.push(c); return c;
 		},
-		async close() { for (const c of conns.values()) c.close(); await Promise.all(procs.reverse().map((c) => stop(c))); for (const id of [...ids, "accounts"]) await rm(`${base}-${id}.sock`, { force: true }); },
+		async close() {
+			// the workers first, then each region's occupancy (checkOccupancy), then the spaces
+			await Promise.all(procs.filter((c) => !spaces.includes(c)).map((c) => stop(c)));
+			for (const id of ids) await checkOccupancy(conns.get(id)!.space, id, byHand).catch((e) => { process.exitCode = 1; console.error(`[occupancy] ${id}: not read: ${(e as Error).message}`); });
+			for (const c of conns.values()) c.close(); await Promise.all(procs.reverse().map((c) => stop(c))); for (const id of [...ids, "accounts"]) await rm(`${base}-${id}.sock`, { force: true });
+		},
 	};
 }
 

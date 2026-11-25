@@ -10,6 +10,7 @@ Phase 0 inventories what the grid switch touches before any format changes. This
 4. [Cells that codemode-chat keeps](#codemode) (plan section 2.2, "Arena and codemode-chat")
 5. [Decisions for phase 1](#offen), collected from the four
 6. [References at scale 1](#referenzen) (plan section 6, cases 4 and 6, phase 0; semantic examples in 6.6)
+7. [Plot writers and readers, the occupancy query](#belegung) (plan section 3, "Occupancy"; phase 1)
 
 Each inventory names the TypeScript place. The Rust engine (`rust/mmo-engine/src`) mirrors it file for file and function for function (`commands/build.ts` → `commands/build.rs`, `npc/economy.ts` → `npc/economy.rs`). The plan's single table of rule values is written in phase 1 from this list in both engines. When it is written, every Rust counterpart is checked line by line, and differences are added here.
 
@@ -498,3 +499,53 @@ Each rule has one target: an area of 3 × 2, a cell, or a fire or exit point. It
 **Result.** All 504 answers hold at scale 2 under these conversions. This includes the sides where the converted footprint lies one cell closer (east and south: 2d − 1 instead of 2d), because every threshold doubles with it.
 
 **For phase 1.** The scale-2 side of the test uses the conversions written in this file. When phase 1 writes the rule table into both engines, the test takes its thresholds from that table. The examples then hold the engines, not only the plan. The examples cover converted legacy points only. Cells a scale-2 world adds between them (odd coordinates) answer by the same doubled thresholds; the plan's acceptance case 1 covers them in a real room.
+
+<a id="belegung"></a>
+
+## 7. Plot writers and readers, the occupancy query
+
+Phase 1, step 4. Every object that has a Plot per cell today, the places that write, take and read those plots, and the query that takes their place.
+
+### 7.1 What stands on plots
+
+Each plot carries the ID of its object in `of`. The objects:
+
+| Object | ID field | Plots written (TS) | Plots taken |
+|---|---|---|---|
+| Site, Building | `buildId` | `build.ts` `bau` (the site), `jettyToWater` (an old jetty moved onto the water), `builder.ts` `versetze` | `freeCells` (`build.ts`): `abriss`, a site that lapsed, `jettyToWater`, `demolishByVote` |
+| Ruin | `buildId` | none: it keeps the building's plots | `freeCells`: `abriss` of a ruin, the sweep at its end |
+| Bed | `bedId` | `garden.ts`, `interior.ts` (a greenhouse's beds, in the inside's room), `versetze` | `freeCells` (`garden.ts`), `dropInterior` |
+| Field | `fieldId` | `field.ts`, `versetze` | `freeCells` (`field.ts`: given up, lapsed) |
+| Tree | `treeId` | `trees.ts`, `versetze` | `freeCells` (`trees.ts`: felled) |
+| Scenery, not `through` | `sceneryId` | `loader.ts` (the world's scenery), `interior.ts` (the furnishings, in the inside's room) | `freeCells` (`scenery.ts`: cleared), `dropInterior` |
+
+MillLoad, Zone and Motion have a rectangle but no plots. A fire (`Beacon`) has no plot either. Its cell blocks steps and building through `blockedIn` (`occupancy.ts`) and the clearance rule, but it does not count for the growth share (`growth.ts`: the share counts plots, `blocked` counts plots and fires).
+
+Plot **readers**:
+- `occupancy.ts` `blockedIn`;
+- `build.ts` `refusal` (its own cells for `versetze`) and `takeNear` (the `held` case);
+- `default.ts` `moveTo` (who stands on a bed or field walks off over it: the cell one stands on and the target must have the same `of`);
+- `loader.ts` (scenery is not placed where a plot lies);
+- `fire.ts` (free cells for wild seeds);
+- `wild.ts` (cells covered);
+- `growth.ts` (blocked cells, share, the shift of the plots with the room);
+- `npc/settlers.ts`, `npc/economy.ts` (busy cells).
+
+The Rust engine has the same places, file for file.
+
+### 7.2 The query
+
+`shared/footprints.ts` and `rust/mmo-engine/src/footprints.rs`:
+- `occupancyOf` gives, per cell of a room, the object on it and three flags: `MOVE`, `BUILD` and `SHARE`. It derives them from the room's objects in the form of the shared grid (index y·w + x).
+- `plotOccupancy` gives the same from the plots and the fires.
+- `occupancyReport` names, by room, cell and object, what differs between the two: overlapping footprints or plots, a footprint beyond the room, a cell where the two give a different object or different flags. The migration (plan section 5, "Legacy plots and new occupancy") reports with the same function: `storeOccupancyReport` with `rooms: "required"`, so occupied cells in a room that is not there are reported too.
+
+The two copies are held together by the same cases and the same report lines (`tests/footprints.test.ts`, the tests in `footprints.rs`). They are held to the game by two checks:
+- Every test stack checks, when it closes, that the footprints give the plots' occupancy in every room (`tests/stack.ts`, also each region of `startRegions`). It runs after the workers have stopped and before the space stops. After a worker was killed it is skipped, because its open transaction keeps its objects taken while their plots stay readable until the lease runs out. A difference fails the test file through its exit code and does not hide a failure the test threw itself.
+- The engine walks run the Rust query on every state they reach (`rust/mmo-engine/tests/common/walk.rs`, `Walk::compare`). What a walk writes or takes by hand (`Walk::write`, `Walk::take`) is left out in the same way as below.
+
+Many fixtures write objects over the test's own connection without the plots a command writes, or take a site and leave its plots. In the first full run that gave 53 reports in 27 files, all of them fixtures and none from the game. The stack's connection therefore notes every object a test writes or takes itself (`noting` in `tests/stack.ts`), and the check leaves out differences that involve only those objects, including the cell of an overlap with one of them. What the game writes through its workers is checked. Most of those fixtures already have the target shape: an object without plots. The fixtures that place bare plots as an obstacle (`tonne-x`, `old-road`, `shed`, `wall` and others) change in step 6.
+
+### 7.3 The readers stay on plots until step 6
+
+The query switches no reader. An object taken in an open transaction (a site during a delivery, a bed while it is watered, what `takeNear` picks) is not read by other transactions, but its plots are. `takeNear`'s `held` case and every overlap check of `refusal` and `blockedIn` rely on that. A reader moved onto footprints before the room lock (step 5) lets two buildings overlap in that window. Step 6 switches the readers and writers together, behind the room lock, and the migration removes the plots.

@@ -93,7 +93,7 @@ struct Region { id: String, space: Space, mirror: Option<Rc<mmo_engine::mirror::
 
 /// One comparison: the two spaces, the TypeScript driver, the Rust engine's space and clock. With regions a pair of
 /// spaces per region; `space`, `w` and the copy are the current region's (`region`).
-pub struct Walk { ts: Driver, _servers: Vec<Kill>, pub space: Space, pub clock: Rc<Cell<f64>>, pub w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet, intents: usize, mirror: Option<Rc<mmo_engine::mirror::Mirror>>, regions: Vec<Region>, full: Json }
+pub struct Walk { ts: Driver, _servers: Vec<Kill>, pub space: Space, pub clock: Rc<Cell<f64>>, pub w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet, intents: usize, mirror: Option<Rc<mmo_engine::mirror::Mirror>>, regions: Vec<Region>, full: Json, by_hand: std::collections::HashSet<String> }
 
 impl Walk {
 	pub fn new(name: &str, seed: u32, start: f64) -> Self { Self::start(name, seed, start, &[]) }
@@ -138,7 +138,7 @@ impl Walk {
 		let first = &list[0];
 		let (space, w, mirror) = (first.space.clone(), first.w.clone(), first.mirror.clone());
 		let regions = if regions.is_empty() { Vec::new() } else { list };
-		Self { ts, _servers: servers, space, clock, w, rt, local, intents: 0, mirror, regions, full }
+		Self { ts, _servers: servers, space, clock, w, rt, local, intents: 0, mirror, regions, full, by_hand: Default::default() }
 	}
 	/// With regions: every later step goes to region `id` on both sides.
 	pub fn region(&mut self, id: &str) {
@@ -178,6 +178,13 @@ impl Walk {
 		let ts = self.ts.call(obj! { "op" => "dump" });
 		let rust = self.run(dump(&self.space));
 		compare(step, &ts, &rust);
+		// the objects' footprints give the plots' occupancy (src/footprints.rs, the stack's check in tests/stack.ts): both
+		// spaces hold the same entries, so this holds the Rust query on every state a walk reaches
+		let all = self.run(self.space.read_all(&obj! {}, None)).expect("readAll");
+		// what the walk wrote or took by hand (`write`, `take`: a fixture's object without its plots) is left out
+		let by_hand = &self.by_hand;
+		let report = mmo_engine::footprints::store_occupancy_report(&all, false, &|id| by_hand.contains(id));
+		assert!(report.is_empty(), "{step}: footprints and plots differ\n  {}", report.iter().take(20).cloned().collect::<Vec<_>>().join("\n  "));
 	}
 	pub fn load(&mut self, replace: bool) {
 		let t = self.ts.call(obj! { "op" => "load", "world" => "leuchtfeuer", "replace" => replace });
@@ -209,6 +216,7 @@ impl Walk {
 	}
 	/// An entry written alike on both sides (FOREVER).
 	pub fn write(&mut self, entry: Json) {
+		if let Some(id) = mmo_engine::footprints::occupancy_id(&entry) { self.by_hand.insert(id); }
 		let t = self.ts.call(obj! { "op" => "write", "entry" => entry.clone() });
 		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "write: {}", t.to_json_text());
 		self.run(self.space.write(&entry, None, FOREVER)).expect("the write");
@@ -216,7 +224,9 @@ impl Walk {
 	/// One entry taken away alike on both sides (whether there was one).
 	pub fn take(&mut self, template: Json) -> bool {
 		let t = self.ts.call(obj! { "op" => "take", "template" => template.clone() });
-		let r = self.run(self.space.take_if_exists(&template, mmo_engine::space::NO_WAIT, None)).expect("the take").is_some();
+		let r = self.run(self.space.take_if_exists(&template, mmo_engine::space::NO_WAIT, None)).expect("the take");
+		for e in r.iter().chain(std::iter::once(&template)) { if let Some(id) = mmo_engine::footprints::occupancy_id(e) { self.by_hand.insert(id); } }
+		let r = r.is_some();
 		assert_eq!(t.get("result"), Some(&Json::Bool(r)), "take: {}", t.to_json_text());
 		r
 	}
