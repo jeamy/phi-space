@@ -10,9 +10,9 @@ use std::process::Command;
 use std::sync::Once;
 
 /// The commit the port follows (docs/rust-portierung.en.md, R8.2). On new-world the grid switch moves it with each step
-/// that changes entries (e194555: the occupancy version and growth on a view, phase 1 step 7); a merge of master that moves it too keeps
+/// that changes entries (c391cfe: the fire's light taken after the room lock, phase 1 step 8); a merge of master that moves it too keeps
 /// the later of the two by hand.
-pub const FROZEN: &str = "e194555";
+pub const FROZEN: &str = "c391cfe";
 
 /// The top of the checkout (this crate is spaces-mmo/rust/mmo-engine): `git archive` has to run there, as from a
 /// subdirectory it packs only that one.
