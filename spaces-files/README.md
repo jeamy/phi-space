@@ -5,14 +5,17 @@ teams share workspaces, roles are inherited from directories, and a revocation i
 after it. Files are UTF-8 text with versions; a save over a stale version is a conflict, never a silent overwrite.
 The plan, with its phases and exit evidence, is `docs/zanzibar-agent-filesystem-plan.en.md`.
 
-**Status: phase 1 of that plan, steps 1 and 2.** The application is registered in the repository checks (`APPS` in
+**Status: phase 1 of that plan, steps 1 to 3.** The application is registered in the repository checks (`APPS` in
 `checks/roots.mjs`) and the root scripts. The service process (`server/launch.ts`, `server/service.ts`) opens phi-spaces'
 own SQLite store in a data directory it refuses when group or others can reach it. The store's owner lock refuses a
 second process, and a crash releases it. The service runs the reaper (`startService`) and reserves one private named
 Space per tenant (alias `t-<tenantId>`), reached only through that tenant's queue. Admission (`server/admission.ts`)
 gives each tenant a bounded queue that runs one operation at a time, with one gate above all of them that refuses
-queued operations and drains started ones, and it can suspend one tenant. Nothing listens yet. The next steps of
-phase 1 are the deployment state, tenant initialization, actors with their homes and the session adapter.
+queued operations and drains started ones, and it can suspend one tenant. The deployment state
+(`server/deployment.ts`, plan section 6.6) sits in a directory of its own beside the data: a SQLite database with its
+own owner lock holding the session epoch, the signing-key generations (key material in `keys.json`, mode 600), the
+durable time floor, the sessions (handles stored hashed; idle, absolute and epoch expiry) and the login index. Nothing
+listens yet. The next steps of phase 1 are tenant initialization, actors with their homes and the session adapter.
 
 The application is a directory of its own and depends on the library as `"phi-spaces": "file:../spaces"`, importing
 only `phi-spaces` and its exported subpaths. Unlike the other applications, the pilot embeds its Space host in the one
@@ -32,4 +35,6 @@ From this directory (or with `npm --prefix spaces-files` from the repository roo
 Variables, read from `spaces-files/.env` (values already in the environment win):
 
 - `FILES_DATA_DIR`: the data directory (default `spaces-files/.local/data`, created with mode 700)
+- `FILES_STATE_DIR`: the deployment-state directory (default `spaces-files/.local/state`, mode 700, never inside the
+  data directory or around it)
 - `FILES_MEM=1`: everything in memory, throwaway

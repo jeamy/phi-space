@@ -1,0 +1,306 @@
+// The deployment state (docs/zanzibar-agent-filesystem-plan.en.md, section 6.6): what must survive a restore of the data
+// store unchanged, so it lives beside it in a directory of its own: the session epoch, the signing-key generations,
+// the durable time floor, the session table and the login index. A plain SQLite database (node:sqlite) with an
+// exclusive owner lock like the data store's, every change committed with synchronous=FULL before the service acts on
+// it. Key material sits in `keys.json` (mode 600) beside it; the database holds only generation numbers and times.
+import { createHash, randomBytes } from "node:crypto";
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, statSync, writeSync } from "node:fs";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { prepareDataDir } from "./dirs.ts";
+
+export const STATE_FILE = "state.sqlite";
+export const KEYS_FILE = "keys.json";
+
+export class StateUnavailable extends Error {
+	constructor(message: string) { super(message); this.name = "StateUnavailable"; }
+}
+
+/** The effective clock jumped further ahead than allowed: issuance and cleanup wait for operator review (section 6.2). */
+export class ClockJump extends Error {
+	readonly code = "unavailable";
+	constructor(message: string) { super(message); this.name = "ClockJump"; }
+}
+
+export type ActorKind = "user" | "agent";
+export type SessionView = { tenantId: string; actorKind: ActorKind; actorId: string; epoch: number; expiresAt: number };
+export type KeyGeneration = { generation: number; secret: Buffer; createdAt: number; validUntil: number | null };
+
+export type DeploymentOptions = {
+	/** The state directory; `null` keeps everything in memory (tests). */
+	dir: string | null;
+	/** The wall clock; the effective time never goes below the durable floor (section 6.2). */
+	clock?: () => number;
+	/** A forward step of the clock larger than this stops `now()` until `acceptClock()` (default one day). */
+	maxClockJumpMs?: number;
+	/** Session lifetimes. */
+	sessionIdleMs?: number;
+	sessionAbsoluteMs?: number;
+};
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS key_generations (generation INTEGER PRIMARY KEY, created_at INTEGER NOT NULL, valid_until INTEGER);
+CREATE TABLE IF NOT EXISTS sessions (handle_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, actor_kind TEXT NOT NULL, actor_id TEXT NOT NULL,
+	epoch INTEGER NOT NULL, created_at INTEGER NOT NULL, idle_until INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS logins (issuer TEXT NOT NULL, subject TEXT NOT NULL, tenant_id TEXT NOT NULL, PRIMARY KEY (issuer, subject, tenant_id));
+`;
+
+const hashHandle = (handle: string) => createHash("sha256").update(handle, "utf8").digest("hex");
+
+export class DeploymentState {
+	readonly #db: DatabaseSync;
+	readonly #lock: DatabaseSync | null;
+	readonly #keysPath: string | null;
+	#keys = new Map<number, Buffer>();
+	readonly #clock: () => number;
+	readonly #maxJump: number;
+	readonly #idleMs: number;
+	readonly #absoluteMs: number;
+	#highWater: number;
+	#closed = false;
+
+	private constructor(db: DatabaseSync, lock: DatabaseSync | null, keysPath: string | null, o: DeploymentOptions) {
+		this.#db = db;
+		this.#lock = lock;
+		this.#keysPath = keysPath;
+		this.#clock = o.clock ?? Date.now;
+		this.#maxJump = o.maxClockJumpMs ?? 24 * 3600_000;
+		this.#idleMs = o.sessionIdleMs ?? 3600_000;
+		this.#absoluteMs = o.sessionAbsoluteMs ?? 12 * 3600_000;
+		this.#highWater = 0;
+	}
+
+	static async open(o: DeploymentOptions): Promise<DeploymentState> {
+		if (o.dir === null) {
+			const s = new DeploymentState(new DatabaseSync(":memory:"), null, null, o);
+			s.#init();
+			return s;
+		}
+		await prepareDataDir(o.dir);
+		const path = join(o.dir, STATE_FILE);
+		const lock = new DatabaseSync(`${path}.owner`, { timeout: 0 });
+		try { lock.exec("PRAGMA locking_mode = EXCLUSIVE; BEGIN EXCLUSIVE;"); }
+		catch (e) { lock.close(); throw new StateUnavailable(`another process owns the deployment state ${path} (${(e as Error).message})`); }
+		let db: DatabaseSync | null = null;
+		try {
+			db = new DatabaseSync(path, { timeout: 10_000 });
+			db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
+			const s = new DeploymentState(db, lock, join(o.dir, KEYS_FILE), o);
+			s.#init();
+			return s;
+		} catch (e) { db?.close(); lock.close(); throw e; }
+	}
+
+	#init(): void {
+		this.#db.exec(SCHEMA);
+		this.#tx(() => {
+			const put = this.#db.prepare("INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)");
+			put.run("format_version", "1"); put.run("session_epoch", "1"); put.run("time_floor", "0");
+		});
+		if (this.#meta("format_version") > 1) throw new StateUnavailable("the deployment state has a newer format");
+		this.#highWater = Math.max(this.#highWater, this.#meta("time_floor"));
+		this.#loadKeys();
+		if (this.currentKey() === undefined) this.#installGeneration(null);
+	}
+
+	// ---------------------------------------------------------------- time (section 6.2)
+
+	/** The effective time: never below the durable floor or an earlier answer, also when the wall clock goes back. */
+	now(): number {
+		const wall = this.#clock();
+		if (wall > this.#highWater + this.#maxJump && this.#highWater > 0) throw new ClockJump(`the clock jumped ${wall - this.#highWater} ms ahead; accept it with acceptClock() after review`);
+		this.#highWater = Math.max(this.#highWater, wall);
+		return this.#highWater;
+	}
+
+	/** Accepts a large forward step of the clock after operator review. */
+	acceptClock(): number {
+		this.#highWater = Math.max(this.#highWater, this.#clock());
+		this.commitFloor(this.#highWater);
+		return this.#highWater;
+	}
+
+	/** Persists `t` as the durable floor before a decision that depends on it (an expiry, a receipt removal). */
+	commitFloor(t: number): void {
+		if (t <= this.#meta("time_floor")) return;
+		this.#tx(() => this.#setMeta("time_floor", t));
+		this.#highWater = Math.max(this.#highWater, t);
+	}
+
+	timeFloor(): number { return this.#meta("time_floor"); }
+
+	// ---------------------------------------------------------------- session epoch
+
+	epoch(): number { return this.#meta("session_epoch"); }
+
+	/** Advances the session epoch (on restore): every session of an older epoch stops working, and is deleted. */
+	advanceEpoch(): number {
+		const next = this.epoch() + 1;
+		this.#tx(() => {
+			this.#setMeta("session_epoch", next);
+			this.#db.prepare("DELETE FROM sessions WHERE epoch < ?").run(next);
+		});
+		return next;
+	}
+
+	// ---------------------------------------------------------------- signing keys (section 6.2)
+
+	/** The generation new operation IDs are signed with. */
+	currentKey(): KeyGeneration | undefined {
+		const row = this.#db.prepare("SELECT generation, created_at, valid_until FROM key_generations WHERE valid_until IS NULL ORDER BY generation DESC LIMIT 1").get() as { generation: number; created_at: number; valid_until: null } | undefined;
+		return row ? this.#generation(row) : undefined;
+	}
+
+	/** A generation that may still verify at `at`: the current one, or a retired one before its `validUntil`. */
+	keyFor(generation: number, at: number): KeyGeneration | undefined {
+		const row = this.#db.prepare("SELECT generation, created_at, valid_until FROM key_generations WHERE generation = ?").get(generation) as { generation: number; created_at: number; valid_until: number | null } | undefined;
+		if (!row || (row.valid_until !== null && at >= row.valid_until)) return undefined;
+		return this.#generation(row);
+	}
+
+	/** Ordinary rotation: a new current generation; the previous one verifies for one more retry window. Earlier retired
+	 *  generations keep their own `validUntil`, so two rotations within one window invalidate nothing early. */
+	rotateKey(retryWindowMs: number): KeyGeneration {
+		if (!(retryWindowMs > 0)) throw new RangeError("retryWindowMs must be positive");
+		const now = this.now();
+		this.commitFloor(now);
+		return this.#installGeneration(now + retryWindowMs);
+	}
+
+	/** Restore rotation: a new current generation, every earlier one retired at once. */
+	rotateKeyRetiringAll(): KeyGeneration {
+		const now = this.now();
+		this.commitFloor(now);
+		const g = this.#installGeneration(now);
+		this.#tx(() => this.#db.prepare("UPDATE key_generations SET valid_until = ? WHERE generation < ? AND (valid_until IS NULL OR valid_until > ?)").run(now, g.generation, now));
+		return g;
+	}
+
+	#installGeneration(previousValidUntil: number | null): KeyGeneration {
+		const now = this.#highWater || this.#clock();
+		const generation = ((this.#db.prepare("SELECT MAX(generation) AS g FROM key_generations").get() as { g: number | null }).g ?? 0) + 1;
+		const secret = randomBytes(32);
+		// the key file first: a generation in the database without its key would refuse every start
+		this.#keys.set(generation, secret);
+		this.#saveKeys();
+		this.#tx(() => {
+			if (previousValidUntil !== null) this.#db.prepare("UPDATE key_generations SET valid_until = ? WHERE valid_until IS NULL").run(previousValidUntil);
+			this.#db.prepare("INSERT INTO key_generations (generation, created_at, valid_until) VALUES (?, ?, NULL)").run(generation, now);
+		});
+		return { generation, secret, createdAt: now, validUntil: null };
+	}
+
+	#generation(row: { generation: number; created_at: number; valid_until: number | null }): KeyGeneration {
+		const secret = this.#keys.get(row.generation);
+		if (!secret) throw new StateUnavailable(`no key material for generation ${row.generation}`);
+		return { generation: row.generation, secret, createdAt: row.created_at, validUntil: row.valid_until };
+	}
+
+	#loadKeys(): void {
+		if (this.#keysPath === null) return;
+		if (existsSync(this.#keysPath)) {
+			if ((statSync(this.#keysPath).mode & 0o077) !== 0) throw new StateUnavailable(`${this.#keysPath} is reachable by group or others; restrict it (chmod 600)`);
+			const raw = JSON.parse(readFileSync(this.#keysPath, "utf8")) as Record<string, string>;
+			this.#keys = new Map(Object.entries(raw).map(([g, k]) => [Number(g), Buffer.from(k, "base64")]));
+		}
+		const live = this.#db.prepare("SELECT generation FROM key_generations").all() as Array<{ generation: number }>;
+		const missing = live.filter((r) => !this.#keys.has(r.generation)).map((r) => r.generation);
+		if (missing.length) throw new StateUnavailable(`${this.#keysPath} lacks the key material of generation ${missing.join(", ")}`);
+	}
+
+	#saveKeys(): void {
+		if (this.#keysPath === null) return;
+		const tmp = `${this.#keysPath}.tmp`;
+		const fd = openSync(tmp, "w", 0o600);
+		try { writeSync(fd, JSON.stringify(Object.fromEntries([...this.#keys].map(([g, k]) => [String(g), k.toString("base64")])))); fsyncSync(fd); }
+		finally { closeSync(fd); }
+		renameSync(tmp, this.#keysPath);
+	}
+
+	// ---------------------------------------------------------------- sessions (section 2)
+
+	/** Creates a session and returns its opaque handle. Only the handle's hash is stored. */
+	createSession(s: { tenantId: string; actorKind: ActorKind; actorId: string }): { handle: string; expiresAt: number } {
+		const now = this.now();
+		const handle = randomBytes(32).toString("base64url");
+		const expiresAt = now + this.#absoluteMs;
+		this.#tx(() => this.#db.prepare("INSERT INTO sessions (handle_hash, tenant_id, actor_kind, actor_id, epoch, created_at, idle_until, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+			.run(hashHandle(handle), s.tenantId, s.actorKind, s.actorId, this.epoch(), now, Math.min(now + this.#idleMs, expiresAt), expiresAt));
+		return { handle, expiresAt };
+	}
+
+	/** The session of a handle, or null when it is unknown, expired, idle too long or of an older epoch. A hit extends the
+	 *  idle deadline (written at most once a minute, so that every request is not a durable write). */
+	lookupSession(handle: string): SessionView | null {
+		if (typeof handle !== "string" || handle.length === 0 || handle.length > 128) return null;
+		const now = this.now();
+		const row = this.#db.prepare("SELECT tenant_id, actor_kind, actor_id, epoch, idle_until, expires_at FROM sessions WHERE handle_hash = ?").get(hashHandle(handle)) as
+			{ tenant_id: string; actor_kind: ActorKind; actor_id: string; epoch: number; idle_until: number; expires_at: number } | undefined;
+		if (!row) return null;
+		if (row.epoch !== this.epoch() || now >= row.expires_at || now >= row.idle_until) {
+			this.#tx(() => this.#db.prepare("DELETE FROM sessions WHERE handle_hash = ?").run(hashHandle(handle)));
+			return null;
+		}
+		const idleUntil = Math.min(now + this.#idleMs, row.expires_at);
+		if (idleUntil - row.idle_until > 60_000) this.#tx(() => this.#db.prepare("UPDATE sessions SET idle_until = ? WHERE handle_hash = ?").run(idleUntil, hashHandle(handle)));
+		return { tenantId: row.tenant_id, actorKind: row.actor_kind, actorId: row.actor_id, epoch: row.epoch, expiresAt: row.expires_at };
+	}
+
+	/** Logout. */
+	endSession(handle: string): void {
+		this.#tx(() => this.#db.prepare("DELETE FROM sessions WHERE handle_hash = ?").run(hashHandle(handle)));
+	}
+
+	/** Removes expired sessions; returns how many. */
+	pruneSessions(): number {
+		const now = this.now();
+		let n = 0;
+		this.#tx(() => { n = Number(this.#db.prepare("DELETE FROM sessions WHERE expires_at <= ? OR idle_until <= ? OR epoch < ?").run(now, now, this.epoch()).changes); });
+		return n;
+	}
+
+	// ---------------------------------------------------------------- login index (section 2: a lookup aid only)
+
+	addLogin(issuer: string, subject: string, tenantId: string): void {
+		this.#tx(() => this.#db.prepare("INSERT OR IGNORE INTO logins (issuer, subject, tenant_id) VALUES (?, ?, ?)").run(issuer, subject, tenantId));
+	}
+
+	/** The tenants an issuer/subject pair may be bound in; each candidate is checked again against its FsActor row. */
+	tenantsFor(issuer: string, subject: string): string[] {
+		return (this.#db.prepare("SELECT tenant_id FROM logins WHERE issuer = ? AND subject = ? ORDER BY tenant_id").all(issuer, subject) as Array<{ tenant_id: string }>).map((r) => r.tenant_id);
+	}
+
+	/** Replaces the whole index (startup rebuild from the tenants' FsActor rows). */
+	replaceLogins(entries: Iterable<{ issuer: string; subject: string; tenantId: string }>): void {
+		this.#tx(() => {
+			this.#db.exec("DELETE FROM logins");
+			const put = this.#db.prepare("INSERT OR IGNORE INTO logins (issuer, subject, tenant_id) VALUES (?, ?, ?)");
+			for (const e of entries) put.run(e.issuer, e.subject, e.tenantId);
+		});
+	}
+
+	// ---------------------------------------------------------------- plumbing
+
+	close(): void {
+		if (this.#closed) return;
+		this.#closed = true;
+		this.#db.close();
+		this.#lock?.close();
+	}
+
+	#meta(key: string): number {
+		const row = this.#db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined;
+		return row ? Number(row.value) : 0;
+	}
+
+	#setMeta(key: string, value: number): void {
+		this.#db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, String(value));
+	}
+
+	#tx(f: () => void): void {
+		this.#db.exec("BEGIN IMMEDIATE");
+		try { f(); this.#db.exec("COMMIT"); }
+		catch (e) { this.#db.exec("ROLLBACK"); throw e; }
+	}
+}

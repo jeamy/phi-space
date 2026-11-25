@@ -2,13 +2,16 @@
 // process opens phi-spaces' own SQLite store, which holds an exclusive owner lock beside the file (a second process is
 // refused, a crash releases it), runs the reaper and gives each tenant a private named Space reached only through its
 // queue. Nothing here serves a Space to anyone: the tenant Spaces are never exposed.
-import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 import { Admission, type AdmissionOptions } from "./admission.ts";
+import { DeploymentState, type DeploymentOptions } from "./deployment.ts";
+import { assertSeparateDirs, prepareDataDir } from "./dirs.ts";
+
+export { prepareDataDir } from "./dirs.ts";
 
 /** The store file inside the data directory. */
 export const STORE_FILE = "files.sqlite";
@@ -26,32 +29,27 @@ export function tenantAlias(tenantId: string): string {
 	return `t-${tenantId}`;
 }
 
-/** Creates the data directory readable only by the service account, and refuses one that others can reach. */
-export async function prepareDataDir(dir: string): Promise<void> {
-	await mkdir(dir, { recursive: true, mode: 0o700 });
-	const s = await stat(dir);
-	if (!s.isDirectory()) throw new Error(`${dir} is not a directory`);
-	if (typeof process.getuid === "function" && s.uid !== process.getuid()) throw new Error(`${dir} belongs to another user`);
-	if ((s.mode & 0o077) !== 0) throw new Error(`${dir} is reachable by group or others (mode ${(s.mode & 0o777).toString(8)}); restrict it to the service account (chmod 700)`);
-	await chmod(dir, 0o700);
-}
-
 export type FilesServiceOptions = AdmissionOptions & {
 	/** The data directory; `null` keeps everything in memory (tests). */
 	dataDir: string | null;
+	/** The deployment-state directory (section 6.6), never inside the data directory or around it; `null`: in memory. */
+	stateDir: string | null;
 	now?: () => number;
+	state?: Omit<DeploymentOptions, "dir">;
 };
 
 export class FilesService {
 	readonly admission: Admission;
 	readonly host: OwnStoreHost;
 	readonly storePath: string | null;
+	readonly state: DeploymentState;
 	readonly #stopService: () => Promise<void>;
 	readonly #now: () => number;
 	#closed = false;
 
-	private constructor(host: OwnStoreHost, stopService: () => Promise<void>, storePath: string | null, o: FilesServiceOptions) {
+	private constructor(host: OwnStoreHost, state: DeploymentState, stopService: () => Promise<void>, storePath: string | null, o: FilesServiceOptions) {
 		this.host = host;
+		this.state = state;
 		this.storePath = storePath;
 		this.#stopService = stopService;
 		this.admission = new Admission(o);
@@ -59,18 +57,21 @@ export class FilesService {
 	}
 
 	static async open(o: FilesServiceOptions): Promise<FilesService> {
-		let host: OwnStoreHost, storePath: string | null = null;
-		if (o.dataDir === null) host = openOwnMemoryHost();
-		else {
-			await prepareDataDir(o.dataDir);
-			storePath = join(o.dataDir, STORE_FILE);
-			host = await openSqliteHost(storePath);
-		}
+		if (o.dataDir !== null && o.stateDir !== null) assertSeparateDirs(o.dataDir, o.stateDir);
+		// the deployment state first: it decides about sessions and keys before any tenant is served
+		const state = await DeploymentState.open({ clock: o.now, ...o.state, dir: o.stateDir });
+		let host: OwnStoreHost | undefined, storePath: string | null = null;
 		try {
+			if (o.dataDir === null) host = openOwnMemoryHost();
+			else {
+				await prepareDataDir(o.dataDir);
+				storePath = join(o.dataDir, STORE_FILE);
+				host = await openSqliteHost(storePath);
+			}
 			// the reaper clears reservations of transactions abandoned by a crash (section 6.1)
 			const stop = await startService(host, ctx, { now: o.now, watchDebounceMs: 50 });
-			return new FilesService(host, stop, storePath, o);
-		} catch (e) { await host.close(ctx); throw e; }
+			return new FilesService(host, state, stop, storePath, o);
+		} catch (e) { await host?.close(ctx); state.close(); throw e; }
 	}
 
 	/** Runs `op` in the tenant's queue with that tenant's private Space. */
@@ -100,5 +101,6 @@ export class FilesService {
 		await this.admission.close();
 		await this.#stopService();
 		await this.host.close(ctx);
+		this.state.close();
 	}
 }

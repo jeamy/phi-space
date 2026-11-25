@@ -1,7 +1,8 @@
 // Starts the filesystem service (docs/zanzibar-agent-filesystem-plan.en.md). Phase 1 so far: the store with its owner
-// lock, the reaper and admission; the adapters follow.
+// lock, the reaper, admission and the deployment state; the adapters follow.
 //
 //   FILES_DATA_DIR=…/data   (default: spaces-files/.local/data; created with mode 700, refused if others can reach it)
+//   FILES_STATE_DIR=…/state (default: spaces-files/.local/state; the deployment state, never inside the data directory)
 //   FILES_MEM=1             in memory, throwaway
 import { ROOT, loadDotEnv } from "./env.ts";
 import { join } from "node:path";
@@ -10,6 +11,7 @@ import { FilesService } from "./service.ts";
 loadDotEnv();
 const mem = process.env.FILES_MEM === "1";
 const dataDir = mem ? null : process.env.FILES_DATA_DIR || join(ROOT, ".local", "data");
+const stateDir = mem ? null : process.env.FILES_STATE_DIR || join(ROOT, ".local", "state");
 
 // The handlers come first: whoever reads the ready line may signal at once, before another statement of this file runs.
 let service: FilesService | undefined;
@@ -24,7 +26,7 @@ const shutdown = async () => {
 process.on("SIGINT", () => void shutdown());
 process.on("SIGTERM", () => void shutdown());
 
-try { service = await FilesService.open({ dataDir }); }
+try { service = await FilesService.open({ dataDir, stateDir }); }
 catch (e) {
 	console.error(`[files] cannot start: ${(e as Error).message}`);
 	process.exit(1);
