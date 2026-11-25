@@ -43,6 +43,10 @@ export type CreateTenantResult =
 	| { status: "created"; tenantId: string; actorId: string; homeNodeId: string }
 	| { status: "alreadyExists"; tenantId: string };
 
+export type Actor = { actorKind: schema.ActorKind; actorId: string; homeNodeId: string };
+/** What an operation learns about its caller once the session and the actor have been checked. */
+export type Session = Actor & { tenantId: string; expiresAt: number };
+
 export function tenantAlias(tenantId: string): string {
 	if (typeof tenantId !== "string" || !TENANT_ID.test(tenantId)) throw new InvalidTenant(tenantId);
 	return `t-${tenantId}`;
@@ -204,7 +208,7 @@ export class FilesService {
 	}
 
 	/** The enabled actor bound to a verified identity in a tenant, or `unauthenticated` (unknown, disabled, deleted). */
-	findActor(tenantId: string, kind: schema.ActorKind, identity: schema.UserIdentity | schema.AgentIdentity): Promise<{ actorKind: schema.ActorKind; actorId: string; homeNodeId: string }> {
+	findActor(tenantId: string, kind: schema.ActorKind, identity: schema.UserIdentity | schema.AgentIdentity): Promise<Actor> {
 		const ident = schema.identityOf(kind, identity);
 		return this.inTenant(tenantId, async (space) => {
 			const a = await space.readIfExists(schema.identityTemplate(kind, ident), 0);
@@ -212,6 +216,37 @@ export class FilesService {
 			return { actorKind: kind, actorId: a.fields.actorId as string, homeNodeId: a.fields.homeNodeId as string };
 		});
 	}
+
+	/**
+	 * Opens a session for a verified identity (section 2): the identity must resolve to an enabled actor of an initialized
+	 * tenant, checked inside that tenant's queue; the handle and its binding go into the deployment state. The caller (an
+	 * adapter) has verified the identity: an OIDC login for users, the enrolled host peer's frame for agents. A tenant in
+	 * provisioning gives `unavailable`, an unknown or disabled actor `unauthenticated`.
+	 */
+	async login(tenantId: string, kind: schema.ActorKind, identity: schema.UserIdentity | schema.AgentIdentity): Promise<{ handle: string; expiresAt: number; actor: Actor }> {
+		const actor = await this.findActor(tenantId, kind, identity);
+		const { handle, expiresAt } = this.state.createSession({ tenantId, actorKind: actor.actorKind, actorId: actor.actorId });
+		return { handle, expiresAt, actor };
+	}
+
+	/**
+	 * Runs `op` for the session behind `handle`, in the order of checks of section 5: the handle is authenticated against
+	 * the deployment state outside every queue (missing, expired, logged out or from an old epoch -> `unauthenticated`;
+	 * only this step selects the tenant), then the request enters the tenant's queue (full or suspended ->
+	 * `unavailable`), and inside it the actor's current FsActor state is checked (unknown, disabled or deleted ->
+	 * `unauthenticated`). A request without a valid handle never reaches a tenant queue.
+	 */
+	async withSession<T>(handle: unknown, op: (session: Session, space: PhiSpaces) => Promise<T>): Promise<T> {
+		const view = typeof handle === "string" ? this.state.lookupSession(handle) : null;
+		if (view === null) throw new schema.Unauthenticated();
+		return this.inTenant(view.tenantId, async (space) => {
+			const a = await this.#enabledActor(space, view.actorKind, view.actorId);
+			return op({ tenantId: view.tenantId, actorKind: view.actorKind, actorId: view.actorId, homeNodeId: a.fields.homeNodeId as string, expiresAt: view.expiresAt }, space);
+		});
+	}
+
+	/** Ends a session (logout); an unknown handle is no error. */
+	logout(handle: string): void { this.state.endSession(handle); }
 
 	async #enabledActor(space: PhiSpaces, kind: string, id: string) {
 		const a = await space.readIfExists({ type: schema.T.actor, fields: { actorKind: kind, actorId: id } }, 0);

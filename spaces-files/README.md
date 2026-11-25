@@ -5,7 +5,7 @@ teams share workspaces, roles are inherited from directories, and a revocation i
 after it. Files are UTF-8 text with versions; a save over a stale version is a conflict, never a silent overwrite.
 The plan, with its phases and exit evidence, is `docs/zanzibar-agent-filesystem-plan.en.md`.
 
-**Status: phase 1 of that plan, steps 1 to 5.** The application is registered in the repository checks (`APPS` in
+**Status: phase 1 of that plan, steps 1 to 6.** The application is registered in the repository checks (`APPS` in
 `checks/roots.mjs`) and the root scripts. The service process (`server/launch.ts`, `server/service.ts`) opens phi-spaces'
 own SQLite store in a data directory it refuses when group or others can reach it. The store's owner lock refuses a
 second process, and a crash releases it. The service runs the reaper (`startService`) and reserves one private named
@@ -25,8 +25,13 @@ initialization or answers `alreadyExists`; an unknown schema version or leftover
 root, the home's owner relation and the audit row in one transaction, then a user's tenant goes into the login index.
 Agent instances are bound to (enrolledHostPeerId, agentId), users to (issuer, subject); an existing actor ID (tombstones
 included), home name or identity pair gives `alreadyExists` and creates nothing. `findActor` resolves a verified identity
-to its enabled actor or fails with `unauthenticated`. Operation IDs and receipts come with phase 3. Nothing listens
-yet. The next step of phase 1 is the session adapter.
+to its enabled actor or fails with `unauthenticated`. Operation IDs and receipts come with phase 3.
+
+The session layer follows the order of checks (plan section 5): `login` resolves an identity an adapter has verified to
+an enabled actor of an initialized tenant and stores the session in the deployment state; `withSession` authenticates a
+handle there first, outside every queue (missing, expired, logged out or from an old epoch: `unauthenticated`, and the
+request never reaches a tenant queue), then admits the request into that tenant's queue and checks the actor's current
+state inside it. Nothing listens yet: the browser and agent-host transports are later work.
 
 The application is a directory of its own and depends on the library as `"phi-spaces": "file:../spaces"`, importing
 only `phi-spaces` and its exported subpaths. Unlike the other applications, the pilot embeds its Space host in the one
