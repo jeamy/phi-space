@@ -44,6 +44,8 @@
     "codemode-forum": "npm --prefix codemode-forum start",
     "codemode-forum:dev": "npm --prefix codemode-forum run dev",
     "test:codemode-forum": "npm --prefix codemode-forum test",
+    "spaces-files": "npm --prefix spaces-files start",
+    "spaces-files:dev": "npm --prefix spaces-files run dev",
     "test:spaces-files": "npm --prefix spaces-files test",
     "example:space-chat": "node --experimental-strip-types help-site/examples/v1-local-memory/run.ts",
     "help": "npm --prefix help-site run dev"

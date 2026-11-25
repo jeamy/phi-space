@@ -67,9 +67,10 @@ so a relative path still means the repository root (`checks/root-scripts.mjs` ke
   yet (phases 10 and 11): it runs on this machine only.
 - Files (`spaces-files/`: a Zanzibar-style filesystem for people and agent instances; plan, phases and exit evidence in
   `docs/zanzibar-agent-filesystem-plan.en.md`, state in `spaces-files/README.md`; one service process with an embedded Space host,
-  its tenant Spaces never exposed, the dashboard does not list it): tests `npm run test:spaces-files`, typecheck
-  `npm --prefix spaces-files run typecheck` (own tsconfig, not part of the root `tsc`). Before phase 1 of its plan: no service yet,
-  no Docker, no Rust space server; it runs on this machine only.
+  its tenant Spaces never exposed, the dashboard does not list it): `npm run spaces-files` (`:dev` restarts on change;
+  `FILES_DATA_DIR`, mode 700, or `FILES_MEM=1`), tests `npm run test:spaces-files`, typecheck
+  `npm --prefix spaces-files run typecheck` (own tsconfig, not part of the root `tsc`). Phase 1 of its plan in progress (store, owner
+  lock, tenant queues; no adapters yet); no Docker, no Rust space server; it runs on this machine only.
 - spaces-mmo (`spaces-mmo/`: MMORPG engine, first world Leuchtfeuer; processes space, world, web; PixiJS map; docs in
   `spaces-mmo/docs/`, plan and phases in `spaces-mmo/docs/phasen.en.md`): `npm --prefix spaces-mmo run build` (the page as static files in `spaces-mmo/out/` with `out/BUILD_ID`, which the web process serves, `server/pages.ts`; `--dev` keeps Next's dev server), then
   `npm --prefix spaces-mmo start` (port 3900; `SPACES_MMO_MEM=1` in memory; model calls only with `SPACES_MMO_LLM=1`, they cost tokens), tests `npm --prefix spaces-mmo test` (`npm --prefix spaces-mmo run test:durable`: the same suites with the durable NPC dialogues on, `tests/test-env-durable.ts`, `tests/durable-deviations.ts`; they start the

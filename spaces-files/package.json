@@ -6,6 +6,8 @@
   "description": "A Zanzibar-style filesystem for people and agent instances on phi-spaces: workspaces, inherited roles, revocation that every later operation sees",
   "scripts": {
     "typecheck": "tsc",
+    "dev": "node --no-warnings --experimental-strip-types --watch server/launch.ts",
+    "start": "node --no-warnings --experimental-strip-types server/launch.ts",
     "test": "node --no-warnings --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
