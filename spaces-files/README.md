@@ -2,10 +2,11 @@
 
 A filesystem for people and agent instances on phi-spaces, with Zanzibar-style relationships: every actor has a home,
 teams share workspaces, roles are inherited from directories, and a revocation is seen by every operation admitted
-after it. Files are UTF-8 text with versions; a save over a stale version is a conflict, never a silent overwrite.
+after it. Files are bytes (text or binary) with versions, sealed in a blob store; a save over a stale version is a
+conflict, never a silent overwrite.
 The plan, with its phases and exit evidence, is `docs/zanzibar-agent-filesystem-plan.en.md`.
 
-**Status: phases 1 to 3 of that plan are complete** (exit evidence below). The application is registered in the repository checks (`APPS` in
+**Status: phases 1 to 4 of that plan are complete** (exit evidence below). The application is registered in the repository checks (`APPS` in
 `checks/roots.mjs`) and the root scripts. The service process (`server/launch.ts`, `server/service.ts`) opens phi-spaces'
 own SQLite store in a data directory it refuses when group or others can reach it. The store's owner lock refuses a
 second process, and a crash releases it. The service runs the reaper (`startService`) and reserves one private named
@@ -31,7 +32,7 @@ The session layer follows the order of checks (plan section 5): `login` resolves
 an enabled actor of an initialized tenant and stores the session in the deployment state; `withSession` authenticates a
 handle there first, outside every queue (missing, expired, logged out or from an old epoch: `unauthenticated`, and the
 request never reaches a tenant queue), then admits the request into that tenant's queue and checks the actor's current
-state inside it. Nothing listens yet: the browser and agent-host transports are later work.
+state inside it. Phase 4 added the transports that carry sessions: the browser and admin adapter and the agent sockets.
 
 The application is a directory of its own and depends on the library as `"phi-spaces": "file:../spaces"`, importing
 only `phi-spaces` and its exported subpaths. Unlike the other applications, the pilot embeds its Space host in the one
@@ -163,7 +164,48 @@ directory of its own, and FsContent names it (plan section 3, *Contents*). Files
 | A barriered mode switch refusing queued work and draining a paused write; the mode after a restart | `tests/maintenance.test.ts` |
 | Blobs: sealed, bound to their owner, swept, held during a backup; content keys never retired by a restore | `tests/blobs.test.ts` |
 
-Not yet there, by the plan's order: the transports (phase 4) and backup, restore and the recovery interface (phase 5).
+Not yet there after phase 3: the transports (phase 4) and backup, restore and the recovery interface (phase 5).
+
+## Phase 4: agent and human access
+
+- Step 1, the agent adapter (`server/agent-socket.ts`): one unix socket per enrolled agent host and tenant
+  (`FILES_AGENT_SOCKETS`; one socket per tenant, decided 2026-11-25, because the same identity pair may exist in
+  several), in a directory others cannot reach (group access is the host user's way in; Node.js sees no peer
+  credentials). Calls are phi-spaces socket frames holding `{op, args, frame: {agent}}`; the frame rule is the
+  agent-host contract's, a call without an agent acts for nobody, and the adapter logs each agent in and renews its
+  session. Only the file operations are offered. `server/wire.ts` holds the operation table and the one mapping of
+  errors to public codes (`inconsistentState` without details, anything unexpected `internal` without a message) and
+  strict base64 for contents. `client/agent-client.ts` is the host's side: a client per agent and the relative-path
+  tools `fs_workspaces`, `fs_list`, `fs_read`, `fs_write`, `fs_mkdir` (refusals as results, a version conflict with the
+  current version, a mutation keeping its operation ID across retries) (`tests/agent-socket.test.ts`).
+- Step 2, the browser and admin adapter (`server/http.ts`), HTTPS only: sign-in through an OpenID provider
+  (`server/oidc.ts`: discovery, code flow with PKCE, state bound to the browser by a cookie, nonce, the ID token checked
+  on the server: JWKS signature, issuer, audience, authorized party, expiry, issue time, nonce), the session handle in a
+  `__Host-files` cookie (Secure, HttpOnly, SameSite=Strict, a new handle on every sign-in, the previous one ended), a
+  tenant choice only among the identity's bindings, and on every call the service's own origin, fetch metadata and a
+  CSRF token bound to the session; bodies are bounded before they are read, and one global bound refuses requests
+  beyond it. The page (`web/`, no framework, its TypeScript served with the types stripped) has the workspace list, the
+  file list, the editor, the grants of a directory and the tenant administration (registration, membership,
+  workspaces, listings); its draft logic is `client/draft.ts`: a conflict or a refusal keeps the draft, a lost reply is
+  retried with its operation ID. The development IdP (`server/dev-idp.ts`, decided 2026-11-25) is a process of its own
+  on loopback that the service talks to like any IdP; it proves nothing, and the tests use it. The host operator's
+  local socket (`server/operator.ts`, in the state directory: `create-tenant`, `tenants`, `mode`) carries no file
+  operation. The launcher starts all of them (`tests/http.test.ts`, `tests/draft.test.ts`, `tests/launch.test.ts`).
+
+| Claim (plan section 7, phase 4, and the acceptance case of phases 1 and 4) | Test |
+|---|---|
+| The opening journey through both adapters with two browser clients and a scripted agent | `tests/phase4-exit.test.ts` |
+| Automatic private homes | `tests/phase4-exit.test.ts`, `tests/agent-socket.test.ts` |
+| Stale editor saves: a version conflict with the current version; the draft kept | `tests/phase4-exit.test.ts`, `tests/agent-socket.test.ts`, `tests/draft.test.ts` |
+| Revoked group membership: the workspace leaves the list, `notFound` inside it like an absent path, the file unchanged | `tests/phase4-exit.test.ts` |
+| Instance isolation for two conversations of one host | `tests/phase4-exit.test.ts`, `tests/agent-socket.test.ts` |
+| Two tenants with the same user name; a forged tenant selector | `tests/http.test.ts` |
+| An expired session fails; cross-origin or unbound requests produce no mutation; a sign-in this browser did not start is refused | `tests/http.test.ts` |
+| The ID-token checks | `tests/http.test.ts` |
+| The launched service: operator, browser, admin registration, an agent's save | `tests/launch.test.ts` |
+
+Not yet there, by the plan's order: backup, restore and the recovery interface, the operator guide and the
+production-like transport checks (phase 5).
 
 ## Commands
 
@@ -171,6 +213,10 @@ From this directory (or with `npm --prefix spaces-files` from the repository roo
 
 - `npm start` (root: `npm run spaces-files`): the service; prints `[files] ready (store …)`, stops cleanly on SIGINT/SIGTERM
 - `npm run dev` (root: `npm run spaces-files:dev`): the same, restarted on every change
+- `npm run dev-cert`: a self-signed certificate for `localhost` in `.local/tls/` (openssl)
+- `npm run dev-idp`: the development IdP on `http://127.0.0.1:4201` (it proves nothing; this machine only)
+- `npm run operator -- create-tenant <tenant> <adminId> <homeName> <issuer> <subject>`, `-- tenants`,
+  `-- mode normal|maintenance`: the host operator's commands against the running service
 - `npm run typecheck` (own tsconfig, not part of the root `tsc`)
 - `npm test` (root: `npm run test:spaces-files`; node test runner, `tests/*.test.ts`; the store test starts the service
   as child processes)
@@ -182,4 +228,15 @@ Variables, read from `spaces-files/.env` (values already in the environment win)
   data directory or around it)
 - `FILES_BLOB_DIR`: the blob directory with the sealed file contents (default `spaces-files/.local/blobs`, mode 700,
   apart from the other two)
-- `FILES_MEM=1`: everything in memory, throwaway
+- `FILES_MEM=1`: everything in memory, throwaway (no operator socket)
+- `FILES_PUBLIC_ORIGIN`: the browser's origin (default `https://localhost:4200`); `FILES_HTTP_HOST` (default
+  `127.0.0.1`) and `FILES_HTTP_PORT` (default: the origin's port) where it listens
+- `FILES_TLS_CERT`, `FILES_TLS_KEY`: PEM files (default `.local/tls/cert.pem`, `key.pem`); without them the browser
+  adapter stays off
+- `FILES_OIDC_ISSUER`, `FILES_OIDC_CLIENT_ID`, `FILES_OIDC_CLIENT_SECRET`, `FILES_OIDC_CA`: the identity provider
+  (default: the development IdP, client `spaces-files-dev`)
+- `FILES_AGENT_SOCKETS`: `hostPeer@tenant=/absolute/path.sock;…`, one socket per enrolled agent host and tenant
+
+A first local run: `npm run dev-cert`, `npm run dev-idp` in one terminal, `npm start` in another, then
+`npm run operator -- create-tenant acme adm adm http://127.0.0.1:4201 adm` and sign in as `adm` at
+`https://localhost:4200` (the browser warns about the self-signed certificate).
