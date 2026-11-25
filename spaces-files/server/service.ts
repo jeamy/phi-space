@@ -14,7 +14,7 @@ import { Admission, Unavailable, type AdmissionOptions } from "./admission.ts";
 import { DeploymentState, type DeploymentOptions } from "./deployment.ts";
 import { BlobStore } from "./blobs.ts";
 import { issueOperationIds, verifyOperationId, type VerifiedOpId } from "./opids.ts";
-import { lookupReceipt, receiptRow, reserveReceipt, type Outcome } from "./receipts.ts";
+import { lookupReceipt, PRUNE_BATCH, pruneReceipts, receiptRow, reserveReceipt, type Outcome } from "./receipts.ts";
 import { checkContents, parsePath, pathString } from "./paths.ts";
 import { contentDigest, requestDigest } from "./digest.ts";
 import { atLeast, checkGrant, checkLastAdmin, checkLastOwner, checkMembership, checkTenantAdmin, childNamed, listGroups, membersOf, resolve, spaceData, subjectRow, type NodeRow, type RelRow, type Subject } from "./policy.ts";
@@ -78,6 +78,9 @@ export type FilesServiceOptions = AdmissionOptions & {
 /** Where a save can be interrupted: before the blob write, between it and the commit, around the commit call (its
  *  outcome then is unknown), and after the commit before the old blob's deletion. */
 export type FaultPoint = "beforeBlob" | "afterBlob" | "commit:before" | "commit:after" | "afterCommit";
+
+/** What a session-bound operation is, for the admission mode (order of checks, step 3). */
+type OpClass = "file" | "admin" | "maintenance" | "issue";
 
 /** What `#admitRows` checks a mutation's budgets for. */
 type AdmitSpec = { id: VerifiedOpId | null; operation: string; targets: string[]; rows: ReturnType<typeof schema.meta>[]; demand?: Demand; replaced?: ReturnType<typeof schema.meta>[]; pool?: "ordinary" | "security" };
@@ -146,6 +149,8 @@ export class FilesService {
 		} catch (e) { await host?.close(ctx); state.close(); throw e; }
 		// the login index is a lookup aid derived from the FsActor rows: rebuilt on every start (section 6.6)
 		try { await service.rebuildLoginIndex(); } catch (e) { await service.close(); throw e; }
+		// a mode transition that a crash interrupted completes before anything is served (section 6.1)
+		if (state.pendingMode() !== null) state.completeModeTransition();
 		// a tenant closed for a pending security action stays closed across restarts (section 6.6); the index above is
 		// only a lookup aid and is rebuilt for it too
 		for (const c of state.closedTenants()) service.admission.suspend(c.tenantId, c.reason);
@@ -307,13 +312,137 @@ export class FilesService {
 	 * `unavailable`), and inside it the actor's current FsActor state is checked (unknown, disabled or deleted ->
 	 * `unauthenticated`). A request without a valid handle never reaches a tenant queue.
 	 */
-	async withSession<T>(handle: unknown, op: (session: Session, space: PhiSpaces) => Promise<T>): Promise<T> {
+	withSession<T>(handle: unknown, op: (session: Session, space: PhiSpaces) => Promise<T>): Promise<T> {
+		return this.#session("file", handle, op);
+	}
+
+	/**
+	 * The session checks of `withSession`, then the admission mode (order of checks, step 3): in normal mode the
+	 * maintenance metadata operations are `unavailable`; in maintenance mode only an enabled tenant administrator's admin
+	 * operations, the maintenance metadata operations and `issueOperationIds` continue, everything else is `unavailable`.
+	 */
+	async #session<T>(cls: OpClass, handle: unknown, op: (session: Session, space: PhiSpaces) => Promise<T>): Promise<T> {
 		const view = typeof handle === "string" ? this.state.lookupSession(handle) : null;
 		if (view === null) throw new schema.Unauthenticated();
 		return this.inTenant(view.tenantId, async (space) => {
 			const a = await this.#enabledActor(space, view.actorKind, view.actorId);
+			const mode = this.state.mode();
+			if (mode === "normal" && cls === "maintenance") throw new Unavailable("maintenance operations are offered in maintenance mode only");
+			if (mode === "maintenance") {
+				if (cls === "file") throw new Unavailable("the service is in maintenance mode");
+				if (view.actorKind !== "user" || !(await this.#has(space, schema.relation("tenant", view.tenantId, "admin", "user", view.actorId))))
+					throw new Unavailable("the service is in maintenance mode");
+			}
 			return op({ tenantId: view.tenantId, actorKind: view.actorKind, actorId: view.actorId, homeNodeId: a.fields.homeNodeId as string, expiresAt: view.expiresAt }, space);
 		});
+	}
+
+	/**
+	 * Switches the admission mode (a host-operator step, section 6.1): the intent is persisted, the gate closes (queued
+	 * operations are refused, started ones drain to their outcome), the destination mode is persisted, then the gate
+	 * opens again. Refused while a commit outcome is unknown.
+	 */
+	async setMode(to: "normal" | "maintenance"): Promise<void> {
+		if (this.#unresolved.length) throw new Unavailable("a commit outcome is unknown: resolve it first");
+		this.state.beginModeTransition(to);
+		await this.admission.close();
+		if (this.#unresolved.length) throw new Unavailable("a commit outcome became unknown while draining: resolve it first");
+		this.state.completeModeTransition();
+		this.admission.reopen();
+	}
+
+	mode(): "normal" | "maintenance" { return this.state.mode(); }
+
+	// ---------------------------------------------------------------- maintenance metadata operations (section 5)
+
+	/** Node names and kinds below a path, in maintenance mode only, without visibility and without contents or versions;
+	 *  an absent path is `notFound`. */
+	maintenanceList(handle: unknown, workspace: unknown, path: unknown): Promise<ListEntry[]> {
+		return this.#session("maintenance", handle, async (s, space) => {
+			const node = await this.#maintenanceTarget(s, space, "maintenanceList", workspace, path);
+			if (node.kind !== "dir") throw new schema.InvalidInput("maintenanceList needs a directory");
+			const kids = await space.readAll({ type: schema.T.node, fields: { parentId: node.nodeId } }, { limit: this.limits.maxDirEntries + 1 });
+			if (kids.length > this.limits.maxDirEntries) throw new schema.CapacityExceeded(`a directory holds more than ${this.limits.maxDirEntries} entries`);
+			return kids.map((k) => ({ name: k.fields.name as string, kind: k.fields.kind as "dir" | "file" })).sort((a, b) => byName(a.name, b.name));
+		});
+	}
+
+	maintenanceListGrants(handle: unknown, workspace: unknown, path: unknown): Promise<Array<{ relation: string; subject: Subject }>> {
+		return this.#session("maintenance", handle, async (s, space) => {
+			const node = await this.#maintenanceTarget(s, space, "maintenanceListGrants", workspace, path);
+			return this.#grantsOn(space, node.nodeId);
+		});
+	}
+
+	/**
+	 * Adds or removes one direct tuple by tenant-administrator authority, in maintenance mode only (section 5): ordinary
+	 * subject, relation and redundant-viewer validation, `lastOwner` kept, idempotent both ways, receipt and audit row.
+	 * It gives no file-content access.
+	 */
+	maintenancePutGrant(handle: unknown, workspace: unknown, path: unknown, action: unknown, relation: unknown, subject: unknown, operationId: unknown): Promise<{ status: string }> {
+		return this.#session("maintenance", handle, async (s, space) => {
+			if (action !== "grant" && action !== "revoke") throw new schema.InvalidInput("action is grant or revoke");
+			if (relation !== "owner" && relation !== "editor" && relation !== "viewer") throw new schema.InvalidInput(`unknown relation ${JSON.stringify(relation)}`);
+			const subj = parseSubject(subject, this.limits.maxNameBytes);
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, "maintenancePutGrant", this.limits);
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			const node = await this.#maintenanceTarget(s, space, "maintenancePutGrant", ws, path, id);
+			const digest = requestDigest("maintenancePutGrant", { workspace: ws, path: pathString(segs), action, relation, subject: subjectRow(subj) });
+			return this.#applyGrant(s, space, id, digest, "maintenancePutGrant", action, node, relation, subj);
+		});
+	}
+
+	/** The target of a maintenance metadata operation: the caller is an administrator (an audited refusal otherwise), the
+	 *  path is walked by names alone, absence is `notFound`. */
+	async #maintenanceTarget(s: Session, space: PhiSpaces, op: string, workspace: unknown, path: unknown, id: VerifiedOpId | null = null): Promise<NodeRow> {
+		const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+		const segs = parsePath(path, op, this.limits);
+		await this.#requireAdmin(s, space, op, id);
+		const d = spaceData(space);
+		let node = await childNamed(d, schema.WORKSPACES, ws);
+		if (node === null) throw new schema.NotFound();
+		for (const seg of segs) {
+			if (node.kind !== "dir") throw new schema.InvalidInput("a path goes through a file");
+			node = await childNamed(d, node.nodeId, seg);
+			if (node === null) throw new schema.NotFound();
+		}
+		return node;
+	}
+
+	// ---------------------------------------------------------------- upkeep (sections 3 and 6.1)
+
+	/**
+	 * Removes, in one bounded batch, the tenant's audit rows older than the retention age, lowest seq first (section 6.2).
+	 * No row younger than `maxAuditAgeMs` is ever removed, and the newest row always stays, so the seq never restarts
+	 * after a reopen. The time floor is persisted before the removal. Returns how many it removed.
+	 */
+	pruneAudit(tenantId: string, limit = 256): Promise<number> {
+		return this.inTenant(tenantId, async (space) => {
+			const now = this.state.now();
+			const rows = (await space.readAll({ type: schema.T.audit })).sort((a, b) => (a.fields.seq as number) - (b.fields.seq as number));
+			const old = rows.slice(0, -1).filter((r) => (r.fields.time as number) < now - this.limits.maxAuditAgeMs).slice(0, limit);
+			if (old.length === 0) return 0;
+			this.state.commitFloor(now);
+			await space.batch(old.map((r) => ({ op: "take" as const, template: { type: schema.T.audit, fields: { seq: r.fields.seq as number } } })));
+			return old.length;
+		});
+	}
+
+	/** The upkeep of one tenant in its queue: expired receipts, old audit rows, orphan blobs (bounded batches each). */
+	async maintainTenant(tenantId: string): Promise<{ receipts: number; audit: number; blobs: number | null }> {
+		const receipts = await this.inTenant(tenantId, (space) => pruneReceipts(space, this.state, PRUNE_BATCH));
+		const audit = await this.pruneAudit(tenantId);
+		const blobs = await this.sweepBlobs(tenantId);
+		return { receipts, audit, blobs };
+	}
+
+	/** Gives the store's free pages back (`OwnStoreHost.compact`, section 6.1), with admission drained around it. */
+	async compact(): Promise<{ freedPages: number; converted: boolean; error?: string } | null> {
+		if (this.#unresolved.length) throw new Unavailable("a commit outcome is unknown: resolve it first");
+		await this.admission.close();
+		try { return await this.host.compact(); }
+		finally { this.admission.reopen(); }
 	}
 
 	/**
@@ -321,7 +450,7 @@ export class FilesService {
 	 * the call writes nothing but the time floor. A count outside 1..maxOperationIdsPerCall is `invalidInput`.
 	 */
 	issueOperationIds(handle: unknown, count: unknown): Promise<string[]> {
-		return this.withSession(handle, async (s) => issueOperationIds(this.state, s, count, this.limits));
+		return this.#session("issue", handle, async (s) => issueOperationIds(this.state, s, count, this.limits));
 	}
 
 	// ---------------------------------------------------------------- file operations (section 5)
@@ -451,11 +580,15 @@ export class FilesService {
 			const segs = parsePath(path, "listGrants", this.limits);
 			const r = await resolve(spaceData(space), s, ws, segs, { limits: this.limits });
 			if (!atLeast(r.role, "owner")) throw new schema.PermissionDenied("listGrants needs owner on the target");
-			const rels = await space.readAll({ type: schema.T.relation, fields: { objectKind: "node", objectId: r.node.nodeId } }, { limit: this.limits.maxGrantsPerTarget + 1 });
-			if (rels.length > this.limits.maxGrantsPerTarget) throw new schema.CapacityExceeded(`more than ${this.limits.maxGrantsPerTarget} grants on one target`);
-			return rels.map((e) => e.fields as unknown as RelRow).map((x) => ({ relation: x.relation, subject: subjectOf(x) }))
-				.sort((a, b) => byName(a.relation, b.relation) || byName(a.subject.kind, b.subject.kind) || byName(a.subject.id, b.subject.id));
+			return this.#grantsOn(space, r.node.nodeId);
 		});
+	}
+
+	async #grantsOn(space: PhiSpaces, nodeId: string): Promise<Array<{ relation: string; subject: Subject }>> {
+		const rels = await space.readAll({ type: schema.T.relation, fields: { objectKind: "node", objectId: nodeId } }, { limit: this.limits.maxGrantsPerTarget + 1 });
+		if (rels.length > this.limits.maxGrantsPerTarget) throw new schema.CapacityExceeded(`more than ${this.limits.maxGrantsPerTarget} grants on one target`);
+		return rels.map((e) => e.fields as unknown as RelRow).map((x) => ({ relation: x.relation, subject: subjectOf(x) }))
+			.sort((a, b) => byName(a.relation, b.relation) || byName(a.subject.kind, b.subject.kind) || byName(a.subject.id, b.subject.id));
 	}
 
 	/**
@@ -482,12 +615,20 @@ export class FilesService {
 			const r = await resolve(d, s, ws, segs, { limits: this.limits });
 			if (!atLeast(r.role, "owner")) throw new schema.PermissionDenied(`${op} needs owner on the target`);
 			const digest = requestDigest(op, { workspace: ws, path: pathString(segs), relation, subject: subjectRow(subj) });
+			return this.#applyGrant(s, space, id, digest, op, op, r.node, relation, subj);
+		});
+	}
+
+	/** One grant or revocation after its authorization: receipt, validation, idempotence, final owner, budgets, commit. */
+	async #applyGrant(s: Session, space: PhiSpaces, id: VerifiedOpId, digest: string, op: string, action: "grant" | "revoke", node: NodeRow, relation: string, subj: Subject): Promise<{ status: string }> {
+		{
+			const d = spaceData(space);
 			const done = await lookupReceipt(space, s, id.operationId, digest);
 			if (done) return { status: done.status as string };
-			const target = r.node.nodeId;
-			const tuple: RelRow = op === "grant" ? await checkGrant(d, r.node, relation, subj) : { objectKind: "node", objectId: target, relation, ...subjectRow(subj) };
+			const target = node.nodeId;
+			const tuple: RelRow = action === "grant" ? await checkGrant(d, node, relation, subj) : { objectKind: "node", objectId: target, relation, ...subjectRow(subj) };
 			const present = await this.#has(space, schema.relation("node", target, tuple.relation, tuple.subjectKind, tuple.subjectId, tuple.subjectRelation));
-			if (op === "grant") {
+			if (action === "grant") {
 				const status = present ? "unchanged" : "granted";
 				const rows = [...(present ? [] : [schema.relation("node", target, tuple.relation, tuple.subjectKind, tuple.subjectId, tuple.subjectRelation)]), receiptRow(s, id, digest, { status })];
 				await this.#admitRows(s, space, { id, operation: op, targets: [target], rows, demand: present ? {} : { relations: 1, grantsOn: { nodeId: target, n: 1 }, groups: tuple.subjectKind === "group" ? [tuple.subjectId] : [] } });
@@ -500,12 +641,12 @@ export class FilesService {
 				await this.#commitMutation(s, space, id, op, [target], rows, null);
 				return { status: "unchanged" };
 			}
-			if (r.node.parentId === schema.WORKSPACES) await checkLastOwner(d, target, { remove: [tuple] }, { limits: this.limits });
+			if (node.parentId === schema.WORKSPACES) await checkLastOwner(d, target, { remove: [tuple] }, { limits: this.limits });
 			const rows = [receiptRow(s, id, digest, { status: "revoked" })];
 			await this.#securityAdmit(s, space, { id, operation: op, targets: [target], rows }, { operation: op, target, relation: tuple.relation, subject: subjectRow(subj) });
 			await this.#commitMutation(s, space, id, op, [target], rows, null, [{ type: schema.T.relation, fields: { ...tuple } }]);
 			return { status: "revoked" };
-		});
+		}
 	}
 
 	/**
@@ -522,7 +663,7 @@ export class FilesService {
 	}
 
 	#putMember(op: "addMember" | "removeMember", handle: unknown, group: unknown, subject: unknown, operationId: unknown): Promise<{ status: string }> {
-		return this.withSession(handle, async (s, space) => {
+		return this.#session("admin", handle, async (s, space) => {
 			const g = schema.groupId(group, this.limits.maxNameBytes);
 			const subj = parseSubject(subject, this.limits.maxNameBytes);
 			if (subj.kind === "group") throw new schema.InvalidInput("groups have no nested groups in the pilot");
@@ -557,7 +698,7 @@ export class FilesService {
 	 * group, is `invalidInput`. The administrator gains no file rights by it.
 	 */
 	createWorkspace(handle: unknown, name: unknown, owner: unknown, operationId: unknown): Promise<{ nodeId: string }> {
-		return this.withSession(handle, async (s, space) => {
+		return this.#session("admin", handle, async (s, space) => {
 			const ws = schema.canonicalName(name, this.limits.maxNameBytes);
 			const o = parseSubject(owner, this.limits.maxNameBytes);
 			if (o.kind === "group") throw new schema.InvalidInput("the first owner of a workspace is a user or an agent");
@@ -589,7 +730,7 @@ export class FilesService {
 		const aid = schema.actorId(actorId);
 		const name = schema.canonicalName(homeName, this.limits.maxNameBytes);
 		let tenant = "";
-		const r = await this.withSession(handle, async (s, space) => {
+		const r = await this.#session("admin", handle, async (s, space) => {
 			tenant = s.tenantId;
 			const id = verifyOperationId(this.state, s, operationId, this.limits);
 			await this.#requireAdmin(s, space, "registerActor", id);
@@ -633,7 +774,7 @@ export class FilesService {
 	}
 
 	#lifecycle(op: "disableActor" | "deleteActor" | "enableActor", handle: unknown, actor: unknown, replacementOwners: unknown, operationId: unknown): Promise<{ status: string }> {
-		return this.withSession(handle, async (s, space) => {
+		return this.#session("admin", handle, async (s, space) => {
 			const target = parseSubject(actor, this.limits.maxNameBytes);
 			if (target.kind === "group") throw new schema.InvalidInput("an actor is a user or an agent");
 			const replacements = parseReplacements(replacementOwners, this.limits.maxNameBytes);
@@ -715,7 +856,7 @@ export class FilesService {
 	}
 
 	#tenantAdmin(op: "grantTenantAdmin" | "revokeTenantAdmin", handle: unknown, user: unknown, operationId: unknown): Promise<{ status: string }> {
-		return this.withSession(handle, async (s, space) => {
+		return this.#session("admin", handle, async (s, space) => {
 			const uid = schema.actorId(user, "user ID");
 			const id = verifyOperationId(this.state, s, operationId, this.limits);
 			await this.#requireAdmin(s, space, op, id);
@@ -768,7 +909,7 @@ export class FilesService {
 	}
 
 	#adminRead<T>(handle: unknown, op: string, read: (space: PhiSpaces) => Promise<T>): Promise<T> {
-		return this.withSession(handle, async (s, space) => { await this.#requireAdmin(s, space, op, null); return read(space); });
+		return this.#session("admin", handle, async (s, space) => { await this.#requireAdmin(s, space, op, null); return read(space); });
 	}
 
 	/** The budgets of a security action; one that does not fit even the security reserve closes the tenant. */

@@ -290,6 +290,20 @@ export class DeploymentState {
 		});
 	}
 
+	// ---------------------------------------------------------------- admission mode (section 6.1)
+
+	/** The admission mode: normal, or maintenance (section 6.5). */
+	mode(): "normal" | "maintenance" { return this.#text("admission_mode") === "maintenance" ? "maintenance" : "normal"; }
+	/** A transition persisted before the gate closes; a restart with one pending completes it before serving. */
+	pendingMode(): "normal" | "maintenance" | null { const v = this.#text("mode_intent"); return v === "normal" || v === "maintenance" ? v : null; }
+	beginModeTransition(to: "normal" | "maintenance"): void { this.#tx(() => this.#setText("mode_intent", to)); }
+	/** Persists the destination mode and clears the intent, in one transaction, before the transition is acknowledged. */
+	completeModeTransition(): "normal" | "maintenance" {
+		const to = this.pendingMode() ?? this.mode();
+		this.#tx(() => { this.#setText("admission_mode", to); this.#db.prepare("DELETE FROM meta WHERE key = 'mode_intent'").run(); });
+		return to;
+	}
+
 	// ---------------------------------------------------------------- closed tenants (section 3, budgets)
 
 	/** Closes a tenant durably with its pending security action: it stays closed across restarts until `reopenTenant`. */
@@ -320,6 +334,15 @@ export class DeploymentState {
 	#meta(key: string): number {
 		const row = this.#db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined;
 		return row ? Number(row.value) : 0;
+	}
+
+	#text(key: string): string | null {
+		const row = this.#db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined;
+		return row ? row.value : null;
+	}
+
+	#setText(key: string, value: string): void {
+		this.#db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
 	}
 
 	#setMeta(key: string, value: number): void {
