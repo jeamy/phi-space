@@ -5,7 +5,7 @@ teams share workspaces, roles are inherited from directories, and a revocation i
 after it. Files are UTF-8 text with versions; a save over a stale version is a conflict, never a silent overwrite.
 The plan, with its phases and exit evidence, is `docs/zanzibar-agent-filesystem-plan.en.md`.
 
-**Status: phases 1 and 2 of that plan are complete** (exit evidence below). The application is registered in the repository checks (`APPS` in
+**Status: phases 1 to 3 of that plan are complete** (exit evidence below). The application is registered in the repository checks (`APPS` in
 `checks/roots.mjs`) and the root scripts. The service process (`server/launch.ts`, `server/service.ts`) opens phi-spaces'
 own SQLite store in a data directory it refuses when group or others can reach it. The store's owner lock refuses a
 second process, and a crash releases it. The service runs the reaper (`startService`) and reserves one private named
@@ -88,7 +88,7 @@ directory of its own, and FsContent names it (plan section 3, *Contents*). Files
 `maxFileBytes` rather than by the Space's entry limit. Phase 2's text row and its 10 KiB limit (`content()`, `checkText`,
 `textBytes`, the content-row cases of `assertLimitsFit`) are replaced by the blob store in phase 3.
 
-## Phase 3: filesystem service (under way)
+## Phase 3: filesystem service
 
 - Step 1, the blob store (`server/blobs.ts`): one sealed blob per file version under
   `<FILES_BLOB_DIR>/<tenant>/<shard>/<blobId>`, written to a temporary file, flushed, renamed and its directory flushed.
@@ -144,6 +144,26 @@ directory of its own, and FsContent names it (plan section 3, *Contents*). Files
   `pruneAudit` removes rows older than `maxAuditAgeMs` (90 days), oldest first, never the newest; `maintainTenant` runs
   receipt pruning, audit pruning and the blob sweep; `compact()` gives free pages back with admission drained
   (`tests/maintenance.test.ts`).
+
+| Claim (plan section 7, phase 3, and the phase 3 acceptance cases) | Test |
+|---|---|
+| The same contracts on memory and SQLite | `tests/files.test.ts` (both media) |
+| Two creates and two edits race | `tests/files.test.ts` |
+| A failure before, at and after the commit, and between the blob write and the commit; reopen and verify rows, receipts, versions, audit and blobs | `tests/files.test.ts` (injected failures, unknown outcomes, SIGKILL at every fault point) |
+| `unauthenticated`, expired IDs, rapid key rotations and a restart during them | `tests/sessions.test.ts`, `tests/opids.test.ts` |
+| `requestMismatch`, failed attempts without receipts, idempotent no-ops with receipts, the operation name in the digest | `tests/files.test.ts`, `tests/grants.test.ts`, `tests/opids.test.ts` |
+| Retries after revocation | `tests/grants.test.ts` |
+| Receipt and audit pruning; the clock across an expiry and back, with a restart | `tests/opids.test.ts`, `tests/maintenance.test.ts` |
+| Duplicate actor, workspace, home and identity creation; invalid actor transitions | `tests/admin.test.ts`, `tests/actors.test.ts`, `tests/grants.test.ts` |
+| `inconsistentState` suspends the tenant alone | `tests/files.test.ts`, `tests/blobs.test.ts`, `tests/tenant.test.ts` |
+| The actor transaction budget | `tests/admin.test.ts` |
+| Store-wide suspension after an unknown commit outcome | `tests/files.test.ts` |
+| Ordinary budgets full with young rows; a removal on the reserve; the replay without a new receipt; the exhausted reserve closed through a restart | `tests/grants.test.ts` |
+| Creation through the parent branch with its collision errors; a lost creation reply replays once | `tests/files.test.ts` |
+| A barriered mode switch refusing queued work and draining a paused write; the mode after a restart | `tests/maintenance.test.ts` |
+| Blobs: sealed, bound to their owner, swept, held during a backup; content keys never retired by a restore | `tests/blobs.test.ts` |
+
+Not yet there, by the plan's order: the transports (phase 4) and backup, restore and the recovery interface (phase 5).
 
 ## Commands
 

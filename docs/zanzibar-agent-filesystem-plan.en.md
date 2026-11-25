@@ -12,7 +12,7 @@ Two sources shape the design. Zontally describes an agent filesystem built on Za
 
 ## 2. Application and trust boundary
 
-Create a sibling application under `spaces-files/` (phases 1 and 2 are complete, 2026-11-25; their exit evidence is listed in `spaces-files/README.md`). Phase 2 still stored text in the content row with a 10 KiB limit; the blob store of section 3 replaces that in phase 3. Give it its own manifest, typecheck, tests and README. Import the existing public package through `phi-spaces` and its exported subpaths. Keep file semantics in the application. Use the own SQLite store for persistence and the in-memory host for fast contract tests. [Package and service contracts](api.en.md) · [Space client](../spaces/src/client.ts)
+Create a sibling application under `spaces-files/` (phases 1 to 3 are complete, 2026-11-25; their exit evidence is listed in `spaces-files/README.md`). Phase 2 still stored text in the content row with a 10 KiB limit; phase 3 replaced it with the blob store of section 3. Give it its own manifest, typecheck, tests and README. Import the existing public package through `phi-spaces` and its exported subpaths. Keep file semantics in the application. Use the own SQLite store for persistence and the in-memory host for fast contract tests. [Package and service contracts](api.en.md) · [Space client](../spaces/src/client.ts)
 
 **Repository integration.**
 

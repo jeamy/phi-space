@@ -249,3 +249,19 @@ for (const [point, committed] of [["beforeBlob", false], ["afterBlob", false], [
 		} finally { rmSync(root, { recursive: true, force: true }); }
 	});
 }
+
+test("a missing or damaged blob is inconsistentState: that tenant is suspended, the others keep running", async () => {
+	const root = mkdtempSync(join(tmpdir(), "spaces-files-ops-"));
+	const f = await fixture({}, root);
+	try {
+		await f.s.createTenant("globex", { actorId: "max", homeName: "max", issuer: "i", subject: "max" });
+		const max = (await f.s.login("globex", "user", { issuer: "i", subject: "max" })).handle;
+		await f.s.write(f.lea, "lea", "f", bytes("one"), 0, await f.id(f.lea));
+		const [blob] = blobFiles(join(root, "blobs"));
+		rmSync(join(root, "blobs", "acme", blob.slice(0, 2), blob));
+		await assert.rejects(f.s.read(f.lea, "lea", "f"), (e: Error & { code?: string }) => e.code === "inconsistentState" && !e.message.includes("lea") && !e.message.includes("one"));
+		assert.equal(f.s.admission.suspended("acme"), "inconsistentState");
+		await assert.rejects(f.s.workspaces(f.lea), code("unavailable"), "until operator repair");
+		assert.deepEqual(await f.s.workspaces(max), ["max"], "another tenant is not affected");
+	} finally { await f.s.close(); rmSync(root, { recursive: true, force: true }); }
+});
