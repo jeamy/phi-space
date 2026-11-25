@@ -140,8 +140,9 @@ export const groupId = (id: unknown, maxBytes = MAX_NAME_BYTES): string => canon
 export const relation = (objectKind: "tenant" | "group" | "node", objectId: string, rel: string, subjectKind: string, subjectId: string, subjectRelation = DIRECT): EntryDraft =>
 	({ type: T.relation, fields: { objectKind, objectId, relation: rel, subjectKind, subjectId, subjectRelation } });
 
-export const content = (nodeId: string, version: number, text: string): EntryDraft =>
-	({ type: T.content, fields: { nodeId, version, text } });
+/** A file version's content row: it names the sealed blob that holds the bytes (section 3, *Contents*), never the bytes. */
+export const content = (nodeId: string, version: number, ref: { blobId: string; size: number; keyGeneration: number }): EntryDraft =>
+	({ type: T.content, fields: { nodeId, version, blobId: ref.blobId, size: ref.size, keyGeneration: ref.keyGeneration } });
 
 export type ReceiptActorKind = ActorKind | "recoverer";
 export const receipt = (actorKind: ReceiptActorKind, actorId: string, operationId: string, digest: string, outcome: Record<string, string | number | boolean | null>, expiry: number): EntryDraft =>

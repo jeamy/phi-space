@@ -14,7 +14,7 @@ import { FilesService, InconsistentState, TenantProvisioning, tenantAlias } from
 import { InvalidInput, T, WORKSPACES } from "../server/schema.ts";
 
 const ADMIN = { actorId: "lea", homeName: "Lea’s home", issuer: "https://id.example", subject: "sub-lea" };
-const mem = () => FilesService.open({ dataDir: null, stateDir: null });
+const mem = () => FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
 const raw = (s: FilesService, tenantId: string) => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias(tenantId) });
 
 test("a reserved Space admits nothing until its initialization commits", async () => {
@@ -87,7 +87,7 @@ test("leftover rows and unknown versions in a tenant Space are refused", async (
 
 test("on disk: a crash between the two commits is resumed, and the login index is rebuilt on start", async () => {
 	const root = mkdtempSync(join(tmpdir(), "spaces-files-tenant-"));
-	const open = () => FilesService.open({ dataDir: join(root, "data"), stateDir: join(root, "state") });
+	const open = () => FilesService.open({ dataDir: join(root, "data"), stateDir: join(root, "state"), blobDir: join(root, "blobs") });
 	try {
 		const a = await open();
 		await a.reserveTenantSpace("acme"); // the first commit, then the process stops

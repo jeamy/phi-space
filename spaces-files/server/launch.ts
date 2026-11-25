@@ -3,6 +3,7 @@
 //
 //   FILES_DATA_DIR=…/data   (default: spaces-files/.local/data; created with mode 700, refused if others can reach it)
 //   FILES_STATE_DIR=…/state (default: spaces-files/.local/state; the deployment state, never inside the data directory)
+//   FILES_BLOB_DIR=…/blobs  (default: spaces-files/.local/blobs; the sealed file contents, apart from both)
 //   FILES_MEM=1             in memory, throwaway
 import { ROOT, loadDotEnv } from "./env.ts";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ loadDotEnv();
 const mem = process.env.FILES_MEM === "1";
 const dataDir = mem ? null : process.env.FILES_DATA_DIR || join(ROOT, ".local", "data");
 const stateDir = mem ? null : process.env.FILES_STATE_DIR || join(ROOT, ".local", "state");
+const blobDir = mem ? null : process.env.FILES_BLOB_DIR || join(ROOT, ".local", "blobs");
 
 // The handlers come first: whoever reads the ready line may signal at once, before another statement of this file runs.
 let service: FilesService | undefined;
@@ -26,7 +28,7 @@ const shutdown = async () => {
 process.on("SIGINT", () => void shutdown());
 process.on("SIGTERM", () => void shutdown());
 
-try { service = await FilesService.open({ dataDir, stateDir }); }
+try { service = await FilesService.open({ dataDir, stateDir, blobDir }); }
 catch (e) {
 	console.error(`[files] cannot start: ${(e as Error).message}`);
 	process.exit(1);

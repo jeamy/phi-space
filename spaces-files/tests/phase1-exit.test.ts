@@ -16,7 +16,7 @@ const conv = (peer: string, agentId: string) => ({ enrolledHostPeerId: peer, age
 const me = (s: FilesService, h: string) => s.withSession(h, async (who) => ({ tenant: who.tenantId, actor: `${who.actorKind}:${who.actorId}`, home: who.homeNodeId }));
 
 test("phase 1 exit: identities, homes, isolation and fail-closed sessions", async () => {
-	const s = await FilesService.open({ dataDir: null, stateDir: null });
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
 	try {
 		// an uninitialized named Space admits no session
 		await s.reserveTenantSpace("acme");

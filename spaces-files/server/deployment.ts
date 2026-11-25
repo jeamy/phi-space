@@ -3,14 +3,18 @@
 // the durable time floor, the session table and the login index. A plain SQLite database (node:sqlite) with an
 // exclusive owner lock like the data store's, every change committed with synchronous=FULL before the service acts on
 // it. Key material sits in `keys.json` (mode 600) beside it; the database holds only generation numbers and times.
+// The content keys that seal the file blobs (section 3, *Contents*) are a second set of generations with their own
+// file, `content-keys.json`: a restore retires signing keys but never a content key, since that would make every blob
+// it sealed unreadable, and losing them loses every file content.
 import { createHash, randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, statSync, writeSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { prepareDataDir } from "./dirs.ts";
 
 export const STATE_FILE = "state.sqlite";
 export const KEYS_FILE = "keys.json";
+export const CONTENT_KEYS_FILE = "content-keys.json";
 
 export class StateUnavailable extends Error {
 	constructor(message: string) { super(message); this.name = "StateUnavailable"; }
@@ -41,6 +45,7 @@ export type DeploymentOptions = {
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS key_generations (generation INTEGER PRIMARY KEY, created_at INTEGER NOT NULL, valid_until INTEGER);
+CREATE TABLE IF NOT EXISTS content_key_generations (generation INTEGER PRIMARY KEY, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (handle_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, actor_kind TEXT NOT NULL, actor_id TEXT NOT NULL,
 	epoch INTEGER NOT NULL, created_at INTEGER NOT NULL, idle_until INTEGER NOT NULL, expires_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS logins (issuer TEXT NOT NULL, subject TEXT NOT NULL, tenant_id TEXT NOT NULL, PRIMARY KEY (issuer, subject, tenant_id));
@@ -53,6 +58,8 @@ export class DeploymentState {
 	readonly #lock: DatabaseSync | null;
 	readonly #keysPath: string | null;
 	#keys = new Map<number, Buffer>();
+	readonly #contentKeysPath: string | null;
+	#contentKeys = new Map<number, Buffer>();
 	readonly #clock: () => number;
 	readonly #maxJump: number;
 	readonly #idleMs: number;
@@ -60,10 +67,11 @@ export class DeploymentState {
 	#highWater: number;
 	#closed = false;
 
-	private constructor(db: DatabaseSync, lock: DatabaseSync | null, keysPath: string | null, o: DeploymentOptions) {
+	private constructor(db: DatabaseSync, lock: DatabaseSync | null, dir: string | null, o: DeploymentOptions) {
 		this.#db = db;
 		this.#lock = lock;
-		this.#keysPath = keysPath;
+		this.#keysPath = dir === null ? null : join(dir, KEYS_FILE);
+		this.#contentKeysPath = dir === null ? null : join(dir, CONTENT_KEYS_FILE);
 		this.#clock = o.clock ?? Date.now;
 		this.#maxJump = o.maxClockJumpMs ?? 24 * 3600_000;
 		this.#idleMs = o.sessionIdleMs ?? 3600_000;
@@ -86,7 +94,7 @@ export class DeploymentState {
 		try {
 			db = new DatabaseSync(path, { timeout: 10_000 });
 			db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
-			const s = new DeploymentState(db, lock, join(o.dir, KEYS_FILE), o);
+			const s = new DeploymentState(db, lock, o.dir, o);
 			s.#init();
 			return s;
 		} catch (e) { db?.close(); lock.close(); throw e; }
@@ -100,8 +108,10 @@ export class DeploymentState {
 		});
 		if (this.#meta("format_version") > 1) throw new StateUnavailable("the deployment state has a newer format");
 		this.#highWater = Math.max(this.#highWater, this.#meta("time_floor"));
-		this.#loadKeys();
+		this.#keys = loadKeyFile(this.#keysPath, this.#db, "key_generations");
 		if (this.currentKey() === undefined) this.#installGeneration(null);
+		this.#contentKeys = loadKeyFile(this.#contentKeysPath, this.#db, "content_key_generations");
+		if (this.#contentKeys.size === 0) this.rotateContentKey();
 	}
 
 	// ---------------------------------------------------------------- time (section 6.2)
@@ -183,7 +193,7 @@ export class DeploymentState {
 		const secret = randomBytes(32);
 		// the key file first: a generation in the database without its key would refuse every start
 		this.#keys.set(generation, secret);
-		this.#saveKeys();
+		saveKeyFile(this.#keysPath, this.#keys);
 		this.#tx(() => {
 			if (previousValidUntil !== null) this.#db.prepare("UPDATE key_generations SET valid_until = ? WHERE valid_until IS NULL").run(previousValidUntil);
 			this.#db.prepare("INSERT INTO key_generations (generation, created_at, valid_until) VALUES (?, ?, NULL)").run(generation, now);
@@ -197,25 +207,24 @@ export class DeploymentState {
 		return { generation: row.generation, secret, createdAt: row.created_at, validUntil: row.valid_until };
 	}
 
-	#loadKeys(): void {
-		if (this.#keysPath === null) return;
-		if (existsSync(this.#keysPath)) {
-			if ((statSync(this.#keysPath).mode & 0o077) !== 0) throw new StateUnavailable(`${this.#keysPath} is reachable by group or others; restrict it (chmod 600)`);
-			const raw = JSON.parse(readFileSync(this.#keysPath, "utf8")) as Record<string, string>;
-			this.#keys = new Map(Object.entries(raw).map(([g, k]) => [Number(g), Buffer.from(k, "base64")]));
-		}
-		const live = this.#db.prepare("SELECT generation FROM key_generations").all() as Array<{ generation: number }>;
-		const missing = live.filter((r) => !this.#keys.has(r.generation)).map((r) => r.generation);
-		if (missing.length) throw new StateUnavailable(`${this.#keysPath} lacks the key material of generation ${missing.join(", ")}`);
+	// ---------------------------------------------------------------- content keys (section 3, *Contents*)
+
+	/** The generation new blobs are sealed with: the newest one. */
+	currentContentKey(): { generation: number; secret: Buffer } {
+		const generation = Math.max(...this.#contentKeys.keys());
+		return { generation, secret: this.#contentKeys.get(generation)! };
 	}
 
-	#saveKeys(): void {
-		if (this.#keysPath === null) return;
-		const tmp = `${this.#keysPath}.tmp`;
-		const fd = openSync(tmp, "w", 0o600);
-		try { writeSync(fd, JSON.stringify(Object.fromEntries([...this.#keys].map(([g, k]) => [String(g), k.toString("base64")])))); fsyncSync(fd); }
-		finally { closeSync(fd); }
-		renameSync(tmp, this.#keysPath);
+	/** Every generation stays readable: a content key is never retired, neither by rotation nor by a restore. */
+	contentKeyFor(generation: number): Buffer | undefined { return this.#contentKeys.get(generation); }
+
+	/** A new content-key generation for new blobs; blobs sealed earlier keep theirs. The key file is written first. */
+	rotateContentKey(): number {
+		const generation = Math.max(0, ...this.#contentKeys.keys()) + 1;
+		this.#contentKeys.set(generation, randomBytes(32));
+		saveKeyFile(this.#contentKeysPath, this.#contentKeys);
+		this.#tx(() => this.#db.prepare("INSERT INTO content_key_generations (generation, created_at) VALUES (?, ?)").run(generation, this.#highWater || this.#clock()));
+		return generation;
 	}
 
 	// ---------------------------------------------------------------- sessions (section 2)
@@ -303,4 +312,31 @@ export class DeploymentState {
 		try { f(); this.#db.exec("COMMIT"); }
 		catch (e) { this.#db.exec("ROLLBACK"); throw e; }
 	}
+}
+
+/** Reads a key file (mode 600) and checks that it holds the material of every generation the table lists. */
+function loadKeyFile(path: string | null, db: DatabaseSync, table: string): Map<number, Buffer> {
+	let keys = new Map<number, Buffer>();
+	if (path === null) return keys;
+	if (existsSync(path)) {
+		if ((statSync(path).mode & 0o077) !== 0) throw new StateUnavailable(`${path} is reachable by group or others; restrict it (chmod 600)`);
+		const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, string>;
+		keys = new Map(Object.entries(raw).map(([g, k]) => [Number(g), Buffer.from(k, "base64")]));
+	}
+	const live = db.prepare(`SELECT generation FROM ${table}`).all() as Array<{ generation: number }>;
+	const missing = live.filter((r) => !keys.has(r.generation)).map((r) => r.generation);
+	if (missing.length) throw new StateUnavailable(`${path} lacks the key material of generation ${missing.join(", ")}`);
+	return keys;
+}
+
+/** Replaces a key file atomically (temporary file, fsync, rename, fsync of the directory). */
+function saveKeyFile(path: string | null, keys: Map<number, Buffer>): void {
+	if (path === null) return;
+	const tmp = `${path}.tmp`;
+	const fd = openSync(tmp, "w", 0o600);
+	try { writeSync(fd, JSON.stringify(Object.fromEntries([...keys].map(([g, k]) => [String(g), k.toString("base64")])))); fsyncSync(fd); }
+	finally { closeSync(fd); }
+	renameSync(tmp, path);
+	const dfd = openSync(dirname(path), "r");
+	try { fsyncSync(dfd); } finally { closeSync(dfd); }
 }

@@ -25,7 +25,7 @@ async function setState(s: FilesService, tenantId: string, kind: string, actorId
 }
 
 test("a login binds the handle to the actor its identity resolves to, and the request reaches that tenant", async () => {
-	const s = await FilesService.open({ dataDir: null, stateDir: null });
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
 	try {
 		await s.createTenant("acme", ADMIN);
 		await s.createTenant("globex", { ...ADMIN, actorId: "lea-g" });
@@ -46,7 +46,7 @@ test("a login binds the handle to the actor its identity resolves to, and the re
 });
 
 test("logins fail closed: unknown identities, other tenants, tenants in provisioning", async () => {
-	const s = await FilesService.open({ dataDir: null, stateDir: null });
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
 	try {
 		await s.createTenant("acme", ADMIN);
 		await assert.rejects(s.login("acme", "user", { issuer: ADMIN.issuer, subject: "sub-eve" }), Unauthenticated);
@@ -59,7 +59,7 @@ test("logins fail closed: unknown identities, other tenants, tenants in provisio
 
 test("bad, expired, logged-out and old-epoch handles never reach a tenant queue", async () => {
 	const c = { t: 1_000_000 };
-	const s = await FilesService.open({ dataDir: null, stateDir: null, now: () => c.t, state: { sessionIdleMs: 30 * MIN, sessionAbsoluteMs: 120 * MIN } });
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null, now: () => c.t, state: { sessionIdleMs: 30 * MIN, sessionAbsoluteMs: 120 * MIN } });
 	try {
 		await s.createTenant("acme", ADMIN);
 		let entered = 0;
@@ -86,7 +86,7 @@ test("bad, expired, logged-out and old-epoch handles never reach a tenant queue"
 });
 
 test("the actor's current state is checked inside the queue on every request", async () => {
-	const s = await FilesService.open({ dataDir: null, stateDir: null });
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
 	try {
 		await s.createTenant("acme", ADMIN);
 		await s.registerActor("acme", LEA, "agent", "a1", "a1", { enrolledHostPeerId: "host-a", agentId: "conversation-1" });
@@ -104,7 +104,7 @@ test("the actor's current state is checked inside the queue on every request", a
 });
 
 test("a suspended tenant admits valid sessions to nothing", async () => {
-	const s = await FilesService.open({ dataDir: null, stateDir: null });
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
 	try {
 		await s.createTenant("acme", ADMIN);
 		await s.createTenant("globex", { ...ADMIN, actorId: "lea-g" });

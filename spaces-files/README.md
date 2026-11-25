@@ -88,6 +88,19 @@ directory of its own, and FsContent names it (plan section 3, *Contents*). Files
 `maxFileBytes` rather than by the Space's entry limit. Phase 2's text row and its 10 KiB limit (`content()`, `checkText`,
 `textBytes`, the content-row cases of `assertLimitsFit`) are replaced by the blob store in phase 3.
 
+## Phase 3: filesystem service (under way)
+
+- Step 1, the blob store (`server/blobs.ts`): one sealed blob per file version under
+  `<FILES_BLOB_DIR>/<tenant>/<shard>/<blobId>`, written to a temporary file, flushed, renamed and its directory flushed.
+  AES-256-GCM with a key per blob (HKDF-SHA-256 of the content key and the blob ID) and associated data that binds
+  tenant, node, version, blob ID and key generation; a missing, truncated, flipped, moved or foreign blob is
+  `inconsistentState`. The content keys are generations of their own in the deployment state
+  (`content-keys.json`, mode 600): a content-key rotation keeps old blobs readable, and a restore rotation of the
+  signing keys never touches them. The sweep removes, in bounded batches, blobs no content row names and leftover
+  temporary files, nothing else, and nothing while a backup holds deletion. FsContent now holds `blobId`, `size`
+  and `keyGeneration`; `maxFileBytes` (16 MiB) and `maxContentBytes` (1 GiB per tenant) bound the contents
+  (`tests/blobs.test.ts`).
+
 ## Commands
 
 From this directory (or with `npm --prefix spaces-files` from the repository root):
@@ -103,4 +116,6 @@ Variables, read from `spaces-files/.env` (values already in the environment win)
 - `FILES_DATA_DIR`: the data directory (default `spaces-files/.local/data`, created with mode 700)
 - `FILES_STATE_DIR`: the deployment-state directory (default `spaces-files/.local/state`, mode 700, never inside the
   data directory or around it)
+- `FILES_BLOB_DIR`: the blob directory with the sealed file contents (default `spaces-files/.local/blobs`, mode 700,
+  apart from the other two)
 - `FILES_MEM=1`: everything in memory, throwaway

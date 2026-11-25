@@ -12,6 +12,7 @@ import { assertLimitsFit, assertRowFits, DEFAULT_FS_LIMITS, encodedBytes, type F
 import { checkQuotas } from "./quotas.ts";
 import { Admission, Unavailable, type AdmissionOptions } from "./admission.ts";
 import { DeploymentState, type DeploymentOptions } from "./deployment.ts";
+import { BlobStore } from "./blobs.ts";
 import { assertSeparateDirs, prepareDataDir } from "./dirs.ts";
 import * as schema from "./schema.ts";
 import { InconsistentState } from "./schema.ts";
@@ -56,6 +57,8 @@ export type FilesServiceOptions = AdmissionOptions & {
 	dataDir: string | null;
 	/** The deployment-state directory (section 6.6), never inside the data directory or around it; `null`: in memory. */
 	stateDir: string | null;
+	/** The blob directory (section 3, *Contents*), apart from both; `null`: in memory. */
+	blobDir: string | null;
 	now?: () => number;
 	state?: Omit<DeploymentOptions, "dir">;
 	/** The filesystem's limits (section 3); checked against the tenant Spaces' limits on open. */
@@ -67,6 +70,7 @@ export class FilesService {
 	readonly host: OwnStoreHost;
 	readonly storePath: string | null;
 	readonly state: DeploymentState;
+	readonly blobs: BlobStore;
 	readonly limits: FsLimits;
 	readonly #stopService: () => Promise<void>;
 	readonly #now: () => number;
@@ -76,9 +80,10 @@ export class FilesService {
 	readonly #seq = new Map<string, number>();
 	#closed = false;
 
-	private constructor(host: OwnStoreHost, state: DeploymentState, stopService: () => Promise<void>, storePath: string | null, o: FilesServiceOptions) {
+	private constructor(host: OwnStoreHost, state: DeploymentState, blobs: BlobStore, stopService: () => Promise<void>, storePath: string | null, o: FilesServiceOptions) {
 		this.host = host;
 		this.state = state;
+		this.blobs = blobs;
 		this.storePath = storePath;
 		this.#stopService = stopService;
 		this.admission = new Admission(o);
@@ -87,13 +92,15 @@ export class FilesService {
 	}
 
 	static async open(o: FilesServiceOptions): Promise<FilesService> {
-		if (o.dataDir !== null && o.stateDir !== null) assertSeparateDirs(o.dataDir, o.stateDir);
+		const blobDir = o.blobDir;
+		assertSeparateDirs({ data: o.dataDir, "deployment-state": o.stateDir, blob: blobDir });
 		// the tenant Spaces run with the default Space limits
 		assertLimitsFit({ ...DEFAULT_FS_LIMITS, ...o.limits }, DEFAULT_LIMITS);
 		// the deployment state first: it decides about sessions and keys before any tenant is served
 		const state = await DeploymentState.open({ clock: o.now, ...o.state, dir: o.stateDir });
 		let host: OwnStoreHost | undefined, storePath: string | null = null, service: FilesService;
 		try {
+			const blobs = await BlobStore.open(blobDir, state);
 			if (o.dataDir === null) host = openOwnMemoryHost();
 			else {
 				await prepareDataDir(o.dataDir);
@@ -102,7 +109,7 @@ export class FilesService {
 			}
 			// the reaper clears reservations of transactions abandoned by a crash (section 6.1)
 			const stop = await startService(host, ctx, { now: o.now, watchDebounceMs: 50 });
-			service = new FilesService(host, state, stop, storePath, o);
+			service = new FilesService(host, state, blobs, stop, storePath, o);
 		} catch (e) { await host?.close(ctx); state.close(); throw e; }
 		// the login index is a lookup aid derived from the FsActor rows: rebuilt on every start (section 6.6)
 		try { await service.rebuildLoginIndex(); } catch (e) { await service.close(); throw e; }

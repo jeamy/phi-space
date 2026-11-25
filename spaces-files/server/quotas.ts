@@ -1,7 +1,7 @@
 // Live-data quotas (docs/zanzibar-agent-filesystem-plan.en.md, section 3, budgets): before a mutation the service
 // checks what it would add against the tenant's limits. Ordinary quota failures are `capacityExceeded` and leave
-// admission open. Counts come from the tenant Space; the content bytes are summed once per tenant and then kept by the
-// single writer (like the audit seq).
+// admission open. Counts come from the tenant Space; the content bytes are the sum of the content rows' `size`, summed
+// once per tenant and then kept by the single writer (like the audit seq).
 import type { PhiSpaces } from "phi-spaces";
 import type { FsLimits } from "./limits.ts";
 import { listGroups } from "./policy.ts";
@@ -24,12 +24,10 @@ export type Demand = {
 	storedBytes?: number;
 };
 
-export const textBytes = (text: string): number => Buffer.byteLength(text, "utf8");
-
-/** The total text bytes of a tenant, for the first check after opening. */
+/** The bytes of a tenant's current file versions, for the first check after opening. */
 export async function sumContentBytes(space: PhiSpaces): Promise<number> {
 	let n = 0;
-	for (const e of await space.readAll({ type: T.content })) n += textBytes(e.fields.text as string);
+	for (const e of await space.readAll({ type: T.content })) n += e.fields.size as number;
 	return n;
 }
 

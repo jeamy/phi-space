@@ -15,7 +15,7 @@ const LEA = { actorKind: "user" as const, actorId: "lea" };
 const put = (sp: PhiSpaces, ...entries: ReturnType<typeof node>[]) => Promise.all(entries.map((e) => sp.write(e, null, FOREVER)));
 
 test("provisioned rows evaluate as the plan says, and tenants stay apart", async () => {
-	const s = await FilesService.open({ dataDir: null, stateDir: null });
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
 	try {
 		const acme = await s.createTenant("acme", ADMIN);
 		const globex = await s.createTenant("globex", { ...ADMIN, actorId: "max" });
@@ -45,8 +45,8 @@ test("provisioned rows evaluate as the plan says, and tenants stay apart", async
 });
 
 test("quotas refuse with capacityExceeded and leave admission open", async () => {
-	const limits = { maxActors: 3, maxWorkspaces: 3, maxNodes: 5, maxRelations: 6, maxGroups: 1, maxDirEntries: 2, maxGrantsPerTarget: 2, maxContentBytes: 10, maxTenantBytes: 4000 };
-	const s = await FilesService.open({ dataDir: null, stateDir: null, limits });
+	const limits = { maxActors: 3, maxWorkspaces: 3, maxNodes: 5, maxRelations: 6, maxGroups: 1, maxDirEntries: 2, maxGrantsPerTarget: 2, maxContentBytes: 10, maxFileBytes: 10, maxTenantBytes: 4000 };
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null, limits });
 	try {
 		const r = await s.createTenant("acme", ADMIN);
 		assert.ok(r.status === "created");
@@ -70,7 +70,8 @@ test("quotas refuse with capacityExceeded and leave admission open", async () =>
 			assert.ok(stored > 0);
 			await checkQuotas(sp, L, { storedBytes: 4000 - stored }, 0);
 			await assert.rejects(checkQuotas(sp, L, { storedBytes: 4001 - stored }, 0), CapacityExceeded, "exactly at the stored-byte limit and one past it");
-			await put(sp, content("f", 1, "héllo"));
+			await put(sp, content("f", 1, { blobId: "b".repeat(22), size: 6, keyGeneration: 1 }));
+			await put(sp, content("g", 3, { blobId: "c".repeat(22), size: 0, keyGeneration: 1 }));
 			assert.equal(await sumContentBytes(sp), 6);
 		});
 		assert.equal(s.admission.open, true);

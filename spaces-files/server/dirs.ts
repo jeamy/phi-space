@@ -1,5 +1,6 @@
-// Directories of the service: the data directory and the deployment-state directory are readable only by the service
-// account (docs/zanzibar-agent-filesystem-plan.en.md, section 2), and they never overlap (section 6.6).
+// Directories of the service: the data directory, the blob directory and the deployment-state directory are readable
+// only by the service account (docs/zanzibar-agent-filesystem-plan.en.md, sections 2 and 3), and no two of them overlap
+// (sections 3 and 6.6).
 import { chmod, mkdir, stat } from "node:fs/promises";
 import { relative, resolve, isAbsolute } from "node:path";
 
@@ -13,9 +14,13 @@ export async function prepareDataDir(dir: string): Promise<void> {
 	await chmod(dir, 0o700);
 }
 
-/** Refuses a data and a state directory that are the same or nested: a data backup must never carry the state. */
-export function assertSeparateDirs(dataDir: string, stateDir: string): void {
-	const a = resolve(dataDir), b = resolve(stateDir);
+/** Refuses directories that are the same or nested: a data backup must never carry the state (and its content keys),
+ *  and the blob sweep must never see the store's files. Pass the directories as name -> path; null entries are skipped. */
+export function assertSeparateDirs(dirs: Record<string, string | null>): void {
 	const inside = (x: string, y: string) => { const r = relative(y, x); return r === "" || (!r.startsWith("..") && !isAbsolute(r)); };
-	if (inside(a, b) || inside(b, a)) throw new Error(`the data directory ${a} and the deployment-state directory ${b} must not overlap`);
+	const list = Object.entries(dirs).filter((e): e is [string, string] => e[1] !== null).map(([n, d]) => [n, resolve(d)] as const);
+	for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+		const [an, a] = list[i], [bn, b] = list[j];
+		if (inside(a, b) || inside(b, a)) throw new Error(`the ${an} directory ${a} and the ${bn} directory ${b} must not overlap`);
+	}
 }

@@ -1,10 +1,11 @@
 // Byte and cardinality limits of the filesystem (docs/zanzibar-agent-filesystem-plan.en.md, sections 3 to 5), checked
 // against the Space's own limits when the service starts, and the exact encoded sizes checked before each write.
 //
-// The Space measures an entry as the UTF-8 bytes of its fields' JSON (`jsonBytes`): text is not normalized, so a
-// control character costs up to six bytes (`\u0007`), a quote or backslash two, everything else its UTF-8 bytes. The
-// configured limits therefore have to fit in their worst case, and the exact size of each row is checked before it
-// is written, so that an overrun is `capacityExceeded` and the Space's own size error never reaches a caller.
+// The Space measures an entry as the UTF-8 bytes of its fields' JSON (`jsonBytes`): a name is not normalized beyond
+// NFC, so a quote or backslash costs two bytes, everything else its UTF-8 bytes. The configured limits therefore have
+// to fit in their worst case, and the exact size of each row is checked before it is written, so that an overrun is
+// `capacityExceeded` and the Space's own size error never reaches a caller. File contents are not rows: they are
+// sealed blobs (blobs.ts), bounded by `maxFileBytes` and the tenant's content quota, not by the Space's limits.
 import type { Limits } from "phi-spaces/core";
 import { CapacityExceeded } from "./schema.ts";
 
@@ -15,8 +16,8 @@ export type FsLimits = {
 	maxPathDepth: number;
 	/** A path, in UTF-8 bytes. */
 	maxPathBytes: number;
-	/** A file's text, in UTF-8 bytes. */
-	maxTextBytes: number;
+	/** One file's contents, in bytes. A read holds them in memory inside the tenant queue (section 6.1). */
+	maxFileBytes: number;
 	/** Children of one directory, and so entries of one `list` reply. */
 	maxDirEntries: number;
 	/** Direct grants on one target, and so tuples of one `listGrants` reply. */
@@ -29,7 +30,7 @@ export type FsLimits = {
 	maxWorkspaces: number;
 	maxNodes: number;
 	maxRelations: number;
-	/** The text bytes of all files. */
+	/** The bytes of all files' current versions (the sum of the content rows' `size`). */
 	maxContentBytes: number;
 	/**
 	 * The stored bytes of all rows (the Space's own measure: the JSON of each entry's fields), checked exactly before each
@@ -43,15 +44,12 @@ export type FsLimits = {
 	maxWorkPerDecision: number;
 };
 
-/**
- * Pilot defaults. Text is 10 KiB because the Space's default entry limit is 64 KiB of JSON and a text of control
- * characters encodes to six times its bytes; a larger text needs a larger `maxEntryBytes` on the tenant Spaces.
- */
+/** Pilot defaults. */
 export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxNameBytes: 255,
 	maxPathDepth: 32,
 	maxPathBytes: 4096,
-	maxTextBytes: 10 * 1024,
+	maxFileBytes: 16 * 1024 * 1024,
 	maxDirEntries: 256,
 	maxGrantsPerTarget: 64,
 	maxReplyBytes: 512 * 1024,
@@ -60,7 +58,7 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxWorkspaces: 500,
 	maxNodes: 20_000,
 	maxRelations: 20_000,
-	maxContentBytes: 32 * 1024 * 1024,
+	maxContentBytes: 1024 * 1024 * 1024,
 	maxTenantBytes: 56 * 1024 * 1024,
 	auditReserveBytes: 4 * 1024 * 1024,
 	maxWorkPerDecision: 512,
@@ -78,12 +76,10 @@ export const encodedBytes = (v: unknown): number => Buffer.byteLength(JSON.strin
 /** Refuses a configuration whose worst case does not fit the Space's limits (plan section 5, paths and text). */
 export function assertLimitsFit(fs: FsLimits, space: Pick<Limits, "maxEntryBytes" | "maxCommitBytes" | "maxSpaceBytes">): void {
 	const fail = (what: string, need: number, have: number) => { throw new Error(`limits: ${what} needs ${need} bytes in the worst case, the limit is ${have}`); };
-	const content = worstJsonString(fs.maxTextBytes) + ROW_OVERHEAD;
-	if (content > space.maxEntryBytes) fail("an FsContent row", content, space.maxEntryBytes);
 	const node = worstJsonString(fs.maxNameBytes) + ROW_OVERHEAD;
 	if (node > space.maxEntryBytes) fail("an FsNode row", node, space.maxEntryBytes);
-	// a save replaces the content row and adds a receipt and an audit row in one commit
-	const save = 2 * content + 4 * ROW_OVERHEAD;
+	// a creating save adds a node, a content row, a receipt and an audit row in one commit (an audit row names IDs only)
+	const save = node + 4 * ROW_OVERHEAD;
 	if (save > space.maxCommitBytes) fail("a save", save, space.maxCommitBytes);
 	const list = fs.maxDirEntries * (worstJsonString(fs.maxNameBytes) + ID_JSON + 64);
 	if (list > fs.maxReplyBytes) fail("a full directory listing", list, fs.maxReplyBytes);
@@ -92,7 +88,7 @@ export function assertLimitsFit(fs: FsLimits, space: Pick<Limits, "maxEntryBytes
 	if (fs.maxPathBytes < fs.maxNameBytes) fail("a path of one segment", fs.maxNameBytes, fs.maxPathBytes);
 	const stored = fs.maxTenantBytes + fs.auditReserveBytes;
 	if (stored > space.maxSpaceBytes) fail("the tenant's rows with the audit reserve", stored, space.maxSpaceBytes);
-	if (fs.maxContentBytes > fs.maxTenantBytes) fail("the content quota inside the tenant's rows", fs.maxContentBytes, fs.maxTenantBytes);
+	if (fs.maxFileBytes > fs.maxContentBytes) fail("one file inside the content quota", fs.maxFileBytes, fs.maxContentBytes);
 }
 
 /** The exact size of a row before it is written: an overrun is `capacityExceeded`, never the Space's own error. */

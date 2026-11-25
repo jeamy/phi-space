@@ -14,7 +14,7 @@ const LEA = { actorKind: "user" as const, actorId: "lea" };
 const raw = (s: FilesService, tenantId: string) => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias(tenantId) });
 
 async function tenant(...ids: string[]): Promise<FilesService> {
-	const s = await FilesService.open({ dataDir: null, stateDir: null });
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
 	for (const id of ids) await s.createTenant(id, ADMIN);
 	return s;
 }
@@ -89,7 +89,7 @@ test("only an enabled tenant administrator registers, and input is checked first
 });
 
 test("registration respects the quotas and creates nothing past them", async () => {
-	const s = await FilesService.open({ dataDir: null, stateDir: null, limits: { maxActors: 2, maxNameBytes: 8 } });
+	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null, limits: { maxActors: 2, maxNameBytes: 8 } });
 	try {
 		await s.createTenant("acme", ADMIN);
 		await assert.rejects(s.registerActor("acme", LEA, "user", "max", "123456789", { issuer: "i", subject: "max" }), (e: Error & { code?: string }) => e.code === "capacityExceeded", "the configured name limit");

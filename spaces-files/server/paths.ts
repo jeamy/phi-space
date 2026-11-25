@@ -1,7 +1,7 @@
-// Canonical paths and file text (docs/zanzibar-agent-filesystem-plan.en.md, section 5, paths and text): one parser
-// for every adapter. A path is relative to its workspace; each segment is a canonical name (NFC, case-sensitive); a
-// lone dot means the workspace root, and only the operations that may address the root accept it. Text is kept
-// exactly as given: well-formed Unicode, never normalized, measured in UTF-8 bytes.
+// Canonical paths (docs/zanzibar-agent-filesystem-plan.en.md, section 5, paths and contents): one parser for every
+// adapter. A path is relative to its workspace; each segment is a canonical name (NFC, case-sensitive); a lone dot
+// means the workspace root, and only the operations that may address the root accept it. File contents are bytes
+// kept exactly as given and are checked by `checkContents`.
 import { DEFAULT_FS_LIMITS, type FsLimits } from "./limits.ts";
 import { CapacityExceeded, InvalidInput, canonicalName } from "./schema.ts";
 
@@ -33,11 +33,10 @@ export function parsePath(path: unknown, operation: string, limits: Pick<FsLimit
 /** The canonical spelling of parsed segments: what request digests and audit refer to. */
 export const pathString = (segments: readonly string[]): string => segments.length === 0 ? "." : segments.join("/");
 
-/** File text as stored: exactly the given scalar values, BOM and controls included; bounded in UTF-8 bytes. */
-export function checkText(text: unknown, limits: Pick<FsLimits, "maxTextBytes"> = DEFAULT_FS_LIMITS): string {
-	if (typeof text !== "string") throw new InvalidInput("text must be a string");
-	if (!text.isWellFormed()) throw new InvalidInput("text must be well-formed Unicode (no unpaired surrogates)");
-	const n = Buffer.byteLength(text, "utf8");
-	if (n > limits.maxTextBytes) throw new CapacityExceeded(`text of ${n} bytes exceeds ${limits.maxTextBytes}`);
-	return text;
+
+/** File contents as stored: the exact bytes, never decoded or normalized; bounded by `maxFileBytes`. */
+export function checkContents(bytes: unknown, limits: Pick<FsLimits, "maxFileBytes"> = DEFAULT_FS_LIMITS): Uint8Array {
+	if (!(bytes instanceof Uint8Array)) throw new InvalidInput("file contents must be bytes");
+	if (bytes.length > limits.maxFileBytes) throw new CapacityExceeded(`a file of ${bytes.length} bytes exceeds ${limits.maxFileBytes}`);
+	return bytes;
 }
