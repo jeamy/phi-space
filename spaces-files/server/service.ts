@@ -2,6 +2,7 @@
 // process opens phi-spaces' own SQLite store, which holds an exclusive owner lock beside the file (a second process is
 // refused, a crash releases it), runs the reaper and gives each tenant a private named Space reached only through its
 // queue. Nothing here serves a Space to anyone: the tenant Spaces are never exposed.
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
@@ -27,6 +28,28 @@ export { prepareDataDir } from "./dirs.ts";
 
 /** The store file inside the data directory. */
 export const STORE_FILE = "files.sqlite";
+/** Beside the data: the deployment state's ID and the highest sequence number it reached (section 6.6). */
+export const STATE_MARKER = "state-marker.json";
+
+/** The deployment state is missing, older than the data has seen, or another deployment's: the service refuses to
+ *  start until the operator restores it from its own backup (`restore-state`, section 6.6). */
+export class StateLost extends Error {
+	constructor(message: string) { super(message); this.name = "StateLost"; }
+}
+
+type Marker = { stateId: string; seq: number };
+function readMarker(path: string): Marker | null {
+	if (!existsSync(path)) return null;
+	const m = JSON.parse(readFileSync(path, "utf8")) as Marker;
+	if (typeof m.stateId !== "string" || !Number.isSafeInteger(m.seq)) throw new StateLost(`${path} is malformed`);
+	return m;
+}
+function writeMarker(path: string, m: Marker): void {
+	const tmp = `${path}.tmp`;
+	const fd = openSync(tmp, "w", 0o600);
+	try { writeSync(fd, JSON.stringify(m)); fsyncSync(fd); } finally { closeSync(fd); }
+	renameSync(tmp, path);
+}
 
 /** A tenant ID: 1 to 62 of a-z 0-9 _ - starting with a letter or digit, so that its Space alias `t-<id>` is valid. */
 const TENANT_ID = /^[a-z0-9][a-z0-9_-]{0,61}$/;
@@ -71,6 +94,9 @@ export type FilesServiceOptions = AdmissionOptions & {
 	limits?: Partial<FsLimits>;
 	/** The lease of a save's transaction: after a crash, its reservation lapses this long after it began (default 10 s). */
 	saveTxnLeaseMs?: number;
+	/** `restore-state` only: the deployment state was just installed from its backup and is older than the data's
+	 *  marker; it is opened anyway and brought forward (`#bringStateForward`). */
+	stateRestore?: boolean;
 	/** Tests only: called at the named points of a save (section 6.3), to inject a failure or a crash there. */
 	faultHook?: (point: FaultPoint) => void | Promise<void>;
 };
@@ -132,8 +158,18 @@ export class FilesService {
 		assertSeparateDirs({ data: o.dataDir, "deployment-state": o.stateDir, blob: blobDir });
 		// the tenant Spaces run with the default Space limits
 		assertLimitsFit({ ...DEFAULT_FS_LIMITS, ...o.limits }, DEFAULT_LIMITS);
-		// the deployment state first: it decides about sessions and keys before any tenant is served
-		const state = await DeploymentState.open({ clock: o.now, ...o.state, dir: o.stateDir });
+		// the deployment state first: it decides about sessions and keys before any tenant is served. Data that exists
+		// without its state would get fresh content keys and lose every file: refused (section 6.6, loss)
+		const markerPath = o.dataDir === null || o.stateDir === null ? null : join(o.dataDir, STATE_MARKER);
+		if (markerPath !== null && (existsSync(join(o.dataDir!, STORE_FILE)) || existsSync(markerPath)) && !DeploymentState.existsIn(o.stateDir!))
+			throw new StateLost(`the data in ${o.dataDir} has no deployment state in ${o.stateDir}: restore the state from its backup (operator restore-state)`);
+		const marker = markerPath === null ? null : readMarker(markerPath);
+		const mirror = (stateId: string, seq: number) => { if (markerPath !== null && existsSync(o.dataDir!)) writeMarker(markerPath, { stateId, seq }); };
+		const state = await DeploymentState.open({ clock: o.now, ...o.state, dir: o.stateDir, onSeq: mirror });
+		try {
+			if (marker !== null && marker.stateId !== state.stateId()) throw new StateLost(`the deployment state in ${o.stateDir} belongs to another deployment than the data in ${o.dataDir}`);
+			if (marker !== null && state.seq() < marker.seq && !o.stateRestore) throw new StateLost(`the deployment state in ${o.stateDir} is older than the data has seen (sequence ${state.seq()} < ${marker.seq}): restore it from its newest backup (operator restore-state)`);
+		} catch (e) { state.close(); throw e; }
 		let host: OwnStoreHost | undefined, storePath: string | null = null, service: FilesService;
 		try {
 			const blobs = await BlobStore.open(blobDir, state);
@@ -147,8 +183,12 @@ export class FilesService {
 			const stop = await startService(host, ctx, { now: o.now, watchDebounceMs: 50 });
 			service = new FilesService(host, state, blobs, stop, storePath, o);
 		} catch (e) { await host?.close(ctx); state.close(); throw e; }
-		// the login index is a lookup aid derived from the FsActor rows: rebuilt on every start (section 6.6)
-		try { await service.rebuildLoginIndex(); } catch (e) { await service.close(); throw e; }
+		try {
+			if (o.stateRestore) await service.#bringStateForward(marker?.seq ?? 0);
+			if (markerPath !== null && (marker === null || state.seq() > marker.seq)) writeMarker(markerPath, { stateId: state.stateId(), seq: state.seq() });
+			// the login index is a lookup aid derived from the FsActor rows: rebuilt on every start (section 6.6)
+			await service.rebuildLoginIndex();
+		} catch (e) { await service.close(); throw e; }
 		// a mode transition that a crash interrupted completes before anything is served (section 6.1)
 		if (state.pendingMode() !== null) state.completeModeTransition();
 		// a tenant closed for a pending security action stays closed across restarts (section 6.6); the index above is
@@ -1008,6 +1048,27 @@ export class FilesService {
 		this.admission.suspend(tenantId, "securityReserve");
 		console.error(`[files] tenant ${tenantId} closed: a security action does not fit its reserve (${cause.message})`);
 		throw new Unavailable(`tenant ${tenantId} is closed until the operator completes a pending security action`);
+	}
+
+	/**
+	 * After the deployment state came back from its backup (section 6.6, loss): the time floor rises to the newest time
+	 * any tenant recorded (audit rows, receipts), the session epoch advances (every session ends), a new signing
+	 * generation retires all earlier ones (every operation ID ends; content keys stay), the sequence number goes beyond
+	 * the data's mirror, and the service waits in maintenance mode for the reconciliation of every tenant.
+	 */
+	async #bringStateForward(markerSeq: number): Promise<void> {
+		let newest = 0;
+		for (const t of await this.tenants()) await this.#inSpace(t, async (space) => {
+			for (const r of await space.readAll({ type: schema.T.audit })) newest = Math.max(newest, Number(r.fields.time) || 0, Number(r.fields.lastTime) || 0);
+			for (const r of await space.readAll({ type: schema.T.receipt })) newest = Math.max(newest, (Number(r.fields.expiry) || 0) - this.limits.retryWindowMs);
+		});
+		this.state.commitFloor(newest);
+		this.state.acceptClock();
+		this.state.advanceEpoch();
+		this.state.rotateKeyRetiringAll();
+		this.state.raiseSeq(markerSeq + 1);
+		this.state.beginModeTransition("maintenance");
+		this.state.completeModeTransition();
 	}
 
 	/** The operator reopens a tenant closed for its security reserve once the pending action has durably succeeded

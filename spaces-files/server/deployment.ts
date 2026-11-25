@@ -7,7 +7,7 @@
 // file, `content-keys.json`: a restore retires signing keys but never a content key, since that would make every blob
 // it sealed unreadable, and losing them loses every file content.
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, statSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { prepareDataDir } from "./dirs.ts";
@@ -40,12 +40,15 @@ export type DeploymentOptions = {
 	/** Session lifetimes. */
 	sessionIdleMs?: number;
 	sessionAbsoluteMs?: number;
+	/** Called after every change that raises the state's sequence number (keys, epoch), with the new number: the
+	 *  service mirrors it beside the data, so a lost or older state is refused on the next start. */
+	onSeq?: (stateId: string, seq: number) => void;
 };
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS key_generations (generation INTEGER PRIMARY KEY, created_at INTEGER NOT NULL, valid_until INTEGER);
-CREATE TABLE IF NOT EXISTS content_key_generations (generation INTEGER PRIMARY KEY, created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS content_key_generations (generation INTEGER PRIMARY KEY, created_at INTEGER NOT NULL, created_seq INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS sessions (handle_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, actor_kind TEXT NOT NULL, actor_id TEXT NOT NULL,
 	epoch INTEGER NOT NULL, created_at INTEGER NOT NULL, idle_until INTEGER NOT NULL, expires_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS closed_tenants (tenant_id TEXT PRIMARY KEY, reason TEXT NOT NULL, action TEXT NOT NULL, closed_at INTEGER NOT NULL);
@@ -67,6 +70,9 @@ export class DeploymentState {
 	readonly #absoluteMs: number;
 	#highWater: number;
 	#closed = false;
+	readonly #onSeq?: (stateId: string, seq: number) => void;
+	/** True when this open created the state: a deployment whose data already exists must never get one this way. */
+	fresh = false;
 
 	private constructor(db: DatabaseSync, lock: DatabaseSync | null, dir: string | null, o: DeploymentOptions) {
 		this.#db = db;
@@ -78,7 +84,11 @@ export class DeploymentState {
 		this.#idleMs = o.sessionIdleMs ?? 3600_000;
 		this.#absoluteMs = o.sessionAbsoluteMs ?? 12 * 3600_000;
 		this.#highWater = 0;
+		this.#onSeq = o.onSeq;
 	}
+
+	/** Whether a state directory holds a deployment state (checked before opening, so that a lost one is not recreated). */
+	static existsIn(dir: string): boolean { return existsSync(join(dir, STATE_FILE)); }
 
 	static async open(o: DeploymentOptions): Promise<DeploymentState> {
 		if (o.dir === null) {
@@ -102,8 +112,13 @@ export class DeploymentState {
 	}
 
 	#init(): void {
+		this.fresh = this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get() === undefined;
 		this.#db.exec(SCHEMA);
+		// a state from before the sequence number: its content keys count as created before any backup
+		if (!(this.#db.prepare("PRAGMA table_info(content_key_generations)").all() as Array<{ name: string }>).some((c) => c.name === "created_seq"))
+			this.#db.exec("ALTER TABLE content_key_generations ADD COLUMN created_seq INTEGER NOT NULL DEFAULT 0");
 		this.#tx(() => {
+			if (this.#text("state_id") === null) { this.#setText("state_id", randomBytes(16).toString("hex")); this.#setMeta("state_seq", 0); this.#setMeta("backed_up_seq", 0); }
 			const put = this.#db.prepare("INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)");
 			put.run("format_version", "1"); put.run("session_epoch", "1"); put.run("time_floor", "0");
 		});
@@ -141,6 +156,48 @@ export class DeploymentState {
 
 	timeFloor(): number { return this.#meta("time_floor"); }
 
+	// ---------------------------------------------------------------- identity, sequence, backup (section 6.6)
+
+	/** Random at creation, kept by a backup and its restore: a state from another deployment is never taken. */
+	stateId(): string { return this.#text("state_id")!; }
+	/** Raised by every change a restore must not roll back unnoticed (keys, epoch); mirrored beside the data. */
+	seq(): number { return this.#meta("state_seq"); }
+	/** The sequence number of the newest backup taken. */
+	backedUpSeq(): number { return this.#meta("backed_up_seq"); }
+
+	/** Inside a transaction: the next sequence number, announced once the transaction has committed. */
+	#bump(): number { const next = this.seq() + 1; this.#setMeta("state_seq", next); this.#announce = next; return next; }
+	#announce: number | null = null;
+
+	/** Raises the sequence number to at least `n` (a restored state goes beyond the mirror it is checked against). */
+	raiseSeq(n: number): void {
+		if (n <= this.seq()) return;
+		this.#tx(() => { this.#setMeta("state_seq", n); this.#announce = n; });
+	}
+
+	/**
+	 * A consistent copy of the state for its backup: the database (VACUUM INTO, one read transaction) and both key
+	 * files, as archive entries; `markBackedUp(seq)` records it once the archive is durable.
+	 */
+	snapshot(): { seq: number; entries: Array<{ name: string; bytes: Buffer }> } {
+		if (this.#keysPath === null) throw new StateUnavailable("an in-memory deployment state has no backup");
+		const tmp = join(dirname(this.#keysPath), "backup.tmp.sqlite");
+		rmSync(tmp, { force: true });
+		const seq = this.seq();
+		try {
+			this.#db.prepare("VACUUM INTO ?").run(tmp);
+			return { seq, entries: [
+				{ name: STATE_FILE, bytes: readFileSync(tmp) },
+				{ name: KEYS_FILE, bytes: readFileSync(this.#keysPath) },
+				{ name: CONTENT_KEYS_FILE, bytes: readFileSync(this.#contentKeysPath!) },
+			] };
+		} finally { rmSync(tmp, { force: true }); }
+	}
+
+	markBackedUp(seq: number): void {
+		if (seq > this.backedUpSeq()) this.#tx(() => this.#setMeta("backed_up_seq", seq));
+	}
+
 	// ---------------------------------------------------------------- session epoch
 
 	epoch(): number { return this.#meta("session_epoch"); }
@@ -151,6 +208,7 @@ export class DeploymentState {
 		this.#tx(() => {
 			this.#setMeta("session_epoch", next);
 			this.#db.prepare("DELETE FROM sessions WHERE epoch < ?").run(next);
+			this.#bump();
 		});
 		return next;
 	}
@@ -184,7 +242,7 @@ export class DeploymentState {
 		const now = this.now();
 		this.commitFloor(now);
 		const g = this.#installGeneration(now);
-		this.#tx(() => this.#db.prepare("UPDATE key_generations SET valid_until = ? WHERE generation < ? AND (valid_until IS NULL OR valid_until > ?)").run(now, g.generation, now));
+		this.#tx(() => { this.#db.prepare("UPDATE key_generations SET valid_until = ? WHERE generation < ? AND (valid_until IS NULL OR valid_until > ?)").run(now, g.generation, now); this.#bump(); });
 		return g;
 	}
 
@@ -198,6 +256,7 @@ export class DeploymentState {
 		this.#tx(() => {
 			if (previousValidUntil !== null) this.#db.prepare("UPDATE key_generations SET valid_until = ? WHERE valid_until IS NULL").run(previousValidUntil);
 			this.#db.prepare("INSERT INTO key_generations (generation, created_at, valid_until) VALUES (?, ?, NULL)").run(generation, now);
+			this.#bump();
 		});
 		return { generation, secret, createdAt: now, validUntil: null };
 	}
@@ -210,11 +269,18 @@ export class DeploymentState {
 
 	// ---------------------------------------------------------------- content keys (section 3, *Contents*)
 
-	/** The generation new blobs are sealed with: the newest one. */
+	/**
+	 * The generation new blobs are sealed with: the newest one that a state backup already holds (the first one always),
+	 * so that losing the state after a rotation never loses a key that sealed a blob.
+	 */
 	currentContentKey(): { generation: number; secret: Buffer } {
-		const generation = Math.max(...this.#contentKeys.keys());
-		return { generation, secret: this.#contentKeys.get(generation)! };
+		const backed = this.backedUpSeq();
+		const row = this.#db.prepare("SELECT generation FROM content_key_generations WHERE created_seq <= ? OR generation = (SELECT MIN(generation) FROM content_key_generations) ORDER BY generation DESC LIMIT 1").get(backed) as { generation: number };
+		return { generation: row.generation, secret: this.#contentKeys.get(row.generation)! };
 	}
+
+	/** The newest content-key generation, backed up or not. */
+	newestContentKey(): number { return Math.max(...this.#contentKeys.keys()); }
 
 	/** Every generation stays readable: a content key is never retired, neither by rotation nor by a restore. */
 	contentKeyFor(generation: number): Buffer | undefined { return this.#contentKeys.get(generation); }
@@ -224,7 +290,7 @@ export class DeploymentState {
 		const generation = Math.max(0, ...this.#contentKeys.keys()) + 1;
 		this.#contentKeys.set(generation, randomBytes(32));
 		saveKeyFile(this.#contentKeysPath, this.#contentKeys);
-		this.#tx(() => this.#db.prepare("INSERT INTO content_key_generations (generation, created_at) VALUES (?, ?)").run(generation, this.#highWater || this.#clock()));
+		this.#tx(() => { const seq = this.#bump(); this.#db.prepare("INSERT INTO content_key_generations (generation, created_at, created_seq) VALUES (?, ?, ?)").run(generation, this.#highWater || this.#clock(), seq); });
 		return generation;
 	}
 
@@ -352,7 +418,10 @@ export class DeploymentState {
 	#tx(f: () => void): void {
 		this.#db.exec("BEGIN IMMEDIATE");
 		try { f(); this.#db.exec("COMMIT"); }
-		catch (e) { this.#db.exec("ROLLBACK"); throw e; }
+		catch (e) { this.#db.exec("ROLLBACK"); this.#announce = null; throw e; }
+		const seq = this.#announce;
+		this.#announce = null;
+		if (seq !== null) this.#onSeq?.(this.stateId(), seq);
 	}
 }
 

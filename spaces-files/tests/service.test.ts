@@ -75,8 +75,8 @@ test("one process owns the store; a killed owner releases it and the data surviv
 		assert.equal(refused.code, 1);
 		// the deployment state is opened first, so its lock refuses the second process before the store's would
 		assert.match(refused.err, /another process owns the deployment state/);
-		// with a deployment state of its own, the store's owner lock refuses it
-		await assert.rejects(FilesService.open({ dataDir: dir, stateDir: join(dir, "..", "state-2"), blobDir: join(dir, "..", "blobs") }), /another process owns the store/);
+		// with another deployment state, the data's state marker refuses it before the store's owner lock would
+		await assert.rejects(FilesService.open({ dataDir: dir, stateDir: join(dir, "..", "state-2"), blobDir: join(dir, "..", "blobs") }), /no deployment state/);
 
 		first.child.kill("SIGKILL");
 		assert.equal((await first.exited).signal, "SIGKILL");

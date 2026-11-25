@@ -119,6 +119,8 @@ test("content keys: rotation keeps old blobs readable, a restore rotation never 
 		let blobs = await BlobStore.open(blobDir, state);
 		const first = await blobs.put(owner(), Buffer.from("v1"));
 		assert.equal(state.rotateContentKey(), 2);
+		assert.equal(state.currentContentKey().generation, 1, "a new generation seals nothing before a state backup holds it");
+		state.markBackedUp(state.seq());
 		const second = await blobs.put(owner({ version: 2 }), Buffer.from("v2"));
 		assert.equal(second.keyGeneration, 2);
 		// a restore retires every signing generation, never a content key
