@@ -2,7 +2,8 @@
 // process opens phi-spaces' own SQLite store, which holds an exclusive owner lock beside the file (a second process is
 // refused, a crash releases it), runs the reaper and gives each tenant a private named Space reached only through its
 // queue. Nothing here serves a Space to anyone: the tenant Spaces are never exposed.
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, statSync, writeSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
@@ -10,6 +11,7 @@ import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 import type { EntryDraft } from "phi-spaces/core";
 import { DEFAULT_LIMITS, FOREVER, UniqueConflict } from "phi-spaces/core";
+import { Metrics } from "./metrics.ts";
 import { assertLimitsFit, assertRowFits, DEFAULT_FS_LIMITS, encodedBytes, type FsLimits } from "./limits.ts";
 import { checkQuotas, sumContentBytes, type Demand } from "./quotas.ts";
 import { Admission, Unavailable, type AdmissionOptions } from "./admission.ts";
@@ -126,6 +128,8 @@ export class FilesService {
 	readonly state: DeploymentState;
 	readonly blobs: BlobStore;
 	readonly limits: FsLimits;
+	/** Process-wide counters: queue wait and run time, adapter calls, evaluator work (server/metrics.ts). */
+	readonly metrics = new Metrics();
 	readonly #stopService: () => Promise<void>;
 	readonly #now: () => number;
 	/** Tenants whose FsMeta this process has seen committed; FsMeta is never removed while the store is open. */
@@ -147,7 +151,7 @@ export class FilesService {
 		this.blobs = blobs;
 		this.storePath = storePath;
 		this.#stopService = stopService;
-		this.admission = new Admission(o);
+		this.admission = new Admission({ ...o, observe: (w, r) => { this.metrics.queueWait.add(w); this.metrics.queueRun.add(r); } });
 		this.#now = o.now ?? Date.now;
 		this.limits = { ...DEFAULT_FS_LIMITS, ...o.limits };
 		this.#fault = o.faultHook ?? (() => {});
@@ -642,6 +646,41 @@ export class FilesService {
 		return { receipts, audit, blobs };
 	}
 
+	/** The store file's size, the part of it free for reuse (what `compact` returns), and its WAL; null in memory. */
+	storeSizes(): { fileBytes: number; freeBytes: number; walBytes: number } | null {
+		if (this.storePath === null || !existsSync(this.storePath)) return null;
+		const db = new DatabaseSync(this.storePath, { readOnly: true });
+		try {
+			const one = (pragma: string) => Object.values(db.prepare(`PRAGMA ${pragma}`).get() as Record<string, number>)[0];
+			const pageSize = one("page_size");
+			const wal = `${this.storePath}-wal`;
+			return { fileBytes: one("page_count") * pageSize, freeBytes: one("freelist_count") * pageSize, walBytes: existsSync(wal) ? statSync(wal).size : 0 };
+		} finally { db.close(); }
+	}
+
+	/**
+	 * Health for the operator (phase 5): `ok`, `maintenance` (the mode, or an open restore), or `degraded` (a closed
+	 * tenant, an unknown commit outcome, closed admission in normal mode); with the restore's step, the deployment
+	 * state's backup lag (a key or epoch change not yet in a state backup) and the store's live and free sizes. Names
+	 * tenants only where one is closed; no actor, path or content.
+	 */
+	async health(): Promise<Record<string, unknown>> {
+		const journal = this.state.restoreJournal();
+		const closed = this.state.closedTenants();
+		const mode = this.state.mode();
+		const degraded = closed.length > 0 || this.#unresolved.length > 0 || (mode === "normal" && !this.admission.open);
+		return {
+			status: degraded ? "degraded" : mode === "maintenance" || journal !== null ? "maintenance" : "ok",
+			mode, admissionOpen: this.admission.open,
+			restore: journal === null ? null : { step: journal.step, epoch: this.state.restoreEpoch() },
+			tenants: (await this.tenants()).length,
+			closedTenants: closed.map((c) => ({ tenantId: c.tenantId, reason: c.reason })),
+			unresolvedOutcomes: this.#unresolved.length,
+			state: { epoch: this.state.epoch(), seq: this.state.seq(), backedUpSeq: this.state.backedUpSeq(), stateBackupDue: this.state.seq() > this.state.backedUpSeq() },
+			store: this.storeSizes(),
+		};
+	}
+
 	/** Gives the store's free pages back (`OwnStoreHost.compact`, section 6.1), with admission drained around it. */
 	async compact(): Promise<{ freedPages: number; converted: boolean; error?: string } | null> {
 		if (this.#unresolved.length) throw new Unavailable("a commit outcome is unknown: resolve it first");
@@ -650,10 +689,6 @@ export class FilesService {
 		finally { this.admission.reopen(); }
 	}
 
-	/**
-	 * Signs `count` operation IDs for the session's actor (section 5, `issueOperationIds`): a valid session suffices, and
-	 * the call writes nothing but the time floor. A count outside 1..maxOperationIdsPerCall is `invalidInput`.
-	 */
 	/** What the browser shows for a session: its tenant, actor and whether it is an enabled tenant administrator.
 	 *  Reads only and audits nothing, so a page may ask on every load. Offered in maintenance mode like
 	 *  `issueOperationIds`. */
@@ -661,6 +696,10 @@ export class FilesService {
 		return this.#session("issue", handle, async (s, space) => ({ tenantId: s.tenantId, actor: { kind: s.actorKind, id: s.actorId }, admin: await this.#isAdmin(s, space), expiresAt: s.expiresAt }));
 	}
 
+	/**
+	 * Signs `count` operation IDs for the session's actor (section 5, `issueOperationIds`): a valid session suffices, and
+	 * the call writes nothing but the time floor. A count outside 1..maxOperationIdsPerCall is `invalidInput`.
+	 */
 	issueOperationIds(handle: unknown, count: unknown): Promise<string[]> {
 		return this.#session("issue", handle, async (s) => issueOperationIds(this.state, s, count, this.limits));
 	}

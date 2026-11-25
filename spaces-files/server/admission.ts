@@ -10,7 +10,7 @@ export class Unavailable extends Error {
 	constructor(message: string, retryAfterMs?: number) { super(message); this.name = "Unavailable"; this.retryAfterMs = retryAfterMs; }
 }
 
-type Pending = { run: () => Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void };
+type Pending = { run: () => Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void; at: number };
 type Queue = { pending: Pending[]; running: boolean };
 
 export type AdmissionOptions = {
@@ -18,6 +18,8 @@ export type AdmissionOptions = {
 	maxQueuedPerTenant?: number;
 	/** The retry delay a refusal suggests. */
 	retryAfterMs?: number;
+	/** Told of every operation that ran: how long it waited in its queue and how long it ran (milliseconds). */
+	observe?: (waitMs: number, runMs: number) => void;
 };
 
 export class Admission {
@@ -25,6 +27,7 @@ export class Admission {
 	readonly #suspended = new Map<string, string>();
 	readonly #maxQueued: number;
 	readonly #retryAfterMs: number;
+	readonly #observe: AdmissionOptions["observe"];
 	#open = true;
 	#started = 0;
 	#drained: Array<() => void> = [];
@@ -32,6 +35,7 @@ export class Admission {
 	constructor(o: AdmissionOptions = {}) {
 		this.#maxQueued = o.maxQueuedPerTenant ?? 64;
 		this.#retryAfterMs = o.retryAfterMs ?? 1000;
+		this.#observe = o.observe;
 		if (!Number.isSafeInteger(this.#maxQueued) || this.#maxQueued < 0) throw new RangeError("maxQueuedPerTenant must be a non-negative integer");
 	}
 
@@ -45,7 +49,7 @@ export class Admission {
 		if (q.running && q.pending.length >= this.#maxQueued) return Promise.reject(new Unavailable(`the queue of tenant ${tenant} is full`, this.#retryAfterMs));
 		const queue = q;
 		return new Promise<T>((resolve, reject) => {
-			queue.pending.push({ run: op, resolve: resolve as (v: unknown) => void, reject });
+			queue.pending.push({ run: op, resolve: resolve as (v: unknown) => void, reject, at: performance.now() });
 			this.#next(tenant, queue);
 		});
 	}
@@ -92,10 +96,12 @@ export class Admission {
 		catch (e) { p.reject(e); this.#next(tenant, q); return; }
 		q.running = true;
 		this.#started++;
+		const start = performance.now();
 		void (async () => {
 			try { p.resolve(await p.run()); }
 			catch (e) { p.reject(e); }
 			finally {
+				this.#observe?.(start - p.at, performance.now() - start);
 				q.running = false;
 				if (--this.#started === 0) for (const r of this.#drained.splice(0)) r();
 				this.#next(tenant, q);

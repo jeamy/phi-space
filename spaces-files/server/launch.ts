@@ -6,6 +6,8 @@
 //   FILES_STATE_DIR=…/state (default: spaces-files/.local/state; the deployment state, never inside the data directory)
 //   FILES_BLOB_DIR=…/blobs  (default: spaces-files/.local/blobs; the sealed file contents, apart from both)
 //   FILES_MEM=1             in memory, throwaway (no operator socket)
+//   FILES_LIMITS=…/limits.json  overrides of the filesystem limits (server/limits.ts), checked on start
+//   FILES_UPKEEP_MS         how often each tenant's upkeep runs (default 600000; 0 turns it off)
 //
 //   FILES_PUBLIC_ORIGIN     the browser's origin (default https://localhost:4200); FILES_HTTP_HOST (default 127.0.0.1)
 //                           and FILES_HTTP_PORT (default: the origin's port) where it listens
@@ -22,6 +24,7 @@ import { ROOT, loadDotEnv } from "./env.ts";
 import { serveHttp, type HttpServer } from "./http.ts";
 import { OidcClient } from "./oidc.ts";
 import { serveOperator } from "./operator.ts";
+import { parseLimits } from "./limits.ts";
 import { FilesService } from "./service.ts";
 
 loadDotEnv();
@@ -48,7 +51,8 @@ process.on("SIGTERM", () => void shutdown());
 
 const notes: string[] = [];
 try {
-	service = await FilesService.open({ dataDir, stateDir, blobDir });
+	const limits = env.FILES_LIMITS ? parseLimits(readFileSync(env.FILES_LIMITS, "utf8"), env.FILES_LIMITS) : undefined;
+	service = await FilesService.open({ dataDir, stateDir, blobDir, limits });
 	if (stateDir) { servers.push(await serveOperator(service, stateDir)); notes.push(`operator ${join(stateDir, "operator.sock")}`); }
 	for (const a of parseAgentSockets(env.FILES_AGENT_SOCKETS ?? "")) { servers.push(await serveAgentSocket(service, a)); notes.push(`agents of ${a.hostPeerId} in ${a.tenantId} at ${a.path}`); }
 	const origin = env.FILES_PUBLIC_ORIGIN || "https://localhost:4200";
@@ -75,6 +79,12 @@ try {
 if (stopping) { await service.close(); process.exit(0); }
 // keep the process (and the owner lock) alive until a signal, also when nothing listens
 setInterval(() => {}, 1 << 30);
+// upkeep (plan section 6.2): expired receipts, audit rows past their age and orphaned blobs, in bounded batches inside
+// each tenant's queue; a busy or closed tenant is simply tried again next time
+const upkeepMs = Number(env.FILES_UPKEEP_MS || 600_000);
+if (upkeepMs > 0) setInterval(() => {
+	void (async () => { for (const t of await service!.tenants()) await service!.maintainTenant(t).catch(() => {}); })().catch(() => {});
+}, upkeepMs).unref();
 for (const n of notes) console.log(`[files] ${n}`);
 // the tests wait for this line
 console.log(`[files] ready (store ${service.storePath ?? "memory"})`);

@@ -7,6 +7,7 @@
 // is decided per workspace: a node is reachable exactly when the actor holds a role on the workspace root; grants
 // below the root only raise viewer to editor or owner and are inert while the root is invisible. Disabled actors hold
 // no rights and their memberships count for nothing. `tenant#admin` gives no file rights.
+import { evaluator } from "./metrics.ts";
 import type { PhiSpaces } from "phi-spaces";
 import { DEFAULT_FS_LIMITS, type FsLimits } from "./limits.ts";
 import {
@@ -41,8 +42,13 @@ export interface PolicyData {
 export class Work {
 	#used = 0;
 	readonly max: number;
-	constructor(max: number) { this.max = max; }
-	spend(n: number): void { this.#used += n; if (this.#used > this.max) throw new CapacityExceeded(`a decision needs more than ${this.max} lookups`); }
+	constructor(max: number) { this.max = max; evaluator.decisions++; }
+	spend(n: number): void {
+		this.#used += n;
+		evaluator.lookups += n;
+		if (this.#used > evaluator.maxPerDecision) evaluator.maxPerDecision = this.#used;
+		if (this.#used > this.max) throw new CapacityExceeded(`a decision needs more than ${this.max} lookups`);
+	}
 	get used(): number { return this.#used; }
 	/** How many rows one more lookup may still return before the budget is gone. */
 	get left(): number { return Math.max(0, this.max - this.#used); }

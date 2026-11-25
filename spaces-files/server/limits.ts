@@ -62,6 +62,24 @@ export type FsLimits = {
 	securityReceiptReserve: number;
 };
 
+/**
+ * The limits a deployment overrides (phase 5, live-data limit configuration): a JSON object of known keys, each a
+ * positive safe integer. Unknown keys and other values are refused, so a typo never silently keeps a default. Whether
+ * the whole set fits the tenant Spaces is checked when the service opens (`assertLimitsFit`).
+ */
+export function parseLimits(text: string, source = "the limits file"): Partial<FsLimits> {
+	let v: unknown;
+	try { v = JSON.parse(text); } catch (e) { throw new Error(`${source} is no JSON: ${(e as Error).message}`); }
+	if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error(`${source} must hold one JSON object`);
+	const out: Record<string, number> = {};
+	for (const [k, x] of Object.entries(v)) {
+		if (!Object.hasOwn(DEFAULT_FS_LIMITS, k)) throw new Error(`${source}: unknown limit ${JSON.stringify(k)}`);
+		if (!Number.isSafeInteger(x) || (x as number) < 1) throw new Error(`${source}: ${k} must be a positive integer`);
+		out[k] = x as number;
+	}
+	return out as Partial<FsLimits>;
+}
+
 /** Pilot defaults. */
 export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxNameBytes: 255,

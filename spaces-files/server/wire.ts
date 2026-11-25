@@ -78,17 +78,27 @@ export const ADMIN_OPS: Record<string, Op> = {
 	listActors: (s, h) => s.listActors(h),
 	listGroups: (s, h) => s.listGroups(h),
 	listGroupMembers: (s, h, a) => s.listGroupMembers(h, a.group) as Promise<Json>,
+	// the maintenance metadata operations (section 5): maintenance mode only, an administrator's, no contents
+	maintenanceList: (s, h, a) => s.maintenanceList(h, a.workspace, a.path) as Promise<Json>,
+	maintenanceListGrants: (s, h, a) => s.maintenanceListGrants(h, a.workspace, a.path) as Promise<Json>,
+	maintenancePutGrant: (s, h, a) => s.maintenancePutGrant(h, a.workspace, a.path, a.action, a.relation, a.subject, a.operationId),
 };
 
 export const isObj = (v: unknown): v is Args => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Runs one operation of `ops` and answers with its reply; never throws. */
 export async function runOp(ops: Record<string, Op>, svc: FilesService, handle: string, op: unknown, args: unknown): Promise<Reply> {
+	const start = performance.now();
+	// the counters name offered operations only, so a caller cannot grow them with names of its own
+	const name = typeof op === "string" && Object.hasOwn(ops, op) ? op : "(unknown)";
+	let r: Reply;
 	try {
-		if (typeof op !== "string" || !Object.hasOwn(ops, op)) throw new BadCall("unknown operation");
+		if (name === "(unknown)") throw new BadCall("unknown operation");
 		if (args !== undefined && !isObj(args)) throw new BadCall("args must be an object");
-		return { ok: true, value: await ops[op](svc, handle, (args ?? {}) as Args) };
-	} catch (e) { return { ok: false, error: wireError(e) }; }
+		r = { ok: true, value: await ops[name](svc, handle, (args ?? {}) as Args) };
+	} catch (e) { r = { ok: false, error: wireError(e) }; }
+	svc.metrics.op(name, performance.now() - start, r.ok ? null : r.error.code);
+	return r;
 }
 
 /** The recovery interface of a restore (section 6.5, step 2): a rostered recoverer's session only, the browser only. */
