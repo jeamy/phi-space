@@ -11,6 +11,7 @@ import { FOREVER } from "phi-spaces/core";
 import { FilesService, InvalidTenant, prepareDataDir, tenantAlias } from "../server/service.ts";
 
 const LAUNCH = join(import.meta.dirname, "..", "server", "launch.ts");
+const ADMIN = { actorId: "lea", homeName: "lea", issuer: "https://id.example", subject: "sub-lea" };
 const scratch = () => mkdtempSync(join(tmpdir(), "spaces-files-"));
 
 test("tenant IDs map to valid Space aliases and nothing else", () => {
@@ -23,7 +24,8 @@ test("tenant Spaces are reserved idempotently and stay apart", async () => {
 	try {
 		const a = await s.reserveTenantSpace("acme");
 		assert.deepEqual(await s.reserveTenantSpace("acme"), a);
-		await s.reserveTenantSpace("globex");
+		await s.createTenant("acme", ADMIN);
+		await s.createTenant("globex", ADMIN);
 		assert.deepEqual(await s.tenants(), ["acme", "globex"]);
 		await s.inTenant("acme", (sp) => sp.write({ type: "Probe", fields: { n: 1 } }, null, FOREVER));
 		assert.equal((await s.inTenant("acme", (sp) => sp.readIfExists({ type: "Probe" }, 0)))?.fields.n, 1);
@@ -81,7 +83,7 @@ test("one process owns the store; a killed owner releases it and the data surviv
 
 		// the store reopens after the crash; write through the service, close cleanly, and find it in a new process's store
 		const s = await FilesService.open({ dataDir: dir, stateDir: join(dir, "..", "state") });
-		await s.reserveTenantSpace("acme");
+		await s.createTenant("acme", ADMIN);
 		await s.inTenant("acme", (sp) => sp.write({ type: "Probe", fields: { n: 7 } }, null, FOREVER));
 		await s.close();
 
