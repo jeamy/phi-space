@@ -37,6 +37,20 @@ export class InvalidInput extends Error {
 	constructor(message: string) { super(message); this.name = "InvalidInput"; }
 }
 
+export class AlreadyExists extends Error {
+	readonly code = "alreadyExists";
+	constructor(message: string) { super(message); this.name = "AlreadyExists"; }
+}
+export class PermissionDenied extends Error {
+	readonly code = "permissionDenied";
+	constructor(message: string) { super(message); this.name = "PermissionDenied"; }
+}
+/** Unknown, disabled or deleted actors fail closed with this (section 2). */
+export class Unauthenticated extends Error {
+	readonly code = "unauthenticated";
+	constructor(message = "unauthenticated") { super(message); this.name = "Unauthenticated"; }
+}
+
 /** Actor IDs and agent IDs: 1 to 128 of A-Z a-z 0-9 _ . : - (the agent frame's rule, section 2). */
 const ACTOR_ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 export function actorId(id: unknown, what = "actor ID"): string {
@@ -61,6 +75,18 @@ export function identityPart(v: unknown, what: string): string {
 	if (typeof v !== "string" || v === "" || v.length > 512 || /\p{Cc}/u.test(v) || !v.isWellFormed()) throw new InvalidInput(`invalid ${what}`);
 	return v;
 }
+
+/** The identity a caller supplies for a new actor, checked and in the stored form of its kind. */
+export function identityOf(kind: ActorKind, identity: unknown): UserIdentity | AgentIdentity {
+	const i = (identity ?? {}) as Record<string, unknown>;
+	if (kind === "user") return { issuer: identityPart(i.issuer, "issuer"), subject: identityPart(i.subject, "subject") };
+	if (kind === "agent") return { enrolledHostPeerId: identityPart(i.enrolledHostPeerId, "enrolled host peer"), agentId: actorId(i.agentId, "agent ID") };
+	throw new InvalidInput(`unknown actor kind ${JSON.stringify(kind)}`);
+}
+
+/** The FsActor template that finds the one actor bound to an identity (the pair is unique per tenant and kind). */
+export const identityTemplate = (kind: ActorKind, identity: UserIdentity | AgentIdentity) =>
+	({ type: T.actor, fields: { actorKind: kind, ...(identity as Record<string, string>) } });
 
 /** A fresh collision-resistant node ID (128 random bits); the caller checks it against the tenant's nodes in the queue. */
 export const newNodeId = (): string => randomBytes(16).toString("base64url");

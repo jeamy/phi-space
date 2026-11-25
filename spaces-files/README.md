@@ -5,7 +5,7 @@ teams share workspaces, roles are inherited from directories, and a revocation i
 after it. Files are UTF-8 text with versions; a save over a stale version is a conflict, never a silent overwrite.
 The plan, with its phases and exit evidence, is `docs/zanzibar-agent-filesystem-plan.en.md`.
 
-**Status: phase 1 of that plan, steps 1 to 4.** The application is registered in the repository checks (`APPS` in
+**Status: phase 1 of that plan, steps 1 to 5.** The application is registered in the repository checks (`APPS` in
 `checks/roots.mjs`) and the root scripts. The service process (`server/launch.ts`, `server/service.ts`) opens phi-spaces'
 own SQLite store in a data directory it refuses when group or others can reach it. The store's owner lock refuses a
 second process, and a crash releases it. The service runs the reaper (`startService`) and reserves one private named
@@ -21,7 +21,12 @@ and the first FsAudit row commit together (`server/schema.ts` holds the entry ty
 canonical names). A Space whose FsMeta has not committed admits no operation; a repeat resumes an interrupted
 initialization or answers `alreadyExists`; an unknown schema version or leftover rows are refused as
 `inconsistentState`. The login-index entry follows the commit, and every start rebuilds the index from the FsActor rows.
-Nothing listens yet. The next steps of phase 1 are `registerActor` with the identity bindings and the session adapter.
+`registerActor` (plan section 5, an enabled tenant administrator calls it) commits the enabled FsActor, its private home
+root, the home's owner relation and the audit row in one transaction, then a user's tenant goes into the login index.
+Agent instances are bound to (enrolledHostPeerId, agentId), users to (issuer, subject); an existing actor ID (tombstones
+included), home name or identity pair gives `alreadyExists` and creates nothing. `findActor` resolves a verified identity
+to its enabled actor or fails with `unauthenticated`. Operation IDs and receipts come with phase 3. Nothing listens
+yet. The next step of phase 1 is the session adapter.
 
 The application is a directory of its own and depends on the library as `"phi-spaces": "file:../spaces"`, importing
 only `phi-spaces` and its exported subpaths. Unlike the other applications, the pilot embeds its Space host in the one

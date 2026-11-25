@@ -66,6 +66,8 @@ export class FilesService {
 	readonly #now: () => number;
 	/** Tenants whose FsMeta this process has seen committed; FsMeta is never removed while the store is open. */
 	readonly #ready = new Set<string>();
+	/** The highest FsAudit seq per tenant, read once when the tenant is first written after opening (section 3). */
+	readonly #seq = new Map<string, number>();
 	#closed = false;
 
 	private constructor(host: OwnStoreHost, state: DeploymentState, stopService: () => Promise<void>, storePath: string | null, o: FilesServiceOptions) {
@@ -152,21 +154,98 @@ export class FilesService {
 			// a Space in provisioning holds nothing yet: the batch below would refuse leftovers by their keys anyway
 			if ((await space.count(null)) !== 0) throw new InconsistentState(`tenant ${tenantId}: rows in a Space without FsMeta`);
 			const homeNodeId = schema.newNodeId();
-			const ops = [
+			await this.#writeAll(tenantId, space, [
 				schema.meta(tenantId),
 				schema.actor("user", id, homeNodeId, identity),
 				schema.node(homeNodeId, schema.WORKSPACES, homeName, "dir"),
 				schema.relation("tenant", tenantId, "admin", "user", id),
 				schema.relation("node", homeNodeId, "owner", "user", id),
 				schema.audit(1, this.state.now(), { kind: "operator", id: "" }, "createTenant", [homeNodeId], "", "ok"),
-			].map((entry) => ({ op: "write" as const, entry, lease: FOREVER, unique: schema.KEY[entry.type as keyof typeof schema.KEY] }));
-			try { await space.batch(ops); }
-			catch (e) { if (e instanceof UniqueConflict) throw new InconsistentState(`tenant ${tenantId}: ${e.message}`); throw e; }
+			]);
 			this.#ready.add(tenantId);
+			this.#seq.set(tenantId, 1);
 			return { status: "created", tenantId, actorId: id, homeNodeId };
 		});
 		if (r.status === "created") this.state.addLogin(identity.issuer, identity.subject, tenantId);
 		return r;
+	}
+
+	/**
+	 * Registers an actor (an admin operation, section 5): the enabled FsActor, its private home root and the home's first
+	 * direct owner relation commit in one transaction together with the audit row, then a user's tenant goes into the
+	 * login index. `by` is the calling administrator, which must be an enabled user holding `tenant#admin`. An existing
+	 * (kind, actorId) (tombstones included: IDs are never reused), home name or identity pair gives `alreadyExists` and
+	 * creates nothing. Operation IDs and receipts arrive with phase 3.
+	 */
+	async registerActor(tenantId: string, by: { actorKind: schema.ActorKind; actorId: string }, kind: schema.ActorKind, actorId: string, homeName: string, identity: schema.UserIdentity | schema.AgentIdentity): Promise<{ actorId: string; homeNodeId: string }> {
+		const ident = schema.identityOf(kind, identity);
+		const id = schema.actorId(actorId);
+		const name = schema.canonicalName(homeName);
+		const r = await this.inTenant(tenantId, async (space) => {
+			const caller = await this.#enabledActor(space, by.actorKind, by.actorId);
+			if (caller.fields.actorKind !== "user" || !(await this.#has(space, schema.relation("tenant", tenantId, "admin", "user", by.actorId))))
+				throw new schema.PermissionDenied("registerActor needs tenant#admin");
+			if (await space.readIfExists({ type: schema.T.actor, fields: { actorKind: kind, actorId: id } }, 0)) throw new schema.AlreadyExists(`actor ${kind}:${id} exists`);
+			if (await space.readIfExists({ type: schema.T.node, fields: { parentId: schema.WORKSPACES, name } }, 0)) throw new schema.AlreadyExists("a workspace of that name exists");
+			if (await space.readIfExists(schema.identityTemplate(kind, ident), 0)) throw new schema.AlreadyExists("that identity is bound to another actor");
+			const homeNodeId = await this.#freshNodeId(space);
+			const seq = (await this.#lastSeq(tenantId, space)) + 1;
+			await this.#writeAll(tenantId, space, [
+				schema.actor(kind, id, homeNodeId, ident),
+				schema.node(homeNodeId, schema.WORKSPACES, name, "dir"),
+				schema.relation("node", homeNodeId, "owner", kind, id),
+				schema.audit(seq, this.state.now(), { kind: by.actorKind, id: by.actorId }, "registerActor", [homeNodeId], "", "ok"),
+			]);
+			this.#seq.set(tenantId, seq);
+			return { actorId: id, homeNodeId };
+		});
+		if (kind === "user") this.state.addLogin((ident as schema.UserIdentity).issuer, (ident as schema.UserIdentity).subject, tenantId);
+		return r;
+	}
+
+	/** The enabled actor bound to a verified identity in a tenant, or `unauthenticated` (unknown, disabled, deleted). */
+	findActor(tenantId: string, kind: schema.ActorKind, identity: schema.UserIdentity | schema.AgentIdentity): Promise<{ actorKind: schema.ActorKind; actorId: string; homeNodeId: string }> {
+		const ident = schema.identityOf(kind, identity);
+		return this.inTenant(tenantId, async (space) => {
+			const a = await space.readIfExists(schema.identityTemplate(kind, ident), 0);
+			if (a === null || a.fields.state !== "enabled") throw new schema.Unauthenticated();
+			return { actorKind: kind, actorId: a.fields.actorId as string, homeNodeId: a.fields.homeNodeId as string };
+		});
+	}
+
+	async #enabledActor(space: PhiSpaces, kind: string, id: string) {
+		const a = await space.readIfExists({ type: schema.T.actor, fields: { actorKind: kind, actorId: id } }, 0);
+		if (a === null || a.fields.state !== "enabled") throw new schema.Unauthenticated();
+		return a;
+	}
+
+	async #has(space: PhiSpaces, rel: ReturnType<typeof schema.relation>): Promise<boolean> {
+		return (await space.readIfExists({ type: rel.type, fields: rel.fields }, 0)) !== null;
+	}
+
+	/** A node ID no node of the tenant carries yet, checked inside the queue (section 3). */
+	async #freshNodeId(space: PhiSpaces): Promise<string> {
+		for (;;) {
+			const id = schema.newNodeId();
+			if ((await space.readIfExists({ type: schema.T.node, fields: { nodeId: id } }, 0)) === null) return id;
+		}
+	}
+
+	async #lastSeq(tenantId: string, space: PhiSpaces): Promise<number> {
+		let seq = this.#seq.get(tenantId);
+		if (seq === undefined) {
+			seq = 0;
+			for (const a of await space.readAll({ type: schema.T.audit })) seq = Math.max(seq, a.fields.seq as number);
+			this.#seq.set(tenantId, seq);
+		}
+		return seq;
+	}
+
+	/** Writes new rows in one commit, each with its type's creation key; a key collision is a corrupt state. */
+	async #writeAll(tenantId: string, space: PhiSpaces, entries: ReturnType<typeof schema.meta>[]): Promise<void> {
+		const ops = entries.map((entry) => ({ op: "write" as const, entry, lease: FOREVER, unique: schema.KEY[entry.type as keyof typeof schema.KEY] }));
+		try { await space.batch(ops); }
+		catch (e) { if (e instanceof UniqueConflict) throw new InconsistentState(`tenant ${tenantId}: ${e.message}`); throw e; }
 	}
 
 	/** Whether a tenant is absent, reserved but still in provisioning, or initialized. */
