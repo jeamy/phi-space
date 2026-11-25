@@ -5,7 +5,7 @@ teams share workspaces, roles are inherited from directories, and a revocation i
 after it. Files are UTF-8 text with versions; a save over a stale version is a conflict, never a silent overwrite.
 The plan, with its phases and exit evidence, is `docs/zanzibar-agent-filesystem-plan.en.md`.
 
-**Status: phase 1 of that plan is complete** (exit evidence below). The application is registered in the repository checks (`APPS` in
+**Status: phases 1 and 2 of that plan are complete** (exit evidence below). The application is registered in the repository checks (`APPS` in
 `checks/roots.mjs`) and the root scripts. The service process (`server/launch.ts`, `server/service.ts`) opens phi-spaces'
 own SQLite store in a data directory it refuses when group or others can reach it. The store's owner lock refuses a
 second process, and a crash releases it. The service runs the reaper (`startService`) and reserves one private named
@@ -53,6 +53,32 @@ Each claim of the plan's section 7, phase 1, and the test that holds it:
 
 Not yet there, by the plan's order: operation IDs and receipts, the file and admin operations beyond `registerActor`
 (phase 3), and the transports that carry sessions (browser login, agent-host socket).
+
+## Phase 2: policy and namespace
+
+- `server/schema.ts`: every entry type of section 3 with its creation key (FsMeta, FsActor, FsNode, FsContent,
+  FsRelation, FsReceipt, FsAudit), the error classes with their codes.
+- `server/paths.ts`: the one path parser (NFC segments, a lone dot only for the operations that may name the root) and
+  verbatim text measured in UTF-8 bytes. `server/digest.ts`: the request digest, SHA-256 of the RFC 8785 JSON of the
+  digest version, the operation name and the canonical arguments.
+- `server/limits.ts`: the filesystem's limits, checked on open in their worst case against the Space's limits (the
+  Space counts the UTF-8 bytes of an entry's JSON, so a control character costs six bytes: text is 10 KiB by
+  default); each row is measured exactly before it is written.
+- `server/policy.ts`: the typed relation validator, the evaluator (`resolve` down a path, `roleOn` up from a node ID
+  along the recorded parent, both charged against a work budget), the final-owner and final-admin checks and the
+  derived groups; `spaceData` reads a tenant Space for it. `server/quotas.ts`: the live-data quotas.
+
+| Claim (plan section 7, phase 2) | Test |
+|---|---|
+| Direct, group, inherited and overlapping grants; workspace visibility; inert grants below an invisible workspace | `tests/policy.test.ts` (the case table, each case also by node ID) |
+| Redundant viewer grants and unknown or deleted subjects are rejected | `tests/policy.test.ts` (validator) |
+| Final-owner and final-admin protection | `tests/policy.test.ts` |
+| Group existence after removing the last member | `tests/policy.test.ts`, `tests/policy-space.test.ts` |
+| Cycles and missing parents map to `inconsistentState`; work and depth limits to `capacityExceeded` | `tests/policy.test.ts` |
+| Quotas and tenant isolation | `tests/policy-space.test.ts` |
+| Canonical paths, text and request digest; byte limits against the Space's limits | `tests/paths.test.ts` |
+
+Suspending a tenant on `inconsistentState` belongs to the operations that meet it and arrives with phase 3.
 
 ## Commands
 

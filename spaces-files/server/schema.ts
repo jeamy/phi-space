@@ -53,6 +53,20 @@ export class InconsistentState extends Error {
 	constructor(message: string) { super(message); this.name = "InconsistentState"; }
 }
 
+/** Absent or invisible: the two are indistinguishable for ordinary operations (section 5). */
+export class NotFound extends Error {
+	readonly code = "notFound";
+	constructor() { super("not found"); this.name = "NotFound"; }
+}
+export class LastOwner extends Error {
+	readonly code = "lastOwner";
+	constructor(nodeId: string) { super(`workspace root ${nodeId} would have no enabled direct owner`); this.name = "LastOwner"; }
+}
+export class LastAdmin extends Error {
+	readonly code = "lastAdmin";
+	constructor() { super("the tenant would have no enabled tenant#admin user"); this.name = "LastAdmin"; }
+}
+
 export class AlreadyExists extends Error {
 	readonly code = "alreadyExists";
 	constructor(message: string) { super(message); this.name = "AlreadyExists"; }
