@@ -90,3 +90,11 @@ export async function runOp(ops: Record<string, Op>, svc: FilesService, handle: 
 		return { ok: true, value: await ops[op](svc, handle, (args ?? {}) as Args) };
 	} catch (e) { return { ok: false, error: wireError(e) }; }
 }
+
+/** The recovery interface of a restore (section 6.5, step 2): a rostered recoverer's session only, the browser only. */
+export const RECOVERY_OPS: Record<string, Op> = {
+	issueOperationIds: (s, h, a) => s.recoveryIssueOperationIds(h, a.count),
+	inspect: (s, h) => s.recoveryInspect(h) as Promise<Json>,
+	provisionAdmin: (s, h, a) => s.recoveryProvisionAdmin(h, a.actorId, a.homeName, a.identity, a.operationId),
+	revokeAdmin: (s, h, a) => s.recoveryRevokeAdmin(h, a.user, a.operationId),
+};

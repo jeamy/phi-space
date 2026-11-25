@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>phi-spaces files: recovery</title>
+<link rel="stylesheet" href="/app/style.css">
+<script type="module" src="/app/recovery.ts"></script>
+</head>
+<body>
+<header>
+	<strong>phi-spaces files: recovery</strong>
+	<span id="who"></span>
+	<nav id="account" hidden><button id="logout" type="button">Sign out</button></nav>
+</header>
+<main id="signin" class="note" hidden>
+	<h1>Recovery</h1>
+	<p>The recovery interface is open while a restore is, to identities on the tenant's recovery roster. Sign in with
+	<code>/recovery/login?tenant=…</code>.</p>
+</main>
+<main id="app" hidden>
+	<section>
+		<h2>Administrators</h2>
+		<ul id="admins"></ul>
+		<h2>Actors</h2>
+		<ul id="actors"></ul>
+	</section>
+	<section>
+		<h2>Provision today's administrator</h2>
+		<form id="provision">
+			<input id="p-actor" placeholder="actor ID" required>
+			<input id="p-home" placeholder="home name" required>
+			<input id="p-issuer" placeholder="issuer" required>
+			<input id="p-subject" placeholder="subject" required>
+			<button>Provision</button>
+		</form>
+		<h2>Remove an obsolete administrator</h2>
+		<form id="revoke">
+			<input id="r-user" placeholder="user ID" required>
+			<button>Remove</button>
+		</form>
+		<p id="status" role="status"></p>
+	</section>
+</main>
+</body>
+</html>

@@ -8,6 +8,7 @@ import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
+import type { EntryDraft } from "phi-spaces/core";
 import { DEFAULT_LIMITS, FOREVER, UniqueConflict } from "phi-spaces/core";
 import { assertLimitsFit, assertRowFits, DEFAULT_FS_LIMITS, encodedBytes, type FsLimits } from "./limits.ts";
 import { checkQuotas, sumContentBytes, type Demand } from "./quotas.ts";
@@ -362,8 +363,10 @@ export class FilesService {
 	 * operations, the maintenance metadata operations and `issueOperationIds` continue, everything else is `unavailable`.
 	 */
 	async #session<T>(cls: OpClass, handle: unknown, op: (session: Session, space: PhiSpaces) => Promise<T>): Promise<T> {
-		const view = typeof handle === "string" ? this.state.lookupSession(handle) : null;
-		if (view === null) throw new schema.Unauthenticated();
+		const found = typeof handle === "string" ? this.state.lookupSession(handle) : null;
+		// a recoverer's session opens the recovery interface alone: no file, version or ordinary session access
+		if (found === null || found.actorKind === "recoverer") throw new schema.Unauthenticated();
+		const view = { ...found, actorKind: found.actorKind };
 		return this.inTenant(view.tenantId, async (space) => {
 			const a = await this.#enabledActor(space, view.actorKind, view.actorId);
 			const mode = this.state.mode();
@@ -461,6 +464,155 @@ export class FilesService {
 			if (node === null) throw new schema.NotFound();
 		}
 		return node;
+	}
+
+	// ---------------------------------------------------------------- the recovery interface (section 6.5, step 2)
+
+	/**
+	 * Signs in a recoverer: an identity the adapter verified (an OIDC login on the recovery path) that the host operator
+	 * put on this tenant's recovery roster, outside the restorable data. Only while a restore is open; the session's
+	 * actor is the recoverer ID of this identity, tenant and restore epoch, and it reaches the recovery operations alone.
+	 * Neither an actor row nor an admin grant from the backup is needed or consulted.
+	 */
+	async recoveryLogin(tenantId: string, identity: schema.UserIdentity): Promise<{ handle: string; expiresAt: number }> {
+		const epoch = this.state.restoreEpoch();
+		if (epoch === null) throw new Unavailable("no restore is open");
+		const ident = schema.identityOf("user", identity) as schema.UserIdentity;
+		if (!this.state.onRoster(tenantId, ident.issuer, ident.subject)) throw new schema.Unauthenticated();
+		if (!(await this.tenants()).includes(tenantId)) throw new schema.Unauthenticated();
+		const actorId = this.state.recovererId(tenantId, ident.issuer, ident.subject);
+		const r = this.state.createSession({ tenantId, actorKind: "recoverer", actorId });
+		this.state.operatorAudit("recoveryLogin", { tenantId, issuer: ident.issuer, subject: ident.subject, epoch });
+		return r;
+	}
+
+	/** Runs a recovery operation: the session is a recoverer's of the open restore, still on the roster, in its tenant's
+	 *  queue. Anything else is `unauthenticated`. */
+	async #recovery<T>(handle: unknown, op: (s: Session, space: PhiSpaces, who: { issuer: string; subject: string; epoch: number }) => Promise<T>): Promise<T> {
+		const view = typeof handle === "string" ? this.state.lookupSession(handle) : null;
+		if (view === null || view.actorKind !== "recoverer") throw new schema.Unauthenticated();
+		const who = this.state.recovererOf(view.actorId);
+		const epoch = this.state.restoreEpoch();
+		if (who === null || epoch === null || who.epoch !== epoch || who.tenantId !== view.tenantId || !this.state.onRoster(who.tenantId, who.issuer, who.subject))
+			throw new schema.Unauthenticated();
+		const s = { tenantId: view.tenantId, actorKind: "recoverer", actorId: view.actorId, homeNodeId: "", expiresAt: view.expiresAt } as unknown as Session;
+		return this.inTenant(view.tenantId, (space) => op(s, space, who));
+	}
+
+	/** Who a recoverer's session belongs to (read-only, no queue): the tenant, identity and restore epoch. */
+	recoverySessionInfo(handle: unknown): { tenantId: string; issuer: string; subject: string; epoch: number; expiresAt: number } {
+		const view = typeof handle === "string" ? this.state.lookupSession(handle) : null;
+		const who = view?.actorKind === "recoverer" ? this.state.recovererOf(view.actorId) : null;
+		if (view === null || who === null || who.epoch !== this.state.restoreEpoch()) throw new schema.Unauthenticated();
+		return { tenantId: view.tenantId, issuer: who.issuer, subject: who.subject, epoch: who.epoch, expiresAt: view.expiresAt };
+	}
+
+	/** The external audit of a recovery mutation: the identity and restore epoch behind it (section 6.5, step 2). */
+	#recoveryAudit(s: Session, who: { issuer: string; subject: string; epoch: number }, operation: string, id: VerifiedOpId, outcome: Record<string, unknown>, replayed: boolean): void {
+		this.state.operatorAudit(`recovery.${operation}`, { tenantId: s.tenantId, issuer: who.issuer, subject: who.subject, epoch: who.epoch, operationId: id.operationId, ...outcome, replayed });
+	}
+
+	/** Recovery operation IDs: signed with the current generation, bound to the recoverer, its tenant and restore epoch. */
+	async recoveryIssueOperationIds(handle: unknown, count: unknown): Promise<string[]> {
+		return this.#recovery(handle, async (s) => issueOperationIds(this.state, s, count, this.limits));
+	}
+
+	/** The tenant's actors and administrators, for the recoverer to compare with current evidence; metadata only. */
+	async recoveryInspect(handle: unknown): Promise<{ actors: Array<{ kind: schema.ActorKind; id: string; state: string; issuer?: string; subject?: string }>; admins: string[] }> {
+		return this.#recovery(handle, async (s, space) => {
+			const rows = await space.readAll({ type: schema.T.actor }, { limit: this.limits.maxActors + 1 });
+			if (rows.length > this.limits.maxActors) throw new schema.CapacityExceeded(`more than ${this.limits.maxActors} actors`);
+			const admins = await space.readAll({ type: schema.T.relation, fields: { objectKind: "tenant", objectId: s.tenantId, relation: "admin" } }, { limit: this.limits.maxActors + 1 });
+			return {
+				actors: rows.map((r) => ({ kind: r.fields.actorKind as schema.ActorKind, id: r.fields.actorId as string, state: r.fields.state as string,
+					...(r.fields.actorKind === "user" ? { issuer: r.fields.issuer as string, subject: r.fields.subject as string } : {}) }))
+					.sort((a, b) => byName(a.kind, b.kind) || byName(a.id, b.id)),
+				admins: admins.map((r) => r.fields.subjectId as string).sort(byName),
+			};
+		});
+	}
+
+	/**
+	 * Establishes today's administrator B (section 6.5, step 3): an identity absent from the backup is provisioned with
+	 * the registration invariants (actor, home, the home's owner relation) and `tenant#admin`; an identity bound to an
+	 * actor of the given ID is enabled and granted where needed. An identity bound to another actor, or an actor ID or
+	 * home name taken by another, is `alreadyExists`: those conflicts are resolved under operator review. Receipt and
+	 * audit row commit with the change, so a repeated step is answered by its receipt.
+	 */
+	async recoveryProvisionAdmin(handle: unknown, actorId: unknown, homeName: unknown, identity: unknown, operationId: unknown): Promise<{ status: "provisioned" | "granted" | "enabled" | "unchanged"; actorId: string }> {
+		const op = "recoveryProvisionAdmin";
+		const ident = schema.identityOf("user", identity) as schema.UserIdentity;
+		const aid = schema.actorId(actorId);
+		const name = schema.canonicalName(homeName, this.limits.maxNameBytes);
+		return this.#recovery(handle, async (s, space, who) => {
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			const digest = requestDigest(op, { actorId: aid, homeName: name, identity: ident as Record<string, string> });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) { this.#recoveryAudit(s, who, op, id, { status: done.status }, true); return { status: done.status as "unchanged", actorId: aid }; }
+			const admin = schema.relation("tenant", s.tenantId, "admin", "user", aid);
+			const hasAdmin = await this.#has(space, admin);
+			const bound = await space.readIfExists(schema.identityTemplate("user", ident), 0);
+			let status: "provisioned" | "granted" | "enabled" | "unchanged";
+			const rows: Array<ReturnType<typeof schema.meta>> = [];
+			const takes: Array<{ type: string; fields: Record<string, string> }> = [];
+			const replaced: EntryDraft[] = [];
+			const demand: Record<string, number> = {};
+			let targets: string[] = [];
+			if (bound !== null) {
+				if (bound.fields.actorId !== aid) throw new schema.AlreadyExists("that identity is bound to another actor: resolve it under operator review");
+				if (bound.fields.state === "deleted") throw new schema.InvalidInput("that actor is deleted: resolve it under operator review");
+				if (bound.fields.state === "disabled") {
+					rows.push({ type: schema.T.actor, fields: { ...bound.fields, state: "enabled" } });
+					takes.push({ type: schema.T.actor, fields: { actorKind: "user", actorId: aid } });
+					replaced.push({ type: schema.T.actor, fields: bound.fields });
+				}
+				if (!hasAdmin) { rows.push(admin); demand.relations = 1; }
+				status = bound.fields.state === "disabled" ? "enabled" : hasAdmin ? "unchanged" : "granted";
+			} else {
+				if (await space.readIfExists({ type: schema.T.actor, fields: { actorKind: "user", actorId: aid } }, 0)) throw new schema.AlreadyExists(`actor user:${aid} exists with another identity: resolve it under operator review`);
+				if (await childNamed(spaceData(space), schema.WORKSPACES, name)) throw new schema.AlreadyExists("a workspace of that name exists: resolve it under operator review");
+				const homeNodeId = await this.#freshNodeId(space);
+				rows.push(schema.actor("user", aid, homeNodeId, ident), schema.node(homeNodeId, schema.WORKSPACES, name, "dir"), schema.relation("node", homeNodeId, "owner", "user", aid));
+				if (!hasAdmin) rows.push(admin);
+				Object.assign(demand, { actors: 1, workspaces: 1, nodes: 1, relations: hasAdmin ? 1 : 2 });
+				targets = [homeNodeId];
+				status = "provisioned";
+			}
+			rows.push(receiptRow(s, id, digest, { status }));
+			await this.#admitRows(s, space, { id, operation: op, targets, rows, demand, replaced });
+			await this.#commitMutation(s, space, id, op, targets, rows, null, takes);
+			if (status === "provisioned") this.state.addLogin(ident.issuer, ident.subject, s.tenantId);
+			this.#recoveryAudit(s, who, op, id, { status, actorId: aid }, false);
+			return { status, actorId: aid };
+		});
+	}
+
+	/** Removes the obsolete administrator A's `tenant#admin` (section 6.5, step 3), keeping the last enabled
+	 *  administrator: establish B first. Idempotent; a security action; receipt and audit row with the change. */
+	async recoveryRevokeAdmin(handle: unknown, user: unknown, operationId: unknown): Promise<{ status: "revoked" | "unchanged" }> {
+		const op = "recoveryRevokeAdmin";
+		const uid = schema.actorId(user, "user ID");
+		return this.#recovery(handle, async (s, space, who) => {
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			const digest = requestDigest(op, { user: uid });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) { this.#recoveryAudit(s, who, op, id, { status: done.status }, true); return { status: done.status as "revoked" }; }
+			const row = schema.relation("tenant", s.tenantId, "admin", "user", uid);
+			const present = await this.#has(space, row);
+			const status = present ? "revoked" : "unchanged";
+			const rows = [receiptRow(s, id, digest, { status })];
+			let takes: Array<{ type: string; fields: Record<string, string> }> = [];
+			if (present) {
+				const d = spaceData(space);
+				const tuple = await checkTenantAdmin(d, s.tenantId, uid);
+				await checkLastAdmin(d, s.tenantId, { remove: [tuple] }, { limits: this.limits });
+				await this.#securityAdmit(s, space, { id, operation: op, targets: [], rows }, { operation: op, user: uid });
+				takes = [{ type: schema.T.relation, fields: { ...tuple } }];
+			} else await this.#admitRows(s, space, { id, operation: op, targets: [], rows });
+			await this.#commitMutation(s, space, id, op, [], rows, null, takes);
+			this.#recoveryAudit(s, who, op, id, { status, user: uid }, false);
+			return { status };
+		});
 	}
 
 	// ---------------------------------------------------------------- upkeep (sections 3 and 6.1)

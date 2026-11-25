@@ -4,7 +4,10 @@
 // CSRF token bound to the session before it reaches the service, and the page itself (web/).
 //
 // Routes: GET / and /app/* (the page), GET /auth/login[?tenant=], GET /auth/callback, POST /auth/select (the tenant
-// choice after a login with several bindings), POST /auth/logout, GET /api/session, POST /api/call {op, args}.
+// choice after a login with several bindings), POST /auth/logout, GET /api/session, POST /api/call {op, args}; and the
+// recovery interface of an open restore (section 6.5, step 2): GET /recovery/login?tenant= (the same OIDC sign-in,
+// admitted by the recovery roster alone), GET /recovery (its page), GET /api/recovery/session, POST /api/recovery
+// {op, args}, POST /recovery/logout, under a cookie of its own that no ordinary route reads.
 // The identity comes from the verified ID token alone; no header, parameter or body names an actor or a tenant with
 // authority: a tenant selector chooses only among the login index's bindings of that identity, and the tenant's
 // FsActor row decides. Nothing is logged: not contents, not handles, not tokens, not paths.
@@ -16,7 +19,7 @@ import { join } from "node:path";
 import { ROOT } from "./env.ts";
 import type { OidcClient, Pending, Verified } from "./oidc.ts";
 import type { FilesService } from "./service.ts";
-import { ADMIN_OPS, base64Chars, FILE_OPS, isObj, runOp, wireError } from "./wire.ts";
+import { ADMIN_OPS, base64Chars, FILE_OPS, isObj, RECOVERY_OPS, runOp, wireError } from "./wire.ts";
 import { BadCall } from "./wire.ts";
 
 export type HttpOptions = {
@@ -37,6 +40,7 @@ export type HttpServer = { port: number; close(): Promise<void> };
 export const SESSION_COOKIE = "__Host-files";
 const LOGIN_COOKIE = "__Host-files-login";
 const CHOICE_COOKIE = "__Host-files-choice";
+export const RECOVERY_COOKIE = "__Host-files-recovery";
 const CSRF_HEADER = "x-files-csrf";
 const MAX_PENDING = 1000;
 const OPS = { ...FILE_OPS, ...ADMIN_OPS };
@@ -45,6 +49,7 @@ const ASSETS: Record<string, string> = {
 	"/app/app.ts": "web/app.ts",
 	"/client/draft.ts": "client/draft.ts",
 	"/app/style.css": "web/style.css",
+	"/app/recovery.ts": "web/recovery.ts",
 };
 
 const PAGE_HEADERS = {
@@ -81,7 +86,7 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 	const csrfKey = randomBytes(32);
 	const csrfFor = (handle: string) => createHmac("sha256", csrfKey).update(handle).digest("base64url");
 	// logins under way, by state; the browser that started one holds its binding in a cookie
-	const logins = new Map<string, { pending: Pending; binding: string; tenant: string | null; exp: number }>();
+	const logins = new Map<string, { pending: Pending; binding: string; tenant: string | null; recovery: boolean; exp: number }>();
 	// verified identities choosing among several tenants, by the token in their cookie
 	const choices = new Map<string, { who: Verified; tenants: string[]; exp: number }>();
 	const prune = <V extends { exp: number }>(m: Map<string, V>) => {
@@ -144,12 +149,19 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			res.end(js ? stripTypeScriptTypes(text) : text);
 			return;
 		}
-		if (route === "GET /auth/login") {
+		if (route === "GET /recovery") {
+			res.writeHead(200, { ...PAGE_HEADERS, ...hsts, "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+			res.end(readFileSync(join(ROOT, "web", "recovery.html")));
+			return;
+		}
+		if (route === "GET /auth/login" || route === "GET /recovery/login") {
 			prune(logins);
+			const recovery = route === "GET /recovery/login";
 			const tenant = url.searchParams.get("tenant");
+			if (recovery && !tenant) return page(res, 400, "Recovery sign-in", "<p>Name the tenant: /recovery/login?tenant=…</p>");
 			const pending = await o.oidc.begin();
 			const binding = randomBytes(24).toString("base64url");
-			logins.set(pending.state, { pending, binding, tenant, exp: now() + ttl });
+			logins.set(pending.state, { pending, binding, tenant, recovery, exp: now() + ttl });
 			res.writeHead(302, { ...PAGE_HEADERS, ...hsts, location: pending.authorizeUrl, "cache-control": "no-store",
 				"set-cookie": cookie(LOGIN_COOKIE, binding, { maxAgeS: Math.floor(ttl / 1000), sameSite: "Lax" }) });
 			res.end();
@@ -164,6 +176,17 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			let who: Verified;
 			try { who = await o.oidc.complete(l.pending, code); }
 			catch { return page(res, 400, "Sign-in failed", `<p>The identity provider's answer could not be verified. <a href="/auth/login">Sign in again</a></p>`, { "set-cookie": clear(LOGIN_COOKIE) }); }
+			if (l.recovery) {
+				// the roster decides, not the login index or any row of the restored data
+				let r: { handle: string; expiresAt: number };
+				try { r = await svc.recoveryLogin(l.tenant!, who); }
+				catch { return page(res, 403, "No recovery access", "<p>No restore is open, or this account is not on the tenant's recovery roster.</p>", { "set-cookie": clear(LOGIN_COOKIE) }); }
+				const old = jar.get(RECOVERY_COOKIE);
+				if (old) svc.state.endSession(old);
+				const maxAgeS = Math.max(1, Math.floor((r.expiresAt - now()) / 1000));
+				return page(res, 200, "Signed in for recovery", `<p><a href="/recovery">Continue</a></p><meta http-equiv="refresh" content="0;url=/recovery">`,
+					{ "set-cookie": [cookie(RECOVERY_COOKIE, r.handle, { maxAgeS, sameSite: "Strict" }), clear(LOGIN_COOKIE)] });
+			}
 			const tenants = svc.state.tenantsFor(who.issuer, who.subject);
 			if (l.tenant !== null && !tenants.includes(l.tenant)) return page(res, 403, "No access", `<p>This account has no access there.</p>`, { "set-cookie": clear(LOGIN_COOKIE) });
 			const pick = l.tenant ?? (tenants.length === 1 ? tenants[0] : null);
@@ -186,11 +209,20 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			choices.delete(token);
 			return enter(res, jar, c.who, tenant);
 		}
-		if (route === "POST /auth/logout") {
-			const h = jar.get(SESSION_COOKIE);
+		if (route === "POST /auth/logout" || route === "POST /recovery/logout") {
+			const name = route === "POST /auth/logout" ? SESSION_COOKIE : RECOVERY_COOKIE;
+			const h = jar.get(name);
 			if (!sameOrigin(req) || !h || !same(csrfFor(h), String(req.headers[CSRF_HEADER] ?? ""))) return json(res, 403, { ok: false, error: { code: "permissionDenied", message: "origin or CSRF token refused" } });
 			svc.state.endSession(h);
-			return json(res, 200, { ok: true, value: null }, { "set-cookie": clear(SESSION_COOKIE) });
+			return json(res, 200, { ok: true, value: null }, { "set-cookie": clear(name) });
+		}
+		if (route === "GET /api/recovery/session") {
+			const h = jar.get(RECOVERY_COOKIE);
+			const site = req.headers["sec-fetch-site"];
+			if (site !== undefined && site !== "same-origin") return json(res, 403, { ok: false, error: { code: "permissionDenied", message: "a request from another origin" } });
+			if (!h) return json(res, 401, { ok: false, error: { code: "unauthenticated", message: "not signed in for recovery" } });
+			try { return json(res, 200, { ok: true, value: { ...svc.recoverySessionInfo(h), csrf: csrfFor(h) } }); }
+			catch (e) { return json(res, 401, { ok: false, error: wireError(e) }); }
 		}
 		if (route === "GET /api/session") {
 			const h = jar.get(SESSION_COOKIE);
@@ -200,8 +232,9 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			try { return json(res, 200, { ok: true, value: { ...(await svc.sessionInfo(h)), csrf: csrfFor(h) } }); }
 			catch (e) { const error = wireError(e); return json(res, error.code === "unauthenticated" ? 401 : 200, { ok: false, error }); }
 		}
-		if (route === "POST /api/call") {
-			const h = jar.get(SESSION_COOKIE);
+		if (route === "POST /api/call" || route === "POST /api/recovery") {
+			const recovery = route === "POST /api/recovery";
+			const h = jar.get(recovery ? RECOVERY_COOKIE : SESSION_COOKIE);
 			if (!sameOrigin(req) || !String(req.headers["content-type"] ?? "").startsWith("application/json"))
 				return json(res, 403, { ok: false, error: { code: "permissionDenied", message: "a request from another origin" } });
 			if (!h) return json(res, 401, { ok: false, error: { code: "unauthenticated", message: "not signed in" } });
@@ -210,7 +243,7 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			if (body === null) return json(res, 413, { ok: false, error: { code: "capacityExceeded", message: "the request is too large" } });
 			let msg: unknown;
 			try { msg = JSON.parse(body.toString("utf8")); } catch { msg = undefined; }
-			const r = isObj(msg) ? await runOp(OPS, svc, h, msg.op, msg.args) : { ok: false as const, error: wireError(new BadCall("a call is one JSON object {op, args}")) };
+			const r = isObj(msg) ? await runOp(recovery ? RECOVERY_OPS : OPS, svc, h, msg.op, msg.args) : { ok: false as const, error: wireError(new BadCall("a call is one JSON object {op, args}")) };
 			return json(res, !r.ok && r.error.code === "unauthenticated" ? 401 : 200, r);
 		}
 		json(res, 404, { ok: false, error: { code: "notFound", message: "no such route" } });

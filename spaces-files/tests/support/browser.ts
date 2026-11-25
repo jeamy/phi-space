@@ -91,6 +91,21 @@ export class Browser {
 		await this.session();
 		return cb;
 	}
+
+	/** Signs in for recovery (/recovery/login?tenant=) and takes the recovery session's CSRF token. */
+	async recoverySignIn(idp: DevIdp, subject: string, tenant: string): Promise<Res> {
+		const start = await this.request("GET", `/recovery/login?tenant=${encodeURIComponent(tenant)}`);
+		if (start.status !== 302) throw new Error(`recovery login answered ${start.status}`);
+		const to = new URL(await idp.authorize(new URL(String(start.headers.location)).searchParams, subject));
+		const cb = await this.request("GET", to.pathname + to.search);
+		const r = await this.request("GET", "/api/recovery/session");
+		if (r.json?.ok) this.csrf = r.json.value.csrf;
+		return cb;
+	}
+	/** One recovery call. */
+	async recover(op: string, args: Record<string, unknown> = {}): Promise<Res> {
+		return this.request("POST", "/api/recovery", { body: JSON.stringify({ op, args }), headers: { "content-type": "application/json", "x-files-csrf": this.csrf } });
+	}
 }
 
 export async function webStack(svc: FilesService, o: { maxInflight?: number } = {}): Promise<{ http: HttpServer; idp: DevIdp; origin: string; browser(): Browser; close(): Promise<void> }> {

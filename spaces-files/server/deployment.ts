@@ -27,7 +27,9 @@ export class ClockJump extends Error {
 }
 
 export type ActorKind = "user" | "agent";
-export type SessionView = { tenantId: string; actorKind: ActorKind; actorId: string; epoch: number; expiresAt: number };
+/** A session's actor: a tenant actor, or a recoverer of the open restore (section 6.5, step 2). */
+export type SessionKind = ActorKind | "recoverer";
+export type SessionView = { tenantId: string; actorKind: SessionKind; actorId: string; epoch: number; expiresAt: number };
 export type KeyGeneration = { generation: number; secret: Buffer; createdAt: number; validUntil: number | null };
 
 export type DeploymentOptions = {
@@ -57,6 +59,7 @@ CREATE TABLE IF NOT EXISTS restore_journal (id INTEGER PRIMARY KEY CHECK (id = 1
 CREATE TABLE IF NOT EXISTS roster (tenant_id TEXT NOT NULL, issuer TEXT NOT NULL, subject TEXT NOT NULL, added_at INTEGER NOT NULL, PRIMARY KEY (tenant_id, issuer, subject));
 CREATE TABLE IF NOT EXISTS reconcilers (tenant_id TEXT NOT NULL, epoch INTEGER NOT NULL, issuer TEXT NOT NULL, subject TEXT NOT NULL, PRIMARY KEY (tenant_id, epoch));
 CREATE TABLE IF NOT EXISTS reconciled (tenant_id TEXT NOT NULL, epoch INTEGER NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (tenant_id, epoch));
+CREATE TABLE IF NOT EXISTS recoverers (actor_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, issuer TEXT NOT NULL, subject TEXT NOT NULL, epoch INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS operator_audit (seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL, operation TEXT NOT NULL, detail TEXT NOT NULL);
 `;
 
@@ -302,7 +305,7 @@ export class DeploymentState {
 	// ---------------------------------------------------------------- sessions (section 2)
 
 	/** Creates a session and returns its opaque handle. Only the handle's hash is stored. */
-	createSession(s: { tenantId: string; actorKind: ActorKind; actorId: string }): { handle: string; expiresAt: number } {
+	createSession(s: { tenantId: string; actorKind: SessionKind; actorId: string }): { handle: string; expiresAt: number } {
 		const now = this.now();
 		const handle = randomBytes(32).toString("base64url");
 		const expiresAt = now + this.#absoluteMs;
@@ -317,7 +320,7 @@ export class DeploymentState {
 		if (typeof handle !== "string" || handle.length === 0 || handle.length > 128) return null;
 		const now = this.now();
 		const row = this.#db.prepare("SELECT tenant_id, actor_kind, actor_id, epoch, idle_until, expires_at FROM sessions WHERE handle_hash = ?").get(hashHandle(handle)) as
-			{ tenant_id: string; actor_kind: ActorKind; actor_id: string; epoch: number; idle_until: number; expires_at: number } | undefined;
+			{ tenant_id: string; actor_kind: SessionKind; actor_id: string; epoch: number; idle_until: number; expires_at: number } | undefined;
 		if (!row) return null;
 		if (row.epoch !== this.epoch() || now >= row.expires_at || now >= row.idle_until) {
 			this.#tx(() => this.#db.prepare("DELETE FROM sessions WHERE handle_hash = ?").run(hashHandle(handle)));
@@ -422,6 +425,28 @@ export class DeploymentState {
 		const r = this.#db.prepare("SELECT issuer, subject FROM reconcilers WHERE tenant_id = ? AND epoch = ?").get(tenantId, epoch) as { issuer: string; subject: string } | undefined;
 		return r ?? null;
 	}
+	/**
+	 * The recoverer actor ID of a rostered identity for a tenant in the open restore (section 6.5, step 2): derived from
+	 * the tenant, issuer, subject and restore epoch, so its operation IDs and receipts belong to this restore alone, and
+	 * recorded so the external audit can name the identity behind it.
+	 */
+	recovererId(tenantId: string, issuer: string, subject: string): string {
+		const epoch = this.restoreEpoch();
+		if (epoch === null) throw new StateUnavailable("no restore is open");
+		const id = "rcv-" + createHash("sha256").update(`phi-spaces-files recoverer\0${tenantId}\0${issuer}\0${subject}\0${epoch}`).digest("base64url").slice(0, 32);
+		this.#tx(() => this.#db.prepare("INSERT OR IGNORE INTO recoverers (actor_id, tenant_id, issuer, subject, epoch) VALUES (?, ?, ?, ?, ?)").run(id, tenantId, issuer, subject, epoch));
+		return id;
+	}
+	/** The identity behind a recoverer actor ID, or null. */
+	recovererOf(actorId: string): { tenantId: string; issuer: string; subject: string; epoch: number } | null {
+		const r = this.#db.prepare("SELECT tenant_id, issuer, subject, epoch FROM recoverers WHERE actor_id = ?").get(actorId) as { tenant_id: string; issuer: string; subject: string; epoch: number } | undefined;
+		return r ? { tenantId: r.tenant_id, issuer: r.issuer, subject: r.subject, epoch: r.epoch } : null;
+	}
+	/** Whether an identity is on a tenant's recovery roster. */
+	onRoster(tenantId: string, issuer: string, subject: string): boolean {
+		return this.#db.prepare("SELECT 1 FROM roster WHERE tenant_id = ? AND issuer = ? AND subject = ?").get(tenantId, issuer, subject) !== undefined;
+	}
+
 	/** The tenants whose approved reconciler is this identity, in the open restore. */
 	reconcilerTenants(issuer: string, subject: string): string[] {
 		const epoch = this.restoreEpoch();
