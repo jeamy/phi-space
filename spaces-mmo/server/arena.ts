@@ -59,6 +59,7 @@ import { resolvePrototype, spawn as spawnItem } from "./engine/prototypes.ts";
 import { flameOf, isLit } from "./engine/fire.ts";
 import { render } from "./engine/funcparser.ts";
 import { formatWorldTime, paused, worldNow, WORLD_MINUTE_MS } from "./engine/worldtime.ts";
+import { ARENA_TRAIL_PATH, ARENA_SUBGOAL_NEAR, ARENA_MAX_TRAIL } from "../shared/rules.ts";
 
 const LISTEN = process.env.SPACES_MMO_ARENA_LISTEN || "unix:/tmp/spaces-mmo-arena.sock";
 const MAX_WORLDS = Math.max(1, Number(process.env.SPACES_MMO_ARENA_WORLDS ?? 2));
@@ -69,7 +70,7 @@ const ACT_MS = 15_000;
 export const MAX_WAIT_MINUTES = 120, MAX_WAITED_MINUTES = 24 * 60;
 const MAX_LINE = 300, MAX_THINGS = 30;
 /** The most cells a world remembers of the figure's way, and the most steps `path` gives. */
-const MAX_TRAIL = 20_000;
+const MAX_TRAIL = ARENA_MAX_TRAIL;
 export const PATH_STEPS = 200;
 type Step = [room: string, x: number, y: number];
 
@@ -109,7 +110,7 @@ export type Subgoal = { room?: string; near?: { x: number; y: number }; holds?: 
 /** What `open` may set up: where the guest starts, what lies where, the world worker's seed, the subgoals to watch. */
 export type OpenSpec = { start?: { room: string; x: number; y: number }; setup?: { clear?: string[]; items?: Array<{ proto: string; room: string; x: number; y: number }> }; seed?: number; subgoals?: Subgoal[] };
 const MAX_SETUP_ITEMS = 50;
-export const MAX_SUBGOALS = 12, SUBGOAL_NEAR = 3;
+export const MAX_SUBGOALS = 12, SUBGOAL_NEAR = ARENA_SUBGOAL_NEAR;
 const PREDICATE = /^(?:beacon:[\w-]+|feed:[\w-]+:\d+|pack:[\w-]+)$/;
 
 /** Checks an `open` request's start, setup and seed against the world before a world is started for it. */
@@ -298,7 +299,7 @@ async function walked(x: World, before: { room: string; x: number; y: number }, 
 	const walk = async (room: string, from: { x: number; y: number }, to: { x: number; y: number }) => {
 		const r = roomOf(room), there: Step = [room, to.x, to.y];
 		if (!r) return [there];
-		const cells = findPath(x.w, r.ground, from, to, 400, await blockedIn(x.space, x.w, room)) ?? findPath(x.w, r.ground, from, to, 400);
+		const cells = findPath(x.w, r.ground, from, to, ARENA_TRAIL_PATH, await blockedIn(x.space, x.w, room)) ?? findPath(x.w, r.ground, from, to, ARENA_TRAIL_PATH);
 		return cells ? cells.map((c): Step => [room, c.x, c.y]) : [there];
 	};
 	const add = (steps: Step[]) => {

@@ -22,6 +22,7 @@ import { decayNowOf, worldNowOf } from "../clock.ts";
 import { describeRoom, dropOffers, placeIn, relocate } from "./default.ts";
 import { ARTICLE, atCell, distTo, planOf } from "./build.ts";
 import { wakeOutside } from "./sleep.ts";
+import { BESIDE, FREE_CELL_RADIUS } from "../../../shared/rules.ts";
 
 export const INTERIOR = "in-";
 export const interiorOf = (buildId: string) => `${INTERIOR}${buildId}`;
@@ -47,7 +48,7 @@ async function frontOf(space: Space, w: WorldDef, b: Pick<BuildingFields, "room"
 	for (let y = b.y + b.h - 1; y >= b.y; y--) rim.push({ x: b.x - 1, y }, { x: b.x + b.w, y });
 	for (let x = b.x - 1; x <= b.x + b.w; x++) rim.push({ x, y: b.y - 1 });
 	const free = rim.find((p) => walkable(w, ground, p.x, p.y) && !blocked.has(cellKey(p)) && !exits.has(cellKey(p)));
-	return free ?? freeCellNear(w, ground, { x: mid, y: b.y + b.h }, new Set([...blocked, ...exits]));
+	return free ?? freeCellNear(w, ground, { x: mid, y: b.y + b.h }, new Set([...blocked, ...exits]), FREE_CELL_RADIUS);
 }
 
 /** Writes the inside of `b` once (nothing when its room is there already, or its plan has none). */
@@ -152,12 +153,12 @@ const isOwner = (c: CommandCtx, b: BuildingFields) => !!c.account && !c.account.
  *  beside the furnishing that does `use` (any furnishing, or none needed, without one). */
 export async function nearBuildings(c: CommandCtx, use?: "cook" | "chest" | "sleep" | "water"): Promise<BuildingFields[]> {
 	const inside = buildIdOf(c.actor.room);
-	if (!inside) return (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1 && atCell(c, b));
+	if (!inside) return (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= BESIDE && atCell(c, b));
 	const b = (await c.space.readAll({ type: "Building", fields: { buildId: inside } }))[0];
 	if (!b) return [];
 	if (use) {
 		const pieces = (await c.space.readAll({ type: "Scenery", fields: { room: c.actor.room } })).map((e) => fieldsOf<SceneryFields>(e)).filter((s) => s.use === use);
-		if (!pieces.some((s) => distTo(c.actor, s) <= 1)) return [];
+		if (!pieces.some((s) => distTo(c.actor, s) <= BESIDE)) return [];
 	}
 	return [fieldsOf<BuildingFields>(b)];
 }
@@ -171,7 +172,7 @@ export async function furnishingFor(c: CommandCtx, use: "cook" | "chest" | "slee
 async function enterable(c: CommandCtx, arg: string): Promise<BuildingFields> {
 	const at = /^(\d+)\s+(\d+)$/.exec(arg.trim()), n = arg.trim().replace(ARTICLE, "").toLowerCase();
 	const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e))
-		.filter((b) => distTo(c.actor, b) <= 1 && atCell(c, b) && (at ? distTo({ x: Number(at[1]), y: Number(at[2]) }, b) === 0 : !n || planOf(c.world, n)?.key === b.plan || b.name.toLowerCase() === n));
+		.filter((b) => distTo(c.actor, b) <= BESIDE && atCell(c, b) && (at ? distTo({ x: Number(at[1]), y: Number(at[2]) }, b) === 0 : !n || planOf(c.world, n)?.key === b.plan || b.name.toLowerCase() === n));
 	const houses = near.filter((b) => planOf(c.world, b.plan)?.interior);
 	if (!houses.length) throw new (near.length ? CommandError : NotUnderstood)(near.length ? `In ${planOf(c.world, near[0]!.plan)?.dative ?? near[0]!.name} geht man nicht hinein.` : "Geh direkt neben eine Hütte (ein Backhaus, eine Metzgerei, ein Gewächshaus), in die du darfst.");
 	return houses.find((b) => isOwner(c, b)) ?? houses.find((b) => mayEnter(c, b)) ?? houses[0]!;
@@ -204,7 +205,7 @@ const betrete: Command = {
 async function ownHouse(c: CommandCtx): Promise<BuildingFields> {
 	const inside = buildIdOf(c.actor.room);
 	const all = inside ? (await c.space.readAll({ type: "Building", fields: { buildId: inside } })).map((e) => fieldsOf<BuildingFields>(e))
-		: (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1 && atCell(c, b));
+		: (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= BESIDE && atCell(c, b));
 	const b = all.find((x) => planOf(c.world, x.plan)?.interior && isOwner(c, x));
 	if (!b) throw new CommandError(all.some((x) => planOf(c.world, x.plan)?.interior) ? "Einladen kann nur, wem der Bau gehört." : "Stell dich neben deine Hütte (oder dein Backhaus, deine Metzgerei, dein Gewächshaus) oder geh hinein.");
 	const e = await c.space.take({ type: "Building", fields: { buildId: b.buildId } }, 5_000, { txn: c.txn });

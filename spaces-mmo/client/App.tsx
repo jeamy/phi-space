@@ -43,6 +43,7 @@ const GONE_GRACE_MS = 2500;
 import { MapRenderer, type MapMode } from "./MapRenderer.tsx";
 import { TouchPad } from "./TouchPad.tsx";
 import { readMapMode, resetStartView } from "./viewPreferences.ts";
+import { REACH_POINT, FEED_FIRE, PASSAGE, SITE_REACH, TARGET_RINGS } from "../shared/rules.ts";
 
 /** A thing picked up shows in the pack at once; without word from the server for this long it lies there again. */
 const PICKUP_MS = 3_000;
@@ -441,7 +442,7 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	const send = (line: string) => (part === "mine" && !line.startsWith("look ") ? sendLine(line, true, false) : sendLine(line));
 	const all = [...objs.values()].filter((o) => o.kind === "item");
 	const carried = all.filter((o) => o.location === me);
-	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
+	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= REACH_POINT;
 	const near = all.filter(close);
 	const fire = [...objs.values()].find((o) => o.kind === "beacon" && close(o));
 	const fuel = fuelIn(objs, me);
@@ -592,7 +593,7 @@ function SiteOrders({ objs, self, room, me, send, walk }: { objs: Map<string, Ob
 	return (
 		<div className="things orders">
 			{shown.map((s) => {
-				const near = !!self && Math.max(Math.max(s.x - self.x, 0, self.x - (s.x + (s.w ?? 1) - 1)), Math.max(s.y - self.y, 0, self.y - (s.y + (s.h ?? 1) - 1))) <= 2;
+				const near = !!self && Math.max(Math.max(s.x - self.x, 0, self.x - (s.x + (s.w ?? 1) - 1)), Math.max(s.y - self.y, 0, self.y - (s.y + (s.h ?? 1) - 1))) <= SITE_REACH;
 				const mine = s.ownerId === me, orders = s.orders ?? [];
 				const open = (s.missing ?? "").split(",").map((p) => /^(\d+)\s+(.+)$/.exec(p.trim())).filter((m) => !!m).map((m) => ({ n: m![1]!, name: m![2]! })).filter((m) => !orders.some((o) => o.name === m.name));
 				return (
@@ -922,7 +923,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		// walkable and nobody standing there (the server checks again and answers either way); at a door (an exit's cell or
 		// one next to it) others do not block: one walks through them, as the server lets one (engine/occupancy.ts)
 		const exits = [...objs.values()].filter((o) => o.kind === "exit" && o.location === hello.room.roomId);
-		const passage = (c: { x: number; y: number }) => exits.some((e) => Math.max(Math.abs(e.x - c.x), Math.abs(e.y - c.y)) <= 1);
+		const passage = (c: { x: number; y: number }) => exits.some((e) => Math.max(Math.abs(e.x - c.x), Math.abs(e.y - c.y)) <= PASSAGE);
 		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
 		// sites and buildings cover their cells: nobody walks into them (server: occupancy.ts blockedIn)
 		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || o.kind === "tree" || (o.kind === "scenery" && !o.through)) && !(from && (o.kind === "bed" || o.kind === "field") && from.x >= o.x && from.y >= o.y && from.x < o.x + (o.w ?? 1) && from.y < o.y + (o.h ?? 1)) && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
@@ -963,7 +964,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		// from the figure answers all of them, walk.ts chooseTarget)
 		const ground = seen.current.hello?.room.ground ?? [];
 		const here = (c: { x: number; y: number }) => c.x === start.x && c.y === start.y;
-		const end = chooseTarget(freeCells(), start, goal, Math.max(0, ...ground.map((row) => row.length)), ground.length) ?? undefined;
+		const end = chooseTarget(freeCells(), start, goal, Math.max(0, ...ground.map((row) => row.length)), ground.length, TARGET_RINGS) ?? undefined;
 		const way = () => { const from = walker.current.shown; return from && end ? nextStep(freeCells(), from, end) : null; };
 		if (end && here(end)) return;
 		if (!way()) { if (!here(goal)) append({ kind: "error", text: "Dorthin führt kein Weg.", from: "", at: Date.now() }); return; }
@@ -1029,7 +1030,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		const self = chars.get(me);
 		if (!self || !hello) return;
 		const d = (o: ObjView) => Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y));
-		const near = [...objs.values()].filter((o) => o.location === hello.room.roomId && d(o) <= 1);
+		const near = [...objs.values()].filter((o) => o.location === hello.room.roomId && d(o) <= REACH_POINT);
 		const item = near.filter((o) => o.kind === "item").sort((a, b) => d(a) - d(b))[0];
 		if (item) return pickUp(item);
 		const fire = near.find((o) => o.kind === "beacon");
@@ -1135,7 +1136,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		if (item) { fetching.current = { id: item.id, until: Date.now() + FETCH_MS }; walkTo(at); return; }
 		// a fire out of reach: to it, "Hier möglich" then offers to feed it
 		const fire = [...objs.values()].find((o) => o.kind === "beacon" && o.location === room && o.x === at.x && o.y === at.y), own = chars.get(me);
-		if (fire && own && Math.max(Math.abs(fire.x - own.x), Math.abs(fire.y - own.y)) > 1) { walkTo(at); return; }
+		if (fire && own && Math.max(Math.abs(fire.x - own.x), Math.abs(fire.y - own.y)) > FEED_FIRE) { walkTo(at); return; }
 		if (hit) { stopWalk.current(); setMenu({ x: at.x, y: at.y, left: lastPress.current.x, top: lastPress.current.y }); return; }
 		walkTo({ x, y });
 	}, [hello, chars, objs, shownObjs, me, onCell, walkTo]);
@@ -1144,7 +1145,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		if (!f || !self || !hello) return;
 		const o = objs.get(f.id);
 		if (!o || o.location !== hello.room.roomId || Date.now() > f.until) { fetching.current = null; return; }
-		if (Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1) { fetching.current = null; stopWalk.current(); pickUp(o); }
+		if (Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= REACH_POINT) { fetching.current = null; stopWalk.current(); pickUp(o); }
 	}, [chars, objs, me, hello, pickUp]);
 
 	// an arrow key in the command line goes back to the map and walks: up and down always, left and right while the line is

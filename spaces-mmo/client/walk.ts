@@ -97,7 +97,7 @@ export function nextStep(free: (x: number, y: number) => boolean, from: Cell, to
  *  free cells. One search from `start` over the room (`w` × `h`) answers every candidate, so a tap looks at no more
  *  than the room's cells plus the candidates (before, every candidate searched anew: about 150 times the room for an
  *  occupied goal beyond water). Null: no cell leads there. Same answer as a search per candidate within the room. */
-export function chooseTarget(free: (x: number, y: number) => boolean, start: Cell, goal: Cell, w: number, h: number, rings = 6): Cell | null {
+export function chooseTarget(free: (x: number, y: number) => boolean, start: Cell, goal: Cell, w: number, h: number, rings: number): Cell | null {
 	if (free(goal.x, goal.y)) return goal;
 	let reached: Uint8Array | null = null;
 	const reach = (c: Cell) => {

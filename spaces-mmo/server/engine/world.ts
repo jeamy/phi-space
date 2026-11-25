@@ -136,7 +136,7 @@ export const walkable = (w: WorldDef, ground: string[], x: number, y: number): b
 
 /** The shortest walk from one cell to another over walkable cells (4 directions) that are not `blocked` ("x,y"), at
  *  most `max` steps; null when there is none. The cells after the start, the target last. */
-export function findPath(w: WorldDef, ground: string[], from: { x: number; y: number }, to: { x: number; y: number }, max = 40, blocked: ReadonlySet<string> = new Set()): Array<{ x: number; y: number }> | null {
+export function findPath(w: WorldDef, ground: string[], from: { x: number; y: number }, to: { x: number; y: number }, max: number, blocked: ReadonlySet<string> = new Set()): Array<{ x: number; y: number }> | null {
 	if (!walkable(w, ground, to.x, to.y) || blocked.has(`${to.x},${to.y}`)) return null;
 	if (from.x === to.x && from.y === to.y) return [];
 	const width = ground[0]!.length, key = (x: number, y: number) => y * width + x;

@@ -1,6 +1,7 @@
 // What can be done on a cell of the map: one function for the mouse's menu and the action sheet of a touch screen. Every
 // entry is a text command; `run` is for what stays on the page. Pure, so it is tested without a browser.
 import type { CharView, ItemUses, ObjView, PlanView, Todo } from "../shared/frames.ts";
+import { BESIDE, REACH_POINT, SITE_REACH, MENU_NEAR } from "../shared/rules.ts";
 
 export type CellEntry = { label: string; line: string; run?: () => void; /** asked before the line is sent (what cannot be undone) */ confirm?: string };
 export type CellInput = {
@@ -59,7 +60,7 @@ const rank = (line: string) => { const i = URGENT.findIndex((r) => r.test(line))
 export function hereEntries(input: Omit<CellInput, "at" | "onPlans">): CellEntry[] {
 	const { self } = input, seen = new Map<string, CellEntry>();
 	if (!self) return [];
-	for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+	for (let dy = -SITE_REACH; dy <= SITE_REACH; dy++) for (let dx = -SITE_REACH; dx <= SITE_REACH; dx++) {
 		for (let e of cellEntries({ ...input, at: { x: self.x + dx, y: self.y + dy }, onPlans: () => {}, onTake: undefined })) {
 			// a tree's seed is offered on every free cell around: here once, the server finds the cell beside one
 			const tree = /^pflanze (\S+) -?\d+ -?\d+$/.exec(e.line);
@@ -195,7 +196,7 @@ export function cellEntries(input: CellInput): CellEntry[] {
 /** A span in hours as the server tells it (animals.ts hours): days from two days on, minutes under an hour. */
 function spanHours(ms: number): string { const h = Math.round(ms / 3600_000); return h >= 48 ? `${Math.round(h / 24)} Tage` : h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; }
 function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, sailWith, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos, feed, fed, decay, account }: CellInput): CellEntry[] {
-	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
+	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= REACH_POINT;
 	const entries: CellEntry[] = [];
 	/** The recipes made at a building of `plan`: what one carries enough for, and the whole list (server: trade.ts "craft hier"). */
 	const made = (plan: string | undefined) => {
@@ -252,7 +253,7 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 		// of what one carries and work beside it; a finished one is mended
 		if (o.kind === "road") {
 			if (o.location !== room || !(o.runs?.[0] ?? []).some((c) => c.x === at.x && c.y === at.y)) continue;
-			const to = o.name.replace(/^Straße nach /, ""), near = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 2;
+			const to = o.name.replace(/^Straße nach /, ""), near = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= MENU_NEAR;
 			entries.push({ label: "Straßen ansehen", line: "straße" });
 			if (o.roadState === "vote" && !guest && !(o.votedIds ?? []).includes(me) && !!account && !!o.voterIds?.includes(account)) entries.push({ label: `Für die Straße nach ${to} stimmen`, line: `straße ja ${to}` }, { label: `Gegen die Straße nach ${to} stimmen`, line: `straße nein ${to}` });
 			if (o.roadState === "build" && near) {
@@ -272,7 +273,7 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 		// a cart: its owner loads and unloads it beside it, or takes it back (server: cart.ts)
 		if (o.kind === "cart") {
 			if (o.location === room && o.x === at.x && o.y === at.y && o.ownerId === me && !guest) {
-				const near = !!self && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
+				const near = !!self && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= REACH_POINT;
 				entries.push({ label: "Karren ansehen", line: "karren" });
 				if (near) {
 					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && i.name !== "Karren").map((i) => i.name))].slice(0, 6)) entries.push({ label: `${n} auf den Karren laden`, line: `karren lade ${n}` });
@@ -292,7 +293,7 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 		// a furnishing inside a building (server: interior.ts): the hearth cooks the building's recipes, the chest is the
 		// owner's chest, the bed is for sleep; each from beside it
 		if (o.kind === "scenery" && o.use && o.location === room && covers(o, at)) {
-			const beside = !!self && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
+			const beside = !!self && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= BESIDE;
 			// one's own chest beside one: „Truhe ansehen“ opens it (its description would be a second line of the same name)
 			if (beside && o.use === "chest" && o.ownerId === me) chestEntries(room.slice(3));
 			else entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` });
@@ -301,19 +302,19 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 			if (beside && o.use === "water") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
 			continue;
 		}
-		if (o.kind === "scenery" && o.location === room && !o.through && !o.fixed && covers(o, at) && self && Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) <= 2) entries.push({ label: `${o.name} abräumen (noch ${o.left ?? 1})`, line: `räume ${o.x} ${o.y}` });
+		if (o.kind === "scenery" && o.location === room && !o.through && !o.fixed && covers(o, at) && self && Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) <= SITE_REACH) entries.push({ label: `${o.name} abräumen (noch ${o.left ?? 1})`, line: `räume ${o.x} ${o.y}` });
 		if (o.kind === "tree" && o.location === room && o.x === at.x && o.y === at.y) {
 			// a planted tree (server: trees.ts): looked at by anyone; picked, cut and felled by its owner from two cells away
 			const dist = self ? Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) : Infinity, mine = o.ownerId === me;
 			entries.push({ label: `${o.name} von ${o.owner ?? ""} ansehen`, line: `baum ansehen ${o.x} ${o.y}` });
-			if (dist <= 2 && mine && o.ripe) entries.push({ label: o.cut ? "Ruten schneiden" : "Ernten", line: "ernte baum" });
-			if (dist <= 2 && (mine || admin) && o.treeStage === 2) entries.push({ label: `${o.name} fällen (mit der Axt)`, line: `fälle ${o.x} ${o.y}`, confirm: `${o.name} fällen? Er gibt Scheite; ein Obstbaum und eine Eiche sind danach fort.` });
+			if (dist <= SITE_REACH && mine && o.ripe) entries.push({ label: o.cut ? "Ruten schneiden" : "Ernten", line: "ernte baum" });
+			if (dist <= SITE_REACH && (mine || admin) && o.treeStage === 2) entries.push({ label: `${o.name} fällen (mit der Axt)`, line: `fälle ${o.x} ${o.y}`, confirm: `${o.name} fällen? Er gibt Scheite; ein Obstbaum und eine Eiche sind danach fort.` });
 			continue;
 		}
 		if ((o.kind !== "site" && o.kind !== "building" && o.kind !== "ruin" && o.kind !== "bed" && o.kind !== "field") || o.location !== room || at.x < o.x || at.y < o.y || at.x >= o.x + (o.w ?? 1) || at.y >= o.y + (o.h ?? 1)) continue;
 		const dist = self ? Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) : Infinity;
 		// a site is worked on from two cells away (server: build.ts SITE_REACH), a building only from beside it
-		const beside = dist <= 1, nearSite = dist <= 2;
+		const beside = dist <= BESIDE, nearSite = dist <= SITE_REACH;
 		if (o.kind === "bed") {
 			// a bed is tended from two cells away too, by its owner and its sponsors, a community bed by everyone; planting
 			// there needs an account (server: garden.ts)

@@ -8,6 +8,7 @@ use crate::fire::key_text;
 use crate::j;
 use crate::space::{by_id, fields, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::world::walkable;
+use crate::rules::PASSAGE;
 
 /// `cellKey`.
 pub fn cell_key(x: f64, y: f64) -> String { format!("{},{}", phi_json::number_text(x), phi_json::number_text(y)) }
@@ -36,7 +37,7 @@ pub async fn occupied_in(space: &Space, room: &str, except: Option<&str>) -> Res
 }
 
 /// `isPassage`: an exit's cell or one next to it.
-pub fn is_passage(exits: &[Json], x: f64, y: f64) -> bool { exits.iter().any(|e| (j::n(e, "x") - x).abs().max((j::n(e, "y") - y).abs()) <= 1.0) }
+pub fn is_passage(exits: &[Json], x: f64, y: f64) -> bool { exits.iter().any(|e| (j::n(e, "x") - x).abs().max((j::n(e, "y") - y).abs()) <= PASSAGE) }
 
 /// `releaseSpot`.
 pub async fn release_spot(space: &Space, txn: &str, char_id: &str) -> Result<()> {

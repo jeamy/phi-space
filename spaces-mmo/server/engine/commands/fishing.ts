@@ -14,6 +14,7 @@ import { dropOffers, placeIn, relocate } from "./default.ts";
 import { countTrip } from "../travel.ts";
 import { randomInt } from "../source.ts";
 import { walkable, type WorldDef } from "../world.ts";
+import { BESIDE } from "../../../shared/rules.ts";
 
 const weighted = (xs: Array<{ proto: string; weight: number }>) => { let r = randomInt(0, xs.reduce((n, x) => n + x.weight, 0)); return xs.find((x) => (r -= x.weight) < 0)!; };
 
@@ -24,7 +25,7 @@ const wirf: Command = {
 		const d = c.world.fishing;
 		if (!d) throw new CommandError("In dieser Welt wird nicht gefischt.");
 		if (arg.trim() && !/^(?:(?:das\s+)?netz|net)$/i.test(arg.trim())) throw new NotUnderstood("So geht es: wirf netz");
-		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: d.plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: d.plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= BESIDE);
 		if (!near) throw new CommandError(`Das Netz wirft man direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Steg"} aus.`);
 		if (!(await inventory(c)).some((i) => i.f.proto === d.net)) throw new CommandError("Dafür brauchst du ein Netz.");
 		const { now, rest } = await rested(c);
@@ -44,7 +45,7 @@ const rudere: Command = {
 		if (!(await inventory(c)).some((i) => i.f.proto === d.proto)) throw new CommandError("Dafür brauchst du ein Ruderboot.");
 		const island = c.world.rooms.find((r) => r.roomId === c.actor.room)?.island;
 		const jetties = (await c.space.readAll({ type: "Building", fields: { plan } })).map((e) => fieldsOf<BuildingFields>(e));
-		if (!jetties.some((b) => b.room === c.actor.room && distTo(c.actor, b) <= 1)) throw new CommandError(`Abgelegt wird direkt neben ${planOf(c.world, plan)?.dative ?? "einem Steg"}.`);
+		if (!jetties.some((b) => b.room === c.actor.room && distTo(c.actor, b) <= BESIDE)) throw new CommandError(`Abgelegt wird direkt neben ${planOf(c.world, plan)?.dative ?? "einem Steg"}.`);
 		const there = c.world.rooms.filter((r) => r.island === island && r.roomId !== c.actor.room && jetties.some((b) => b.room === r.roomId));
 		const word = arg.trim().toLowerCase();
 		if (!word) return msg(c, c.actor.charId, "info", there.length ? `Stege gibt es in: ${there.map((r) => r.name).join(", ")}.` : "Auf dieser Insel gibt es keinen anderen Steg.");
@@ -81,7 +82,7 @@ const segle: Command = {
 		const d = c.world.boat, plan = c.world.fishing?.plan;
 		if (!d?.sail || !plan) throw new CommandError("In dieser Welt gibt es keine Segelboote.");
 		if (!(await inventory(c)).some((i) => i.f.proto === d.sail)) throw new CommandError("Dafür brauchst du ein Segelboot.");
-		const here = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+		const here = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= BESIDE);
 		if (!here) throw new CommandError(`Abgelegt wird direkt neben ${planOf(c.world, plan)?.dative ?? "einem Steg"}.`);
 		const rooms = c.world.allRooms ?? c.world.rooms, mine = rooms.find((r) => r.roomId === c.actor.room)?.island;
 		const islands = [...new Set(rooms.flatMap((r) => (r.island && r.island !== mine ? [r.island] : [])))];
@@ -121,7 +122,7 @@ const luke: Command = {
 		const load = /^(?:lade|laden|load)$/i.test(word);
 		if (load && !what) throw new NotUnderstood("Was soll in die Luke? luke lade [n|alle] <ding>");
 		if (!load && !/^(?:entlade|entladen|unload)$/i.test(word)) throw new NotUnderstood("So geht es: luke, luke lade <ding>, luke entlade <ding>.");
-		const atJetty = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+		const atJetty = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= BESIDE);
 		if (!atJetty) throw new CommandError(`Be- und entladen wird direkt neben ${planOf(c.world, plan)?.dative ?? "einem Steg"}.`);
 		// „alle“ alone: everything (unloading, also without a word); else as with a chest: [n|alle] <ding>
 		const everything = /^(?:alle?|all)$/i.test(what) || (!load && !what), { n, name } = everything ? { n: null, name: "" } : amount(what);

@@ -4,6 +4,7 @@
 // With a model (docs/modell-npcs.en.md) the model answers; this is the script that answers when it is off or asleep.
 import { fieldsOf, type ItemFields } from "../model.ts";
 import type { Npc } from "./scripts.ts";
+import { FEED_FIRE } from "../../shared/rules.ts";
 
 export type Request = { kind: "gather"; count: number } | { kind: "feed" } | { kind: "greet" } | { kind: "unclear" };
 
@@ -59,10 +60,10 @@ export async function gather(n: Npc, me: { name: string; charId: string }, from:
 	const at = await position();
 	if (beacon && at && at.room === beacon.room) {
 		for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]] as const) {
-			if (reach((await position()) ?? at, beacon) <= 1) break;
+			if (reach((await position()) ?? at, beacon) <= FEED_FIRE) break;
 			await n.act(`move ${beacon.x + dx} ${beacon.y + dy}`);
 		}
-		if (reach((await position()) ?? at, beacon) <= 1) {
+		if (reach((await position()) ?? at, beacon) <= FEED_FIRE) {
 			for (let i = 0; i < mine.length && !n.halt.aborted; i++) await n.act(`put ${mine[i]!.name} in ${beacon.aliases?.[0] ?? "feuer"}`);
 			await n.act(`say Fertig, ${from}: ${scheite(mine.length)} liegen im Feuer.`);
 			return;

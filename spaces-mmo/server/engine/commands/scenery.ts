@@ -4,8 +4,9 @@ import { FOREVER, NO_WAIT } from "phi-spaces";
 import { fieldsOf, type SceneryFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, NotUnderstood, type CommandCtx } from "../context.ts";
-import { distTo, freeCells, giveBack, rested, SITE_REACH, tire } from "./build.ts";
+import { distTo, freeCells, giveBack, rested, tire } from "./build.ts";
 import { needRank } from "./settlement.ts";
+import { SITE_REACH } from "../../../shared/rules.ts";
 
 const nearby = async (c: CommandCtx, arg: string): Promise<SceneryFields> => {
 	const at = /^(\d+)\s+(\d+)$/.exec(arg.trim());

@@ -28,6 +28,7 @@ import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, t
 import { deliverer } from "./settlers.ts";
 import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scripts.ts";
 import { SAY_MAX, sayParts } from "./say-parts.ts";
+import { BESIDE, FEED_FIRE, NPC_WANDER_X, NPC_WANDER_Y, onRing, REACH_POINT } from "../../shared/rules.ts";
 
 /** One round of a trader or a worker: every look is several calls to the space (each a transaction), and players do not
  *  wait on a trader as they do on the keeper, so the rounds are not short. */
@@ -150,7 +151,7 @@ async function byTrain(n: Npc, l: Look, room: string): Promise<boolean> {
 	const station = (r: string) => n.space.readAll({ type: "Building", fields: { plan: d.plan, room: r } }).then((xs) => xs.map((e) => fieldsOf<BuildingFields>(e))[0]);
 	const here = await station(l.me.room);
 	if (!here || !(await station(room))) return false;
-	if (await stepBeside(n, l, here)) return true;
+	if (await stepBeside(n, l, here, BESIDE)) return true;
 	boarding.set(n, { room: l.me.room, times: (boarding.get(n)?.times ?? 0) + 1 });
 	await n.act(`zug ${n.world.rooms.find((x) => x.roomId === room)?.name ?? room}`);
 	return true;
@@ -164,12 +165,12 @@ export const distTo = (p: { x: number; y: number }, r: Rect) => Math.max(Math.ma
 
 /** In its room, walks to a free cell right beside `r` (a building, a site, a bed): false when it stands within `reach`
  *  of it already (or finds no free cell). */
-export async function stepBeside(n: Npc, l: Look, r: Rect, reach = 1): Promise<boolean> {
+export async function stepBeside(n: Npc, l: Look, r: Rect, reach: number): Promise<boolean> {
 	if (distTo(l.me, r) <= reach && distTo(l.me, r) > 0) return false;
 	const ground = n.world.rooms.find((x) => x.roomId === l.me.room)?.ground ?? [];
 	const busy = new Set([...(await n.space.readAll({ type: "Character", fields: { room: l.me.room } })), ...(await n.space.readAll({ type: "Plot", fields: { room: l.me.room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
 	for (let y = r.y - 1; y <= r.y + r.h; y++) for (let x = r.x - 1; x <= r.x + r.w; x++) {
-		if (distTo({ x, y }, r) !== 1 || busy.has(`${x},${y}`) || !",.:".includes(ground[y]?.[x] ?? "~")) continue;
+		if (!onRing(distTo({ x, y }, r)) || busy.has(`${x},${y}`) || !",.:".includes(ground[y]?.[x] ?? "~")) continue;
 		await n.act(`move ${x} ${y}`);
 		return true;
 	}
@@ -181,7 +182,7 @@ export async function gather(n: Npc, l: Look, protos: string[]): Promise<boolean
 	const d = (i: ItemFields) => Math.max(Math.abs(i.x - l.me.x), Math.abs(i.y - l.me.y));
 	const there = l.ground.filter((i) => protos.includes(i.proto)).sort((a, b) => d(a) - d(b))[0];
 	if (!there) return false;
-	if (d(there) <= 1) await n.act(`get ${there.name}`);
+	if (d(there) <= REACH_POINT) await n.act(`get ${there.name}`);
 	else await n.act(`move ${there.x} ${there.y}`);
 	return true;
 }
@@ -400,7 +401,7 @@ function huter(): Script {
 		let acted = (await talk(n, l));
 		if (!acted && weak && fuel.length) {
 			if (await travel(n, l, beacon.room)) {
-				if (Math.max(Math.abs(l.me.x - beacon.x), Math.abs(l.me.y - beacon.y)) <= 1) await n.act(`put ${fuel[0]!.name} in ${beacon.aliases[0] ?? "feuer"}`);
+				if (Math.max(Math.abs(l.me.x - beacon.x), Math.abs(l.me.y - beacon.y)) <= FEED_FIRE) await n.act(`put ${fuel[0]!.name} in ${beacon.aliases[0] ?? "feuer"}`);
 				else await nextTo(n, l, beacon);
 			}
 			acted = true;
@@ -536,7 +537,7 @@ function plauderer(): Script {
 			else if (randomInt(0, 6) === 0 && homes.length > 1) { home = (home + 1) % homes.length; await travel(n, l, homes[home]!); }
 			else if (randomInt(0, 3) === 0) {
 				const ground = n.world.rooms.find((r) => r.roomId === l.me.room)?.ground ?? [];
-				const x = Math.min(22, Math.max(1, l.me.x + randomInt(-4, 5))), y = Math.min(14, Math.max(1, l.me.y + randomInt(-3, 4)));
+				const x = Math.min(22, Math.max(1, l.me.x + randomInt(-NPC_WANDER_X, NPC_WANDER_X + 1))), y = Math.min(14, Math.max(1, l.me.y + randomInt(-NPC_WANDER_Y, NPC_WANDER_Y + 1)));
 				if (",.".includes(ground[y]?.[x] ?? "~")) await n.act(`move ${x} ${y}`);
 			}
 		}

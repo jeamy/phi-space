@@ -16,6 +16,7 @@ use crate::js;
 use crate::prototypes::{resolve_prototype, spawn, At};
 use crate::source::{hex, random_bytes, time_now};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
+use crate::rules::BESIDE;
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
@@ -229,7 +230,7 @@ async fn tilge(c: &mut Ctx) -> Result<()> {
 	let inv = inventory(c).await?; let purse = purse_of(c, inv);
 	let house = c.space.peek(&tmpl("Building", obj! { "buildId" => j::at(&l, "buildId").clone() }), c.txn()).await?;
 	let at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	if let Some(h) = &house { let h = fields(h); if j::s(h, "room") != c.room() || dist_to(at, Rect::of(h)) > 1.0 { return refuse("Getilgt wird am Kontor, bei dem du geliehen hast."); } }
+	if let Some(h) = &house { let h = fields(h); if j::s(h, "room") != c.room() || dist_to(at, Rect::of(h)) > BESIDE { return refuse("Getilgt wird am Kontor, bei dem du geliehen hast."); } }
 	let me = c.char_id().to_owned();
 	let loan_id = txt(j::at(&l, "loanId"));
 	// the house is gone: nobody is owed the coins, so they stay with the debtor

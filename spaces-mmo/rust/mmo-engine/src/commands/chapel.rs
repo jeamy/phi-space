@@ -11,6 +11,7 @@ use crate::fire::key_text;
 use crate::j;
 use crate::js;
 use crate::space::{fields, not_understood, refuse, tmpl, Result, FOREVER, NO_WAIT};
+use crate::rules::BESIDE;
 
 /// `blessed`: whether the actor's blessing still holds.
 pub async fn blessed(c: &Ctx, now: f64) -> Result<bool> {
@@ -23,7 +24,7 @@ pub async fn opfere(c: &mut Ctx, arg: &str) -> Result<()> {
 	let Some(ch) = j::opt(c.w(), "chapel").cloned() else { return refuse("In dieser Welt gibt es keine Kapellen.") };
 	let plan = j::s(&ch, "plan").to_owned();
 	let at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	let near = c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan.as_str() }), None).await?.iter().any(|e| dist_to(at, Rect::of(fields(e))) <= 1.0);
+	let near = c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan.as_str() }), None).await?.iter().any(|e| dist_to(at, Rect::of(fields(e))) <= BESIDE);
 	if !near { return refuse(format!("Opfern kann man nur direkt neben {}.", plan_of(c.w(), &plan).and_then(|p| j::so(p, "dative")).unwrap_or("einer Kapelle"))); }
 	let offerings = j::strs(j::a(&ch, "offerings"));
 	let names = proto_names(c.w(), offerings.iter().copied());

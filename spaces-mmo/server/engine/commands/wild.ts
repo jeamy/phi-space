@@ -25,6 +25,7 @@ import { atCell, distTo, planOf, putBack, takeNear, type Rect } from "./build.ts
 import { cropOf, fieldName, harvestOf } from "./field.ts";
 import { bedHere, bedName, growFactor, mayTend, nextDue, protoName, sortOf, writeBed } from "./garden.ts";
 import { random, randomBytes, timeNow } from "../source.ts";
+import { BESIDE } from "../../../shared/rules.ts";
 
 const night = (worldMs: number) => { const h = calendar(worldMs).hour; return h >= 20 || h < 6; };
 /** Cells between two rectangles (0: touching or overlapping), as one walks: diagonal steps count one. */
@@ -319,7 +320,7 @@ const zaeune: Command = {
 	help: "zäune – einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), einen Acker oder einen Hühnerstall neben dir setzen: Hasen, Rehe und Füchse kommen nicht mehr hinein",
 	async func(c) {
 		const wd = wild(c), room = { room: c.actor.room };
-		const near = <F extends Rect>(xs: F[]) => xs.filter((x) => distTo(c.actor, x) <= 1 && atCell(c, x));
+		const near = <F extends Rect>(xs: F[]) => xs.filter((x) => distTo(c.actor, x) <= BESIDE && atCell(c, x));
 		const beds = near((await c.space.readAll({ type: "Bed", fields: room })).map((e) => fieldsOf<BedFields>(e))).filter((b) => mayTend(c, b));
 		if (beds.length) {
 			const b = await bedHere(c, { may: (x) => mayTend(c, x), reach: 1 });

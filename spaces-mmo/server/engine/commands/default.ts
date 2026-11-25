@@ -15,6 +15,7 @@ import { handOff } from "../handover.ts";
 import { deedsOf, deedText } from "../deeds.ts";
 import { regionOfRoom } from "../regions.ts";
 import { DEFAULT_APPEARANCE, describeAppearance, parseAppearance } from "../appearance.ts";
+import { REACH_POINT, FEED_FIRE, FREE_CELL_RADIUS, COMMAND_PATH } from "../../../shared/rules.ts";
 
 const MAX_SAY = 300;
 
@@ -50,7 +51,7 @@ async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: b
 		const occ = await occupiedIn(c.space, room.roomId, c.actor.charId);
 		const there = occ.get(cellKey(to));
 		if (there && !passage) throw new CommandError(`Dort steht schon ${there}.`);
-		if (!findPath(c.world, room.ground, c.actor, to, 40, new Set([...[...occ.keys()].filter((k) => { const [x, y] = k.split(",").map(Number); return !isPassage(exits, { x: x!, y: y! }); }), ...solid]))) throw new CommandError("Dorthin führt kein freier Weg.");
+		if (!findPath(c.world, room.ground, c.actor, to, COMMAND_PATH, new Set([...[...occ.keys()].filter((k) => { const [x, y] = k.split(",").map(Number); return !isPassage(exits, { x: x!, y: y! }); }), ...solid]))) throw new CommandError("Dorthin führt kein freier Weg.");
 	}
 	if (passage) await releaseSpot(c.space, c.txn, c.actor.charId);
 	await relocate(c, { room: room.roomId, x: to.x, y: to.y }, { spot: !passage });
@@ -83,7 +84,7 @@ export async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; 
 	}
 	const avoid = new Set([...(await occupiedIn(c.space, room.roomId, c.actor.charId)).keys(), ...blocked, ...(o.exits === false ? [] : (await exitsHere(c, room.roomId)).map((x) => cellKey(x.f))), ...keepOff]);
 	for (let tries = 0; tries < 4; tries++) {
-		const cell = freeCellNear(c.world, room.ground, at, avoid);
+		const cell = freeCellNear(c.world, room.ground, at, avoid, FREE_CELL_RADIUS);
 		if (!cell) break;
 		if (!(await claimSpot(c.space, c.txn, c.actor, { room: room.roomId, ...cell }))) return cell;
 		avoid.add(cellKey(cell));
@@ -227,7 +228,7 @@ const move: Command = {
 		const [x, y] = arg.split(/\s+/).map(Number);
 		if (!Number.isInteger(x) || !Number.isInteger(y) || arg.split(/\s+/).length !== 2) throw new CommandError("So geht es: move <x> <y>, zum Beispiel move 10 8");
 		const room = await roomOf(c);
-		const path = findPath(c.world, room.ground, c.actor, { x: x!, y: y! });
+		const path = findPath(c.world, room.ground, c.actor, { x: x!, y: y! }, COMMAND_PATH);
 		if (!path) throw new CommandError("Dorthin führt kein Weg.");
 		if (path.length) await moveTo(c, { x: x!, y: y! }, { path: true });
 	},
@@ -285,7 +286,7 @@ const get: Command = {
 	async func(c, arg) {
 		if (!arg) throw new NotUnderstood("Was möchtest du aufheben? Zum Beispiel: get treibholz");
 		const found = itemsNamed(c.world, await itemsHere(c), arg, c.actor);
-		const item = found.find((i) => reach(i.f, c.actor) <= 1);
+		const item = found.find((i) => reach(i.f, c.actor) <= REACH_POINT);
 		if (!item) throw new (found.length ? CommandError : NotUnderstood)(found.length ? `${found[0]!.f.name} liegt zu weit weg; geh näher heran.` : `Hier liegt nichts, was „${arg.slice(0, 30)}“ heißt.`);
 		await check(c, item.f.locks, "get", `${item.f.name} lässt sich nicht aufheben.`);
 		// held by another world worker right now: someone else is faster
@@ -415,7 +416,7 @@ const put: Command = {
 		if (!found.length) throw new NotUnderstood(what ? `Du trägst nichts, was „${what.slice(0, 30)}“ heißt.` : "Was möchtest du nachlegen? Zum Beispiel: put treibholz in feuer");
 		const beacon = byName(await beaconsIn(c, c.actor.room), where, c.actor)[0];
 		if (!beacon) throw new NotUnderstood(`Hier ist kein ${where.slice(0, 30)}.`);
-		if (reach(beacon.f, c.actor) > 1) throw new CommandError(`Das ${beacon.f.name} ist zu weit weg; geh näher heran.`);
+		if (reach(beacon.f, c.actor) > FEED_FIRE) throw new CommandError(`Das ${beacon.f.name} ist zu weit weg; geh näher heran.`);
 		const plural = counted.count === null && !found.some((i) => [i.f.name, ...i.f.aliases].some((n) => n.toLowerCase() === what.toLowerCase())) && stem(what) !== what.toLowerCase();
 		const want = counted.count ?? (plural ? Infinity : 1);
 		if (want === 1) { await feed(c, found[0]!, beacon.f); return; }

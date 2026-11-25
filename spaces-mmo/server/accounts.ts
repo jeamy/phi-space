@@ -14,6 +14,7 @@ import { cellKey, freeCellNear, occupiedIn } from "./engine/occupancy.ts";
 import { walkable, type WorldDef } from "./engine/world.ts";
 import { actorToken, asFields, fieldsOf, NAMES_LOCK, type AccountFields, type CharacterFields, type CredentialFields, type NameAliasFields, type WebSessionFields } from "./model.ts";
 import { envMs, readExisting, StillHeld, peek } from "./space.ts";
+import { FREE_CELL_RADIUS, SPAWN_SCATTER_X, SPAWN_SCATTER_Y } from "../shared/rules.ts";
 
 const scrypt = (password: string, salt: Buffer): Promise<Buffer> =>
 	new Promise((ok, fail) => scryptCb(password, salt, 64, { N: 16384, r: 8, p: 1 }, (e, key) => (e ? fail(e) : ok(key))));
@@ -334,8 +335,8 @@ export class Accounts {
 		const room = live.rooms.find((r) => r.roomId === start)!;
 		const avoid = new Set([...(await occupiedIn(world, room.roomId)).keys(), ...live.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e)), ...live.beacons.filter((b) => b.room === room.roomId).map((b) => cellKey(b))]);
 		// a little scatter around the spawn, then the nearest free cell from there
-		const near = { x: room.spawn.x + randomInt(-3, 4), y: room.spawn.y + randomInt(-2, 3) };
-		const at = freeCellNear(this.w, room.ground, walkable(this.w, room.ground, near.x, near.y) ? near : room.spawn, avoid) ?? room.spawn;
+		const near = { x: room.spawn.x + randomInt(-SPAWN_SCATTER_X, SPAWN_SCATTER_X + 1), y: room.spawn.y + randomInt(-SPAWN_SCATTER_Y, SPAWN_SCATTER_Y + 1) };
+		const at = freeCellNear(this.w, room.ground, walkable(this.w, room.ground, near.x, near.y) ? near : room.spawn, avoid, FREE_CELL_RADIUS) ?? room.spawn;
 		const char = { charId: id("c"), accountId: account.accountId, name: account.name, room: room.roomId, x: at.x, y: at.y, skin: randomInt(0, this.w.skins.length), guest: account.guest };
 		return { char, release: async () => {} };
 	}

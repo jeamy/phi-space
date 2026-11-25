@@ -19,6 +19,7 @@ import { CommandError, type CommandCtx } from "./context.ts";
 import { blockedIn, claimSpot, freeCellNear, isPassage, occupiedIn } from "./occupancy.ts";
 import type { WorldDef } from "./world.ts";
 import { timeNow } from "./source.ts";
+import { FREE_CELL_RADIUS } from "../../shared/rules.ts";
 
 /** A guest account's lease, as the accounts write it (accounts.ts). */
 const GUEST_MS = () => envMs("SPACES_MMO_GUEST_TTL_MS", 7 * 24 * 3600_000);
@@ -70,7 +71,7 @@ export async function arrive(space: SpaceLike, w: WorldDef, h: HandoverFields): 
 		if (room && !landing) {
 			const avoid = new Set([...(await occupiedIn(space, room.roomId, h.charId)).keys(), ...(await blockedIn(space, w, room.roomId))]);
 			for (let tries = 0; tries < 4; tries++) {
-				const cell = freeCellNear(w, room.ground, at, avoid);
+				const cell = freeCellNear(w, room.ground, at, avoid, FREE_CELL_RADIUS);
 				if (!cell) break;
 				if (!(await claimSpot(space, txn, h.character, { room: room.roomId, ...cell }))) { at = cell; break; }
 				avoid.add(`${cell.x},${cell.y}`);

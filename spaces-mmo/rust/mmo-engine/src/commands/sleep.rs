@@ -18,6 +18,7 @@ use crate::js;
 use crate::settings::setting;
 use crate::source::time_now;
 use crate::space::{fields, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
+use crate::rules::BESIDE;
 
 fn nt(n: f64) -> String { phi_json::number_text(n) }
 fn works(n: f64) -> String { if n == 1.0 { "eine Arbeit".to_owned() } else { format!("{} Arbeiten", nt(n)) } }
@@ -89,7 +90,7 @@ pub async fn spend_rested(c: &Ctx) -> Result<bool> {
 async fn schlafe(c: &mut Ctx) -> Result<()> {
 	let Some(bed) = furnishing_for(c, "sleep").await? else { return refuse("Schlafen kann man im Bett einer Hütte; geh hinein („betrete“ neben ihr).") };
 	let bname = txt(j::at(&bed, "name"));
-	if near_buildings(c, Some("sleep")).await?.is_empty() || dist_to((j::n(&c.actor, "x"), j::n(&c.actor, "y")), Rect::of(&bed)) > 1.0 { return refuse(format!("Geh zum {bname}.")); }
+	if near_buildings(c, Some("sleep")).await?.is_empty() || dist_to((j::n(&c.actor, "x"), j::n(&c.actor, "y")), Rect::of(&bed)) > BESIDE { return refuse(format!("Geh zum {bname}.")); }
 	if c.space.peek(&tmpl("Sleep", obj! { "charId" => c.char_id() }), None).await?.is_some() { return refuse("Du schläfst schon."); }
 	if let Some(other) = c.space.read_all(&tmpl("Sleep", obj! { "bed" => j::at(&bed, "sceneryId").clone() }), None).await?.first() {
 		return refuse(format!("Im {bname} schläft schon {}.", txt(j::at(fields(other), "name"))));

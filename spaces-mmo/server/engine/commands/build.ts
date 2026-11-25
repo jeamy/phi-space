@@ -38,6 +38,7 @@ import { baysOf, berth, SHIP_LENGTH } from "../liner.ts";
 import { roadCellsIn, routeDeliver, routeNear, routeWork } from "./road.ts";
 import { spendRested } from "./sleep.ts";
 import { interiorOf, interiorSweep, isInterior, makeInterior, nearBuildings } from "./interior.ts";
+import { BESIDE, FIRE_CLEARANCE, SITE_REACH, EXIT_REACH, MOVE_BUILDING, MOVE_WINDOW, onRing } from "../../../shared/rules.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -77,7 +78,6 @@ function reachable(w: WorldDef, ground: string[], from: { x: number; y: number }
 export const PATH = ":";
 /** `onPeople`: beds and fields are dug and sown under anyone's feet, who walks off them afterwards (default.ts moveTo). */
 /** How far from an exit a plan `atExit` may lie: the cells right beside it stay free (isPassage). */
-export const EXIT_REACH = 2;
 
 /** Why `rect` cannot be built on, or null. `own`: the object being moved there (versetze, builder.ts): its own cells
  *  are no obstacle. */
@@ -99,7 +99,7 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 		if (!walkable(c.world, room.ground, p.x, p.y)) return "Dort ist kein fester Boden.";
 		if (room.ground[p.y]?.[p.x] === PATH) return "Das ist ein Weg; Wege und Plätze bleiben frei.";
 		if (isPassage(exits, p)) return "Dort ist ein Weg hinaus; den baut niemand zu.";
-		if (fires.some((b) => Math.max(Math.abs(b.x - p.x), Math.abs(b.y - p.y)) <= 1)) return "So nah am Feuer baut man nicht.";
+		if (fires.some((b) => Math.max(Math.abs(b.x - p.x), Math.abs(b.y - p.y)) <= FIRE_CLEARANCE)) return "So nah am Feuer baut man nicht.";
 		if (blocked.has(k)) { const piece = (await c.space.readAll({ type: "Scenery", fields: { room: room.roomId } })).map((e) => fieldsOf<SceneryFields>(e)).find((s) => distTo(p, s) === 0); return piece && !piece.fixed ? `Dort steht ${piece.name}; erst abräumen (räume).` : "Dort steht schon etwas oder wird gebaut."; }
 		if (!onPeople && people.has(k)) return "Dort steht jemand.";
 		if (things.has(k)) return "Dort liegt etwas; räum es erst weg.";
@@ -121,7 +121,7 @@ function besidesOf(p: { x: number; y: number }, plan: Pick<PlanDef, "w" | "h">):
 	const { x, y } = p, out: Rect[] = [];
 	for (let ry = y - plan.h; ry <= y + 1; ry++) for (let rx = x - plan.w; rx <= x + 1; rx++) {
 		const r = { x: rx, y: ry, w: plan.w, h: plan.h };
-		if (distTo(p, r) === 1) out.push(r);
+		if (onRing(distTo(p, r))) out.push(r);
 	}
 	const side = (r: Rect) => (r.y === y + 1 ? 0 : r.x === x + 1 ? 1 : r.x + r.w === x ? 2 : 3) * 10 + Math.abs(r.x + r.w / 2 - 0.5 - x) + Math.abs(r.y + r.h / 2 - 0.5 - y);
 	return out.sort((a, b) => side(a) - side(b));
@@ -180,9 +180,9 @@ async function jettyToWater(space: SpaceLike, w: WorldDef, txn: string, type: "B
 	const land = (x: number, y: number) => walkable(w, g, x, y);
 	if (!cells(b).some((p) => land(p.x, p.y))) return false; // on the water already
 	const long = Math.max(b.w, b.h), short = Math.min(b.w, b.h), tries: Rect[] = [];
-	for (const s of [{ w: long, h: short }, { w: short, h: long }]) for (let y = b.y - 2 - s.h; y <= b.y + b.h + 2; y++) for (let x = b.x - 2 - s.w; x <= b.x + b.w + 2; x++) {
+	for (const s of [{ w: long, h: short }, { w: short, h: long }]) for (let y = b.y - MOVE_WINDOW - s.h; y <= b.y + b.h + MOVE_WINDOW; y++) for (let x = b.x - MOVE_WINDOW - s.w; x <= b.x + b.w + MOVE_WINDOW; x++) {
 		const r = { x, y, ...s };
-		if (cells(r).every((p) => distTo(p, b) > 3)) continue;
+		if (cells(r).every((p) => distTo(p, b) > MOVE_BUILDING)) continue;
 		tries.push(r);
 	}
 	const touch = (r: Rect) => cells(r).filter((p) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => land(p.x + dx!, p.y + dy!))).length;
@@ -267,7 +267,6 @@ export async function useLight(c: CommandCtx, beaconId: string, use: LightUseFie
 
 /** How far from a site one still delivers and works on it: two cells, so a crowd fits (a hut of 2×2 has 12 cells beside
  *  it, 32 within two; one figure per cell). Chest, repair and demolition stay beside the building. */
-export const SITE_REACH = 2;
 
 /** The entry of `type` (a site, a bed) within `reach` of the actor whose cells (Plot `of`) carry `idKey`, taken in the
  *  transaction; `named` picks among several. One another command holds right now is not read (it is taken in that
@@ -563,7 +562,7 @@ const lager: Command = {
 	help: "lager [log] – was im Lagerhaus neben dir liegt und was du heute noch nehmen darfst; log: wer zuletzt ein- und ausgelagert hat",
 	async func(c, arg) {
 		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e));
-		const b = near.find((x) => planOf(c.world, x.plan)?.store && distTo(c.actor, x) <= 1);
+		const b = near.find((x) => planOf(c.world, x.plan)?.store && distTo(c.actor, x) <= BESIDE);
 		if (!b) throw new NotUnderstood("Geh direkt neben ein Lagerhaus.");
 		const right = await storeRight(c, b);
 		if (/^(?:log|protokoll|buch)$/i.test(arg.trim())) {
@@ -616,7 +615,7 @@ async function chestNamed(c: CommandCtx, target: string): Promise<OwnChest> {
 	const generic = !t || /^(?:truhe|kiste|chest)$/.test(t);
 	if (generic) {
 		// inside one's hut: its chest
-		const beside = mine.find((x) => x.region === null && (x.b.room === c.actor.room ? distTo(c.actor, x.b) <= 1 : c.actor.room === interiorOf(x.b.buildId)));
+		const beside = mine.find((x) => x.region === null && (x.b.room === c.actor.room ? distTo(c.actor, x.b) <= BESIDE : c.actor.room === interiorOf(x.b.buildId)));
 		if (beside) return beside;
 		if (mine.length === 1) return mine[0]!;
 		throw new CommandError(`In welche Truhe? ${mine.map((x, i) => `${i + 1} ${chestLabel(c, x.b)}`).join(", ")}. Sag zum Beispiel „verstaue 3 muscheln in 2“.`);
@@ -629,7 +628,7 @@ async function chestNamed(c: CommandCtx, target: string): Promise<OwnChest> {
 	const fits = mine.filter((x) => words.length && words.every((w) => names(x).includes(w)));
 	if (fits.length === 1) return fits[0]!;
 	if (fits.length > 1) {
-		const beside = fits.find((x) => x.region === null && x.b.room === c.actor.room && distTo(c.actor, x.b) <= 1);
+		const beside = fits.find((x) => x.region === null && x.b.room === c.actor.room && distTo(c.actor, x.b) <= BESIDE);
 		if (beside) return beside;
 		throw new CommandError(`Das passt auf mehrere Truhen: ${fits.map((x) => `${mine.indexOf(x) + 1} ${chestLabel(c, x.b)}`).join(", ")}. Sag die Nummer, etwa „verstaue 3 muscheln in ${mine.indexOf(fits[0]!) + 1}“.`);
 	}
@@ -677,7 +676,7 @@ const verstaue: Command = {
 		const kp = c.world.wild?.keepers?.find((k) => k.proto === hits[0]!.f.proto);
 		if (kp) throw new CommandError(`${kp.name} kommt nicht in die Truhe; neben deinem Bau lässt „einstallen ${kp.key}“ ${kp.acc} dort wachen.`);
 		// beside a warehouse and no chest named: into the store, as before
-		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
+		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= BESIDE);
 		const ownBeside = near.some((b) => b.accountId === c.account?.accountId && planOf(c.world, b.plan)?.chest && !planOf(c.world, b.plan)?.store);
 		const storeBeside = near.find((b) => planOf(c.world, b.plan)?.store);
 		const proto = hits[0]!.f.proto, all = (await inventory(c)).filter((i) => i.f.proto === proto), each = weight(c, proto);
@@ -709,7 +708,7 @@ const verstaue: Command = {
 		const fit = Math.min(n ?? all.length, all.length, each ? Math.floor(room / each + 1e-9) : all.length), k = Math.min(fit, MOVES_PER_COMMAND);
 		const where = `die Truhe deiner ${chestLabel(c, chest.b)}`;
 		if (k <= 0) throw new CommandError(`Die Truhe deiner ${chestLabel(c, chest.b)} ist voll (${cap}).`);
-		const beside = chest.region === null && chest.b.room === c.actor.room && distTo(c.actor, chest.b) <= 1;
+		const beside = chest.region === null && chest.b.room === c.actor.room && distTo(c.actor, chest.b) <= BESIDE;
 		let moved = 0;
 		if (chest.region === null) {
 			for (const it of all.slice(0, k)) if (await moveItem(c.space, c.txn, it.f.itemId, c.actor.charId, chest.b.buildId)) moved++;
@@ -802,7 +801,7 @@ const abriss: Command = {
 	help: "abriss – deinen Bau oder deine Baustelle neben dir abreißen (reisse … ab): die Fläche wird frei, ein Teil des Materials kommt zurück; eine Ruine neben dir räumt jeder ab",
 	async func(c, arg) {
 		const name = arg.replace(/\s+ab$/i, "").replace(/^(?:die|den|das|meine?n?)\s+/i, "").replace(/^baustelle$/i, "");
-		const site = (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e)).find((s) => distTo(c.actor, s) <= 1 && s.accountId === c.account?.accountId);
+		const site = (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e)).find((s) => distTo(c.actor, s) <= BESIDE && s.accountId === c.account?.accountId);
 		if (site && (!name || /baustelle/i.test(arg) || planOf(c.world, name)?.key === site.plan)) {
 			if (!(await c.space.takeIfExists({ type: "Site", fields: { buildId: site.buildId } }, 5_000, { txn: c.txn }))) throw new CommandError("Die Baustelle ist gerade nicht greifbar; bitte noch einmal.");
 			const back = await giveBack(c, site.needs.map((n) => ({ proto: n.proto, count: n.have })));
@@ -814,8 +813,8 @@ const abriss: Command = {
 		}
 		// a ruin beside one: anyone may clear it (its light went back already); what lay in its chest stays the owner's estate
 		const ruinName = name.replace(/^ruine?\s*(?:(?:der|des|einer|eines|von|of the|of)\s+)?/i, "");
-		const ownNear = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).some((e) => { const b = fieldsOf<BuildingFields>(e); return b.accountId === c.account?.accountId && distTo(c.actor, b) <= 1; });
-		const ruins = (await c.space.readAll({ type: "Ruin", fields: { room: c.actor.room } })).map((e) => fieldsOf<RuinFields>(e)).filter((r) => distTo(c.actor, r) <= 1 && (!ruinName || planOf(c.world, ruinName)?.key === r.plan || r.name.toLowerCase() === ruinName.toLowerCase()));
+		const ownNear = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).some((e) => { const b = fieldsOf<BuildingFields>(e); return b.accountId === c.account?.accountId && distTo(c.actor, b) <= BESIDE; });
+		const ruins = (await c.space.readAll({ type: "Ruin", fields: { room: c.actor.room } })).map((e) => fieldsOf<RuinFields>(e)).filter((r) => distTo(c.actor, r) <= BESIDE && (!ruinName || planOf(c.world, ruinName)?.key === r.plan || r.name.toLowerCase() === ruinName.toLowerCase()));
 		const ruin = /^ruine?\b/i.test(name) || !ownNear ? (ruins.find((r) => r.accountId === c.account?.accountId) ?? ruins[0]) : undefined;
 		if (ruin) {
 			if (!c.account || c.account.guest) throw new CommandError("Ruinen räumen nur registrierte Spieler.");

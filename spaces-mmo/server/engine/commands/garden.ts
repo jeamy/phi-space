@@ -31,9 +31,10 @@ import { harvestField, sowOnField } from "./field.ts";
 import { harvestTree, meansTree, plantTree } from "./trees.ts";
 import { furnishingFor } from "./interior.ts";
 import { collect, meansYield } from "./animals.ts";
-import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, noteBuilder, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
+import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, noteBuilder, plural, putBack, refusal, releaseLight, takeNear, useLight, type Rect } from "./build.ts";
 import { random, randomBytes, randomInt } from "../source.ts";
 import { creditDeed } from "../deeds.ts";
+import { SITE_REACH, flowerNeighbour } from "../../../shared/rules.ts";
 
 const STAGES = ["Saat", "Keim", "reif", "welk"] as const;
 export const garden = (c: CommandCtx): GardenDef => {
@@ -294,7 +295,7 @@ export function crossings(g: GardenDef, b: BedFields, ripe: BedPlant[], rnd: () 
 	const out = new Map<BedPlant, BedPlant>();
 	for (const p of ripe) {
 		if (sortOf(g, p.sort)?.kind !== "zier") continue;
-		const beside = b.plants.filter((q) => q !== p && q.stage < 3 && sortOf(g, q.sort)?.kind === "zier" && Math.abs(q.x - p.x) + Math.abs(q.y - p.y) === 1 && strain(q) !== strain(p));
+		const beside = b.plants.filter((q) => q !== p && q.stage < 3 && sortOf(g, q.sort)?.kind === "zier" && flowerNeighbour(Math.abs(q.x - p.x) + Math.abs(q.y - p.y)) && strain(q) !== strain(p));
 		if (beside.length && rnd() < g.crossChance) out.set(p, beside[Math.floor(rnd() * beside.length) % beside.length]!);
 	}
 	return out;
