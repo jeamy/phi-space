@@ -494,8 +494,9 @@ export async function startArena(o: { listen?: string; worlds?: number; /** test
 
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const a = await startArena();
-	console.log(`[arena] ready on ${a.listen}, ${MAX_WORLDS} worlds at a time`);
 	const bye = async () => { await a.close(); process.exit(0); };
 	process.on("SIGTERM", () => void bye());
 	process.on("SIGINT", () => void bye());
+	// the starter and the tests wait for this line; it comes after the handlers, since whoever reads it may signal at once
+	console.log(`[arena] ready on ${a.listen}, ${MAX_WORLDS} worlds at a time`);
 }

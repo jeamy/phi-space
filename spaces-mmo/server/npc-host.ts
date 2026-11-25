@@ -152,9 +152,9 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const npcs = await startNpcs();
-	// the starter and the tests wait for this line
-	console.log("[npc] ready");
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await npcs.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());
+	// the starter and the tests wait for this line; it comes after the handlers, since whoever reads it may signal at once
+	console.log("[npc] ready");
 }

@@ -340,11 +340,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 			await new Promise((r) => setTimeout(r, 1000));
 		}
 	}
-	// the starter and the tests wait for this line
-	console.log(`[world] ready (${process.env.SPACES_MMO_WORLD || "leuchtfeuer"}${process.env.SPACES_MMO_REGION ? `, region ${process.env.SPACES_MMO_REGION}` : ""})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await world.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());
+	// the starter and the tests wait for this line; it comes after the handlers, since whoever reads it may signal at once
+	console.log(`[world] ready (${process.env.SPACES_MMO_WORLD || "leuchtfeuer"}${process.env.SPACES_MMO_REGION ? `, region ${process.env.SPACES_MMO_REGION}` : ""})`);
 }
 
 /** A world worker loads its own part of the world only (2026-11-11, docs/rust-portierung.en.md R8.6): once a worker that was

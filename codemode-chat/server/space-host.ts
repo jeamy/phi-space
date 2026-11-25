@@ -60,9 +60,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const mem = process.env.CODEMODE_MEM === "1";
 	const dbPath = process.env.CODEMODE_SQLITE || join(ROOT, ".local", "codemode-space.sqlite");
 	const host = await startSpaceHost({ listen: process.env.CODEMODE_LISTEN || DEFAULT_SPACE, dbPath: mem ? null : dbPath });
-	// the starter and the tests wait for this line
-	console.log(`[space] ready on ${host.listen} (db ${mem ? "memory" : dbPath})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await host.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());
+	// the starter and the tests wait for this line; it comes after the handlers, since whoever reads it may signal at once
+	console.log(`[space] ready on ${host.listen} (db ${mem ? "memory" : dbPath})`);
 }

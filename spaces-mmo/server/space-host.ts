@@ -95,9 +95,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const dataDir = mem ? null : process.env.SPACES_MMO_DATA || join(ROOT, ".local");
 	const region = process.env.SPACES_MMO_REGION || undefined;
 	const host = await startSpaceHost({ listen: process.env.SPACES_MMO_LISTEN || DEFAULT_SPACE, accountsListen: process.env.SPACES_MMO_ACCOUNTS_LISTEN || DEFAULT_ACCOUNTS, dataDir, spaces: servedSpaces(), ...(region ? { region } : {}) });
-	// the starter and the tests wait for this line
-	console.log(`[space] ready: world on ${host.listen ?? "-"}, accounts on ${host.accountsListen ?? "-"} (${dataDir ?? "memory"})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await host.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());
+	// the starter and the tests wait for this line; it comes after the handlers, since whoever reads it may signal at once
+	console.log(`[space] ready: world on ${host.listen ?? "-"}, accounts on ${host.accountsListen ?? "-"} (${dataDir ?? "memory"})`);
 }

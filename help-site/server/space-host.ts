@@ -25,7 +25,6 @@ const server = await serveSpace(new SpaceService({
 	host: side.host, ctx,
 	identity: new StaticIdentity({ "peer-swarm": { principal: { peerId: "peer-swarm" }, roles: ["member"] } }),
 }), { listen: parseTarget(listenSpec), connection: () => ({ peerId: "peer-swarm" }) });
-console.log(`[space] ready on ${listenSpec} (db ${file ?? "memory"})`);
 
 let stopping = false;
 const shutdown = async () => {
@@ -37,3 +36,5 @@ const shutdown = async () => {
 };
 process.on("SIGINT", () => void shutdown());
 process.on("SIGTERM", () => void shutdown());
+// the starter and the tests wait for this line; it comes after the handlers, since whoever reads it may signal at once
+console.log(`[space] ready on ${listenSpec} (db ${file ?? "memory"})`);

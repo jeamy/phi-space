@@ -119,9 +119,9 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const m = await startModel();
-	// the starter and the tests wait for this line
-	console.log(`[model] ready (${process.env.SPACES_MMO_LLM === "1" ? "model calls on" : "model calls off"})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await m.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());
+	// the starter and the tests wait for this line; it comes after the handlers, since whoever reads it may signal at once
+	console.log(`[model] ready (${process.env.SPACES_MMO_LLM === "1" ? "model calls on" : "model calls off"})`);
 }

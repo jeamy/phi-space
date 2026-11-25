@@ -50,8 +50,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href && /\/standalo
 	const store = arg("--store"), listen = arg("--listen");
 	if (!store || !listen) { console.error("usage: standalone.ts --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--agent-host]"); process.exit(2); }
 	const s = await startStandalone({ store: store === "memory" ? null : store, listen: parseListen(listen), ...(arg("--peer") ? { peerId: arg("--peer")! } : {}), ...(process.argv.includes("--agent-host") ? { agentHost: true } : {}) });
-	console.log(`[phi-spaces] ready on ${s.address} (store ${store})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await s.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());
+	// the starter and the tests wait for this line; it comes after the handlers, since whoever reads it may signal at once
+	console.log(`[phi-spaces] ready on ${s.address} (store ${store})`);
 }
