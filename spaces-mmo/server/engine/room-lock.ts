@@ -2,14 +2,14 @@
 // one per island. Whoever changes the static occupancy of a room (builds, digs a bed or a field, plants, moves, clears
 // or demolishes, lets a site or ruin lapse) takes the room's lock in its transaction and writes it back with the commit;
 // an aborted transaction or a lease that runs out brings it back by the space's rules. A command that meets a taken lock
-// is refused (`held`, try again), a job waits. Roads across rooms and growth take the island's lock first. Order:
+// waits below one tick (COMMAND_LOCK_WAIT_MS) and is then refused (`held`, try again), a job waits longer. Roads across rooms and growth take the island's lock first. Order:
 // WORLD_LOCK (shared through pinTerrain, exclusive for loader and growth), then the island lock, then the room locks in
-// the order of their IDs. The decisive overlap check reads the plots after taking, inside the transaction (`refusal`
+// the order of their IDs. A fire's light use (LightUse, build.ts useLight and releaseLight) is taken after the room's lock, never before it. The decisive overlap check reads the footprints after taking, inside the transaction (`refusal`
 // with `locked`, `blockedIn` with the transaction), not from the process's copy of the world. A lock is written with its room (loader, `dig`, an inside) and goes with it.
 // A room's lock carries the room's occupancy version (`version`): every holder counts it up when it writes the lock back
 // (holdRoomVersion), so growth can tell that a room changed since it decided on it (commands/growth.ts).
 // The Rust engine has the same (rust/mmo-engine/src/room_lock.rs).
-import { NO_WAIT, FOREVER, type SpaceLike, type Template } from "phi-spaces";
+import { FOREVER, type SpaceLike, type Template } from "phi-spaces";
 import { CommandError } from "./context.ts";
 
 /** `version`: how often the lock was held and committed (absent: never), the room's occupancy version (plan section 3,
@@ -22,6 +22,11 @@ export const islandLock = (island: string) => ({ type: "IslandLock", fields: { i
 
 /** How long a job waits for a room's or an island's lock before it leaves the change to its next run. */
 export const LOCK_WAIT_MS = 5_000;
+/** How long a command waits for a taken room's or island's lock before it refuses: below one tick (150 ms). Two players
+ *  building side by side and the room's settlers (tests/perf/lock-refusals.ts, inventory 7.6): refused at once, 3.4 % of
+ *  their building commands were refused for the lock; with this wait, and the fire's light taken after the lock, none in
+ *  nine runs (plan section 3, "Locks": at most 1 %). */
+export const COMMAND_LOCK_WAIT_MS = 100;
 /** What a command meeting a taken room lock says (as the held case of takeNear). */
 export const LOCK_HELD = "Hier wird gerade gebaut oder abgeräumt; bitte gleich noch einmal.";
 
@@ -68,13 +73,13 @@ export async function holdIsland(space: SpaceLike, txn: string, island: string, 
 	return true;
 }
 
-/** A command: the room's lock now, or refused (LOCK_HELD). */
+/** A command: the room's lock within COMMAND_LOCK_WAIT_MS, or refused (LOCK_HELD). */
 export async function holdRoomOrRefuse(c: { space: SpaceLike; txn: string }, room: string): Promise<void> {
-	if (!(await holdRoom(c.space, c.txn, room, NO_WAIT))) throw new CommandError(LOCK_HELD);
+	if (!(await holdRoom(c.space, c.txn, room, COMMAND_LOCK_WAIT_MS))) throw new CommandError(LOCK_HELD);
 }
 /** A command: an island's lock and its rooms', or refused. */
 export async function holdIslandOrRefuse(c: { space: SpaceLike; txn: string }, island: string, rooms: readonly string[]): Promise<void> {
-	if (!(await holdIsland(c.space, c.txn, island, rooms, NO_WAIT))) throw new CommandError(LOCK_HELD);
+	if (!(await holdIsland(c.space, c.txn, island, rooms, COMMAND_LOCK_WAIT_MS))) throw new CommandError(LOCK_HELD);
 }
 
 /** What differs from one lock per room and one per island (the start check of plan section 5, made by the tests' stack

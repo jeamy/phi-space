@@ -576,11 +576,11 @@ The decision of 2026-11-25 (plan section 3, "Locks"): step 6 does not read the o
 
 ### 7.4 The room and island locks (step 5)
 
-One `RoomLock` {room} per room and one `IslandLock` {island} per island (`server/engine/room-lock.ts`, `rust/mmo-engine/src/room_lock.rs`). The loader writes them with the rooms, `dig` with a dug room and `makeInterior` with an inside. On every start the loader also gives each Room entry of the store that has no lock its lock, so dug rooms and insides from before step 5 get one. It takes the Room first, so a room being dropped is left alone. `dropInterior` takes the inside's lock away first; if the lock is still held after `LOCK_WAIT_MS`, the drop is aborted and left to the next sweep. Otherwise a holder committing later would write the lock back for a room that is gone. A holder takes the lock in its transaction and writes it back there, so the lock is held until the commit and comes back by the space's rules on an abort or an expired lease. Order: WORLD_LOCK, the island lock, then the room locks by ID.
+One `RoomLock` {room} per room and one `IslandLock` {island} per island (`server/engine/room-lock.ts`, `rust/mmo-engine/src/room_lock.rs`). The loader writes them with the rooms, `dig` with a dug room and `makeInterior` with an inside. On every start the loader also gives each Room entry of the store that has no lock its lock, so dug rooms and insides from before step 5 get one. It takes the Room first, so a room being dropped is left alone. `dropInterior` takes the inside's lock away first; if the lock is still held after `LOCK_WAIT_MS`, the drop is aborted and left to the next sweep. Otherwise a holder committing later would write the lock back for a room that is gone. A holder takes the lock in its transaction and writes it back there, so the lock is held until the commit and comes back by the space's rules on an abort or an expired lease. Order: WORLD_LOCK, the island lock, then the room locks by ID (since step 8 a fire's LightUse entry after them, section 7.6).
 
 | Who | Lock | When it is held |
 | --- | --- | --- |
-| `bau`, `abriss`, digging a bed (`umgraben`), staking a field (`stake`), giving up a bed or a field, planting a tree (`plantTree`), felling one (`treeHere`), clearing scenery (its last take), `versetze` | room, refused (`LOCK_HELD`) | before the decisive overlap check, which then reads the plots (since step 6 the Footprint entries) inside the transaction (`refusal(..., locked)`, `blockedIn(..., txn)`) |
+| `bau`, `abriss`, digging a bed (`umgraben`), staking a field (`stake`), giving up a bed or a field, planting a tree (`plantTree`), felling one (`treeHere`), clearing scenery (its last take), `versetze` | room, refused (`LOCK_HELD`; since step 8 after a wait of up to `COMMAND_LOCK_WAIT_MS`, 100 ms, section 7.6) | before the decisive overlap check, which then reads the plots (since step 6 the Footprint entries) inside the transaction (`refusal(..., locked)`, `blockedIn(..., txn)`) |
 | a jetty to the water, the sweep (a site lapses, a building on an old road, a ruin ends), the vote's demolition, a bed's or a field's tick when it lapses | room, waits `LOCK_WAIT_MS` | before the take; still held, the change waits for the next run |
 | a road's vote and plan | island and the rooms it crosses, refused | before the Route take, or after the trace (the cells are checked again inside the transaction) |
 | the road tick | island and its rooms, waits | before the take |
@@ -607,6 +607,30 @@ The migration, `npm --prefix spaces-mmo run migrate:footprints -- --space <addre
 
 The copies of the local test bed's region stores (2026-11-24) were run on copies in the scratchpad:
 - nord, ost and sued lacked only the locks. They migrated in 3 to 12 s each (101, 136 and 40 objects; 21, 28 and 8 locks), and the start check then let them start.
-- west is refused. The `test:play` huts and two test railway stations were written by hand without plots. One station, at graue-bucht 13,6, also overlaps the boat scenery and a bed; that overlap is left to the store's owner.
+- west is refused. The `test:play` huts and two test railway stations were written by hand without plots. One station, at graue-bucht 13,6, also overlaps the boat scenery and a bed; that overlap is left to the store's owner. On 2026-11-25 the owner had the two stations removed from the test bed's west store (with the two estates of a test account that does not exist and the 32 items in them; a backup was kept); a `--check` now lists only the `test:play` huts, which `--follow-objects` takes as they stand.
 
 Whether the stores on big and nano hold such objects is shown by a `--check` on a copy of each. new-world is not deployed, and a local store with data from before step 6 is refused until it is migrated.
+
+### 7.6 Contention at the room lock (step 8)
+
+`tests/contention.test.ts` runs two world workers with one lane each (`SPACES_MMO_WORLD_LANES=1`), so two characters' commands sent at once run in two processes; with `SPACES_MMO_WORLD_CMD` one or both are the Rust worker (`SPACES_MMO_WORLD_MIXED=1`: one of each).
+- *Two attempts on the same cells.* The admin moves its hut onto a rectangle (`versetze`, which takes no fire's light) while a player stakes out a hut on it, and two players stake out a hut there, each for `CONTENTION_ROUNDS` rounds (default 12). The move is sent a little later each round, across the time `bau` takes before its lock. Each round leaves exactly one object on the cells, and the objects, their Footprint entries and the locks agree. With `holdRoomOrRefuse` made a no-op, round 0 leaves two objects there, in both cases.
+- *A world worker killed in such a round.* The intent it held comes back with its transaction's lease (`SPACES_MMO_TXN_MS` 4 s in the test) and the other worker runs it; one object, every lock back.
+- *A holder killed while it holds the lock* (`tests/lock-holder.ts`, killed with SIGKILL). Until its lease runs out, `bau` is refused and leaves no footprint and no light used. Then the lock is back with the version it had (the killed transaction's write-back is gone), and the same `bau` goes through and counts the version up.
+- *Building against growth.* A command reads `WORLD_LOCK` in its transaction (`pinTerrain`, or the read in the world worker's first batch), and a read under a transaction keeps any other transaction from taking that entry. Growth takes `WORLD_LOCK` with `NO_WAIT`, so it cannot commit while a command runs, and a command does not start while growth holds it. A command never sees the room's grid change under it.
+- *Abort and retry* is `tests/room-lock.test.ts` (refused while held, through once free), with the killed holder above.
+
+The test found two defects at the fire's light use (`LightUse`, `build.ts` `lightFor`), both in TypeScript and Rust.
+- A command took the fire's LightUse entry before its search, and `count` was meant to tell a held entry from none. A count does not see a held entry, so a second builder took the path of a fire's first use. It searched, took the room's lock, and failed only at the unique write, while the first builder, holding the light, had been refused at that lock: both were refused. The take now uses `takeExisting`, which tells a held entry from a missing one.
+- The order was an inversion. `bau`, `umgraben`, `stake` and `plantTree` took the light before the room lock, while `abriss`, giving a bed, a field or a tree back and every job take the room lock and then the light (`releaseLight`). Since step 8 `lightFor` only reads (the same fire and the same refusal as before, so the walks do not change), and `useLight` takes the light after the room lock, waiting up to `COMMAND_LOCK_WAIT_MS`, and refuses if it no longer suffices. Order everywhere: WORLD_LOCK, island lock, room locks, then LightUse.
+
+*Refusal rate* (plan section 3, at most 1 %): `tests/perf/lock-refusals.ts` runs two world workers, the npc process with the bay's three settlers (no model calls, each given the material of its three buildings), and two players beside each other in the bay, who stake out a hut and give it up again with a random pause of up to 1.5 s between their commands, for 180 s. That is one building command per player about every 0.85 s, far denser than play. The settlers add 4 to 11 building commands a run at their 8 s rounds.
+
+| Variant | Runs | Building commands per run | Refused for the lock |
+| --- | --- | --- | --- |
+| refused at once, light before the lock | 2 (TypeScript) | 431 to 439 | 2.05 %, 1.86 % (the second: 4 `bau`, 4 `abriss`) |
+| 100 ms wait, light before the lock | 4 (TS twice, Rust, mixed) | 414 to 445 | 0.67 %, 2.17 %, 0.70 %, 0.95 %, every refusal a `bau` (the inversion) |
+| refused at once, light after the lock | 1 (TypeScript) | 436 | 3.44 % (two builders now meet at the room lock) |
+| 100 ms wait, light after the lock (step 8) | 3 each of TS, Rust, mixed | 418 to 445 | 0 % in all nine; no refusal for the light either |
+
+A command now waits up to `COMMAND_LOCK_WAIT_MS` (100 ms, below a tick of 150 ms) for a room's or an island's lock before it refuses with `LOCK_HELD`. A job still waits `LOCK_WAIT_MS`.

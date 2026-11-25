@@ -140,7 +140,7 @@ async function stake(c: CommandCtx, at: string): Promise<void> {
 	if (again) throw new CommandError(`Hier passt kein Acker hin (${d.w}×${d.h}): ${again}`);
 	const fieldId = `field-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
 	await writeFootprint(c.space, c.txn, footprint(room.roomId, fieldId, rect));
-	await useLight(c, light.beaconId, light.use, d.points, light.fresh);
+	await useLight(c, light.beaconId, d.points);
 	const f: FieldFields = { fieldId, room: room.roomId, ...rect, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId, beaconId: light.beaconId, points: d.points,
 		stage: "brach", crop: null, seeds: 0, seedNeed: 0, work: 0, workNeed: 0, yields: [], soil: 1, by: {}, human: 0, other: 0, lastGroup: null, tired: 0, lastHarvestWorldMs: 0,
 		dueWorldMs: FOREVER, untilWorldMs: (await decayNowOf(c.space, c.txn)) + d.keepWorldMs, at: now };

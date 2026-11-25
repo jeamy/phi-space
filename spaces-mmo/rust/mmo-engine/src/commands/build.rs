@@ -20,7 +20,7 @@ use crate::fire::{covers_of, flame_of, is_lit, key_text};
 use crate::j;
 use crate::js;
 use crate::occupancy::{blocked_in_txn, cell_key, cell_of, footprint, footprint_cells, footprints_in, is_passage, occupied_in, take_footprint, write_footprint};
-use crate::room_lock::{hold_room, hold_room_or_refuse, LOCK_WAIT_MS};
+use crate::room_lock::{hold_room, hold_room_or_refuse, COMMAND_LOCK_WAIT_MS, LOCK_WAIT_MS};
 use crate::pack::{fmt_load, load_at, load_of, pack_max};
 use crate::prototypes::{resolve_prototype, spawn, At};
 use crate::room_growth::rows;
@@ -330,15 +330,19 @@ pub fn touches_water(w: &Json, ground: &[String], r: Rect) -> bool {
 	cells(Rect { x: r.x - 1.0, y: r.y - 1.0, w: r.w + 2.0, h: r.h + 2.0 }).iter().any(|p| tile(ground, p.0, p.1).is_some() && !walkable(w, ground, p.0, p.1))
 }
 
-/// A fire's light for a site: the fire, its use (taken in the transaction) and whether it is its first.
-pub struct Light { pub beacon_id: String, pub used: f64, pub fresh: bool }
+/// A fire with light left for a site (`lightFor`; its use is taken by `use_light`).
+pub struct Light { pub beacon_id: String }
 
 const BUSY: &str = "Gerade baut jemand anderes im Licht dieses Feuers; bitte gleich noch einmal.";
 
-/// `lightFor`: a burning fire that covers the room and has light left for `points`; Err with the reason.
+/// `shareOf`: how much of a fire's light the actor may use (a settler leaves `settlers.reserve` free).
+fn share_of(c: &Ctx) -> f64 { if c.account.as_ref().is_some_and(|a| j::b(a, "settler")) { 1.0 - j::no(j::at(c.w(), "settlers"), "reserve").unwrap_or(0.25) } else { 1.0 } }
+
+/// `lightFor`: a burning fire that covers the room and has light left for `points`, as the space stands (nothing taken:
+/// `use_light` takes the light use after the room's lock); Err with the reason.
 pub async fn light_for(c: &Ctx, points: f64) -> Result<std::result::Result<Light, String>> {
 	let now = world_now_of(&c.space, c.txn()).await?;
-	let share = if c.account.as_ref().is_some_and(|a| j::b(a, "settler")) { 1.0 - j::no(j::at(c.w(), "settlers"), "reserve").unwrap_or(0.25) } else { 1.0 };
+	let share = share_of(c);
 	let cover = covers_of(&c.space, c.w(), c.txn()).await?;
 	let room = c.room().to_owned();
 	let mut fires: Vec<&Json> = j::a(c.w(), "beacons").iter().filter(|b| cover.iter().find(|(k, _)| k == j::s(b, "beaconId")).is_some_and(|(_, l)| l.contains(&room))).collect();
@@ -349,12 +353,8 @@ pub async fn light_for(c: &Ctx, points: f64) -> Result<std::result::Result<Light
 		let id = j::s(b, "beaconId").to_owned();
 		if !is_lit(flame_of(&c.space, &id, None).await?.as_ref(), now) { continue; }
 		if lit.is_none() { lit = Some(id.clone()); }
-		let t = tmpl("LightUse", obj! { "beaconId" => id.as_str() });
-		let e = c.space.take_if_exists(&t, NO_WAIT, c.txn()).await?;
-		if e.is_none() && c.space.count(&t, None).await? > 0.0 { return refuse(BUSY); }
-		let used = e.as_ref().map_or(0.0, |e| j::n(fields(e), "used"));
-		if used + points <= light_of(c, &id).await? * share { return Ok(Ok(Light { beacon_id: id, used, fresh: e.is_none() })); }
-		if let Some(e) = &e { c.space.write(&tmpl("LightUse", fields(e).clone()), c.txn(), FOREVER).await?; }
+		let used = c.space.peek(&tmpl("LightUse", obj! { "beaconId" => id.as_str() }), None).await?.map_or(0.0, |e| j::n(fields(&e), "used"));
+		if used + points <= light_of(c, &id).await? * share { return Ok(Ok(Light { beacon_id: id })); }
 	}
 	Ok(Err(match lit { Some(id) => format!("Das Licht des Feuers reicht für keinen weiteren Bau.{}", more_light(c, &id).await?), None => "Das Feuer, das hier Licht gibt, ist aus; gebaut wird nur im Licht.".into() }))
 }
@@ -386,10 +386,15 @@ async fn more_light(c: &Ctx, beacon_id: &str) -> Result<String> {
 	Ok(out)
 }
 
-/// `useLight`: writes the fire's light use back (its first with the unique check).
-pub async fn use_light(c: &Ctx, l: &Light, delta: f64) -> Result<()> {
-	let e = tmpl("LightUse", obj! { "beaconId" => l.beacon_id.as_str(), "used" => (l.used + delta).max(0.0) });
-	let r = if l.fresh { c.space.write_unique(&e, c.txn(), FOREVER, &["beaconId"]).await } else { c.space.write(&e, c.txn(), FOREVER).await };
+/// `useLight`: takes `points` of the fire's light after the room's lock (its first use written with the unique check).
+pub async fn use_light(c: &Ctx, l: &Light, points: f64) -> Result<()> {
+	// after the room's lock (`useLight`): waits for another holder up to COMMAND_LOCK_WAIT_MS, then refused
+	let t = tmpl("LightUse", obj! { "beaconId" => l.beacon_id.as_str() });
+	let e = match c.space.take_existing(&t, c.txn(), COMMAND_LOCK_WAIT_MS).await { Err(Error::StillHeld(_)) => return refuse(BUSY), e => e? };
+	let used = e.as_ref().map_or(0.0, |e| j::n(fields(e), "used"));
+	if used + points > light_of(c, &l.beacon_id).await? * share_of(c) { return refuse(format!("Das Licht des Feuers reicht für keinen weiteren Bau.{}", more_light(c, &l.beacon_id).await?)); }
+	let w = tmpl("LightUse", obj! { "beaconId" => l.beacon_id.as_str(), "used" => (used + points).max(0.0) });
+	let r = if e.is_none() { c.space.write_unique(&w, c.txn(), FOREVER, &["beaconId"]).await } else { c.space.write(&w, c.txn(), FOREVER).await };
 	match r { Err(e) if e.to_string().contains("unique entry already exists") => refuse(BUSY), Err(e) => Err(e), Ok(_) => Ok(()) }
 }
 

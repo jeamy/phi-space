@@ -159,7 +159,7 @@ async function dig(c: CommandCtx, arg: string): Promise<void> {
 		try { await c.space.write({ type: "BedCommons", fields: { beaconId: light.beaconId, bedId } as never }, c.txn, FOREVER, { unique: ["beaconId"] }); }
 		catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Im Licht dieses Feuers hat gerade jemand ein Gemeinschaftsbeet angelegt."); throw e; }
 	}
-	await useLight(c, light.beaconId, light.use, size.points, light.fresh);
+	await useLight(c, light.beaconId, size.points);
 	const b: BedFields = { ...(kind ? { kind } : {}), bedId, room: room.roomId, ...rect, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId, beaconId: light.beaconId, points: size.points,
 		sponsors: [], plants: [], wateredWorldMs: now, weedy: false, dueWorldMs: FOREVER, untilWorldMs: (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs, at: now };
 	await writeBed(c, b);

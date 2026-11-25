@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use phi_json::{obj, Json};
 
 use crate::j;
-use crate::space::{fields, refuse, tmpl, Result, Space, FOREVER, NO_WAIT};
+use crate::space::{fields, refuse, tmpl, Result, Space, FOREVER};
 
 /// `roomLock`.
 pub fn room_lock(room: &str) -> Json { tmpl("RoomLock", obj! { "room" => room }) }
@@ -17,6 +17,8 @@ pub fn island_lock(island: &str) -> Json { tmpl("IslandLock", obj! { "island" =>
 
 /// `LOCK_WAIT_MS`: how long a job waits for a lock before it leaves the change to its next run.
 pub const LOCK_WAIT_MS: f64 = 5_000.0;
+/// `COMMAND_LOCK_WAIT_MS`: how long a command waits for a taken lock before it refuses (below one tick).
+pub const COMMAND_LOCK_WAIT_MS: f64 = 100.0;
 /// `LOCK_HELD`.
 pub const LOCK_HELD: &str = "Hier wird gerade gebaut oder abgeräumt; bitte gleich noch einmal.";
 
@@ -56,9 +58,9 @@ pub async fn hold_island(space: &Space, txn: &str, island: &str, rooms: &[&str],
 	Ok(true)
 }
 /// `holdRoomOrRefuse`.
-pub async fn hold_room_or_refuse(space: &Space, txn: &str, room: &str) -> Result<()> { if hold_room(space, txn, room, NO_WAIT).await? { Ok(()) } else { refuse(LOCK_HELD) } }
+pub async fn hold_room_or_refuse(space: &Space, txn: &str, room: &str) -> Result<()> { if hold_room(space, txn, room, COMMAND_LOCK_WAIT_MS).await? { Ok(()) } else { refuse(LOCK_HELD) } }
 /// `holdIslandOrRefuse`.
-pub async fn hold_island_or_refuse(space: &Space, txn: &str, island: &str, rooms: &[&str]) -> Result<()> { if hold_island(space, txn, island, rooms, NO_WAIT).await? { Ok(()) } else { refuse(LOCK_HELD) } }
+pub async fn hold_island_or_refuse(space: &Space, txn: &str, island: &str, rooms: &[&str]) -> Result<()> { if hold_island(space, txn, island, rooms, COMMAND_LOCK_WAIT_MS).await? { Ok(()) } else { refuse(LOCK_HELD) } }
 
 /// `lockReport`: a room without its lock or with two, a lock without its room, the same for islands (`skip_room`: rooms
 /// a test wrote by hand; an island only such rooms are on is left out with them).

@@ -18,7 +18,7 @@ import { blessed } from "./chapel.ts";
 import { zoneRefusal } from "./townhall.ts";
 import { satedFactor } from "./food.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
-import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
+import { FOREVER, NO_WAIT, StillHeld, takeExisting, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type FreightFields, type FireBuilderFields, type IntentFields, type ItemFields, type LightUseFields, type MillLoadFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
@@ -38,7 +38,7 @@ import { baysOf, berth, SHIP_LENGTH } from "../liner.ts";
 import { roadCellsIn, routeDeliver, routeNear, routeWork } from "./road.ts";
 import { spendRested } from "./sleep.ts";
 import { interiorOf, interiorSweep, isInterior, makeInterior, nearBuildings } from "./interior.ts";
-import { holdRoom, holdRoomOrRefuse } from "../room-lock.ts";
+import { COMMAND_LOCK_WAIT_MS, holdRoom, holdRoomOrRefuse } from "../room-lock.ts";
 import { BESIDE, FIRE_CLEARANCE, SITE_REACH, EXIT_REACH, MOVE_BUILDING, MOVE_WINDOW, onRing } from "../../../shared/rules.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
@@ -221,12 +221,15 @@ function jettyTries(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">, at?: { x: num
 /** Whether a cell beside the rect is water. */
 export const touchesWater = (w: WorldDef, room: RoomFields, r: Rect) => cells({ x: r.x - 1, y: r.y - 1, w: r.w + 2, h: r.h + 2 }).some((p) => room.ground[p.y]?.[p.x] !== undefined && !walkable(w, room.ground, p.x, p.y));
 
-/** A burning fire that covers the room and has light left for `points` (its LightUse taken in the transaction); null with
- *  the reason. */
-export async function lightFor(c: CommandCtx, points: number): Promise<{ beaconId: string; use: LightUseFields; fresh: boolean } | string> {
-	const now = await worldNowOf(c.space, c.txn);
-	// a settler leaves part of the light free for the people who come (world settlers.reserve)
-	const share = c.account?.settler ? 1 - (c.world.settlers?.reserve ?? 0.25) : 1;
+/** Another command holds the fire's light use right now. */
+const BUSY_LIGHT = "Gerade baut jemand anderes im Licht dieses Feuers; bitte gleich noch einmal.";
+/** How much of a fire's light the actor may use: a settler leaves part of it free for the people who come (world
+ *  settlers.reserve). */
+const shareOf = (c: CommandCtx) => (c.account?.settler ? 1 - (c.world.settlers?.reserve ?? 0.25) : 1);
+/** A burning fire that covers the room and has light left for `points`, as the space stands (nothing taken: the light
+ *  use is taken after the room's lock, by useLight); the reason otherwise. */
+export async function lightFor(c: CommandCtx, points: number): Promise<{ beaconId: string } | string> {
+	const now = await worldNowOf(c.space, c.txn), share = shareOf(c);
 	// a lighthouse widens its fire to the rooms around it (fire.ts coversOf): its light is shared there too
 	const cover = await coversOf(c.space, c.world, c.txn);
 	const fires = c.world.beacons.filter((b) => cover.get(b.beaconId)?.includes(c.actor.room)).sort((a, b) => Number(b.room === c.actor.room) - Number(a.room === c.actor.room));
@@ -235,11 +238,8 @@ export async function lightFor(c: CommandCtx, points: number): Promise<{ beaconI
 	for (const b of fires) {
 		if (!isLit(await flameOf(c.space, b.beaconId), now)) continue;
 		lit ??= b;
-		const e = await c.space.takeIfExists({ type: "LightUse", fields: { beaconId: b.beaconId } }, NO_WAIT, { txn: c.txn });
-		if (!e && (await c.space.count({ type: "LightUse", fields: { beaconId: b.beaconId } }))) throw new CommandError("Gerade baut jemand anderes im Licht dieses Feuers; bitte gleich noch einmal.");
-		const use = e ? fieldsOf<LightUseFields>(e) : { beaconId: b.beaconId, used: 0 };
-		if (use.used + points <= (await lightOf(c, b.beaconId)) * share) return { beaconId: b.beaconId, use, fresh: !e };
-		if (e) await c.space.write({ type: "LightUse", fields: use as never }, c.txn, FOREVER); // unchanged, back
+		const e = await peek(c.space, { type: "LightUse", fields: { beaconId: b.beaconId } });
+		if ((e ? fieldsOf<LightUseFields>(e).used : 0) + points <= (await lightOf(c, b.beaconId)) * share) return { beaconId: b.beaconId };
 	}
 	return lit ? `Das Licht des Feuers reicht für keinen weiteren Bau.${await moreLight(c, lit.beaconId)}` : "Das Feuer, das hier Licht gibt, ist aus; gebaut wird nur im Licht.";
 }
@@ -264,10 +264,16 @@ async function moreLight(c: CommandCtx, beaconId: string): Promise<string> {
 	out.push(" Verfällt ein Bau oder wird er abgerissen, wird sein Licht wieder frei.");
 	return out.join("");
 }
-/** Writes the fire's light use back (`fresh`: its first: with the unique check, so two first sites cannot both write one). */
-export async function useLight(c: CommandCtx, beaconId: string, use: LightUseFields, delta: number, fresh: boolean): Promise<void> {
-	try { await c.space.write({ type: "LightUse", fields: { beaconId, used: Math.max(0, use.used + delta) } as never }, c.txn, FOREVER, fresh ? { unique: ["beaconId"] } : {}); }
-	catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Gerade baut jemand anderes im Licht dieses Feuers; bitte gleich noch einmal."); throw e; }
+/** Takes `points` of the fire's light for what is placed, after the room's lock (room-lock.ts: the light use after the
+ *  room's lock, as every command and job that gives light back holds them): waits for another holder up to
+ *  COMMAND_LOCK_WAIT_MS, then refused; refused too when the light no longer suffices (another took it since lightFor).
+ *  The first use of a fire is written with the unique check, so two first sites cannot both write one. */
+export async function useLight(c: CommandCtx, beaconId: string, points: number): Promise<void> {
+	const e = await takeExisting(c.space, { type: "LightUse", fields: { beaconId } }, COMMAND_LOCK_WAIT_MS, { txn: c.txn }).catch((x) => { throw x instanceof StillHeld ? new CommandError(BUSY_LIGHT) : x; });
+	const used = e ? fieldsOf<LightUseFields>(e).used : 0;
+	if (used + points > (await lightOf(c, beaconId)) * shareOf(c)) throw new CommandError(`Das Licht des Feuers reicht für keinen weiteren Bau.${await moreLight(c, beaconId)}`);
+	try { await c.space.write({ type: "LightUse", fields: { beaconId, used: Math.max(0, used + points) } as never }, c.txn, FOREVER, e ? {} : { unique: ["beaconId"] }); }
+	catch (x) { if (/unique entry already exists/.test((x as Error).message)) throw new CommandError(BUSY_LIGHT); throw x; }
 }
 
 /** How far from a site one still delivers and works on it: two cells, so a crowd fits (a hut of 2×2 has 12 cells beside
@@ -399,7 +405,7 @@ export const bau: Command = {
 		if (again) throw new CommandError(`Hier passt ${plan.dative?.startsWith("einem ") ? "kein" : "keine"} ${plan.name} hin: ${again}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
 		await writeFootprint(c.space, c.txn, footprint(room.roomId, buildId, rect));
-		await useLight(c, light.beaconId, light.use, plan.points, light.fresh);
+		await useLight(c, light.beaconId, plan.points);
 		const s: SiteFields = { buildId, plan: plan.key, name: plan.name, room: room.roomId, ...rect, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId,
 			needs: plan.needs.map((n) => ({ proto: n.proto, name: c.world.prototypes.find((x) => x.key === n.proto)?.name ?? n.proto, count: n.count, have: 0 })), work: 0, workNeed: plan.work, human: 0, other: 0, beaconId: light.beaconId, points: plan.points, by: {},
 			untilWorldMs: (await decayNowOf(c.space, c.txn)) + def.siteWorldMs, at: now };

@@ -93,7 +93,7 @@ export async function plantTree(c: CommandCtx, arg: string): Promise<boolean> {
 	if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: hit.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Der Samen ist gerade nicht greifbar; bitte noch einmal.");
 	const treeId = `tree-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
 	await writeFootprint(c.space, c.txn, footprint(room.roomId, treeId, rect));
-	await useLight(c, light.beaconId, light.use, d.points, light.fresh);
+	await useLight(c, light.beaconId, d.points);
 	const t: TreeFields = { treeId, sort: sort.key, room: room.roomId, x: rect.x, y: rect.y, w: 1, h: 1, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId, beaconId: light.beaconId, points: d.points,
 		stage: 0, dueWorldMs: nextDate(sort, 0, now, await fogOf(c.space, room.roomId), await patienceOf(c.space, c.txn)), at: now };
 	await c.space.write({ type: "Tree", fields: t as never }, c.txn, FOREVER);
