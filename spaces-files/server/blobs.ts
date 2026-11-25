@@ -64,6 +64,7 @@ export function unseal(secret: Buffer, o: BlobOwner, ref: BlobRef, sealed: Buffe
 interface Medium {
 	write(tenantId: string, blobId: string, sealed: Buffer): Promise<void>;
 	read(tenantId: string, blobId: string): Promise<Buffer | null>;
+	has(tenantId: string, blobId: string): Promise<boolean>;
 	remove(tenantId: string, blobId: string): Promise<void>;
 	/** Every file in the tenant's blob area as `shard/name`, finished blobs and leftover temporary files alike. */
 	names(tenantId: string): Promise<string[]>;
@@ -76,6 +77,7 @@ class MemoryMedium implements Medium {
 	#t(tenantId: string) { let m = this.files.get(tenantId); if (!m) this.files.set(tenantId, m = new Map()); return m; }
 	async write(t: string, id: string, b: Buffer) { this.#t(t).set(id, Buffer.from(b)); }
 	async read(t: string, id: string) { const b = this.files.get(t)?.get(id); return b ? Buffer.from(b) : null; }
+	async has(t: string, id: string) { return this.files.get(t)?.has(id) ?? false; }
 	async remove(t: string, id: string) { this.files.get(t)?.delete(id); }
 	async names(t: string) { return [...(this.files.get(t)?.keys() ?? [])].map((n) => `${n.slice(0, 2)}/${n}`); }
 	async removeName(t: string, p: string) { this.files.get(t)?.delete(p.slice(p.indexOf("/") + 1)); }
@@ -112,6 +114,10 @@ class DirMedium implements Medium {
 		catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return null; throw e; }
 	}
 	async remove(t: string, id: string) { await this.removeName(t, `${id.slice(0, 2)}/${id}`); }
+	async has(t: string, id: string) {
+		try { return (await stat(join(this.#dir(t, id), id))).isFile(); }
+		catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return false; throw e; }
+	}
 	async names(t: string) {
 		const out: string[] = [];
 		let shards: string[];
@@ -163,7 +169,7 @@ export class BlobStore {
 
 	/** Whether the blob exists (the restore check, section 6.5); says nothing about its authenticity. */
 	async exists(tenantId: string, blobId: string): Promise<boolean> {
-		return BLOB_ID.test(blobId) && (await this.#m.read(tenantId, blobId)) !== null;
+		return BLOB_ID.test(blobId) && this.#m.has(tenantId, blobId);
 	}
 
 	/** Deletes a blob no committed row names any more; false while deletion is held. */

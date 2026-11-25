@@ -300,6 +300,27 @@ export class FilesService {
 		catch (e) { if (e instanceof UniqueConflict) throw new InconsistentState(`tenant ${tenantId}: ${e.message}`); throw e; }
 	}
 
+	/**
+	 * Deletes, in one bounded batch, the tenant's blobs that no content row names (section 6.3): orphans of saves that
+	 * died between the blob write and the commit, or after the commit before the old blob's deletion. It runs in the
+	 * tenant queue, where no save of the tenant is in flight, and only while the tenant Space holds no open or
+	 * reserved transaction state: a content row taken by a save that has not resolved yet (a crashed process before the
+	 * reaper, an unknown outcome) is invisible to a read, and its blob must survive the transaction's abort. Returns the
+	 * number removed, or `null` when it did not run.
+	 */
+	sweepBlobs(tenantId: string, limit = 1000): Promise<number | null> {
+		return this.inTenant(tenantId, async (space) => {
+			const st = await space.stats();
+			if (st.txns > 0 || st.locked > 0 || st.uncommitted > 0) return null;
+			const referenced = new Set<string>();
+			for (const e of await space.readAll({ type: schema.T.content })) referenced.add(e.fields.blobId as string);
+			// the state may have changed while we read; only an unchanged one is safe to act on
+			const again = await space.stats();
+			if (again.txns > 0 || again.locked > 0 || again.uncommitted > 0) return null;
+			return this.blobs.sweep(tenantId, referenced, limit);
+		});
+	}
+
 	/** Whether a tenant is absent, reserved but still in provisioning, or initialized. */
 	async tenantState(tenantId: string): Promise<"absent" | "provisioning" | "ready"> {
 		if (!(await this.tenants()).includes(tenantId)) return "absent";

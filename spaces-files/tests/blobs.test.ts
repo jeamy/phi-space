@@ -9,7 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BlobStore, type BlobOwner, type BlobRef } from "../server/blobs.ts";
 import { CONTENT_KEYS_FILE, DeploymentState, StateUnavailable } from "../server/deployment.ts";
-import { InconsistentState } from "../server/schema.ts";
+import { FOREVER } from "phi-spaces/core";
+import { content, InconsistentState, T } from "../server/schema.ts";
 import { FilesService } from "../server/service.ts";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "spaces-files-blobs-"));
@@ -153,6 +154,40 @@ test("the service opens its blob directory apart from the data and state directo
 		try {
 			assert.equal(s.blobs.dir, join(root, "blobs"));
 			assert.equal(statSync(join(root, "blobs")).mode & 0o777, 0o700);
+		} finally { await s.close(); }
+	} finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("the sweep waits while a save's take of the old content row is unresolved, also across a crash", async () => {
+	const root = scratch();
+	const dirs = { dataDir: join(root, "data"), stateDir: join(root, "state"), blobDir: join(root, "blobs") };
+	const NODE = "f".repeat(22);
+	try {
+		let s = await FilesService.open(dirs);
+		await s.createTenant("acme", { actorId: "lea", homeName: "lea", issuer: "i", subject: "s" });
+		const old = await s.blobs.put(owner({ nodeId: NODE }), Buffer.from("version 1"));
+		const orphan = await s.blobs.put(owner({ nodeId: NODE, version: 2 }), Buffer.from("never committed"));
+		await s.inTenant("acme", (sp) => sp.write(content(NODE, 1, old), null, FOREVER));
+		// a save has taken the old row inside its transaction and has not committed when the process dies
+		const txn = await s.inTenant("acme", async (sp) => {
+			const t = await sp.createTransaction(3600_000);
+			assert.ok(await sp.take({ type: T.content, fields: { nodeId: NODE } }, 0, { txn: t.id }));
+			assert.equal((await sp.readAll({ type: T.content })).length, 0, "the taken row is invisible to a read");
+			return t.id;
+		});
+		assert.equal(await s.sweepBlobs("acme"), null, "an open reservation stops the sweep");
+		await s.close();
+
+		s = await FilesService.open(dirs);
+		try {
+			assert.equal(await s.sweepBlobs("acme"), null, "after the restart, before the reservation resolves");
+			assert.equal(await s.blobs.exists("acme", old.blobId), true);
+			// the save is abandoned: its take comes back, and only now may the sweep run
+			await s.inTenant("acme", (sp) => sp.abort(txn));
+			assert.equal(await s.sweepBlobs("acme"), 1);
+			assert.equal(await s.blobs.exists("acme", orphan.blobId), false);
+			const row = await s.inTenant("acme", (sp) => sp.readIfExists({ type: T.content, fields: { nodeId: NODE } }, 0));
+			assert.deepEqual(await s.blobs.get(owner({ nodeId: NODE }), { blobId: row!.fields.blobId as string, size: row!.fields.size as number, keyGeneration: row!.fields.keyGeneration as number }), Buffer.from("version 1"));
 		} finally { await s.close(); }
 	} finally { rmSync(root, { recursive: true, force: true }); }
 });

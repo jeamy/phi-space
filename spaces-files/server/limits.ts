@@ -22,7 +22,7 @@ export type FsLimits = {
 	maxDirEntries: number;
 	/** Direct grants on one target, and so tuples of one `listGrants` reply. */
 	maxGrantsPerTarget: number;
-	/** Bytes of one reply of the service. */
+	/** Bytes of one listing reply (`list`, `listGrants`, the admin lists); a read's contents are bounded by maxFileBytes. */
 	maxReplyBytes: number;
 	/** Per tenant. */
 	maxActors: number;
