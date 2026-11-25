@@ -154,6 +154,10 @@ test("the recovery path of the browser adapter: the roster admits, its cookie re
 		assert.deepEqual((await ops.recover("provisionAdmin", args)).json?.value, { status: "provisioned", actorId: "bert" });
 		assert.deepEqual((await ops.recover("provisionAdmin", args)).json?.value, { status: "provisioned", actorId: "bert" }, "the receipt answers");
 		assert.equal((await ops.request("GET", "/recovery")).status, 200);
+		const script = await ops.request("GET", "/app/recovery.ts");
+		assert.equal(script.status, 200);
+		assert.match(String(script.headers["content-type"]), /^text\/javascript/);
+		assert.ok(!script.body.includes(": Promise<"), "served with its types stripped");
 
 		// the recovery session ends with the restore
 		svc.state.markReconciled("acme");

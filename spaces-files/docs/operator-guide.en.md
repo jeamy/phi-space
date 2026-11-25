@@ -137,13 +137,16 @@ administrator rows prove nothing. Only the operator's roster and the operator's 
    step. `restore-status` shows the journal.
 3. Start the service. It stays in maintenance mode. `health` shows `restore.step: "checked"`.
 4. For each tenant, verify against the tenant's own identity provider, outside this service, who should administer
-   it today. Put those people on the recovery roster:
+   it today. List the roster first, remove every entry that is no longer current, then put those people on it:
 
    ```
+   npm run operator -- roster
+   npm run operator -- roster-remove <tenant> <issuer> <subject>
    npm run operator -- roster-add <tenant> <issuer> <subject>
    ```
 
-   Roster changes are recorded in the operator audit, and the roster stays outside every data backup.
+   Roster changes are recorded in the operator audit. The roster stays outside every data backup, but it is part of
+   the deployment state, so each state backup holds the roster of its time.
 5. If today's administrator (B) is missing from the backup, a rostered recoverer opens
    `https://<origin>/recovery/login?tenant=<tenant>`. The recovery page:
    - lists the tenant's actors and administrators;
@@ -189,7 +192,9 @@ recover:
    - maintenance mode.
 
    Every earlier session and operation ID is refused. The content keys are kept.
-3. Continue with steps 3 to 9 of section 4. A state restore also opens a restore journal.
+3. Continue with steps 3 to 9 of section 4. A state restore also opens a restore journal. The roster, the approvals
+   and the operator audit are now those of the state backup: someone removed from the roster after that backup is on
+   it again. Step 4 (`roster`, then `roster-remove`) matters most here.
 
 ## 6. Retiring an actor who owns too much
 
