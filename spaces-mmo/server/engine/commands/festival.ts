@@ -19,6 +19,7 @@ import { distTo, planOf } from "./build.ts";
 import { hutsIn, rankOf, settlementIn } from "./settlement.ts";
 import { consume } from "./trade.ts";
 import { randomBytes, randomInt, timeNow } from "../source.ts";
+import { BESIDE } from "../../../shared/rules.ts";
 
 const NAME: Record<ShowKind, string> = { blumen: "Blumenschau", ernte: "Erntefest", regatta: "Regatta" };
 /** The seasons of each festival, by `SEASONS`. */
@@ -29,7 +30,7 @@ export const flowers = (w: WorldDef) => (w.garden?.sorts ?? []).filter((s) => s.
 export const crops = (w: WorldDef) => (w.fields?.crops ?? []).flatMap((x) => x.yields.map((y) => y.proto)).filter((p) => !p.startsWith("samen-"));
 const members = (c: CommandCtx) => { if (!c.account || c.account.guest) throw new CommandError("Gäste machen hier nicht mit; registriere dich dafür."); return c.account; };
 const placeOf = (d: FestivalDef, kind: ShowKind) => (kind === "regatta" ? d.regatta ?? d.plan : d.plan);
-const parkBeside = async (c: CommandCtx, d: FestivalDef, plan = d.plan) => (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan } }, { txn: c.txn })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+const parkBeside = async (c: CommandCtx, d: FestivalDef, plan = d.plan) => (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan } }, { txn: c.txn })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= BESIDE);
 const atPark = (c: CommandCtx, d: FestivalDef, plan = d.plan) => `direkt neben ${planOf(c.world, plan)?.dative ?? "einem Park"}`;
 /** What a flower is worth at the show: a named sort over a bred one over a wild one. */
 const bloom = (f: ItemFields) => (f.variety ? (f.variety.name ? 3 : 2) : 1);

@@ -10,11 +10,12 @@ use crate::fire::key_text;
 use crate::j;
 use crate::prototypes::{resolve_prototype, spawn, At};
 use crate::space::{fields, refuse, tmpl, Result};
+use crate::rules::BESIDE;
 
 async fn dig(c: &mut Ctx, q: &Json, what: &str, done: &str, tired: &str) -> Result<()> {
 	let plan_key = j::s(q, "plan");
 	let at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	let near = c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan_key }), None).await?.iter().any(|e| dist_to(at, Rect::of(fields(e))) <= 1.0);
+	let near = c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan_key }), None).await?.iter().any(|e| dist_to(at, Rect::of(fields(e))) <= BESIDE);
 	if !near { return refuse(format!("{what} direkt neben {}.", plan_of(c.w(), plan_key).and_then(|p| j::so(p, "dative")).unwrap_or("einer Grube"))); }
 	need_rank(c, "helfer", tired).await?;
 	let (now, rest) = rested(c).await?;

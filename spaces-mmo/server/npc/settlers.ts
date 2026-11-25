@@ -12,7 +12,7 @@
 //   people who come still find building land.
 // - One command a round, then a rest at the pace of economy.ts (slower while no person is on the island).
 import { randomInt } from "node:crypto";
-import { EXIT_REACH, PATH } from "../engine/commands/build.ts";
+import { PATH } from "../engine/commands/build.ts";
 import { roadLinks, roadPath } from "../engine/commands/cart.ts";
 import { epochOf } from "../engine/commands/epoch.ts";
 import { enoughHuts, settlementIn } from "../engine/commands/settlement.ts";
@@ -25,6 +25,7 @@ import { fieldsOf, type BedFields, type CartFields, type BuildingFields, type Li
 import { crops, flowers } from "../engine/commands/festival.ts";
 import { gather, look, nextTo, rest, social, stepBeside, travel, type Look } from "./economy.ts";
 import type { Npc, Script } from "./scripts.ts";
+import { BESIDE, FEED_FIRE, SITE_REACH, SETTLER_CLEARANCE } from "../../shared/rules.ts";
 
 type Rect = { x: number; y: number; w: number; h: number };
 const dist = (p: { x: number; y: number }, r: Rect) => Math.max(Math.max(r.x - p.x, 0, p.x - (r.x + r.w - 1)), Math.max(r.y - p.y, 0, p.y - (r.y + r.h - 1)));
@@ -71,7 +72,7 @@ export async function wanted(n: Npc): Promise<boolean> {
 }
 
 /** Walks to a free cell beside `r` (a site, a building, a bed): false when it stands there already. */
-async function besideOf(n: Npc, l: Look, r: Rect & { room: string }, reach = 1): Promise<boolean> {
+async function besideOf(n: Npc, l: Look, r: Rect & { room: string }, reach: number): Promise<boolean> {
 	if (!(await travel(n, l, r.room))) return true;
 	return stepBeside(n, l, r, reach);
 }
@@ -88,7 +89,7 @@ async function freeGround(n: Npc, room: string, w: number, h: number): Promise<{
 	const busy = new Set([...(await n.space.readAll({ type: "Plot", fields: { room } })), ...(await n.space.readAll({ type: "Item", fields: { location: room } })), ...(await n.space.readAll({ type: "Character", fields: { room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
 	const near = [...n.world.exits.filter((e) => e.room === room), ...n.world.beacons.filter((b) => b.room === room)];
 	const fits = (x0: number, y0: number, tile: string) => {
-		for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (ground[y]?.[x] !== tile || busy.has(`${x},${y}`) || near.some((e) => Math.max(Math.abs(e.x - x), Math.abs(e.y - y)) <= 2)) return false;
+		for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (ground[y]?.[x] !== tile || busy.has(`${x},${y}`) || near.some((e) => Math.max(Math.abs(e.x - x), Math.abs(e.y - y)) <= SETTLER_CLEARANCE)) return false;
 		return true;
 	};
 	for (const tile of [",", "."]) {
@@ -132,7 +133,7 @@ export function siedler(): Script {
 			const f = await flameOf(n.space, fire.beaconId), piece = Math.min(...Object.values(w.fire.fuel)) * clockOf(n.space).patience();
 			if (!f || f.until - now < piece * 2) {
 				if (!(await travel(n, l, fire.room))) return;
-				if (Math.max(Math.abs(me.x - fire.x), Math.abs(me.y - fire.y)) <= 1) await n.act(`put ${fuel[0]!.name} in ${fire.aliases[0] ?? "feuer"}`);
+				if (Math.max(Math.abs(me.x - fire.x), Math.abs(me.y - fire.y)) <= FEED_FIRE) await n.act(`put ${fuel[0]!.name} in ${fire.aliases[0] ?? "feuer"}`);
 				else await nextTo(n, l, fire);
 				return;
 			}
@@ -147,7 +148,7 @@ export function siedler(): Script {
 		const own = sites.find((s) => s.accountId === me.charId);
 		// what it staked out on a path before the paths were closed to building goes: it builds again elsewhere
 		const astray = [own, ...(await n.space.readAll({ type: "Building", fields: { accountId: me.charId } })).map((e) => fieldsOf<BuildingFields>(e))].find((r) => r && onPath(w, r));
-		if (astray) { if (!(await besideOf(n, l, astray))) await n.act(`abriss ${astray === own ? "baustelle" : astray.name}`); return; }
+		if (astray) { if (!(await besideOf(n, l, astray, BESIDE))) await n.act(`abriss ${astray === own ? "baustelle" : astray.name}`); return; }
 		// its own site: deliver what it carries of what is missing, then work; what is missing it gathers below
 		if (own && (await atSite(n, l, own, tired))) return;
 		// the sites of others on its island: bring what they need, lend a hand now and then
@@ -158,7 +159,7 @@ export function siedler(): Script {
 		for (const b of buildings) {
 			const cost = w.building?.plans.find((p) => p.key === b.plan)?.repair ?? [];
 			if (b.untilWorldMs - ((await clockOf(n.space).decayNow()) ?? 0) > 2 * 24 * 3600_000 || !cost.every((r) => count(l, r.proto) >= r.count)) continue;
-			if (!(await besideOf(n, l, b))) await n.act(`repariere ${b.name}`);
+			if (!(await besideOf(n, l, b, BESIDE))) await n.act(`repariere ${b.name}`);
 			return;
 		}
 		// the beds: harvest, weed, water, plant
@@ -201,7 +202,7 @@ export function siedler(): Script {
 		if (await trade(n, l, w, homes, heap, own)) return;
 		// the hut's chest takes what piles up
 		const hut = buildings.find((b) => b.plan === "huette");
-		if (hut && heap.length > 6 && may("chest")) { later("chest", 10); if (!(await besideOf(n, l, hut))) await n.act(`verstaue alle ${heap[0]!.name}`); return; }
+		if (hut && heap.length > 6 && may("chest")) { later("chest", 10); if (!(await besideOf(n, l, hut, BESIDE))) await n.act(`verstaue alle ${heap[0]!.name}`); return; }
 		// gather: what lies on the beaches of its rooms, moving on to the next room when nothing is left here
 		// and what a site of its island lacks beyond that, stone for a road
 		const building = (await n.space.readAll({ type: "Route" })).map((e) => fieldsOf<RouteFields>(e)).filter((r) => r.state === "build" && r.rooms.some((x) => homes.includes(x)));
@@ -224,7 +225,7 @@ export function siedler(): Script {
 			const give = open.needs.find((x) => x.have < x.count && count(l, x.proto) > 0);
 			if (!give && open.work >= open.workNeed) return false; // what it lacks it gathers below
 			const cell = open.cells.find((c) => c.room === l.me.room) ?? open.cells[0]!;
-			if (await besideOf(n, l, { room: cell.room, x: cell.x, y: cell.y, w: 1, h: 1 }, 2)) return true;
+			if (await besideOf(n, l, { room: cell.room, x: cell.x, y: cell.y, w: 1, h: 1 }, SITE_REACH)) return true;
 			later("road", 2);
 			await n.act(give ? `liefere ${give.name} an die straße` : "arbeite an der straße");
 			return true;
@@ -253,11 +254,11 @@ export function siedler(): Script {
 			if (!cargo && !loading) {
 				// empty where it stands: it takes it along (at the market after unloading, or a load it gave up on)
 				if (!(await travel(n, l, mine.room))) return true;
-				if (!(await besideOf(n, l, { ...at(mine), room: mine.room }))) await n.act("karren nimm");
+				if (!(await besideOf(n, l, { ...at(mine), room: mine.room }, BESIDE))) await n.act("karren nimm");
 				return true;
 			}
 			if (mine.room !== l.me.room) { await travel(n, l, mine.room); return true; }
-			if (await besideOf(n, l, { ...at(mine), room: mine.room })) return true;
+			if (await besideOf(n, l, { ...at(mine), room: mine.room }, BESIDE)) return true;
 			if (mine.room === market) { await n.act("karren entlade"); later("karren", 30); return true; }
 			if (loading) { await n.act(`karren lade ${heap[0]!.name}`); return true; }
 			// a road that fell since it set the cart down: it takes the load back
@@ -296,7 +297,7 @@ export function siedler(): Script {
 			if (s.accountId === l.me.charId) { const rope = s.needs.find((x) => x.proto === "tangseil" && x.have < x.count); if (rope && count(l, "tang") >= 3) { await n.act("craft tangseil"); return true; } }
 			return false;
 		}
-		if (await besideOf(n, l, s, 2)) return true;
+		if (await besideOf(n, l, s, SITE_REACH)) return true;
 		await n.act(give ? `liefere ${give.name}` : "arbeite");
 		return true;
 	}
@@ -323,13 +324,13 @@ export function siedler(): Script {
 				const thing = show.kind === "blumen" ? flower : l.pack.find((i) => crops(w).includes(i.proto));
 				if (thing) {
 					if (!(await travel(n, l, room))) return true;
-					if (!(await besideOf(n, l, park))) { await n.act(`zeige ${thing.name}`); if (show.kind === "blumen") later(`fest-${show.showId}`, 100_000); }
+					if (!(await besideOf(n, l, park, BESIDE))) { await n.act(`zeige ${thing.name}`); if (show.kind === "blumen") later(`fest-${show.showId}`, 100_000); }
 					return true;
 				}
 			}
 			if (flower && may("pflege")) {
 				if (!(await travel(n, l, room))) return true;
-				if (!(await besideOf(n, l, park))) { await n.act("pflege"); later("pflege", 60); }
+				if (!(await besideOf(n, l, park, BESIDE))) { await n.act("pflege"); later("pflege", 60); }
 				return true;
 			}
 		}
@@ -339,14 +340,14 @@ export function siedler(): Script {
 	/** Tends a bed of its own: harvest, weed, water (a can from its barrel), plant a seed it carries, look for seeds. */
 	async function tend(n: Npc, l: Look, b: BedFields, buildings: BuildingFields[], now: number): Promise<boolean> {
 		const g = n.world.garden!;
-		const near = async (line: string) => { if (!(await besideOf(n, l, b))) await n.act(line); return true; };
+		const near = async (line: string) => { if (!(await besideOf(n, l, b, BESIDE))) await n.act(line); return true; };
 		if (b.plants.some((p) => p.stage === 2)) return near("ernte");
 		if (b.weedy || b.plants.some((p) => p.stage === 3)) return near("jäte");
 		const growing = b.plants.some((p) => p.stage < 2);
 		if (growing && now - b.wateredWorldMs > g.thirstWorldMs * 0.6 * clockOf(n.space).patience()) {
 			if (count(l, g.can)) return near("gieße");
 			const barrel = buildings.find((x) => x.plan === g.barrel);
-			if (barrel && may("schoepfe")) { later("schoepfe", 6); if (!(await besideOf(n, l, barrel))) await n.act("schöpfe"); return true; }
+			if (barrel && may("schoepfe")) { later("schoepfe", 6); if (!(await besideOf(n, l, barrel, BESIDE))) await n.act("schöpfe"); return true; }
 		}
 		const seed = l.pack.find((i) => g.sorts.some((s) => s.seed === i.proto && (b.kind !== "zier" || s.kind === "zier")));
 		if (b.plants.length < b.w * b.h) {
@@ -375,7 +376,7 @@ export function deliverer(): (n: Npc, l: Look, homes: string[]) => Promise<boole
 		turn++;
 		const job = (await paidJobs(n, homes, tried, turn)).find(({ o }) => o.proto && count(l, o.proto));
 		if (!job) return false;
-		if (await besideOf(n, l, job.s)) return true;
+		if (await besideOf(n, l, job.s, BESIDE)) return true;
 		tried.set(job.o.orderId, turn + 10);
 		await n.act(`liefere ${Math.min(job.o.left, count(l, job.o.proto))} ${job.o.name}`);
 		return true;
@@ -398,7 +399,7 @@ function bauhelfer(): Script {
 			const rest0 = (await n.space.readAll({ type: "WorkRest", fields: { charId: l.me.charId } })).map((e) => fieldsOf<WorkRestFields>(e))[0];
 			const work = !rest0 || rest0.untilWorldMs <= now ? jobs.find(({ o }) => !o.proto) : undefined;
 			if (work) {
-				if (!(await besideOf(n, l, work.s))) { tried.set(work.o.orderId, turn + 5); await n.act("arbeite"); }
+				if (!(await besideOf(n, l, work.s, BESIDE))) { tried.set(work.o.orderId, turn + 5); await n.act("arbeite"); }
 			}
 			else if (jobs.some(({ o }) => o.proto)) {
 				if (!(await gather(n, l, jobs.map(({ o }) => o.proto)))) { home = (home + 1) % homes.length; await travel(n, l, homes[home]!); }
@@ -448,7 +449,7 @@ function dorfbewohner(): Script {
 				if (!fuel) { if (await gather(n, l, fuels)) return true; }
 				else {
 					if (!(await travel(n, l, fire.room))) return true;
-					if (dist(l.me, { ...fire, w: 1, h: 1 }) <= 1) await n.act(`put ${fuel.name} in ${fire.aliases[0] ?? "feuer"}`);
+					if (dist(l.me, { ...fire, w: 1, h: 1 }) <= FEED_FIRE) await n.act(`put ${fuel.name} in ${fire.aliases[0] ?? "feuer"}`);
 					else await nextTo(n, l, fire);
 					return true;
 				}
@@ -459,11 +460,11 @@ function dorfbewohner(): Script {
 		if (!g) return false;
 		const dry = (await n.space.readAll({ type: "Bed", fields: { room, kind: "gemein" } })).map((e) => fieldsOf<BedFields>(e)).find((b) => b.plants.some((p) => p.stage < 2) && now - b.wateredWorldMs > g.thirstWorldMs * 0.6 * clockOf(n.space).patience());
 		if (!dry) return false;
-		if (count(l, g.can)) { if (!(await besideOf(n, l, dry))) await n.act("gieße"); return true; }
+		if (count(l, g.can)) { if (!(await besideOf(n, l, dry, BESIDE))) await n.act("gieße"); return true; }
 		// a can from a barrel of the village; an empty one leaves the bed for the next round
 		const barrel = (await n.space.readAll({ type: "Building", fields: { room, plan: g.barrel } })).map((e) => fieldsOf<BuildingFields>(e))[0];
 		if (!barrel) return false;
-		if (!(await besideOf(n, l, barrel))) await n.act("schöpfe");
+		if (!(await besideOf(n, l, barrel, BESIDE))) await n.act("schöpfe");
 		return true;
 	}
 }

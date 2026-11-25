@@ -15,11 +15,12 @@ import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, levelOf, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { fogOf } from "../fire.ts";
 import type { TreeSortDef, TreesDef, WorldDef } from "../world.ts";
-import { ARTICLE, besides, distTo, freeCells, giveBack, human, lightFor, noteBuilder, refusal, releaseLight, rested, SITE_REACH, takeNear, tire, useLight, type Rect } from "./build.ts";
+import { ARTICLE, besides, distTo, freeCells, giveBack, human, lightFor, noteBuilder, refusal, releaseLight, rested, takeNear, tire, useLight, type Rect } from "./build.ts";
 import { growFactor, protoName } from "./garden.ts";
 import { needRank } from "./settlement.ts";
 import { consume, move } from "./trade.ts";
 import { randomBytes, randomInt } from "../source.ts";
+import { SITE_REACH } from "../../../shared/rules.ts";
 
 const STAGES = ["Setzling", "junger Baum", "ausgewachsen"] as const;
 export const sortOfTree = (d: TreesDef, key: string): TreeSortDef | undefined => d.sorts.find((s) => s.key === key);

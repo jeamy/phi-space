@@ -17,6 +17,7 @@ use crate::room_growth::{grown_point, pin_terrain, rows};
 use crate::source::time_now;
 use crate::space::{fields, refuse, tmpl, Error, Result, Space, FOREVER, HELD_WAIT_MS, NO_WAIT};
 use crate::transfer::{move_things, MoveOptions};
+use crate::rules::FREE_CELL_RADIUS;
 
 /// A guest account's lease, as the accounts write it.
 fn guest_ms() -> f64 { std::env::var("SPACES_MMO_GUEST_TTL_MS").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| v.is_finite()).unwrap_or(7.0 * 24.0 * 3_600_000.0) }
@@ -72,7 +73,7 @@ pub async fn arrive(space: &Space, w: &Json, h: &Json) -> Result<bool> {
 				avoid.extend(blocked_in(space, rid).await?);
 				let ground = rows(j::at(room, "ground"));
 				for _ in 0..4 {
-					let Some(cell) = free_cell_near(w, &ground, (j::n(&at, "x"), j::n(&at, "y")), &|k| avoid.contains(k), 8) else { break };
+					let Some(cell) = free_cell_near(w, &ground, (j::n(&at, "x"), j::n(&at, "y")), &|k| avoid.contains(k), FREE_CELL_RADIUS as usize) else { break };
 					if claim_spot(space, &txn, char_id, j::at(ch, "name"), rid, cell.0, cell.1).await?.is_none() { at = obj! { "x" => cell.0, "y" => cell.1 }; break; }
 					avoid.insert(cell_key(cell.0, cell.1));
 				}

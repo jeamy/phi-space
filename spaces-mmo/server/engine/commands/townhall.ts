@@ -18,6 +18,7 @@ import { demolishByVote, distTo, logGone, planOf } from "./build.ts";
 import { hutsIn, rankOf, settlementIn } from "./settlement.ts";
 import { votersOf } from "./road.ts";
 import { randomBytes, timeNow } from "../source.ts";
+import { BESIDE } from "../../../shared/rules.ts";
 
 /** Whether a town hall stands in the room. */
 export const hallIn = async (space: SpaceLike, w: WorldDef, room: string, txn: string | null = null) => !!w.townhall && (await space.count({ type: "Building", fields: { room, plan: w.townhall.plan } }, txn)) > 0;
@@ -69,7 +70,7 @@ async function zoneAt(c: CommandCtx, kind: string, radius: number) {
 
 /** The one building beside the actor that a vote may take down. */
 async function condemned(c: CommandCtx, room: string, hall: string): Promise<NonNullable<MotionFields["target"]>> {
-	const beside = (await c.space.readAll({ type: "Building", fields: { room } }, { txn: c.txn })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
+	const beside = (await c.space.readAll({ type: "Building", fields: { room } }, { txn: c.txn })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= BESIDE);
 	if (!beside.length) throw new CommandError("Stell dich neben den Bau, über dessen Abriss abgestimmt werden soll.");
 	if (beside.length > 1) throw new CommandError(`Hier stehen mehrere Bauten nebeneinander (${beside.map((b) => b.name).join(", ")}); stell dich so, dass nur einer neben dir steht.`);
 	const b = beside[0]!;
@@ -98,7 +99,7 @@ const antrag: Command = {
 		const halls = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: d.plan } }, { txn: c.txn })).map((e) => fieldsOf<BuildingFields>(e));
 		const down = /^(?:abriss|abreißen|abreissen|demolish)$/.test(word);
 		if ((zone || down) && !halls.length) throw new CommandError(`${zone ? "Zonen setzt" : "Einen Abriss beschließt"} ein Rathaus; hier steht keines.`);
-		if (!zone && !down && !halls.some((b) => distTo(c.actor, b) <= 1)) throw new CommandError(`Anträge stellt man direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Rathaus"}.`);
+		if (!zone && !down && !halls.some((b) => distTo(c.actor, b) <= BESIDE)) throw new CommandError(`Anträge stellt man direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Rathaus"}.`);
 		const s = await ofSettler(c, "Anträge stellen");
 		const taxed = /^steuer\s+(\d+)$/i.exec(text);
 		if (taxed && Number(taxed[1]) > d.maxTax) throw new CommandError(`Mehr als ${d.maxTax} Münzen je Stück trägt kein Lager.`);

@@ -20,6 +20,7 @@ use crate::js;
 use crate::prototypes::{resolve_prototype, spawn, At};
 use crate::source::{hex, random, random_bytes, random_int};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
+use crate::rules::flower_neighbour;
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
@@ -373,7 +374,7 @@ pub fn crossings(g: &Json, plants: &[Json], ripe: &[usize]) -> Vec<(usize, usize
 	for &i in ripe {
 		let p = &plants[i];
 		if !zier(p) { continue; }
-		let beside: Vec<usize> = (0..plants.len()).filter(|&k| { let q = &plants[k]; k != i && j::n(q, "stage") < 3.0 && zier(q) && (j::n(q, "x") - j::n(p, "x")).abs() + (j::n(q, "y") - j::n(p, "y")).abs() == 1.0 && strain(q) != strain(p) }).collect();
+		let beside: Vec<usize> = (0..plants.len()).filter(|&k| { let q = &plants[k]; k != i && j::n(q, "stage") < 3.0 && zier(q) && flower_neighbour((j::n(q, "x") - j::n(p, "x")).abs() + (j::n(q, "y") - j::n(p, "y")).abs()) && strain(q) != strain(p) }).collect();
 		if !beside.is_empty() && random() < j::n(g, "crossChance") { let k = (random() * beside.len() as f64).floor() as usize % beside.len(); out.push((i, beside[k])); }
 	}
 	out

@@ -8,11 +8,12 @@ import { distTo, planOf, rested, tire } from "./build.ts";
 import type { WorldDef } from "../world.ts";
 import { needRank } from "./settlement.ts";
 import { consume, move } from "./trade.ts";
+import { BESIDE } from "../../../shared/rules.ts";
 
 /** One work at a pit: `q`'s plan beside the actor, its tool in the pack. A tool without wear (the spade) stays whole. */
 async function dig(c: CommandCtx, q: { plan: string; tool?: string; makes: string; count: number }, what: string, done: string, tired: string): Promise<void> {
 	const plan = planOf(c.world, q.plan);
-	const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: q.plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+	const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: q.plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= BESIDE);
 	if (!near) throw new CommandError(`${what} direkt neben ${plan?.dative ?? "einer Grube"}.`);
 	await needRank(c, "helfer", tired);
 	const { now, rest } = await rested(c);

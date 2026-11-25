@@ -19,7 +19,8 @@ import { randomBytes, timeNow } from "../source.ts";
 import { setting } from "../../settings.ts";
 import { epochName, epochOf, islandOf } from "./epoch.ts";
 import { hutsIn, needRank, settlementIn } from "./settlement.ts";
-import { ARTICLE, days, human, plural, rested, SITE_REACH, tire } from "./build.ts";
+import { ARTICLE, days, human, plural, rested, tire } from "./build.ts";
+import { SITE_REACH } from "../../../shared/rules.ts";
 
 type Cell = { x: number; y: number };
 type RouteDef = NonNullable<NonNullable<WorldDef["cart"]>["route"]>;

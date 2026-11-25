@@ -25,6 +25,7 @@ use crate::regions::region_of_room;
 use crate::source::random_int;
 use crate::space::{fields, tmpl, Result};
 use crate::world::way_to;
+use crate::rules::{BESIDE, REACH_POINT, FEED_FIRE, NPC_WANDER_X, NPC_WANDER_Y, on_ring};
 
 fn nt(n: f64) -> String { phi_json::number_text(n) }
 fn plural(n: f64, one: &str, many: &str) -> String { format!("{} {}", nt(n), if n == 1.0 { one } else { many }) }
@@ -185,7 +186,7 @@ async fn by_train(n: &Npc, l: &Look, room: &str) -> Result<bool> {
 	let station = |r: String| { let plan = j::at(&d, "plan").clone(); async move { Ok::<_, crate::space::Error>(n.space.read_all(&tmpl("Building", obj! { "plan" => plan, "room" => r }), None).await?.first().map(|e| fields(e).clone())) } };
 	let Some(here) = station(l.room().to_owned()).await? else { return Ok(false) };
 	if station(room.to_owned()).await?.is_none() { return Ok(false); }
-	if step_beside(n, l, &Rect::of(&here), 1.0).await? { return Ok(true); }
+	if step_beside(n, l, &Rect::of(&here), BESIDE).await? { return Ok(true); }
 	tried_once_more(n, l.room());
 	n.act(&format!("zug {}", room_name(&w, room))).await?;
 	Ok(true)
@@ -212,7 +213,7 @@ pub async fn step_beside(n: &Npc, l: &Look, r: &Rect, reach: f64) -> Result<bool
 	while y <= r.y + r.h {
 		let mut x = r.x - 1.0;
 		while x <= r.x + r.w {
-			if dist_to((x, y), r) == 1.0 && !busy.contains(&format!("{},{}", nt(x), nt(y))) && ",.:".contains(tile(&ground, x, y).as_str()) {
+			if on_ring(dist_to((x, y), r)) && !busy.contains(&format!("{},{}", nt(x), nt(y))) && ",.:".contains(tile(&ground, x, y).as_str()) {
 				n.act(&format!("move {} {}", nt(x), nt(y))).await?;
 				return Ok(true);
 			}
@@ -230,7 +231,7 @@ pub async fn gather(n: &Npc, l: &Look, protos: &[String]) -> Result<bool> {
 	let mut there: Vec<&Json> = l.ground.iter().filter(|i| protos.iter().any(|p| p == j::s(i, "proto"))).collect();
 	there.sort_by(|a, b| d(a).total_cmp(&d(b)));
 	let Some(t) = there.first() else { return Ok(false) };
-	if d(t) <= 1.0 { n.act(&format!("get {}", j::s(t, "name"))).await?; } else { n.act(&format!("move {} {}", nt(j::n(t, "x")), nt(j::n(t, "y")))).await?; }
+	if d(t) <= REACH_POINT { n.act(&format!("get {}", j::s(t, "name"))).await?; } else { n.act(&format!("move {} {}", nt(j::n(t, "x")), nt(j::n(t, "y")))).await?; }
 	Ok(true)
 }
 
@@ -548,7 +549,7 @@ impl Huter {
 		if !acted && weak && !fuel.is_empty() {
 			if travel(n, &l, &broom).await? {
 				let me = l.xy();
-				if (me.0 - bxy.0).abs().max((me.1 - bxy.1).abs()) <= 1.0 { n.act(&format!("put {} in {}", j::s(fuel[0], "name"), first_alias(&beacon))).await?; }
+				if (me.0 - bxy.0).abs().max((me.1 - bxy.1).abs()) <= FEED_FIRE { n.act(&format!("put {} in {}", j::s(fuel[0], "name"), first_alias(&beacon))).await?; }
 				else { next_to(n, &l, bxy).await?; }
 			}
 			acted = true;
@@ -691,8 +692,8 @@ impl Plauderer {
 			else if rand(3.0) == 0.0 {
 				let ground = ground_of(&w, l.room());
 				let (mx, my) = l.xy();
-				let x = 22f64.min(1f64.max(mx + random_int(-4.0, 5.0)));
-				let y = 14f64.min(1f64.max(my + random_int(-3.0, 4.0)));
+				let x = 22f64.min(1f64.max(mx + random_int(-NPC_WANDER_X, NPC_WANDER_X + 1.0)));
+				let y = 14f64.min(1f64.max(my + random_int(-NPC_WANDER_Y, NPC_WANDER_Y + 1.0)));
 				if ",.".contains(tile(&ground, x, y).as_str()) { n.act(&format!("move {} {}", nt(x), nt(y))).await?; }
 			}
 		}

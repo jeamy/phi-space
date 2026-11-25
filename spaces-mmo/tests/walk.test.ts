@@ -94,7 +94,7 @@ test("a tap's target in one search: the same cell as a search per candidate, and
 		const start = { x: Math.floor(rnd() * w), y: Math.floor(rnd() * h) }, goal = { x: Math.floor(rnd() * w), y: Math.floor(rnd() * h) };
 		const before = legacyTarget(free, start, goal);
 		looks = 0;
-		const after = chooseTarget(free, start, goal, w, h);
+		const after = chooseTarget(free, start, goal, w, h, 6);
 		assert.deepEqual(after, before, `room ${w}x${h} #${i}, start ${start.x},${start.y}, goal ${goal.x},${goal.y}`);
 		assert.ok(looks <= w * h + 169, `room ${w}x${h} #${i}: ${looks} cells looked at`);
 	}
@@ -105,6 +105,6 @@ test("the occupied goal beyond the water: one search instead of one per candidat
 	const free = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && x !== 5 && !(Math.abs(x - mid.x) <= 1 && Math.abs(y - mid.y) <= 1);
 	let looks = 0;
 	const counted = (x: number, y: number) => { looks++; return free(x, y); };
-	assert.equal(chooseTarget(counted, { x: 1, y: 1 }, mid, w, h), null);
+	assert.equal(chooseTarget(counted, { x: 1, y: 1 }, mid, w, h, 6), null);
 	assert.ok(looks <= w * h + 169, `${looks} cells looked at (before: about 133,000)`);
 });

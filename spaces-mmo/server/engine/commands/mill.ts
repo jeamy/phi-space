@@ -16,11 +16,12 @@ import { windFactor } from "./wind.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, type CommandCtx } from "../context.ts";
 import type { MillDef, WorldDef } from "../world.ts";
-import { ARTICLE, distTo, giveBack, plural, planOf, putBack, SITE_REACH, takeNear } from "./build.ts";
+import { ARTICLE, distTo, giveBack, plural, planOf, putBack, takeNear } from "./build.ts";
 import { protoName } from "./garden.ts";
 import { craft } from "./trade.ts";
 import { randomBytes } from "../source.ts";
 import { nearBuildings } from "./interior.ts";
+import { BESIDE, SITE_REACH } from "../../../shared/rules.ts";
 
 const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; };
 function millOf(c: CommandCtx): MillDef {
@@ -46,7 +47,7 @@ const mahle: Command = {
 		const a = /^(?:(\d+|alle?|all)\s+)?(.*)$/i.exec(arg.trim().replace(/^(?:mein|meine|meinen|das|den|die)\s+/i, ""))!;
 		if (!a[2]) {
 			// only a look: read, not taken (unless another command holds it right now)
-			const seen = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: m.plan } })).map((e) => fieldsOf<BuildingFields>(e)).find((b) => distTo(c.actor, b) <= 1);
+			const seen = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: m.plan } })).map((e) => fieldsOf<BuildingFields>(e)).find((b) => distTo(c.actor, b) <= BESIDE);
 			const b = seen ?? (await millHere(c, m));
 			if (!seen) await putBack(c, b);
 			const mine = (await c.space.readAll({ type: "MillLoad", fields: { buildId: b.buildId, charId: c.actor.charId } })).map((e) => fieldsOf<MillLoadFields>(e));

@@ -16,6 +16,7 @@ use crate::j;
 use crate::js;
 use crate::source::{hex, random_bytes};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
+use crate::rules::BESIDE;
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
@@ -64,7 +65,7 @@ async fn mahle(c: &mut Ctx, arg: &str) -> Result<()> {
 	let at = xy(&c.actor);
 	if what.is_empty() {
 		// only a look: read, not taken (unless another command holds it right now)
-		let seen = c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan.as_str() }), None).await?.iter().map(|e| fields(e).clone()).find(|b| dist_to(at, Rect::of(b)) <= 1.0);
+		let seen = c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan.as_str() }), None).await?.iter().map(|e| fields(e).clone()).find(|b| dist_to(at, Rect::of(b)) <= BESIDE);
 		let b = match seen.clone() { Some(b) => b, None => mill_here(c, &m).await? };
 		if seen.is_none() { put_back(c, &b).await?; }
 		let mine: Vec<Json> = c.space.read_all(&tmpl("MillLoad", obj! { "buildId" => j::at(&b, "buildId").clone(), "charId" => me.as_str() }), None).await?.iter().map(|e| fields(e).clone()).collect();

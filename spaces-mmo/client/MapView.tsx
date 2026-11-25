@@ -12,6 +12,7 @@ import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { WALK_MS } from "./walk.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
+import { MENU_NEAR } from "../shared/rules.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 type Px = typeof import("pixi.js");
@@ -348,7 +349,7 @@ function frame(s: Scene, world: Hello["world"], me: string, roomId: string, objs
 		sp.label.position.set(sp.px + ts / 2, sp.py + ts - skin.frameH);
 		sp.label.zIndex = id === me ? Number.MAX_SAFE_INTEGER : sp.py * 2 + 1; // the own name on top of all others
 		// names: all of them in a quiet room; in a crowd only the own one and those standing close by
-		const near = !!ownAt && Math.max(Math.abs(sp.tx - ownAt.tx), Math.abs(sp.ty - ownAt.ty)) <= 2;
+		const near = !!ownAt && Math.max(Math.abs(sp.tx - ownAt.tx), Math.abs(sp.ty - ownAt.ty)) <= MENU_NEAR;
 		sp.label.visible = id === me || s.sprites.size <= CROWD || near;
 	}
 	if (s.water.length > 1 && Number.isFinite(s.waterMs)) { const f = Math.floor(t / s.waterMs) % s.water.length; s.water.forEach((c, i) => { c.visible = i === f; }); }

@@ -23,10 +23,11 @@ import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, ro
 import { fogOf } from "../fire.ts";
 import type { CropDef, FieldDef, WorldDef } from "../world.ts";
 import { blessed } from "./chapel.ts";
-import { ARTICLE, besides, cells, freeCells, giveBack, human, lightFor, noteBuilder, plural, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
+import { ARTICLE, besides, cells, freeCells, giveBack, human, lightFor, noteBuilder, plural, refusal, releaseLight, takeNear, useLight, type Rect } from "./build.ts";
 import { growFactor } from "./garden.ts";
 import { spendRested } from "./sleep.ts";
 import { randomBytes, timeNow } from "../source.ts";
+import { SITE_REACH } from "../../../shared/rules.ts";
 
 const STAGE: Record<FieldFields["stage"], string> = { brach: "brach", saat: "wird bestellt", waechst: "wächst", reif: "reif", spaet: "überreif" };
 const fieldDef = (c: CommandCtx): FieldDef => {

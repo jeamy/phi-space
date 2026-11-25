@@ -23,6 +23,7 @@ use crate::source::time_now;
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::typeclasses::draft_of;
 use crate::world::walkable;
+use crate::rules::{BESIDE, FREE_CELL_RADIUS};
 
 pub const INTERIOR: &str = "in-";
 pub fn interior_of(build_id: &str) -> String { format!("{INTERIOR}{build_id}") }
@@ -53,7 +54,7 @@ async fn front_of(space: &Space, w: &Json, b: &Json) -> Result<Option<(f64, f64)
 	let mut x = r.x - 1.0;
 	while x <= r.x + r.w { rim.push((x, r.y - 1.0)); x += 1.0; }
 	if let Some(p) = rim.into_iter().find(|p| walkable(w, &ground, p.0, p.1) && !blocked.contains(&cell_key(p.0, p.1)) && !exits.contains(&cell_key(p.0, p.1))) { return Ok(Some(p)); }
-	Ok(free_cell_near(w, &ground, (mid, r.y + r.h), &|k| blocked.contains(k) || exits.contains(k), 8))
+	Ok(free_cell_near(w, &ground, (mid, r.y + r.h), &|k| blocked.contains(k) || exits.contains(k), FREE_CELL_RADIUS as usize))
 }
 
 /// "Drinnen in der Hütte", "Drinnen im Backhaus": by the plan's dative ("einer Hütte", "einem Backhaus").
@@ -230,12 +231,12 @@ pub fn may_enter(c: &Ctx, b: &Json) -> bool { is_owner(c, b) || j::a(b, "guests"
 pub async fn near_buildings(c: &Ctx, use_: Option<&str>) -> Result<Vec<Json>> {
 	let me = xy(&c.actor);
 	let Some(inside) = build_id_of(c.room()) else {
-		return Ok(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me, Rect::of(b)) <= 1.0 && at_cell(c, b)).collect());
+		return Ok(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me, Rect::of(b)) <= BESIDE && at_cell(c, b)).collect());
 	};
 	let Some(b) = c.space.read_all(&tmpl("Building", obj! { "buildId" => inside }), None).await?.into_iter().next() else { return Ok(vec![]) };
 	if let Some(u) = use_ {
 		let pieces = c.space.read_all(&tmpl("Scenery", obj! { "room" => c.room() }), None).await?;
-		if !pieces.iter().map(fields).filter(|s| j::s(s, "use") == u).any(|s| dist_to(me, Rect::of(s)) <= 1.0) { return Ok(vec![]); }
+		if !pieces.iter().map(fields).filter(|s| j::s(s, "use") == u).any(|s| dist_to(me, Rect::of(s)) <= BESIDE) { return Ok(vec![]); }
 	}
 	Ok(vec![fields(&b).clone()])
 }
@@ -259,7 +260,7 @@ async fn enterable(c: &Ctx, arg: &str) -> Result<Json> {
 	let n = no_article(js::trim(arg)).to_lowercase();
 	let me = xy(&c.actor);
 	let near: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone())
-		.filter(|b| dist_to(me, Rect::of(b)) <= 1.0 && at_cell(c, b) && match at { Some(p) => dist_to(p, Rect::of(b)) == 0.0, None => n.is_empty() || plan_of(c.w(), &n).is_some_and(|p| j::at(p, "key") == j::at(b, "plan")) || txt(j::at(b, "name")).to_lowercase() == n }).collect();
+		.filter(|b| dist_to(me, Rect::of(b)) <= BESIDE && at_cell(c, b) && match at { Some(p) => dist_to(p, Rect::of(b)) == 0.0, None => n.is_empty() || plan_of(c.w(), &n).is_some_and(|p| j::at(p, "key") == j::at(b, "plan")) || txt(j::at(b, "name")).to_lowercase() == n }).collect();
 	let houses: Vec<&Json> = near.iter().filter(|b| interior_def(c.w(), j::s(b, "plan")).is_some()).collect();
 	if houses.is_empty() {
 		return match near.first() {
@@ -296,7 +297,7 @@ async fn own_house(c: &Ctx) -> Result<Json> {
 	let me = xy(&c.actor);
 	let all: Vec<Json> = match build_id_of(c.room()) {
 		Some(inside) => c.space.read_all(&tmpl("Building", obj! { "buildId" => inside }), None).await?.iter().map(|e| fields(e).clone()).collect(),
-		None => c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me, Rect::of(b)) <= 1.0 && at_cell(c, b)).collect(),
+		None => c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me, Rect::of(b)) <= BESIDE && at_cell(c, b)).collect(),
 	};
 	let house = |x: &Json| interior_def(c.w(), j::s(x, "plan")).is_some();
 	let Some(b) = all.iter().find(|x| house(x) && is_owner(c, x)) else {

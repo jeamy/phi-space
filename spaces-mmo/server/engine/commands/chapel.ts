@@ -9,6 +9,7 @@ import { CommandError, inventory, itemsNamed, msg, NotUnderstood, type CommandCt
 import { peek } from "../../space.ts";
 import { distTo, planOf } from "./build.ts";
 import { consume } from "./trade.ts";
+import { BESIDE } from "../../../shared/rules.ts";
 
 /** The blessing of a figure, when it still holds. */
 export async function blessed(c: CommandCtx, now: number): Promise<boolean> {
@@ -23,7 +24,7 @@ const opfere: Command = {
 	async func(c: CommandCtx, arg) {
 		const ch = c.world.chapel;
 		if (!ch) throw new CommandError("In dieser Welt gibt es keine Kapellen.");
-		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: ch.plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: ch.plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= BESIDE);
 		if (!near) throw new CommandError(`Opfern kann man nur direkt neben ${planOf(c.world, ch.plan)?.dative ?? "einer Kapelle"}.`);
 		const names = ch.offerings.map((p) => c.world.prototypes.find((x) => x.key === p)?.name ?? p).join(", ");
 		if (!arg.trim()) throw new NotUnderstood(`Was opferst du? Willkommen sind: ${names}.`);

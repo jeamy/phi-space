@@ -7,6 +7,7 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type SessionFields, type SpotFields } from "../model.ts";
 import { peek } from "../space.ts";
 import { walkable, type WorldDef } from "./world.ts";
+import { PASSAGE } from "../../shared/rules.ts";
 
 type Cell = { x: number; y: number };
 export const cellKey = (c: Cell) => `${c.x},${c.y}`;
@@ -31,7 +32,7 @@ export async function occupiedIn(space: SpaceLike, room: string, except?: string
  *  several stand on it and walk through each other, so a crowd at a door does not close the way (arrow keys walk only
  *  cell by cell, they cannot go round). */
 export function isPassage(exits: ReadonlyArray<{ x: number; y: number }>, cell: { x: number; y: number }): boolean {
-	return exits.some((e) => Math.max(Math.abs(e.x - cell.x), Math.abs(e.y - cell.y)) <= 1);
+	return exits.some((e) => Math.max(Math.abs(e.x - cell.x), Math.abs(e.y - cell.y)) <= PASSAGE);
 }
 
 /** Leaves the character's cell without taking another (it stands on a passage now). */
@@ -48,7 +49,7 @@ export async function blockedIn(space: SpaceLike, _w: WorldDef, room: string): P
 
 /** The nearest walkable cell to `at` (itself first) that is not in `avoid`, searching outwards; null when there is
  *  none within `radius`. */
-export function freeCellNear(w: WorldDef, ground: string[], at: Cell, avoid: ReadonlySet<string> | ReadonlyMap<string, unknown>, radius = 8): Cell | null {
+export function freeCellNear(w: WorldDef, ground: string[], at: Cell, avoid: ReadonlySet<string> | ReadonlyMap<string, unknown>, radius: number): Cell | null {
 	const seen = new Set<string>([cellKey(at)]);
 	let ring: Cell[] = [at];
 	for (let r = 0; r <= radius && ring.length; r++) {

@@ -17,6 +17,7 @@ import { setting } from "../../settings.ts";
 import { peek } from "../../space.ts";
 import { distTo } from "./build.ts";
 import { furnishingFor, isInterior, nearBuildings } from "./interior.ts";
+import { BESIDE } from "../../../shared/rules.ts";
 
 type Space = Pick<SpaceLike, "readAll" | "readIfExists" | "write" | "takeIfExists">;
 
@@ -81,7 +82,7 @@ const schlafe: Command = {
 	async func(c) {
 		const bed = await furnishingFor(c, "sleep");
 		if (!bed) throw new CommandError("Schlafen kann man im Bett einer Hütte; geh hinein („betrete“ neben ihr).");
-		if (!(await nearBuildings(c, "sleep")).length || distTo(c.actor, bed) > 1) throw new CommandError(`Geh zum ${bed.name}.`);
+		if (!(await nearBuildings(c, "sleep")).length || distTo(c.actor, bed) > BESIDE) throw new CommandError(`Geh zum ${bed.name}.`);
 		if (await peek(c.space, { type: "Sleep", fields: { charId: c.actor.charId } })) throw new CommandError("Du schläfst schon.");
 		const other = (await c.space.readAll({ type: "Sleep", fields: { bed: bed.sceneryId } })).map((e) => fieldsOf<SleepFields>(e))[0];
 		if (other) throw new CommandError(`Im ${bed.name} schläft schon ${other.name}.`);

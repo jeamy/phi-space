@@ -18,6 +18,7 @@ import { consume, move } from "./trade.ts";
 import { countTrip } from "../travel.ts";
 import { randomBytes, timeNow } from "../source.ts";
 import { routeLinks, strasse } from "./road.ts";
+import { BESIDE, REACH_POINT } from "../../../shared/rules.ts";
 
 /** Room to rooms the roads join, both ways: a finished road (road.ts) links the two rooms it runs between. */
 export async function roadLinks(space: SpaceLike, w: WorldDef, txn: string | null = null): Promise<Map<string, Set<string>>> {
@@ -43,7 +44,7 @@ const cargoOf = async (c: CommandCtx, cartId: string) => (await c.space.readAll(
 /** The actor's cart here, taken in the transaction. */
 async function mine(c: CommandCtx): Promise<CartFields> {
 	const all = (await c.space.readAll({ type: "Cart", fields: { room: c.actor.room } }, { txn: c.txn })).map((e) => fieldsOf<CartFields>(e));
-	const f = all.find((x) => x.accountId === c.account?.accountId && Math.max(Math.abs(x.x - c.actor.x), Math.abs(x.y - c.actor.y)) <= 1);
+	const f = all.find((x) => x.accountId === c.account?.accountId && Math.max(Math.abs(x.x - c.actor.x), Math.abs(x.y - c.actor.y)) <= REACH_POINT);
 	if (!f) throw new CommandError("Neben dir steht kein Karren von dir.");
 	if (!(await c.space.takeIfExists({ type: "Cart", fields: { cartId: f.cartId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Der Karren ist gerade nicht greifbar; bitte noch einmal.");
 	return f;
@@ -223,7 +224,7 @@ const zug: Command = {
 		if (!d) throw new CommandError("In dieser Welt fährt keine Bahn.");
 		const island = c.world.rooms.find((r) => r.roomId === c.actor.room)?.island;
 		const stations = (await c.space.readAll({ type: "Building", fields: { plan: d.plan } }, { txn: c.txn })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => c.world.rooms.find((r) => r.roomId === b.room)?.island === island);
-		if (!stations.some((b) => b.room === c.actor.room && distTo(c.actor, b) <= 1)) throw new CommandError("Der Zug hält nur an Bahnhöfen; stell dich neben einen.");
+		if (!stations.some((b) => b.room === c.actor.room && distTo(c.actor, b) <= BESIDE)) throw new CommandError("Der Zug hält nur an Bahnhöfen; stell dich neben einen.");
 		// one stop a room, however many stations stand in it
 		const others = stations.filter((b, i) => b.room !== c.actor.room && stations.findIndex((x) => x.room === b.room) === i);
 		const names = others.map((b) => nameOf(c, b.room)).join(", "), coins = `${d.fare} Münze${d.fare === 1 ? "" : "n"}`;

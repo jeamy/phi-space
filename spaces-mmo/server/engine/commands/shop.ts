@@ -25,6 +25,7 @@ import { ARTICLE, distTo, planOf, putBack, takeNear } from "./build.ts";
 import { settlementIn } from "./settlement.ts";
 import { consume, move, refuseLoaded } from "./trade.ts";
 import { randomBytes, timeNow } from "../source.ts";
+import { BESIDE } from "../../../shared/rules.ts";
 
 const coinsWord = (n: number) => `${n} Münze${n === 1 ? "" : "n"}`;
 const protoName = (w: WorldDef, proto: string) => w.prototypes.find((p) => p.key === proto)?.name ?? proto;
@@ -180,7 +181,7 @@ const tilge: Command = {
 		if (!e) throw new CommandError("Du hast keinen Kredit.");
 		const l = fieldsOf<LoanFields>(e), purse = (await inventory(c)).filter((i) => i.f.proto === c.world.currency);
 		const house = await peek(c.space, { type: "Building", fields: { buildId: l.buildId } }, { txn: c.txn });
-		if (house && (fieldsOf<BuildingFields>(house).room !== c.actor.room || distTo(c.actor, fieldsOf<BuildingFields>(house)) > 1)) throw new CommandError("Getilgt wird am Kontor, bei dem du geliehen hast.");
+		if (house && (fieldsOf<BuildingFields>(house).room !== c.actor.room || distTo(c.actor, fieldsOf<BuildingFields>(house)) > BESIDE)) throw new CommandError("Getilgt wird am Kontor, bei dem du geliehen hast.");
 		// the house is gone: nobody is owed the coins (the loan's end would give the pledge back as well, loanTick), so
 		// they stay with the debtor; destroyed, they would be lost
 		if (!house) {
