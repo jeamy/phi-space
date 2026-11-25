@@ -52,8 +52,8 @@ const PAGE_HEADERS = {
 	"x-content-type-options": "nosniff",
 	"referrer-policy": "no-referrer",
 	"cross-origin-opener-policy": "same-origin",
-	"strict-transport-security": "max-age=31536000",
 };
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 function cookies(h: string | undefined): Map<string, string> {
 	const m = new Map<string, string>();
@@ -72,6 +72,8 @@ const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.fr
 export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<HttpServer> {
 	const origin = new URL(o.origin).origin;
 	if (!origin.startsWith("https://")) throw new Error("the public origin must be https");
+	// HSTS pins a whole host name to https, every port: never for a loopback name, where other plain-http tools run
+	const hsts: Record<string, string> = LOOPBACK.has(new URL(origin).hostname) ? {} : { "strict-transport-security": "max-age=31536000" };
 	const now = o.now ?? Date.now;
 	const ttl = o.loginTtlMs ?? 600_000;
 	const maxInflight = o.maxInflight ?? 64;
@@ -90,11 +92,11 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 	let inflight = 0;
 
 	const page = (res: import("node:http").ServerResponse, status: number, title: string, body: string, extra: Record<string, string | string[]> = {}) => {
-		res.writeHead(status, { ...PAGE_HEADERS, "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...extra });
+		res.writeHead(status, { ...PAGE_HEADERS, ...hsts, "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...extra });
 		res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)}</title><link rel="stylesheet" href="/app/style.css"><main class="note"><h1>${esc(title)}</h1>${body}</main>`);
 	};
 	const json = (res: import("node:http").ServerResponse, status: number, v: unknown, extra: Record<string, string | string[]> = {}) => {
-		res.writeHead(status, { ...PAGE_HEADERS, "content-type": "application/json", "cache-control": "no-store", ...extra });
+		res.writeHead(status, { ...PAGE_HEADERS, ...hsts, "content-type": "application/json", "cache-control": "no-store", ...extra });
 		res.end(JSON.stringify(v));
 	};
 	/** A browser request from this origin: Origin must be ours, and a Fetch Metadata header, where sent, same-origin. */
@@ -130,7 +132,7 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 		const route = `${req.method} ${url.pathname}`;
 
 		if (route === "GET /") {
-			res.writeHead(200, { ...PAGE_HEADERS, "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+			res.writeHead(200, { ...PAGE_HEADERS, ...hsts, "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
 			res.end(readFileSync(join(ROOT, "web", "index.html")));
 			return;
 		}
@@ -138,7 +140,7 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			const file = ASSETS[url.pathname];
 			const text = readFileSync(join(ROOT, file), "utf8");
 			const js = file.endsWith(".ts");
-			res.writeHead(200, { ...PAGE_HEADERS, "content-type": js ? "text/javascript; charset=utf-8" : "text/css; charset=utf-8", "cache-control": "no-cache" });
+			res.writeHead(200, { ...PAGE_HEADERS, ...hsts, "content-type": js ? "text/javascript; charset=utf-8" : "text/css; charset=utf-8", "cache-control": "no-cache" });
 			res.end(js ? stripTypeScriptTypes(text) : text);
 			return;
 		}
@@ -148,7 +150,7 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			const pending = await o.oidc.begin();
 			const binding = randomBytes(24).toString("base64url");
 			logins.set(pending.state, { pending, binding, tenant, exp: now() + ttl });
-			res.writeHead(302, { ...PAGE_HEADERS, location: pending.authorizeUrl, "cache-control": "no-store",
+			res.writeHead(302, { ...PAGE_HEADERS, ...hsts, location: pending.authorizeUrl, "cache-control": "no-store",
 				"set-cookie": cookie(LOGIN_COOKIE, binding, { maxAgeS: Math.floor(ttl / 1000), sameSite: "Lax" }) });
 			res.end();
 			return;

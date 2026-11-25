@@ -15,10 +15,24 @@ let draft: Draft | null = null;
 
 class Lost extends Error {}
 
+/** The session's CSRF token; the adapter derives it anew after a restart, so a refusal (HTTP 403) fetches it again. */
+async function refreshCsrf(): Promise<boolean> {
+	const r = await fetch("/api/session");
+	if (!r.ok) return false;
+	csrf = ((await r.json()).value as { csrf: string }).csrf;
+	return true;
+}
+
 async function call<T>(op: string, args: Record<string, unknown> = {}): Promise<Reply<T>> {
+	const body = JSON.stringify({ op, args });
+	const send = () => fetch("/api/call", { method: "POST", headers: { "content-type": "application/json", "x-files-csrf": csrf }, body });
 	let res: Response;
-	try { res = await fetch("/api/call", { method: "POST", headers: { "content-type": "application/json", "x-files-csrf": csrf }, body: JSON.stringify({ op, args }) }); }
-	catch { throw new Lost(); }
+	try {
+		res = await send();
+		// service refusals come back as 200; a 403 is the adapter's origin or CSRF check: the same call once more with a
+		// fresh token (a mutation keeps its operation ID, so it still applies once)
+		if (res.status === 403 && await refreshCsrf()) res = await send();
+	} catch { throw new Lost(); }
 	if (res.status === 401) { showSignIn(); }
 	try { return await res.json() as Reply<T>; } catch { throw new Lost(); }
 }
@@ -55,7 +69,6 @@ async function start() {
 	$("account").hidden = false;
 	$("app").hidden = false;
 	await showWorkspaces();
-	await showAdmin();
 }
 
 async function showWorkspaces() {
@@ -162,10 +175,11 @@ async function create(kind: string) {
 	await showDir();
 }
 
+// The administration loads on request only: a refused admin operation is audited, so the page never asks by itself.
 async function showAdmin() {
 	const actors = await call<Array<{ kind: string; id: string; state: string }>>("listActors");
-	$("admin").hidden = !actors.ok;
-	if (!actors.ok) return;
+	$("admin").hidden = false;
+	if (!actors.ok) { $("admin-status").textContent = actors.error.code === "permissionDenied" ? "Only a tenant administrator manages the tenant." : actors.error.message; $("actors").replaceChildren(); $("groups").replaceChildren(); return; }
 	$("actors").replaceChildren(...actors.value.map((a) => text(`${a.kind}:${a.id} (${a.state})`)));
 	const groups = await call<string[]>("listGroups");
 	$("groups").replaceChildren(...(groups.ok ? groups.value : []).map((g) => text(g)));
@@ -183,7 +197,12 @@ $<HTMLTextAreaElement>("text").addEventListener("input", (e) => { if (draft) { d
 $("save").onclick = () => void save();
 $("theirs").onclick = () => void loadTheirs();
 $("close").onclick = () => { if (draft && dirty(draft) && !confirm("Discard your unsaved draft?")) return; draft = null; renderDraft(); };
-$("logout").onclick = async () => { await fetch("/auth/logout", { method: "POST", headers: { "x-files-csrf": csrf } }); location.reload(); };
+$("logout").onclick = async () => {
+	const out = () => fetch("/auth/logout", { method: "POST", headers: { "x-files-csrf": csrf } });
+	if ((await out()).status === 403 && await refreshCsrf()) await out();
+	location.reload();
+};
+$("admin-open").onclick = () => void showAdmin();
 $("create").addEventListener("submit", (e) => { e.preventDefault(); void create(submitter(e as SubmitEvent)); });
 $("grant-form").addEventListener("submit", (e) => {
 	e.preventDefault();

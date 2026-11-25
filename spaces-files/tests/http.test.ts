@@ -128,6 +128,7 @@ test("expired and ended sessions; a body over the bound; the page and nothing el
 		const page = await adm.request("GET", "/");
 		assert.equal(page.status, 200);
 		assert.match(String(page.headers["content-security-policy"]), /frame-ancestors 'none'/);
+		assert.equal(page.headers["strict-transport-security"], undefined, "no HSTS for a loopback name");
 		const js = await adm.request("GET", "/app/app.ts");
 		assert.match(String(js.headers["content-type"]), /javascript/);
 		assert.doesNotMatch(js.body, /: Promise</, "types stripped");
