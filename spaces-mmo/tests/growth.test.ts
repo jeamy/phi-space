@@ -10,7 +10,7 @@ import { loadWorld } from "../server/engine/world.ts";
 import { initialClock } from "../server/engine/worldtime.ts";
 import type { CharacterFields, RoomFields, RoomGrowthFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, placeFootprint, Player, startServer, startStack } from "./stack.ts";
+import { eventually, lightFire, placeFootprint, Player, startServer, startStack, arrived } from "./stack.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { worstOf, writeWorstGrowth } from "./growth-worst.ts";
 import { writeRoomLock } from "../server/engine/room-lock.ts";
@@ -79,7 +79,7 @@ test("a fire carries 20 and grows with a builder; five animal houses are the mos
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields & { accountId: string };
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields & { accountId: string };
 		const accountId = (await s.readAll({ type: "Character", fields: { charId: me } }))[0]!.fields.accountId as string | undefined;
 		await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 20 } as never }, null, FOREVER, { unique: ["beaconId"] });
 		assert.match(await does(p, "bau regentonne", "Licht"), /Licht des Feuers reicht/);

@@ -12,7 +12,7 @@ import { sweepTick } from "../server/engine/sweep.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ItemFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer } from "./stack.ts";
+import { eventually, Player, startServer, arrived } from "./stack.ts";
 
 const w = await loadWorld();
 const H = 3600_000, D = 24 * H;
@@ -45,7 +45,11 @@ test("planks: a log makes a whole plank, driftwood goes first; a barrel and a cr
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Tischler", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields, 10_000, "the character")) as { room: string; x: number; y: number; accountId: string };
+		// a place of its own away from the bay's fire (9,10) and its stall (13,10), where everything below fits beside it: a newcomer starts
+		// scattered around the spawn, and from some of those cells the hut's door would lie on the fire
+		await arrived(s, me);
+		p.send("move 18 12");
+		const c = (await eventually(async () => { const e = (await s.readAll({ type: "Character", fields: { charId: me } }))[0]; return e?.fields.x === 18 && e.fields.y === 12 ? e : null; }, 40_000, "at 18,12")).fields as { room: string; x: number; y: number; accountId: string };
 		const kept = await decayNowOf(s);
 
 		// a log is driftwood and a log

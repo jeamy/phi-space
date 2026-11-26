@@ -339,6 +339,19 @@ export async function eventually<T>(check: () => Promise<T | null | undefined | 
 	}
 }
 
+/** A character that has just come online, where it stands once the world ran its `arrive` (engine/commands/default.ts):
+ *  the gateway sends that intent when the character's session begins, and it moves the character aside when someone
+ *  stands on its cell (two new characters may pick the same one, an NPC may be passing). A test that reads the
+ *  character's place right after `play()` may read it before that move, and then puts things beside a cell the
+ *  character is about to leave. So this waits for its Spot (claimed by `arrive`) and for the character on it. */
+export async function arrived(space: SpaceLike, charId: string, ms = 30_000): Promise<Awaited<ReturnType<SpaceLike["readAll"]>>[number]> {
+	return eventually(async () => {
+		const spot = (await space.readAll({ type: "Spot", fields: { charId } }))[0]?.fields;
+		const c = (await space.readAll({ type: "Character", fields: { charId } }))[0];
+		return spot && c && c.fields.room === spot.room && c.fields.x === spot.x && c.fields.y === spot.y ? c : null;
+	}, ms, `${charId} arrived`);
+}
+
 /** A fire that burns for `realMs` of real time (the world's rate turns that into the world time it burns until). */
 /** The cells objects stand on in a room, as "x,y" (their Footprint entries; shared/footprints.ts). `of`: only those of
  *  objects whose ID passes. */

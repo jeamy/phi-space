@@ -12,7 +12,7 @@ import { zoneRefusal } from "../server/engine/commands/townhall.ts";
 import { settlementTick } from "../server/engine/commands/settlement.ts";
 import type { BuildingFields, CharacterFields, MotionFields, ZoneFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { cellsOfObject, eventually, lightFire, placeFootprint, Player, startServer } from "./stack.ts";
+import { cellsOfObject, eventually, lightFire, placeFootprint, Player, startServer, arrived } from "./stack.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 
 const w = await loadWorld();
@@ -32,7 +32,7 @@ test("a town hall: a motion, one vote each with the last counting, and after a d
 		assert.equal((await b.post("/api/register", { name: "Xaveria", password: "geheim-123" })).status, 200);
 		assert.equal((await c.post("/api/register", { name: "Zenzi", password: "geheim-123" })).status, 200);
 		const ids = [(await a.play()).me.charId, (await b.play()).me.charId, (await c.play()).me.charId];
-		const chars = await Promise.all(ids.map((id) => eventually(async () => (await s.readAll({ type: "Character", fields: { charId: id } }))[0], 10_000, id)));
+		const chars = await Promise.all(ids.map((id) => arrived(s, id)));
 		const [ca, cb] = chars.map((e) => e!.fields as unknown as CharacterFields & { accountId: string });
 		const room = ca!.room;
 		const building = (id: string, plan: string, name: string, x: number, y: number, ch: { accountId: string; name: string }): BuildingFields => ({ buildId: id, plan, name, room, x, y, w: 1, h: 1, owner: ch.accountId, ownerName: ch.name, accountId: ch.accountId, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 });

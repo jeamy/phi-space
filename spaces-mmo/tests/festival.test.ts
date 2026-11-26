@@ -11,7 +11,7 @@ import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { BuildingFields, CharacterFields, ShowFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer } from "./stack.ts";
+import { eventually, Player, startServer, arrived } from "./stack.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -34,7 +34,7 @@ test("a festival: only a settler beside a park opens it; the better flower wins 
 		assert.equal((await a.post("/api/register", { name: "Quirina", password: "geheim-123" })).status, 200);
 		assert.equal((await b.post("/api/register", { name: "Xaveria", password: "geheim-123" })).status, 200);
 		const ids = [(await a.play()).me.charId, (await b.play()).me.charId];
-		const [ca, cb] = (await Promise.all(ids.map((id) => eventually(async () => (await s.readAll({ type: "Character", fields: { charId: id } }))[0], 10_000, id)))).map((e) => e!.fields as unknown as CharacterFields & { accountId: string });
+		const [ca, cb] = (await Promise.all(ids.map((id) => arrived(s, id)))).map((e) => e!.fields as unknown as CharacterFields & { accountId: string });
 		const room = ca!.room;
 		assert.equal(cb!.room, room);
 		const building = (id: string, plan: string, name: string, x: number, y: number, ch: { accountId: string; name: string }, points = 1): BuildingFields => ({ buildId: id, plan, name, room, x, y, w: 1, h: 1, owner: ch.accountId, ownerName: ch.name, accountId: ch.accountId, beaconId: "feuer-bucht", points, by: {}, untilWorldMs: FOREVER, builtAt: 0 });

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
 import { loadWorld, sceneryText, walkable } from "../server/engine/world.ts";
-import { cellsOfObject, eventually, Player, startServer } from "./stack.ts";
+import { cellsOfObject, eventually, Player, startServer, arrived } from "./stack.ts";
 import type { CharacterFields, ItemFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 
@@ -53,7 +53,7 @@ test("a piece is cleared work by work; its cells are free, its wood in the pack,
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Raeumer", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "char"))!;
+		const c = (await arrived(s, me))!;
 		await s.takeIfExists({ id: c.id }, 2_000);
 		await s.write({ type: "Character", fields: { ...(c.fields as unknown as CharacterFields), room: "graue-bucht", x: 14, y: 7 } as never }, null, FOREVER);
 		assert.ok(piece);

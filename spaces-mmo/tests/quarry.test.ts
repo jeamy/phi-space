@@ -9,7 +9,7 @@ import { loadWorld } from "../server/engine/world.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import type { BuildingFields, CharacterFields, ItemFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer } from "./stack.ts";
+import { eventually, Player, startServer, arrived } from "./stack.ts";
 import { saveSettings, workRestMs } from "../server/settings.ts";
 
 const w = await loadWorld();
@@ -31,7 +31,7 @@ test("stone: a pickaxe of rubble; a quarry gives three for its wear and a rest; 
 		assert.equal((await p.post("/api/register", { name: "Hauer", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
 		await does(p, "who", /./); // the arrival may still move the figure: its commands run in order
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Hauer"))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		await give(s, me, "treibholz", 10);
 		await give(s, me, "stein", 2);
 		await give(s, me, "tangseil", 4);
@@ -78,7 +78,7 @@ test("clay and bricks: a spade cuts clay and stays whole; a brickworks burns it"
 		assert.equal((await p.post("/api/register", { name: "Lehmer", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
 		await does(p, "who", /./); // the arrival may still move the figure: its commands run in order
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Lehmer"))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		await give(s, me, "treibholz", 2);
 		assert.match(await does(p, "steche", "direkt neben"), /Lehm sticht man direkt neben einer Lehmgrube/);
 		await s.write({ type: "Building", fields: building("pit", "lehmgrube", "Lehmgrube", c.x + 1, c.y) as never }, null, FOREVER);
@@ -104,7 +104,7 @@ test("the rest after work is the admin's setting, in world minutes", { timeout: 
 		assert.equal((await p.post("/api/register", { name: "Ruhende", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
 		await does(p, "who", /./); // the arrival may still move the figure: its commands run in order
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Ruhende"))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		await give(s, me, "spaten", 1);
 		await s.write({ type: "Building", fields: building("pit", "lehmgrube", "Lehmgrube", c.x + 1, c.y) as never }, null, FOREVER);
 		await does(p, "steche", "aus der Grube");
@@ -122,7 +122,7 @@ test("a chapel: an offering of worth gives a blessing, and the rest after work i
 		assert.equal((await p.post("/api/register", { name: "Opfernde", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
 		await does(p, "who", /./); // the arrival may still move the figure: its commands run in order
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Opfernde"))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		await give(s, me, "perle", 1);
 		await give(s, me, "treibholz", 1);
 		await give(s, me, "spaten", 1);

@@ -11,7 +11,7 @@ import { loadWorld } from "../server/engine/world.ts";
 import type { CartFields, CharacterFields, ExitFields, RoadFields, RouteFields } from "../server/model.ts";
 import { roadCellsEntries, roadTick } from "../server/engine/commands/road.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { cellsOfObject, eventually, heldCells, lightFire, placeFootprint, Player, startServer } from "./stack.ts";
+import { cellsOfObject, eventually, heldCells, lightFire, placeFootprint, Player, startServer, arrived } from "./stack.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -44,7 +44,7 @@ test("a road is planned from plaza to plaza, the settlers of both rooms vote, it
 		await g.play();
 		await lightFire(s, 600_000, "feuer-bucht");
 		const ch = async (id: string) => (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: id } }))[0], 10_000, id))!.fields as unknown as CharacterFields;
-		const c = await ch(me), d = await ch(her);
+		const c = (await arrived(s, me)).fields as unknown as CharacterFields, d = (await arrived(s, her)).fields as unknown as CharacterFields;
 		const x = (await s.readAll({ type: "Exit", fields: { location: c.room } })).map((e) => e.fields as unknown as ExitFields).find((e) => w.rooms.some((r) => r.roomId === e.destination && r.island === w.rooms.find((q) => q.roomId === c.room)!.island))!;
 		const to = w.rooms.find((r) => r.roomId === x.destination)!;
 		// a hut each, one here and one there: both vote
@@ -110,7 +110,7 @@ test("two plan the same road at once: one road stands", { timeout: 120_000 }, as
 		assert.equal((await b.post("/api/register", { name: "Mia", password: "geheim-123" })).status, 200);
 		const me = (await a.play()).me.charId, her = (await b.play()).me.charId;
 		const ch = async (id: string) => (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: id } }))[0], 10_000, id))!.fields as unknown as CharacterFields;
-		const c = await ch(me), d = await ch(her);
+		const c = (await arrived(s, me)).fields as unknown as CharacterFields, d = (await arrived(s, her)).fields as unknown as CharacterFields;
 		assert.equal(c.room, d.room);
 		const x = (await s.readAll({ type: "Exit", fields: { location: c.room } })).map((e) => e.fields as unknown as ExitFields).find((e) => w.rooms.some((r) => r.roomId === e.destination && r.island === w.rooms.find((q) => q.roomId === c.room)!.island))!;
 		const to = w.rooms.find((r) => r.roomId === x.destination)!;
@@ -149,7 +149,7 @@ test("a room holds one station: a second is refused, built or staked", { timeout
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
 		await lightFire(s, 600_000, "feuer-bucht");
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		await s.write({ type: "Building", fields: { buildId: "st", plan: "bahnhof", name: "Bahnhof", room: c.room, x: 0, y: 0, w: 3, h: 2, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
 		assert.match(await does(p, "bau bahnhof", /höchstens einen|Baustelle ab|passt keine?/), /höchstens einen Bau „Bahnhof“/);
 		await s.take({ type: "Building", fields: { buildId: "st" } }, 5_000);
@@ -164,7 +164,7 @@ test("freight by rail: sent while the train stands, for one fare; it waits at th
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		const here = w.rooms.find((r) => r.roomId === c.room)!, there = w.rooms.find((r) => r.island === here.island && r.roomId !== c.room)!;
 		const station = (id: string, room: string, x: number, y: number) => s.write({ type: "Building", fields: { buildId: id, plan: "bahnhof", name: "Bahnhof", room, x, y, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
 		await station("a", c.room, c.x + 1, c.y);
@@ -209,7 +209,7 @@ test("a cart goes only by road, alone, with its cargo; its owner unloads it ther
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		const x = (await s.readAll({ type: "Exit", fields: { location: c.room } })).map((e) => e.fields as unknown as ExitFields).find((e) => w.rooms.some((r) => r.roomId === e.destination))!;
 		const to = w.rooms.find((r) => r.roomId === x.destination)!;
 		await give(s, me, "karren");
@@ -241,7 +241,7 @@ test("a cart on a standing route loads from its owner's chest at one end, unload
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		const x = (await s.readAll({ type: "Exit", fields: { location: c.room } })).map((e) => e.fields as unknown as ExitFields).find((e) => w.rooms.some((r) => r.roomId === e.destination))!;
 		const to = w.rooms.find((r) => r.roomId === x.destination)!;
 		const hut = (id: string, room: string, at: { x: number; y: number }) => s.write({ type: "Building", fields: { buildId: id, plan: "huette", name: "Hütte", room, x: at.x, y: at.y, w: 2, h: 2, owner: me, ownerName: "Ole", accountId: c.accountId, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
@@ -285,7 +285,7 @@ test("the island railway: from station to station of an island, for its fare, wh
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		const here = w.rooms.find((r) => r.roomId === c.room)!, there = w.rooms.find((r) => r.island === here.island && r.roomId !== c.room)!;
 		const station = (id: string, room: string, x: number, y: number) => s.write({ type: "Building", fields: { buildId: id, plan: "bahnhof", name: "Bahnhof", room, x, y, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
 		assert.match(await does(p, "zug", "Bahnh"), /nur an Bahnhöfen/);

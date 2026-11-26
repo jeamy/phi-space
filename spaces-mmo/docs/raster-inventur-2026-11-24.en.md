@@ -716,4 +716,10 @@ The page still draws the Road parts. Growth does not move a road's cells yet (pl
 
 `tests/migrate-footprints.test.ts` covers a store migrated before step 10: refused at start, then migrated with two RoadCells entries, then it starts.
 
-*Seen meanwhile:* the railway tests of `tests/cart.test.ts` (freight by rail, the island railway) fail now and then under load: `zug` answers "Der Zug hält nur an Bahnhöfen" though the figure stands beside the station the test wrote. The commit before step 9 fails as often: 2 failed tests in six parallel runs of the file, as the current tree. It is a race older than steps 9 and 10, not yet explained.
+*Seen meanwhile, and explained (2026-11-26):* the railway tests of `tests/cart.test.ts` (freight by rail, the island railway) failed now and then under load. `zug` answered "Der Zug hält nur an Bahnhöfen" though the test had written the station beside the figure. The commit before step 9 failed as often, so it was older than steps 9 and 10.
+
+It was the tests, not the engine. A new figure holds no cell until it comes online. The gateway then sends its `arrive`, and the world worker runs it a moment later; if someone stands on the figure's cell (an NPC passing, a second newcomer), `arrive` moves it aside. The tests read the figure's place right after `play()`, sometimes before that move, and wrote the station beside a cell the figure was about to leave. In one run the figure was read at 13,10, the station went to 14,10, and the figure stood at 12,10 when `zug` ran. `tests/festival.test.ts` failed the same way ("Dieses Fest eröffnet man direkt neben einem Park"): two newcomers in one bay may pick the same cell.
+
+`arrived` in `tests/stack.ts` waits for the Spot that `arrive` claims and for the figure on it. Every test that reads a newcomer's place to put things beside it now uses it (cart, festival, growth, harbour, planks, quarry, rule-gaps, scenery, townhall). A read after a walk keeps the plain read: on a door cell a figure holds no Spot.
+
+`tests/planks.test.ts` failed for a reason of its own. It put a workshop, two huts and the cell to walk to beside wherever the newcomer started, and from some cells around the spawn that cell fell on the bay's fire. It now walks the figure to 18,12 first. With these changes, six parallel runs of the railway tests and four of planks all pass.

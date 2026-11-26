@@ -20,7 +20,7 @@ import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { BuildingFields, CharacterFields, RouteFields, TreeFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, Player, startServer } from "./stack.ts";
+import { eventually, lightFire, Player, startServer, arrived } from "./stack.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -42,7 +42,7 @@ test("trees count towards the island's stock, eight an account in each place; a 
 		const s = srv.stack.space, p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Försterin", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields & { accountId: string };
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields & { accountId: string };
 		const here = w.rooms.find((r) => r.roomId === c.room)!, elsewhere = w.rooms.find((r) => r.island === here.island && r.roomId !== here.roomId)!;
 		await lightFire(s, 600_000, "feuer-bucht");
 		await give(s, me, "spaten", 1);
@@ -72,7 +72,7 @@ test("a fire carries one lighthouse", { timeout: 180_000 }, async () => {
 		const s = srv.stack.space, p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Türmer", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const c = (await arrived(s, me))!.fields as unknown as CharacterFields;
 		await lightFire(s, 600_000, "feuer-bucht");
 		await s.write({ type: "Building", fields: building("turm", "leuchtturm", c.room, { points: 3 }) as never }, null, FOREVER);
 		assert.match(await does(p, "bau leuchtturm", /Feuer trägt|steckt|passt/), /Ein Feuer trägt höchstens einen Bau „Leuchtturm“, und dieses hat ihn schon/);
