@@ -72,9 +72,13 @@ pub fn arena_max_trail() -> f64 { length(20_000.0) }
 pub fn menu_near() -> f64 { length(2.0) }
 /// a tap on an occupied cell looks for a free one within this (client/walk.ts chooseTarget)
 pub fn target_rings() -> f64 { length(6.0) }
+/// the cells one numbered step covers, on one axis (default.ts step and the gateways' step check): at scale 2 two consecutive cells, the same physical step
+pub fn step_length() -> f64 { length(1.0) }
 
 /// `onRing`: on the ring beside a footprint, not on it and within BESIDE (at scale 1 exactly 1).
 pub fn on_ring(d: f64) -> bool { (1.0..=beside()).contains(&d) }
 /// `flowerNeighbour`: within FLOWER_NEIGHBOUR, Manhattan, not on the same cell (at scale 1 exactly 1).
 pub fn is_flower_neighbour(d: f64) -> bool { (1.0..=flower_neighbour()).contains(&d) }
+/// `bedCapacity`: the plants a bed of `w` × `h` cells holds, as many as the same physical bed at scale 1 (`w·h / gridScale²`).
+pub fn bed_capacity(w: f64, h: f64) -> f64 { let s = grid_scale(); (w * h / (s * s)).floor() }
 

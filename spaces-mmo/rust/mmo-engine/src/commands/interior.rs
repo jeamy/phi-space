@@ -23,7 +23,7 @@ use crate::source::time_now;
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::typeclasses::draft_of;
 use crate::world::walkable;
-use crate::rules::{beside, free_cell_radius};
+use crate::rules::{beside, free_cell_radius, grid_scale};
 
 pub const INTERIOR: &str = "in-";
 pub fn interior_of(build_id: &str) -> String { format!("{INTERIOR}{build_id}") }
@@ -43,7 +43,7 @@ async fn front_of(space: &Space, w: &Json, b: &Json) -> Result<Option<(f64, f64)
 	let Some(room_e) = space.read_all(&tmpl("Room", obj! { "roomId" => room }), None).await?.into_iter().next() else { return Ok(None) };
 	let ground = rows(j::at(fields(&room_e), "ground"));
 	let blocked = blocked_in(space, room).await?;
-	let exits: HashSet<String> = space.read_all(&tmpl("Exit", obj! { "location" => room }), None).await?.iter().map(|e| cell_key(j::n(fields(e), "x"), j::n(fields(e), "y"))).collect();
+	let exits: HashSet<String> = space.read_all(&tmpl("Exit", obj! { "location" => room }), None).await?.iter().flat_map(|e| crate::grid::Area::of(fields(e)).cells()).map(|(x, y)| cell_key(x, y)).collect();
 	let r = Rect::of(b);
 	let mid = r.x + (r.w / 2.0).floor();
 	let mut rim = vec![(mid, r.y + r.h)];
@@ -95,6 +95,8 @@ pub async fn make_interior(space: &Space, txn: &str, w: &Json, b: &Json) -> Resu
 		"arrive" => obj! { "x" => front.0, "y" => front.1 }, "locks" => ""
 	};
 	if revision > 0 { j::set(&mut exit, "arriveGrowthRevision", revision as f64); }
+	// at a finer grid the door is an area like every exit (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 2.2)
+	if grid_scale() > 1.0 { j::set(&mut exit, "w", grid_scale()); j::set(&mut exit, "h", grid_scale()); }
 	space.write(&draft_of("Exit", j::at(w, "typeclasses"), exit)?, Some(txn), FOREVER).await?;
 	for f in j::a(def, "furniture") {
 		let kind = txt(j::at(f, "kind"));

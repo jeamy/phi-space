@@ -365,8 +365,8 @@ impl Accounts {
 		let Some(room) = j::by(j::a(&live, "rooms"), "roomId", start).cloned() else { return Err(WebError::Other(format!("no room {start}"))) };
 		let rid = j::s(&room, "roomId");
 		let mut avoid: Vec<String> = occupied_in(world, rid, None).await?.into_iter().map(|(k, _)| k).collect();
-		avoid.extend(j::a(&live, "exits").iter().filter(|e| j::s(e, "room") == rid).map(|e| cell_key(j::n(e, "x"), j::n(e, "y"))));
-		avoid.extend(j::a(&live, "beacons").iter().filter(|b| j::s(b, "room") == rid).map(|b| cell_key(j::n(b, "x"), j::n(b, "y"))));
+		avoid.extend(j::a(&live, "exits").iter().filter(|e| j::s(e, "room") == rid).flat_map(|e| mmo_engine::grid::Area::of(e).cells()).map(|(x, y)| cell_key(x, y)));
+		avoid.extend(j::a(&live, "beacons").iter().filter(|b| j::s(b, "room") == rid).flat_map(|b| mmo_engine::grid::Area::of(b).cells()).map(|(x, y)| cell_key(x, y)));
 		let ground: Vec<String> = j::a(&room, "ground").iter().filter_map(Json::as_str).map(str::to_owned).collect();
 		let spawn = j::at(&room, "spawn");
 		let s = (j::n(spawn, "x"), j::n(spawn, "y"));

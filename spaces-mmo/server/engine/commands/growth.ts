@@ -8,7 +8,7 @@ import { footprintCells, isPassage } from "../occupancy.ts";
 import { grownPoint, insertStrip } from "../room-growth.ts";
 import { walkable, type WorldDef } from "../world.ts";
 import { timeNow } from "../source.ts";
-import { components, gridOf } from "../../../shared/grid.ts";
+import { areaCells, components, gridOf, type Area } from "../../../shared/grid.ts";
 import { isInterior } from "./interior.ts";
 export { grownGround, grownDecor } from "../room-growth.ts";
 
@@ -58,7 +58,7 @@ export function freeSide(w: WorldDef, room: RoomFields, exits: Array<{ x: number
  *  this against the two searches over the grown room it replaced. */
 export function seamCheck(w: WorldDef, room: RoomFields, entries: Taken[]): (s: RoomGrowthStep) => boolean {
 	const ground = room.ground, width = ground[0]?.length ?? 0, height = ground.length;
-	const blocked = new Set([...entries.filter((e) => is(e, "Beacon")).map((e) => `${e.fields.x},${e.fields.y}`), ...claimed(entries)]);
+	const blocked = new Set([...entries.filter((e) => is(e, "Beacon")).flatMap((e) => areaCells(e.fields as unknown as Area).map((c) => `${c.x},${c.y}`)), ...claimed(entries)]);
 	const grid = gridOf(width, height, (x, y) => walkable(w, ground, x, y) && !blocked.has(`${x},${y}`));
 	let start = room.spawn && walkable(w, ground, room.spawn.x, room.spawn.y) && !blocked.has(`${room.spawn.x},${room.spawn.y}`) ? room.spawn : undefined;
 	if (!start) { const first = grid.open.indexOf(1); if (first >= 0) start = { x: first % width, y: Math.floor(first / width) }; }

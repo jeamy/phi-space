@@ -74,7 +74,7 @@ const beam: Command = {
 		if (pause > 0) await c.space.write({ type: "BeamRest", fields: { charId: c.actor.charId, untilWorldMs: now + pause } satisfies BeamRestFields as never }, c.txn, FOREVER);
 		await countTrip(c, "beam");
 		await msg(c, "*", "info", `$you() $conj(löst|löst) $conj(dich|sich) auf.`, { templ: true });
-		const landing = { x: t.fire.x, y: t.fire.y + 1 }, toRegion = crossing(c.world, t.room.roomId);
+		const landing = { x: t.fire.x, y: t.fire.y + (t.fire.h ?? 1) }, toRegion = crossing(c.world, t.room.roomId);
 		await dropOffers(c);
 		if (toRegion) { await handOff(c, c.world.region!, toRegion, { room: t.room.roomId, ...landing }); return; }
 		const dest = await roomOf(c, t.room.roomId), at = await placeIn(c, dest, landing);

@@ -6,6 +6,7 @@
 // cannot both succeed), turn the account into a registered one in the world (or create it), then activate the
 // credential. A run that stops after step 1 leaves a pending credential whose lease frees the name again; one that
 // stops after step 2 is completed by the next login.
+import { areaCells } from "../shared/grid.ts";
 import { pinTerrain, spatialWorld } from "./engine/room-growth.ts";
 import { createHash, randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { RegionSpaces } from "./region-spaces.ts";
@@ -333,7 +334,7 @@ export class Accounts {
 	async #newCharacter(account: AccountFields, start: string, world: SpaceLike): Promise<{ char: CharacterFields; release: () => Promise<void> }> {
 		const live = await spatialWorld(world, this.w);
 		const room = live.rooms.find((r) => r.roomId === start)!;
-		const avoid = new Set([...(await occupiedIn(world, room.roomId)).keys(), ...live.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e)), ...live.beacons.filter((b) => b.room === room.roomId).map((b) => cellKey(b))]);
+		const avoid = new Set([...(await occupiedIn(world, room.roomId)).keys(), ...live.exits.filter((e) => e.room === room.roomId).flatMap((e) => areaCells(e).map(cellKey)), ...live.beacons.filter((b) => b.room === room.roomId).flatMap((b) => areaCells(b).map(cellKey))]);
 		// a little scatter around the spawn, then the nearest free cell from there
 		const near = { x: room.spawn.x + randomInt(-SPAWN_SCATTER_X, SPAWN_SCATTER_X + 1), y: room.spawn.y + randomInt(-SPAWN_SCATTER_Y, SPAWN_SCATTER_Y + 1) };
 		const at = freeCellNear(this.w, room.ground, walkable(this.w, room.ground, near.x, near.y) ? near : room.spawn, avoid, FREE_CELL_RADIUS) ?? room.spawn;

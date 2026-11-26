@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use phi_json::{obj, Json};
 
-use super::economy::{beacon_of, dist_to, first_alias, fuels, gather, homes_of, look, min_fuel, next_to, rest, step_beside, tile, travel, Look, Rect, Social};
+use super::economy::{beacon_of, first_alias, fuels, gather, homes_of, look, min_fuel, next_to, rest, step_beside, tile, travel, Look, Rect, Social};
 use super::Npc;
 use crate::commands::build::PATH;
 use crate::commands::cart::{road_links, road_path};
@@ -96,13 +96,13 @@ async fn free_ground(n: &Npc, room: &str, w: f64, h: f64) -> Result<Option<(f64,
 	for t in [tmpl("Item", obj! { "location" => room }), tmpl("Character", obj! { "room" => room })] {
 		busy.extend(n.space.read_all(&t, None).await?.iter().map(|e| format!("{},{}", nt(j::n(fields(e), "x")), nt(j::n(fields(e), "y")))));
 	}
-	let near: Vec<(f64, f64)> = j::a(&world, "exits").iter().filter(|e| j::s(e, "room") == room).chain(j::a(&world, "beacons").iter().filter(|b| j::s(b, "room") == room)).map(|e| (j::n(e, "x"), j::n(e, "y"))).collect();
+	let near: Vec<crate::grid::Area> = j::a(&world, "exits").iter().filter(|e| j::s(e, "room") == room).chain(j::a(&world, "beacons").iter().filter(|b| j::s(b, "room") == room)).map(crate::grid::Area::of).collect();
 	let fits = |x0: f64, y0: f64, t: &str| {
 		let mut y = y0;
 		while y < y0 + h {
 			let mut x = x0;
 			while x < x0 + w {
-				if tile(&ground, x, y) != t || busy.contains(&format!("{},{}", nt(x), nt(y))) || near.iter().any(|e| (e.0 - x).abs().max((e.1 - y).abs()) <= settler_clearance()) { return false; }
+				if tile(&ground, x, y) != t || busy.contains(&format!("{},{}", nt(x), nt(y))) || near.iter().any(|e| e.dist(x, y) <= settler_clearance()) { return false; }
 				x += 1.0;
 			}
 			y += 1.0;
@@ -164,9 +164,9 @@ impl Siedler {
 		if let (Some(fire), false) = (beacon_of(&w, &def), fuel.is_empty()) {
 			if fire_low(n, &w, fire, now, 2.0).await? {
 				if !travel(n, l, j::s(fire, "room")).await? { return Ok(()); }
-				let fxy = (j::n(fire, "x"), j::n(fire, "y"));
+				let fa = crate::grid::Area::of(fire);
 				let (mx, my) = l.xy();
-				if (mx - fxy.0).abs().max((my - fxy.1).abs()) <= feed_fire() { n.act(&format!("put {} in {}", j::s(fuel[0], "name"), first_alias(fire))).await?; } else { next_to(n, l, fxy).await?; }
+				if fa.dist(mx, my) <= feed_fire() { n.act(&format!("put {} in {}", j::s(fuel[0], "name"), first_alias(fire))).await?; } else { next_to(n, l, fa).await?; }
 				return Ok(());
 			}
 		}
@@ -428,7 +428,7 @@ impl Siedler {
 		}
 		let zier = j::s(b, "kind") == "zier";
 		let seed = l.pack.iter().find(|i| j::a(&g, "sorts").iter().any(|s| j::at(s, "seed") == j::at(i, "proto") && (!zier || j::s(s, "kind") == "zier")));
-		if (plants.len() as f64) < j::n(b, "w") * j::n(b, "h") {
+		if (plants.len() as f64) < crate::rules::bed_capacity(j::n(b, "w"), j::n(b, "h")) {
 			if let Some(s) = seed { return near(format!("pflanze {}", j::s(s, "name"))).await; }
 			if self.may("samen") { self.later("samen", 8); n.act("sammle samen").await?; return Ok(true); }
 		}
@@ -537,8 +537,8 @@ async fn chores(n: &Npc, l: &Look, room: &str) -> Result<bool> {
 				None => { if gather(n, l, &fs).await? { return Ok(true); } }
 				Some(f) => {
 					if !travel(n, l, j::s(fire, "room")).await? { return Ok(true); }
-					let fxy = (j::n(fire, "x"), j::n(fire, "y"));
-					if dist_to(l.xy(), &Rect::cell(fxy.0, fxy.1)) <= feed_fire() { n.act(&format!("put {} in {}", j::s(f, "name"), first_alias(fire))).await?; } else { next_to(n, l, fxy).await?; }
+					let fa = crate::grid::Area::of(fire);
+					if fa.dist(l.xy().0, l.xy().1) <= feed_fire() { n.act(&format!("put {} in {}", j::s(f, "name"), first_alias(fire))).await?; } else { next_to(n, l, fa).await?; }
 					return Ok(true);
 				}
 			}

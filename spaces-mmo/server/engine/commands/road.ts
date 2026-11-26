@@ -22,7 +22,7 @@ import { epochName, epochOf, islandOf } from "./epoch.ts";
 import { hutsIn, needRank, settlementIn } from "./settlement.ts";
 import { ARTICLE, days, human, plural, rested, tire } from "./build.ts";
 import { SITE_REACH } from "../../../shared/rules.ts";
-import { closing, indexOf, walkGrid } from "../../../shared/grid.ts";
+import { areaCells, besideArea, closing, indexOf, walkGrid, type Area } from "../../../shared/grid.ts";
 
 type Cell = { x: number; y: number };
 type RouteDef = NonNullable<NonNullable<WorldDef["cart"]>["route"]>;
@@ -36,9 +36,9 @@ const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
 /** The middle of a room a road runs to: beside its fire, else the cobble cell nearest the room's centre, else the walkable
  *  cell nearest it. The cells that count as arrived. */
-function middleOf(w: WorldDef, room: RoomFields, fire: Cell | undefined): Cell[] {
+function middleOf(w: WorldDef, room: RoomFields, fire: Area | undefined): Cell[] {
 	const g = room.ground, h = g.length, wd = g[0]?.length ?? 0;
-	if (fire) return STEPS.map(([dx, dy]) => ({ x: fire.x + dx, y: fire.y + dy })).filter((p) => walkable(w, g, p.x, p.y));
+	if (fire) return besideArea(fire).filter((p) => walkable(w, g, p.x, p.y));
 	const mid = { x: (wd - 1) / 2, y: (h - 1) / 2 };
 	let best: Cell | null = null, bestD = Infinity, bestCobble = false;
 	for (let y = 0; y < h; y++) for (let x = 0; x < wd; x++) {
@@ -296,7 +296,7 @@ async function plan(c: CommandCtx, word: string): Promise<void> {
 	const fire = (room: string) => c.world.beacons.find((b) => b.room === room);
 	const blockedA = await blockedIn(c.space, c.world, here.roomId), blockedB = await blockedIn(c.space, c.world, there.roomId);
 	const startA = middleOf(c.world, here, fire(here.roomId)).find((p) => !blockedA.has(cellKey(p)));
-	const legA = startA ? trace(c.world, here.ground, startA, [{ x: to.exit.x, y: to.exit.y }], blockedA) : null;
+	const legA = startA ? trace(c.world, here.ground, startA, areaCells(to.exit), blockedA) : null;
 	const legB = trace(c.world, there.ground, to.exit.arrive, middleOf(c.world, there, fire(there.roomId)).filter((p) => !blockedB.has(cellKey(p))), blockedB);
 	if (!legA || !legB) throw new CommandError(`Zwischen hier und ${to.name} ist kein freier Weg für eine Straße; etwas ist zugebaut.`);
 	const cells = [...legA.map((p) => ({ room: here.roomId, ...p })), ...legB.map((p) => ({ room: there.roomId, ...p }))];

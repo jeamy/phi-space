@@ -23,7 +23,8 @@ import { describeRoom, dropOffers, placeIn, relocate } from "./default.ts";
 import { ARTICLE, atCell, distTo, planOf } from "./build.ts";
 import { wakeOutside } from "./sleep.ts";
 import { dropRoomLock, writeRoomLock } from "../room-lock.ts";
-import { BESIDE, FREE_CELL_RADIUS } from "../../../shared/rules.ts";
+import { areaCells, type Area } from "../../../shared/grid.ts";
+import { BESIDE, FREE_CELL_RADIUS, gridScale } from "../../../shared/rules.ts";
 
 export const INTERIOR = "in-";
 export const interiorOf = (buildId: string) => `${INTERIOR}${buildId}`;
@@ -43,7 +44,7 @@ async function frontOf(space: Space, w: WorldDef, b: Pick<BuildingFields, "room"
 	const roomE = (await space.readAll({ type: "Room", fields: { roomId: b.room } }))[0];
 	if (!roomE) return null;
 	const ground = fieldsOf<RoomFields>(roomE).ground, blocked = await blockedIn(space as SpaceLike, w, b.room);
-	const exits = new Set((await space.readAll({ type: "Exit", fields: { location: b.room } })).map((e) => cellKey(e.fields as unknown as { x: number; y: number })));
+	const exits = new Set((await space.readAll({ type: "Exit", fields: { location: b.room } })).flatMap((e) => areaCells(e.fields as unknown as Area).map(cellKey)));
 	const mid = b.x + Math.floor(b.w / 2), rim: Array<{ x: number; y: number }> = [{ x: mid, y: b.y + b.h }];
 	for (let x = b.x - 1; x <= b.x + b.w; x++) rim.push({ x, y: b.y + b.h });
 	for (let y = b.y + b.h - 1; y >= b.y; y--) rim.push({ x: b.x - 1, y }, { x: b.x + b.w, y });
@@ -67,7 +68,9 @@ export async function makeInterior(space: Space, txn: string, w: WorldDef, b: Bu
 	await space.write(draftOf("Room", w.typeclasses, room), txn, FOREVER);
 	await writeRoomLock(space as SpaceLike, txn, roomId);
 	const outside = w.rooms.find((r) => r.roomId === b.room)?.name ?? "draußen";
-	const exit: ExitFields = { exitId: exitIdOf(b.buildId), name: "hinaus", aliases: ["raus", "tür", "tuer", "out"], desc: `Hinaus nach ${outside}.`, location: roomId, destination: b.room, x: def.door.x, y: def.door.y, arrive: front, locks: "", ...(revision ? { arriveGrowthRevision: revision } : {}) };
+	const exit: ExitFields = { exitId: exitIdOf(b.buildId), name: "hinaus", aliases: ["raus", "tür", "tuer", "out"], desc: `Hinaus nach ${outside}.`, location: roomId, destination: b.room, x: def.door.x, y: def.door.y, arrive: front, locks: "", ...(revision ? { arriveGrowthRevision: revision } : {}),
+		// at a finer grid the door is an area like every exit (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 2.2)
+		...(gridScale() > 1 ? { w: gridScale(), h: gridScale() } : {}) };
 	await space.write(draftOf("Exit", w.typeclasses, exit), txn, FOREVER);
 	for (const f of def.furniture) {
 		const s: SceneryFields = { sceneryId: furnishingId(b.buildId, f.kind), room: roomId, x: f.x, y: f.y, w: 1, h: 1, model: f.kind, name: f.name, fixed: true, work: 0, left: 0, yields: [], of: b.buildId, plan: b.plan, owner: b.owner, ...(f.use ? { use: f.use } : {}), desc: f.desc };

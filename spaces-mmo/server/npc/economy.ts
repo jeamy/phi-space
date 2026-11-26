@@ -29,6 +29,7 @@ import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, t
 import { deliverer } from "./settlers.ts";
 import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scripts.ts";
 import { SAY_MAX, sayParts } from "./say-parts.ts";
+import { besideArea, distToArea, type Area } from "../../shared/grid.ts";
 import { BESIDE, FEED_FIRE, NPC_WANDER_X, NPC_WANDER_Y, onRing, REACH_POINT } from "../../shared/rules.ts";
 
 /** One round of a trader or a worker: every look is several calls to the space (each a transaction), and players do not
@@ -402,7 +403,7 @@ function huter(): Script {
 		let acted = (await talk(n, l));
 		if (!acted && weak && fuel.length) {
 			if (await travel(n, l, beacon.room)) {
-				if (Math.max(Math.abs(l.me.x - beacon.x), Math.abs(l.me.y - beacon.y)) <= FEED_FIRE) await n.act(`put ${fuel[0]!.name} in ${beacon.aliases[0] ?? "feuer"}`);
+				if (distToArea(l.me, beacon) <= FEED_FIRE) await n.act(`put ${fuel[0]!.name} in ${beacon.aliases[0] ?? "feuer"}`);
 				else await nextTo(n, l, beacon);
 			}
 			acted = true;
@@ -418,11 +419,10 @@ function huter(): Script {
 }
 
 /** Walks to a free cell next to `at` (a fire): the first one no one stands on. */
-export async function nextTo(n: Npc, l: Look, at: { x: number; y: number }): Promise<void> {
+export async function nextTo(n: Npc, l: Look, at: Area): Promise<void> {
 	const ground = n.world.rooms.find((r) => r.roomId === l.me.room)?.ground ?? [];
 	const busy = new Set((await n.space.readAll({ type: "Character", fields: { room: l.me.room } })).map((e) => `${e.fields.x},${e.fields.y}`));
-	for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]] as const) {
-		const x = at.x + dx, y = at.y + dy;
+	for (const { x, y } of besideArea(at, true)) {
 		if (busy.has(`${x},${y}`) || !",.:".includes(ground[y]?.[x] ?? "~")) continue;
 		await n.act(`move ${x} ${y}`);
 		return;

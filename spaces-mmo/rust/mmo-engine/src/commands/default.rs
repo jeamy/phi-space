@@ -6,7 +6,8 @@ use crate::context::{by_name, check, exits_here, inventory, items_here, items_na
 use crate::fire::{burn_text, covers_of, flame_of, fog_of, key_text};
 use crate::j;
 use crate::js::{self, JsRegex};
-use crate::occupancy::{blocked_in, cell_key, cell_of, claim_spot, free_cell_near, is_passage, occupied_in, online_ids, release_spot};
+use crate::grid::Area;
+use crate::occupancy::{blocked_in, cell_key, claim_spot, free_cell_near, is_passage, occupied_in, online_ids, release_spot};
 use crate::room_growth::{grown_point, rows};
 use crate::space::{by_id, fields, not_understood, refuse, tmpl, Error, Result, FOREVER, NO_WAIT};
 use crate::world::{find_path, walkable, way_to};
@@ -21,11 +22,11 @@ pub async fn online(c: &Ctx, room: Option<&str>) -> Result<Vec<Json>> {
 	Ok(c.space.read_all(&t, None).await?.iter().map(|e| fields(e).clone()).filter(|ch| live.contains(&key_text(j::at(ch, "charId")))).collect())
 }
 
-/// `moveTo`: to a cell of the actor's room; an exit on it is taken at once. `path`: the whole walk must get around
-/// whoever stands in the way.
-pub async fn move_to(c: &mut Ctx, to: (f64, f64), path: bool, room: Option<Json>) -> Result<()> {
+/// `moveTo`: to a cell of the actor's room; an exit on it (a cell of its area) is taken at once. `path`: the whole walk must get around
+/// whoever stands in the way. True: it went through an exit.
+pub async fn move_to(c: &mut Ctx, to: (f64, f64), path: bool, room: Option<Json>) -> Result<bool> {
 	let exits: Vec<Json> = exits_here(c, None).await?.iter().map(|x| fields(x).clone()).collect();
-	if let Some(exit) = exits.iter().find(|x| xy(x) == to) { return traverse(c, exit).await; }
+	if let Some(exit) = exits.iter().find(|x| Area::of(x).contains(to.0, to.1)) { traverse(c, exit).await?; return Ok(true); }
 	let room = match room { Some(r) => r, None => room_of(c, None).await? };
 	let room_id = j::s(&room, "roomId").to_owned();
 	let solid = blocked_in(&c.space, &room_id).await?;
@@ -36,7 +37,7 @@ pub async fn move_to(c: &mut Ctx, to: (f64, f64), path: bool, room: Option<Json>
 	let inside = claimed.get(&cell_key(me.0, me.1));
 	let through = inside.is_some_and(|i| !i.is_empty() && claimed.get(&at) == Some(i));
 	if solid.contains(&at) && !through {
-		let fire = j::a(c.w(), "beacons").iter().any(|b| j::s(b, "room") == room_id && xy(b) == to);
+		let fire = j::a(c.w(), "beacons").iter().any(|b| j::s(b, "room") == room_id && Area::of(b).contains(to.0, to.1));
 		return refuse(if fire { "Dort brennt das Leuchtfeuer; da läuft man nicht hinein." } else { "Dort steht ein Bau; da geht man außen herum." });
 	}
 	let passage = is_passage(&exits, to.0, to.1);
@@ -48,7 +49,8 @@ pub async fn move_to(c: &mut Ctx, to: (f64, f64), path: bool, room: Option<Json>
 		if find_path(c.w(), &rows(j::at(&room, "ground")), me, to, command_path() as usize, &blocked).is_none() { return refuse("Dorthin führt kein freier Weg."); }
 	}
 	if passage { release_spot(&c.space, &c.txn, c.char_id()).await?; }
-	relocate(c, &room_id, to, !passage, None).await
+	relocate(c, &room_id, to, !passage, None).await?;
+	Ok(false)
 }
 
 /// `relocate`: takes the actor's character and writes it at a new place; its Spot goes along unless `spot` is false.
@@ -76,13 +78,13 @@ pub async fn place_in(c: &mut Ctx, room: &Json, at: (f64, f64), exits_too: bool,
 	let exits: Vec<Json> = exits_here(c, Some(&room_id)).await?.iter().map(|x| fields(x).clone()).collect();
 	let blocked = blocked_in(&c.space, &room_id).await?;
 	let key = cell_key(at.0, at.1);
-	if exits_too && !avoid.contains(&key) && is_passage(&exits, at.0, at.1) && !exits.iter().any(|x| xy(x) == at) && walkable(c.w(), &ground, at.0, at.1) && !blocked.contains(&key) {
+	if exits_too && !avoid.contains(&key) && is_passage(&exits, at.0, at.1) && !exits.iter().any(|x| Area::of(x).contains(at.0, at.1)) && walkable(c.w(), &ground, at.0, at.1) && !blocked.contains(&key) {
 		release_spot(&c.space, &c.txn, c.char_id()).await?;
 		return Ok(at);
 	}
 	let mut keep: std::collections::HashSet<String> = occupied_in(&c.space, &room_id, Some(c.char_id())).await?.into_iter().map(|(k, _)| k).collect();
 	keep.extend(blocked);
-	if exits_too { for x in exits_here(c, Some(&room_id)).await? { keep.insert(cell_of(fields(&x))); } }
+	if exits_too { for x in &exits { for (ex, ey) in Area::of(x).cells() { keep.insert(cell_key(ex, ey)); } } }
 	keep.extend(avoid.iter().cloned());
 	for _ in 0..4 {
 		let Some(cell) = free_cell_near(c.w(), &ground, at, &|k| keep.contains(k), free_cell_radius() as usize) else { break };
@@ -239,22 +241,38 @@ pub fn words(arg: &str) -> Vec<String> { BLANKS.with(|b| b.split(arg).into_iter(
 
 fn is_integer(n: f64) -> bool { n.is_finite() && n.fract() == 0.0 }
 
-/// `step <dx> <dy>`: one step; a numbered step of a page that cannot be taken is still answered.
+/// `step <dx> <dy>`: up to `step_length` cells on one axis, leg by leg (an exit on one ends it, a refused leg keeps the
+/// figure where the one before it ended); a numbered step of a page that cannot be taken is still answered.
 pub async fn step(c: &mut Ctx, arg: &str) -> Result<()> {
 	let d: Vec<f64> = words(arg).iter().map(|s| js::to_number(s)).collect();
 	let (dx, dy) = (d.first().copied().unwrap_or(f64::NAN), d.get(1).copied().unwrap_or(f64::NAN));
-	if !is_integer(dx) || !is_integer(dy) || dx.abs() + dy.abs() != 1.0 { return refuse("So geht es: step <dx> <dy> mit einem Schritt, z. B. step 1 0"); }
-	let me = xy(&c.actor);
-	let to = (me.0 + dx, me.1 + dy);
+	let n = dx.abs() + dy.abs();
+	let most = crate::rules::step_length();
+	if !is_integer(dx) || !is_integer(dy) || !(1.0..=most).contains(&n) || (dx != 0.0 && dy != 0.0) {
+		return refuse(if most > 1.0 { format!("So geht es: step <dx> <dy> mit einem bis {0} Schritten in einer Richtung, z. B. step {0} 0", phi_json::number_text(most)) } else { "So geht es: step <dx> <dy> mit einem Schritt, z. B. step 1 0".to_owned() });
+	}
+	let unit = |v: f64| if v > 0.0 { 1.0 } else if v < 0.0 { -1.0 } else { 0.0 };
+	let (ux, uy) = (unit(dx), unit(dy));
+	let start = xy(&c.actor);
+	let mut me = start;
 	let tried: Result<()> = async {
 		let room = room_of(c, None).await?;
-		if !walkable(c.w(), &rows(j::at(&room, "ground")), to.0, to.1) { return refuse("Da geht es nicht weiter."); }
-		move_to(c, to, false, Some(room)).await
+		let ground = rows(j::at(&room, "ground"));
+		let legs = n as usize;
+		for leg in 1..=legs {
+			let to = (me.0 + ux, me.1 + uy);
+			if !walkable(c.w(), &ground, to.0, to.1) { return refuse("Da geht es nicht weiter."); }
+			if move_to(c, to, false, Some(room.clone())).await? { return Ok(()); }
+			if leg < legs { me = to; c.actor = j::without(&c.actor, "refused"); j::set(&mut c.actor, "x", to.0); j::set(&mut c.actor, "y", to.1); }
+		}
+		Ok(())
 	}.await;
 	let Err(e) = tried else { return Ok(()) };
-	if !e.is_command() || c.step.is_none() { return Err(e); }
+	// a refused later leg of a double step keeps the legs before it, numbered or not
+	if !e.is_command() || (c.step.is_none() && me == start) { return Err(e); }
 	let text = e.to_string();
 	if j::at(&c.actor, "refused").as_str() != Some(text.as_str()) { let me = c.char_id().to_owned(); msg(c, &me, "error", &text, MsgOpts::default()).await?; }
+	if c.step.is_none() { return Ok(()); }
 	let room = c.room().to_owned();
 	relocate(c, &room, me, false, Some(&text)).await
 }
@@ -437,7 +455,7 @@ async fn put(c: &mut Ctx, arg: &str) -> Result<()> {
 	let room = c.room().to_owned();
 	let Some(beacon) = by_name(&beacons_in(c, &room).await?, &place, Some(xy(&c.actor))).into_iter().next() else { return not_understood(format!("Hier ist kein {}.", js::slice16(&place, 0, Some(30)))) };
 	let b = fields(&beacon).clone();
-	if reach(&b, &c.actor) > feed_fire() { return refuse(format!("Das {} ist zu weit weg; geh näher heran.", key_text(j::at(&b, "name")))); }
+	if Area::of(&b).dist(j::n(&c.actor, "x"), j::n(&c.actor, "y")) > feed_fire() { return refuse(format!("Das {} ist zu weit weg; geh näher heran.", key_text(j::at(&b, "name")))); }
 	let wl = what.to_lowercase();
 	let plural = count.is_none() && !found.iter().any(|i| { let f = fields(i); std::iter::once(j::s(f, "name")).chain(j::strs(j::a(f, "aliases"))).any(|n| n.to_lowercase() == wl) }) && stem(&what) != wl;
 	let want = count.unwrap_or(if plural { f64::INFINITY } else { 1.0 });

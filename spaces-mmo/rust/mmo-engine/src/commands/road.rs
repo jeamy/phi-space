@@ -40,8 +40,8 @@ fn at_of(ground: &[String], x: f64, y: f64) -> &str { ground.get(y as usize).map
 
 /// `middleOf`: the cells a road arrives at in a room: beside its fire, else the cobble cell nearest the room's centre,
 /// else the walkable cell nearest it.
-fn middle_of(w: &Json, ground: &[String], fire: Option<Cell>) -> Vec<Cell> {
-	if let Some(f) = fire { return STEPS.iter().map(|(dx, dy)| (f.0 + dx, f.1 + dy)).filter(|p| walkable(w, ground, p.0, p.1)).collect(); }
+fn middle_of(w: &Json, ground: &[String], fire: Option<crate::grid::Area>) -> Vec<Cell> {
+	if let Some(f) = fire { return f.beside(false).into_iter().filter(|p| walkable(w, ground, p.0, p.1)).collect(); }
 	let (h, wd) = (ground.len(), ground.first().map_or(0, |r| js::len16(r)));
 	let mid = ((wd as f64 - 1.0) / 2.0, (h as f64 - 1.0) / 2.0);
 	let (mut best, mut best_d, mut best_cobble): (Option<Cell>, f64, bool) = (None, f64::INFINITY, false);
@@ -376,7 +376,7 @@ async fn neighbours(c: &Ctx) -> Result<Vec<(Json, String, String)>> {
 	Ok(out)
 }
 
-fn fire_of(w: &Json, room: &str) -> Option<Cell> { j::by(j::a(w, "beacons"), "room", room).map(|b| (j::n(b, "x"), j::n(b, "y"))) }
+fn fire_of(w: &Json, room: &str) -> Option<crate::grid::Area> { j::by(j::a(w, "beacons"), "room", room).map(crate::grid::Area::of) }
 fn proto_name(w: &Json, key: &str) -> String { j::by(j::a(w, "prototypes"), "key", key).map_or_else(|| key.to_owned(), |p| txt(j::at(p, "name"))) }
 fn strip_to(word: &str) -> String { js::re(r"^(?:nach|zu|zum|zur|to)\s+", "").replace(js::trim(word), "") }
 
@@ -409,7 +409,7 @@ async fn plan(c: &mut Ctx, word: &str) -> Result<()> {
 	let blocked_a = blocked_in(&c.space, &here_id).await?;
 	let blocked_b = blocked_in(&c.space, &there_id).await?;
 	let start_a = middle_of(c.w(), &ga, fire_of(c.w(), &here_id)).into_iter().find(|p| !blocked_a.contains(&cell_key(p.0, p.1)));
-	let leg_a = start_a.and_then(|s| trace(c.w(), &ga, s, &[(j::n(&exit, "x"), j::n(&exit, "y"))], &blocked_a));
+	let leg_a = start_a.and_then(|s| trace(c.w(), &ga, s, &crate::grid::Area::of(&exit).cells(), &blocked_a));
 	let arrive = j::at(&exit, "arrive");
 	let ends_b: Vec<Cell> = middle_of(c.w(), &gb, fire_of(c.w(), &there_id)).into_iter().filter(|p| !blocked_b.contains(&cell_key(p.0, p.1))).collect();
 	let leg_b = trace(c.w(), &gb, (j::n(arrive, "x"), j::n(arrive, "y")), &ends_b, &blocked_b);

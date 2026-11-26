@@ -77,13 +77,13 @@ pub async fn gather(n: &Npc, me_char: &str, from: &str, mut count: f64) -> Resul
 	let at = position(n).await?;
 	if let (Some(beacon), Some(at)) = (&beacon, &at) {
 		if at.2 == j::s(beacon, "room") {
-			let bxy = xy(beacon);
+			let ba = crate::grid::Area::of(beacon);
 			let pos = |p: Option<(f64, f64, String)>| p.map_or((at.0, at.1), |p| (p.0, p.1));
-			for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)] {
-				if reach(pos(position(n).await?), bxy) <= feed_fire() { break; }
-				n.act(&format!("move {} {}", phi_json::number_text(bxy.0 + dx), phi_json::number_text(bxy.1 + dy))).await?;
+			for (x, y) in ba.beside(true) {
+				if { let p = pos(position(n).await?); ba.dist(p.0, p.1) } <= feed_fire() { break; }
+				n.act(&format!("move {} {}", phi_json::number_text(x), phi_json::number_text(y))).await?;
 			}
-			if reach(pos(position(n).await?), bxy) <= feed_fire() {
+			if { let p = pos(position(n).await?); ba.dist(p.0, p.1) } <= feed_fire() {
 				let into = j::a(beacon, "aliases").first().and_then(Json::as_str).unwrap_or("feuer").to_owned();
 				for it in &mine { if n.halted() { break; } n.act(&format!("put {} in {into}", j::s(it, "name"))).await?; }
 				return n.act(&format!("say Fertig, {from}: {} liegen im Feuer.", scheite(mine.len() as f64))).await;

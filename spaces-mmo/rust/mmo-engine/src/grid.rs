@@ -169,6 +169,21 @@ mod tests {
 	use crate::occupancy::cell_key as key;
 	use crate::world::walkable;
 
+	#[test]
+	fn area_of_one_cell_and_of_two_by_two() {
+		// as tests/area.test.ts: one cell keeps the point's answers and the old neighbour order
+		let p = Area::of(&phi_json::obj! { "x" => 5.0, "y" => 7.0 });
+		assert_eq!(p.cells(), vec![(5.0, 7.0)]);
+		assert_eq!(p.dist(8.0, 6.0), 3.0);
+		assert!(p.contains(5.0, 7.0) && !p.contains(6.0, 7.0));
+		assert_eq!(p.beside(true), vec![(6.0, 7.0), (4.0, 7.0), (5.0, 8.0), (5.0, 6.0), (6.0, 8.0), (4.0, 8.0), (6.0, 6.0), (4.0, 6.0)]);
+		let a = Area::of(&phi_json::obj! { "x" => 10.0, "y" => 4.0, "w" => 2.0, "h" => 2.0 });
+		assert_eq!(a.cells(), vec![(10.0, 4.0), (11.0, 4.0), (10.0, 5.0), (11.0, 5.0)]);
+		assert!(a.contains(11.0, 5.0) && !a.contains(12.0, 5.0) && !a.contains(10.0, 6.0));
+		assert_eq!((a.dist(11.0, 5.0), a.dist(12.0, 4.0), a.dist(13.0, 7.0), a.dist(8.0, 4.0)), (0.0, 1.0, 2.0, 2.0));
+		assert_eq!(a.beside(true), vec![(12.0, 4.0), (12.0, 5.0), (9.0, 4.0), (9.0, 5.0), (10.0, 6.0), (11.0, 6.0), (10.0, 3.0), (11.0, 3.0), (12.0, 6.0), (9.0, 6.0), (12.0, 3.0), (9.0, 3.0)]);
+	}
+
 	const STEPS: [(f64, f64); 4] = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)];
 
 	fn legacy_find_path(w: &Json, ground: &[String], from: (f64, f64), to: (f64, f64), max: usize, blocked: &HashSet<String>) -> Option<Vec<(f64, f64)>> {
@@ -356,5 +371,42 @@ mod tests {
 			];
 			for (name, old, new) in &cases { println!("{wd}x{h} {name}: old {} µs, new {} µs", median(old.as_ref()), median(new.as_ref())); }
 		}
+	}
+}
+
+/// An exit's or a fire's cells (`shared/grid.ts` `Area`; docs/3d-welt-und-raster-plan-2026-11-21.en.md section 2.2:
+/// points of a scale-1 definition, areas of `w` × `h` at a finer grid); without `w`/`h` one cell.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Area { pub x: f64, pub y: f64, pub w: f64, pub h: f64 }
+
+impl Area {
+	/// The area of an entry's or a definition's fields `x`, `y`, `w`, `h`.
+	pub fn of(v: &Json) -> Area { Area { x: crate::j::n(v, "x"), y: crate::j::n(v, "y"), w: crate::j::no(v, "w").unwrap_or(1.0), h: crate::j::no(v, "h").unwrap_or(1.0) } }
+	/// `inArea`: whether (x, y) is a cell of it.
+	pub fn contains(&self, x: f64, y: f64) -> bool { x >= self.x && y >= self.y && x < self.x + self.w && y < self.y + self.h }
+	/// `distToArea`: the steps (Chebyshev) from (x, y) to its nearest cell, 0 on it.
+	pub fn dist(&self, x: f64, y: f64) -> f64 {
+		(self.x - x).max(0.0).max(x - (self.x + self.w - 1.0)).max(self.y - y).max(y - (self.y + self.h - 1.0))
+	}
+	/// `areaCells`: its cells, row by row.
+	pub fn cells(&self) -> Vec<(f64, f64)> {
+		let mut out = Vec::new();
+		let mut y = self.y;
+		while y < self.y + self.h { let mut x = self.x; while x < self.x + self.w { out.push((x, y)); x += 1.0; } y += 1.0; }
+		out
+	}
+	/// `besideArea`: the cells beside it (right side, left, below, above, each from the top or the left), then with
+	/// `corners` the four corners (below right, below left, above right, above left).
+	pub fn beside(&self, corners: bool) -> Vec<(f64, f64)> {
+		let (x0, y0, w, h) = (self.x, self.y, self.w, self.h);
+		let mut out = Vec::new();
+		let rows = || { let mut v = Vec::new(); let mut y = y0; while y < y0 + h { v.push(y); y += 1.0; } v };
+		let cols = || { let mut v = Vec::new(); let mut x = x0; while x < x0 + w { v.push(x); x += 1.0; } v };
+		for y in rows() { out.push((x0 + w, y)); }
+		for y in rows() { out.push((x0 - 1.0, y)); }
+		for x in cols() { out.push((x, y0 + h)); }
+		for x in cols() { out.push((x, y0 - 1.0)); }
+		if corners { out.extend([(x0 + w, y0 + h), (x0 - 1.0, y0 + h), (x0 + w, y0 - 1.0), (x0 - 1.0, y0 - 1.0)]); }
+		out
 	}
 }

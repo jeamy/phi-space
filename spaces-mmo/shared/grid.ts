@@ -127,3 +127,29 @@ export function nearestOpen(g: { w: number; h: number }, at: At, radius: number,
 	}
 	return null;
 }
+
+/** An exit's or a fire's cells (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 2.2: points of a scale-1
+ *  definition, areas of `w` × `h` at a finer grid); without `w`/`h` one cell. */
+export type Area = { x: number; y: number; w?: number; h?: number };
+/** Whether `c` is a cell of `a`. */
+export const inArea = (a: Area, c: At): boolean => c.x >= a.x && c.y >= a.y && c.x < a.x + (a.w ?? 1) && c.y < a.y + (a.h ?? 1);
+/** The steps (Chebyshev) from `c` to the nearest cell of `a`, 0 on it: for one cell the distance to that point. */
+export const distToArea = (c: At, a: Area): number => Math.max(a.x - c.x, 0, c.x - (a.x + (a.w ?? 1) - 1), a.y - c.y, c.y - (a.y + (a.h ?? 1) - 1));
+/** The cells of `a`, row by row. */
+export function areaCells(a: Area): At[] {
+	const out: At[] = [];
+	for (let y = a.y; y < a.y + (a.h ?? 1); y++) for (let x = a.x; x < a.x + (a.w ?? 1); x++) out.push({ x, y });
+	return out;
+}
+/** The cells beside `a` (four neighbours of its cells, outside it): its right side, left, below, above, each from the
+ *  top or the left; for one cell right, left, below, above. `corners`: then the four corners (below right, below left,
+ *  above right, above left), the eight neighbours of a cell in that order. */
+export function besideArea(a: Area, corners = false): At[] {
+	const w = a.w ?? 1, h = a.h ?? 1, out: At[] = [];
+	for (let y = a.y; y < a.y + h; y++) out.push({ x: a.x + w, y });
+	for (let y = a.y; y < a.y + h; y++) out.push({ x: a.x - 1, y });
+	for (let x = a.x; x < a.x + w; x++) out.push({ x, y: a.y + h });
+	for (let x = a.x; x < a.x + w; x++) out.push({ x, y: a.y - 1 });
+	if (corners) out.push({ x: a.x + w, y: a.y + h }, { x: a.x - 1, y: a.y + h }, { x: a.x + w, y: a.y - 1 }, { x: a.x - 1, y: a.y - 1 });
+	return out;
+}

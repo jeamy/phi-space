@@ -25,7 +25,7 @@ import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.t
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
 import { chooseTarget, MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
-import { indexOf, walkGrid } from "../shared/grid.ts";
+import { distToArea, indexOf, walkGrid } from "../shared/grid.ts";
 import { cellAbout, cellEntries, type CellInput, hereEntries, itemEntries, KEEPERS, tapTarget, wildHere } from "./cellActions.ts";
 import { hintsFor, type Hint } from "./hints.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
@@ -924,7 +924,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		// walkable and nobody standing there (the server checks again and answers either way); at a door (an exit's cell or
 		// one next to it) others do not block: one walks through them, as the server lets one (engine/occupancy.ts)
 		const exits = [...objs.values()].filter((o) => o.kind === "exit" && o.location === hello.room.roomId);
-		const passage = (c: { x: number; y: number }) => exits.some((e) => Math.max(Math.abs(e.x - c.x), Math.abs(e.y - c.y)) <= PASSAGE);
+		const passage = (c: { x: number; y: number }) => exits.some((e) => distToArea(c, e) <= PASSAGE);
 		const grid = walkGrid(hello.world.tiles, hello.room.ground), take = (x: number, y: number) => { const i = indexOf(grid, { x, y }); if (i >= 0) grid.open[i] = 0; };
 		for (const c of [...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)]) take(c.x, c.y);
 		// sites and buildings cover their cells: nobody walks into them (server: occupancy.ts blockedIn)
@@ -1139,7 +1139,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		if (item) { fetching.current = { id: item.id, until: Date.now() + FETCH_MS }; walkTo(at); return; }
 		// a fire out of reach: to it, "Hier möglich" then offers to feed it
 		const fire = [...objs.values()].find((o) => o.kind === "beacon" && o.location === room && o.x === at.x && o.y === at.y), own = chars.get(me);
-		if (fire && own && Math.max(Math.abs(fire.x - own.x), Math.abs(fire.y - own.y)) > FEED_FIRE) { walkTo(at); return; }
+		if (fire && own && distToArea(own, fire) > FEED_FIRE) { walkTo(at); return; }
 		if (hit) { stopWalk.current(); setMenu({ x: at.x, y: at.y, left: lastPress.current.x, top: lastPress.current.y }); return; }
 		walkTo({ x, y });
 	}, [hello, chars, objs, shownObjs, me, onCell, walkTo]);

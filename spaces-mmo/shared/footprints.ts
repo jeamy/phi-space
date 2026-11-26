@@ -71,7 +71,7 @@ export function occupancyOf(w: number, h: number, entries: Iterable<OccupancyEnt
 	return o;
 }
 
-/** The same from the Footprint entries (`of` the object, the rectangle) and the Beacons. */
+/** The same from the Footprint entries (`of` the object, the rectangle) and the Beacons (their areas). */
 export function footprintOccupancy(w: number, h: number, entries: Iterable<OccupancyEntry>): Occupancy {
 	const o = empty(w, h), index = new Map<string, number>();
 	for (const e of entries) {
@@ -79,7 +79,10 @@ export function footprintOccupancy(w: number, h: number, entries: Iterable<Occup
 		if (typeOf(e, "Footprint")) {
 			const x0 = num(f.x, NaN), y0 = num(f.y, NaN), fw = num(f.w, 1), fh = num(f.h, 1);
 			for (let y = y0; y < y0 + fh; y++) for (let x = x0; x < x0 + fw; x++) claim(o, index, String(f.of), x, y, MOVE | BUILD | SHARE);
-		} else if (typeOf(e, "Beacon")) claim(o, index, String(f.beaconId), num(f.x, NaN), num(f.y, NaN), MOVE | BUILD);
+		} else if (typeOf(e, "Beacon")) {
+			const x0 = num(f.x, NaN), y0 = num(f.y, NaN), fw = num(f.w, 1), fh = num(f.h, 1);
+			for (let y = y0; y < y0 + fh; y++) for (let x = x0; x < x0 + fw; x++) claim(o, index, String(f.beaconId), x, y, MOVE | BUILD);
+		}
 	}
 	return o;
 }

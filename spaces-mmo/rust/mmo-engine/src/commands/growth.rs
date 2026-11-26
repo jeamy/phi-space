@@ -20,6 +20,7 @@ use crate::world::walkable;
 const POSITIONED: [&str; 17] = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Footprint", "Zone", "Motion", "Animal", "Tree"];
 fn is(e: &Json, ty: &str) -> bool { j::a(e, "types").iter().any(|t| t.as_str() == Some(ty)) }
 fn key(x: f64, y: f64) -> String { format!("{},{}", phi_json::number_text(x), phi_json::number_text(y)) }
+#[cfg(test)]
 fn key_of(p: &Json) -> String { format!("{},{}", key_text(j::at(p, "x")), key_text(j::at(p, "y"))) }
 fn pt(x: f64, y: f64) -> Json { obj! { "x" => x, "y" => y } }
 /// `crosses`: a rectangle the seam `s` would cut.
@@ -83,7 +84,7 @@ fn claimed(entries: &[Json]) -> Vec<String> {
 /// is walkable (it takes grass or path where either has it, else the left one's land), so every way that crossed the
 /// seam still crosses it: only the new land has to join. The tests below hold it against the two searches it replaced.
 pub fn seam_check(w: &Json, room: &Json, ground: &[String], entries: &[Json]) -> impl Fn(&Json) -> bool {
-	let mut blocked: HashSet<String> = entries.iter().filter(|e| is(e, "Beacon")).map(|e| key_of(fields(e))).collect();
+	let mut blocked: HashSet<String> = entries.iter().filter(|e| is(e, "Beacon")).flat_map(|e| crate::grid::Area::of(fields(e)).cells()).map(|(x, y)| key(x, y)).collect();
 	blocked.extend(claimed(entries));
 	let free = |x: f64, y: f64| walkable(w, ground, x, y) && !blocked.contains(&key(x, y));
 	let (width, height) = (ground.first().map_or(0, |r| js::len16(r)), ground.len());

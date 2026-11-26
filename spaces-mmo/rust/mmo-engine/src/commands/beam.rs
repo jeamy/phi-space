@@ -91,7 +91,7 @@ async fn beam(c: &mut Ctx, arg: &str) -> Result<()> {
 	if pause > 0.0 { c.space.write(&tmpl("BeamRest", obj! { "charId" => me.as_str(), "untilWorldMs" => now + pause }), c.txn(), FOREVER).await?; }
 	count_trip(c, "beam").await?;
 	msg(c, "*", "info", "$you() $conj(löst|löst) $conj(dich|sich) auf.", MsgOpts { templ: true, ..Default::default() }).await?;
-	let landing = (j::n(&t.fire, "x"), j::n(&t.fire, "y") + 1.0);
+	let landing = (j::n(&t.fire, "x"), j::n(&t.fire, "y") + j::no(&t.fire, "h").unwrap_or(1.0));
 	let room_id = j::s(&t.room, "roomId").to_owned();
 	let to_region = crossing(c.w(), &room_id)?;
 	drop_offers(c).await?;

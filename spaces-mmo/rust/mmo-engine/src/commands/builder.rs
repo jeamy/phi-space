@@ -1,6 +1,7 @@
 //! Builder and admin commands (`server/engine/commands/builder.ts`): shaping the world from inside it. Each carries a
 //! `cmd` lock (the command table has them), so below the level the command does not exist. Lock strings a builder writes
 //! are parsed before they are stored.
+use crate::grid::Area;
 use phi_json::{obj, Json};
 
 use crate::context::{by_name, exits_here, inventory, items_here, items_named, msg, room_of, Ctx, MsgOpts};
@@ -65,10 +66,10 @@ fn checked_locks(s: &str) -> Result<String> {
 }
 
 /// `arrivalNear`: a walkable cell next to `at` that holds no exit.
-fn arrival_near(c: &Ctx, ground: &[String], at: (f64, f64), exits: &[(f64, f64)]) -> Result<Json> {
+fn arrival_near(c: &Ctx, ground: &[String], at: (f64, f64), exits: &[Area]) -> Result<Json> {
 	for (dx, dy) in [(0.0, 1.0), (1.0, 0.0), (-1.0, 0.0), (0.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)] {
 		let p = (at.0 + dx, at.1 + dy);
-		if walkable(c.w(), ground, p.0, p.1) && !exits.contains(&p) { return Ok(obj! { "x" => p.0, "y" => p.1 }); }
+		if walkable(c.w(), ground, p.0, p.1) && !exits.iter().any(|x| x.contains(p.0, p.1)) { return Ok(obj! { "x" => p.0, "y" => p.1 }); }
 	}
 	refuse("Neben dieser Stelle ist kein Platz zum Ankommen.")
 }
@@ -105,15 +106,15 @@ async fn dig(c: &mut Ctx, arg: &str) -> Result<()> {
 	let back = parts.get(1).cloned().unwrap_or_default();
 	let Some(a) = a.filter(|a| name_ok(&a.0) && name_ok(&ways)) else { return refuse("So geht es: dig <name> = <richtung>[, <zurück>]") };
 	let here = room_of(c, None).await?;
-	let exits_now: Vec<(f64, f64)> = exits_here(c, None).await?.iter().map(|x| xy(fields(x))).collect();
+	let exits_now: Vec<Area> = exits_here(c, None).await?.iter().map(|x| Area::of(fields(x))).collect();
 	let me = xy(&c.actor);
-	if exits_now.contains(&me) { return refuse("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle."); }
+	if exits_now.iter().any(|x| x.contains(me.0, me.1)) { return refuse("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle."); }
 	let room_id = format!("r-{}", hex(&random_bytes(5)));
 	let d = j::at(c.w(), "dig").clone();
 	let spawn_at = xy(j::at(&d, "spawn"));
 	c.space.write(&draft_of("Room", j::at(c.w(), "typeclasses"), obj! { "roomId" => room_id.as_str(), "name" => a.0.as_str(), "desc" => j::at(&d, "desc").clone(), "ground" => j::at(&d, "ground").clone(), "spawn" => j::at(&d, "spawn").clone() })?, c.txn(), FOREVER).await?;
 	crate::room_lock::write_room_lock(&c.space, c.txn(), &room_id).await?;
-	let back_exit: Vec<(f64, f64)> = if back.is_empty() { vec![] } else { vec![spawn_at] };
+	let back_exit: Vec<Area> = if back.is_empty() { vec![] } else { vec![Area { x: spawn_at.0, y: spawn_at.1, w: 1.0, h: 1.0 }] };
 	let id = format!("x-{}", hex(&random_bytes(5)));
 	let arrive = arrival_near(c, &rows(j::at(&d, "ground")), spawn_at, &back_exit)?;
 	let room_here = j::s(&here, "roomId").to_owned();
@@ -121,7 +122,7 @@ async fn dig(c: &mut Ctx, arg: &str) -> Result<()> {
 	if !back.is_empty() {
 		let id = format!("x-{}", hex(&random_bytes(5)));
 		let mut avoid = exits_now.clone();
-		avoid.push(me);
+		avoid.push(Area { x: me.0, y: me.1, w: 1.0, h: 1.0 });
 		let arrive = arrival_near(c, &rows(j::at(&here, "ground")), me, &avoid)?;
 		write_exit(c, exit_fields(id, &back, format!("Zurück nach {}.", txt(j::at(&here, "name"))), &room_id, &room_here, spawn_at, arrive)).await?;
 	}
@@ -134,7 +135,7 @@ async fn open(c: &mut Ctx, arg: &str) -> Result<()> {
 	let rooms: Vec<Json> = c.space.read_all(&obj! { "type" => "Room" }, None).await?.iter().map(|e| fields(e).clone()).collect();
 	let Some(dest) = rooms.iter().find(|r| j::s(r, "roomId") == a.1).or_else(|| rooms.iter().find(|r| js::lower(&txt(j::at(r, "name"))) == js::lower(&a.1))).cloned() else { return refuse(format!("Einen Raum „{}“ gibt es nicht.", js::slice16(&a.1, 0, Some(30)))) };
 	let me = xy(&c.actor);
-	if exits_here(c, None).await?.iter().any(|x| xy(fields(x)) == me) { return refuse("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle."); }
+	if exits_here(c, None).await?.iter().any(|x| Area::of(fields(x)).contains(me.0, me.1)) { return refuse("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle."); }
 	let ground = rows(j::at(&dest, "ground"));
 	let spawn_at = match j::opt(&dest, "spawn") { Some(s) => s.clone(), None => obj! { "x" => (ground.first().map_or(1, |r| js::len16(r)) as f64 / 2.0).floor(), "y" => (ground.len() as f64 / 2.0).floor() } };
 	let arrive = if walkable(c.w(), &ground, j::n(&spawn_at, "x"), j::n(&spawn_at, "y")) { spawn_at } else { arrival_near(c, &ground, xy(&spawn_at), &[])? };

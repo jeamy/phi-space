@@ -4,6 +4,7 @@
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type BedFields, type ExitFields, type ItemFields, type RoomFields, type TagFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
+import { inArea, type Area } from "../../../shared/grid.ts";
 import { byName, CommandError, exitsHere, inventory, itemsHere, msg, roomOf, type CommandCtx, itemsNamed } from "../context.ts";
 import { LEVELS, LockError, parseLocks } from "../locks.ts";
 import { DEFAULT_ITEM_LOCKS, newItemId, resolvePrototype, spawn as spawnItem } from "../prototypes.ts";
@@ -55,10 +56,10 @@ const checkedLocks = (s: string): string => {
 };
 
 /** A walkable cell next to `at` that holds no exit (where someone arriving stands). */
-function arrivalNear(c: CommandCtx, ground: string[], at: { x: number; y: number }, exits: Array<{ x: number; y: number }>): { x: number; y: number } {
+function arrivalNear(c: CommandCtx, ground: string[], at: { x: number; y: number }, exits: Area[]): { x: number; y: number } {
 	for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]] as const) {
 		const p = { x: at.x + dx, y: at.y + dy };
-		if (walkable(c.world, ground, p.x, p.y) && !exits.some((x) => x.x === p.x && x.y === p.y)) return p;
+		if (walkable(c.world, ground, p.x, p.y) && !exits.some((x) => inArea(x, p))) return p;
 	}
 	throw new CommandError("Neben dieser Stelle ist kein Platz zum Ankommen.");
 }
@@ -76,7 +77,7 @@ const dig: Command = {
 		if (!a || !NAME.test(a[0]) || !NAME.test(ways)) throw new CommandError("So geht es: dig <name> = <richtung>[, <zurück>]");
 		const here = await roomOf(c);
 		const exitsHereNow = (await exitsHere(c)).map((x) => x.f);
-		if (exitsHereNow.some((x) => x.x === c.actor.x && x.y === c.actor.y)) throw new CommandError("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle.");
+		if (exitsHereNow.some((x) => inArea(x, c.actor))) throw new CommandError("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle.");
 		const roomId = `r-${randomBytes(5).toString("hex")}`, d = c.world.dig;
 		await c.space.write(draftOf("Room", c.world.typeclasses, { roomId, name: a[0], desc: d.desc, ground: d.ground, spawn: d.spawn } satisfies RoomFields), c.txn, FOREVER);
 		await writeRoomLock(c.space, c.txn, roomId);
@@ -96,7 +97,7 @@ const open: Command = {
 		const rooms = (await c.space.readAll({ type: "Room" })).map((e) => fieldsOf<RoomFields>(e));
 		const dest = rooms.find((r) => r.roomId === a[1]) ?? rooms.find((r) => r.name.toLowerCase() === a[1]!.toLowerCase());
 		if (!dest) throw new CommandError(`Einen Raum „${a[1]!.slice(0, 30)}“ gibt es nicht.`);
-		if ((await exitsHere(c)).some((x) => x.f.x === c.actor.x && x.f.y === c.actor.y)) throw new CommandError("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle.");
+		if ((await exitsHere(c)).some((x) => inArea(x.f, c.actor))) throw new CommandError("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle.");
 		const spawnAt = dest.spawn ?? { x: Math.floor((dest.ground[0]?.length ?? 1) / 2), y: Math.floor(dest.ground.length / 2) };
 		const arrive = walkable(c.world, dest.ground, spawnAt.x, spawnAt.y) ? spawnAt : arrivalNear(c, dest.ground, spawnAt, []);
 		await writeExit(c, { exitId: `x-${randomBytes(5).toString("hex")}`, name: a[0], aliases: [], desc: `Nach ${dest.name}.`, location: c.actor.room, destination: dest.roomId, x: c.actor.x, y: c.actor.y, arrive, locks: "" });

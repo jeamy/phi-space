@@ -295,7 +295,7 @@ async fn free_cells(space: &Space, w: &Json, room_id: &str, tile: &str) -> Resul
 	for (ty, key) in [("Item", "location"), ("Exit", "location"), ("Beacon", "room")] {
 		for e in space.read_all(&tmpl(ty, obj! { key => room_id }), None).await? {
 			let f = fields(&e);
-			taken.insert(format!("{},{}", key_text(j::at(f, "x")), key_text(j::at(f, "y"))));
+			for (x, y) in crate::grid::Area::of(f).cells() { taken.insert(crate::occupancy::cell_key(x, y)); }
 		}
 	}
 	taken.extend(crate::occupancy::claimed_in(space, room_id, None).await?.into_keys());

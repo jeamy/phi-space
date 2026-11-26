@@ -36,7 +36,7 @@ import { collect, meansYield } from "./animals.ts";
 import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, noteBuilder, plural, putBack, refusal, releaseLight, takeNear, useLight, type Rect } from "./build.ts";
 import { random, randomBytes, randomInt } from "../source.ts";
 import { creditDeed } from "../deeds.ts";
-import { SITE_REACH, flowerNeighbour } from "../../../shared/rules.ts";
+import { SITE_REACH, bedCapacity, flowerNeighbour } from "../../../shared/rules.ts";
 
 const STAGES = ["Saat", "Keim", "reif", "welk"] as const;
 export const garden = (c: CommandCtx): GardenDef => {
@@ -232,11 +232,13 @@ const pflanze: Command = {
 			throw e;
 		});
 		if (b.kind === "zier" && sort.kind !== "zier") throw new CommandError(`Ins Zierbeet kommen nur Blumen; ${sort.name} gehört in ein Gartenbeet.`);
-		const free = cells(b).filter((p) => !b.plants.some((q) => q.x === p.x && q.y === p.y));
+		// a bed holds bedCapacity plants (at a finer grid fewer than its cells), in any of its free cells
+		const left = bedCapacity(b) - b.plants.length;
+		const free = left > 0 ? cells(b).filter((p) => !b.plants.some((q) => q.x === p.x && q.y === p.y)) : [];
 		const first = m[2] !== undefined ? free.findIndex((p) => p.x === Number(m[2]) && p.y === Number(m[3])) : 0;
 		if (first < 0 || !free.length) throw new CommandError(free.length ? "Diese Zelle gehört nicht zum Beet oder ist schon bepflanzt." : "Das Beet ist voll; ernte erst oder jäte das Welke aus.");
 		// the named cell first, then the next free ones
-		const targets = [...free.slice(first), ...free.slice(0, first)].slice(0, want);
+		const targets = [...free.slice(first), ...free.slice(0, first)].slice(0, Math.min(want, left));
 		const same = hits.filter((i) => i.f.proto === hit.f.proto && (i.f.variety ?? "") === (hit.f.variety ?? ""));
 		const label = want > 1 ? `${want} ${pluralOf(hit.f.name, c.world)}` : hit.f.name;
 		if (same.length < want) throw new CommandError(`Du trägst nur ${same.length}× ${hit.f.name}.`);

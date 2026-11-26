@@ -300,14 +300,16 @@ async fn pflanze(c: &mut Ctx, arg: &str) -> Result<()> {
 	};
 	if kind(&b) == "zier" && j::s(&sort, "kind") != "zier" { return refuse(format!("Ins Zierbeet kommen nur Blumen; {} gehört in ein Gartenbeet.", txt(j::at(&sort, "name")))); }
 	let mut plants = plants_of(&b);
-	let free: Vec<(f64, f64)> = cells(Rect::of(&b)).into_iter().filter(|p| !plants.iter().any(|q| j::n(q, "x") == p.0 && j::n(q, "y") == p.1)).collect();
+	// a bed holds bed_capacity plants (at a finer grid fewer than its cells), in any of its free cells
+	let left = crate::rules::bed_capacity(j::n(&b, "w"), j::n(&b, "h")) - plants.len() as f64;
+	let free: Vec<(f64, f64)> = if left > 0.0 { cells(Rect::of(&b)).into_iter().filter(|p| !plants.iter().any(|q| j::n(q, "x") == p.0 && j::n(q, "y") == p.1)).collect() } else { vec![] };
 	let first: isize = match (&m[2], &m[3]) {
 		(Some(x), Some(y)) => { let (x, y) = (js::to_number(x), js::to_number(y)); free.iter().position(|p| p.0 == x && p.1 == y).map_or(-1, |i| i as isize) }
 		_ => 0,
 	};
 	if first < 0 || free.is_empty() { return refuse(if !free.is_empty() { "Diese Zelle gehört nicht zum Beet oder ist schon bepflanzt." } else { "Das Beet ist voll; ernte erst oder jäte das Welke aus." }); }
 	let first = first as usize;
-	let targets: Vec<(f64, f64)> = free[first..].iter().chain(free[..first].iter()).take(want as usize).copied().collect();
+	let targets: Vec<(f64, f64)> = free[first..].iter().chain(free[..first].iter()).take(want.min(left) as usize).copied().collect();
 	let hv = variety(&hf).cloned();
 	// the oracle compares the variety objects themselves: a crossing's seed is the same only as itself
 	let same: Vec<&Json> = hits.iter().filter(|i| { let f = fields(i); j::at(f, "proto") == j::at(&hf, "proto") && match (&hv, j::opt(f, "variety")) { (None, None) => true, (Some(_), Some(_)) => j::at(f, "itemId") == j::at(&hf, "itemId"), _ => false } }).collect();

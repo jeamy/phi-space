@@ -32,6 +32,8 @@ test("a step onto someone is refused, a walk goes around them", async () => {
 		await walk(a.p, space, a.me, 15, 8);
 		await walk(b.p, space, b.me, 16, 8);
 		assert.equal(await does(a.p, "step 1 0", "steht schon"), "Dort steht schon Bert.");
+		// at scale 1 a step is one cell (the double step is scale 2's, tests/double-step.test.ts)
+		assert.match(await does(a.p, "step 2 0", "So geht es"), /mit einem Schritt/);
 		assert.equal(await does(a.p, "move 16 8", "steht schon"), "Dort steht schon Bert.");
 		await walk(a.p, space, a.me, 17, 8); // around Bert
 		const pa = await charAt(space, a.me), pb = await charAt(space, b.me);

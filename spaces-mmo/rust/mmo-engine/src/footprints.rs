@@ -76,7 +76,7 @@ pub fn footprint_occupancy<'a>(w: usize, h: usize, entries: impl IntoIterator<It
 	for e in entries {
 		let f = j::at(e, "fields");
 		if type_of(e, "Footprint") { o.rect(&id_text(j::at(f, "of")), f, MOVE | BUILD | SHARE); }
-		else if type_of(e, "Beacon") { o.claim(&id_text(j::at(f, "beaconId")), num(f, "x", f64::NAN), num(f, "y", f64::NAN), MOVE | BUILD); }
+		else if type_of(e, "Beacon") { o.rect(&id_text(j::at(f, "beaconId")), f, MOVE | BUILD); }
 	}
 	o
 }

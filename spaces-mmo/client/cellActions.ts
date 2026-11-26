@@ -1,7 +1,7 @@
 // What can be done on a cell of the map: one function for the mouse's menu and the action sheet of a touch screen. Every
 // entry is a text command; `run` is for what stays on the page. Pure, so it is tested without a browser.
 import type { CharView, ItemUses, ObjView, PlanView, Todo } from "../shared/frames.ts";
-import { BESIDE, REACH_POINT, SITE_REACH, MENU_NEAR } from "../shared/rules.ts";
+import { BESIDE, REACH_POINT, SITE_REACH, MENU_NEAR, bedCapacity } from "../shared/rules.ts";
 
 export type CellEntry = { label: string; line: string; run?: () => void; /** asked before the line is sent (what cannot be undone) */ confirm?: string };
 export type CellInput = {
@@ -327,7 +327,7 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 				if (o.weedy || (o.plants ?? []).some((pl) => pl.stage === 3)) entries.push({ label: "Jäten", line: "jäte" });
 				if ((o.plants ?? []).some((pl) => pl.stage === 2)) entries.push({ label: "Ernten", line: "ernte" });
 				if (beside && !o.fenced) entries.push({ label: "Zaun setzen (2 Treibholz, 1 Tangseil oder 2 Bohlen)", line: "zäune" });
-				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => mayPlantIn(o.bedKind, n, beds)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
+				if (mine && (o.plants ?? []).length < bedCapacity({ w: o.w ?? 1, h: o.h ?? 1 })) for (const n of [...new Set(carried.filter((n) => mayPlantIn(o.bedKind, n, beds)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
 			}
 			// one's own bed (a community bed: who dug it) goes back to grass from beside it (server: garden.ts "beet aufgeben")
 			if (beside && (o.ownerId === me || admin)) entries.push({ label: o.ownerId === me ? "Beet aufgeben (wird wieder Gras)" : "Beet auflösen (als Betreiber)", line: `beet aufgeben ja ${o.x} ${o.y}`, confirm: "Das Beet aufgeben? Was darin wächst, geht verloren, die Fläche wird wieder Gras." });

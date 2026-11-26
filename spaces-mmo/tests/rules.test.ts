@@ -16,7 +16,7 @@ const LEGACY: Record<RuleName, number> = {
 	BESIDE: 1, REACH_POINT: 1, FEED_FIRE: 1, FIRE_CLEARANCE: 1, PASSAGE: 1, SITE_REACH: 2, EXIT_REACH: 2, SETTLER_CLEARANCE: 2,
 	MOVE_BUILDING: 3, MOVE_WINDOW: 2, FLOWER_NEIGHBOUR: 1, FREE_CELL_RADIUS: 8, COMMAND_PATH: 40, SPAWN_SCATTER_X: 3,
 	SPAWN_SCATTER_Y: 2, NPC_WANDER_X: 4, NPC_WANDER_Y: 3, ARENA_TRAIL_PATH: 400, ARENA_SUBGOAL_NEAR: 3, ARENA_MAX_TRAIL: 20_000,
-	MENU_NEAR: 2, TARGET_RINGS: 6,
+	MENU_NEAR: 2, TARGET_RINGS: 6, STEP_LENGTH: 1,
 };
 
 test("the rule table at scale 1 is the literals it replaced, and its constants are the table at the world's scale", () => {
@@ -49,6 +49,15 @@ test("a length doubles at scale 2, an area quadruples; the ring and the flower's
 		assert.equal(rules.onRing(d), d === 1, `ring at ${d}`);
 		assert.equal(rules.flowerNeighbour(d), d === 1, `flower at ${d}`);
 	}
+});
+
+test("a bed holds as many plants as the same physical bed at scale 1", () => {
+	assert.equal(rules.bedCapacity({ w: 4, h: 3 }), 12);
+	useGridScale(2);
+	try {
+		assert.equal(rules.bedCapacity({ w: 8, h: 6 }), 12, "the scale-1 bed of 4 × 3, resampled");
+		assert.equal(rules.bedCapacity({ w: 3, h: 3 }), 2, "an odd bed: whole plants only");
+	} finally { useGridScale(1); }
 });
 
 test("the Rust engine's rules.rs has the same rows, values and kinds", () => {

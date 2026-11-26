@@ -26,10 +26,10 @@ import { fieldsOf, type BedFields, type CartFields, type BuildingFields, type Li
 import { crops, flowers } from "../engine/commands/festival.ts";
 import { gather, look, nextTo, rest, social, stepBeside, travel, type Look } from "./economy.ts";
 import type { Npc, Script } from "./scripts.ts";
-import { BESIDE, FEED_FIRE, SITE_REACH, SETTLER_CLEARANCE } from "../../shared/rules.ts";
+import { distToArea } from "../../shared/grid.ts";
+import { BESIDE, FEED_FIRE, SITE_REACH, SETTLER_CLEARANCE, bedCapacity } from "../../shared/rules.ts";
 
 type Rect = { x: number; y: number; w: number; h: number };
-const dist = (p: { x: number; y: number }, r: Rect) => Math.max(Math.max(r.x - p.x, 0, p.x - (r.x + r.w - 1)), Math.max(r.y - p.y, 0, p.y - (r.y + r.h - 1)));
 const count = (l: Look, proto: string) => l.pack.filter((i) => i.proto === proto).length;
 const nameOf = (w: WorldDef, proto: string) => w.prototypes.find((p) => p.key === proto)?.name ?? proto;
 /** What lies on the beaches and what a hut, a barrel and a spade are made of. */
@@ -90,7 +90,7 @@ async function freeGround(n: Npc, room: string, w: number, h: number): Promise<{
 	const busy = new Set([...(await claimedIn(n.space, room)).keys(), ...[...(await n.space.readAll({ type: "Item", fields: { location: room } })), ...(await n.space.readAll({ type: "Character", fields: { room } }))].map((e) => `${e.fields.x},${e.fields.y}`)]);
 	const near = [...n.world.exits.filter((e) => e.room === room), ...n.world.beacons.filter((b) => b.room === room)];
 	const fits = (x0: number, y0: number, tile: string) => {
-		for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (ground[y]?.[x] !== tile || busy.has(`${x},${y}`) || near.some((e) => Math.max(Math.abs(e.x - x), Math.abs(e.y - y)) <= SETTLER_CLEARANCE)) return false;
+		for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (ground[y]?.[x] !== tile || busy.has(`${x},${y}`) || near.some((e) => distToArea({ x, y }, e) <= SETTLER_CLEARANCE)) return false;
 		return true;
 	};
 	for (const tile of [",", "."]) {
@@ -134,7 +134,7 @@ export function siedler(): Script {
 			const f = await flameOf(n.space, fire.beaconId), piece = Math.min(...Object.values(w.fire.fuel)) * clockOf(n.space).patience();
 			if (!f || f.until - now < piece * 2) {
 				if (!(await travel(n, l, fire.room))) return;
-				if (Math.max(Math.abs(me.x - fire.x), Math.abs(me.y - fire.y)) <= FEED_FIRE) await n.act(`put ${fuel[0]!.name} in ${fire.aliases[0] ?? "feuer"}`);
+				if (distToArea(me, fire) <= FEED_FIRE) await n.act(`put ${fuel[0]!.name} in ${fire.aliases[0] ?? "feuer"}`);
 				else await nextTo(n, l, fire);
 				return;
 			}
@@ -351,7 +351,7 @@ export function siedler(): Script {
 			if (barrel && may("schoepfe")) { later("schoepfe", 6); if (!(await besideOf(n, l, barrel, BESIDE))) await n.act("schöpfe"); return true; }
 		}
 		const seed = l.pack.find((i) => g.sorts.some((s) => s.seed === i.proto && (b.kind !== "zier" || s.kind === "zier")));
-		if (b.plants.length < b.w * b.h) {
+		if (b.plants.length < bedCapacity(b)) {
 			if (seed) return near(`pflanze ${seed.name}`);
 			if (may("samen")) { later("samen", 8); await n.act("sammle samen"); return true; }
 		}
@@ -450,7 +450,7 @@ function dorfbewohner(): Script {
 				if (!fuel) { if (await gather(n, l, fuels)) return true; }
 				else {
 					if (!(await travel(n, l, fire.room))) return true;
-					if (dist(l.me, { ...fire, w: 1, h: 1 }) <= FEED_FIRE) await n.act(`put ${fuel.name} in ${fire.aliases[0] ?? "feuer"}`);
+					if (distToArea(l.me, fire) <= FEED_FIRE) await n.act(`put ${fuel.name} in ${fire.aliases[0] ?? "feuer"}`);
 					else await nextTo(n, l, fire);
 					return true;
 				}

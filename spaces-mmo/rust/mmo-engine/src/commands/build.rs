@@ -2,6 +2,7 @@
 //! needs and work on it; when nothing is missing it becomes the building, in the same transaction. Its chest, a
 //! settlement's warehouse, repair, demolition and estates.
 //!
+use crate::grid::Area;
 use std::collections::HashSet;
 
 use phi_json::{obj, Json, Object};
@@ -91,7 +92,6 @@ pub(crate) fn anew(e: &Json, f: Json) -> Json {
 fn fields_of(list: Vec<Json>) -> Vec<Json> { list.iter().map(|e| fields(e).clone()).collect() }
 fn info() -> MsgOpts { MsgOpts::default() }
 
-const DIRS: [(f64, f64); 4] = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)];
 
 
 /// The cobbles of paths and plazas: nothing is built or dug on them.
@@ -129,7 +129,7 @@ pub async fn refusal_locked(c: &Ctx, room: &Json, rect: Rect, green: bool, on_pe
 		if !walkable(c.w(), &ground, p.0, p.1) { return Ok(Some("Dort ist kein fester Boden.".into())); }
 		if tile(&ground, p.0, p.1).as_deref() == Some(PATH) { return Ok(Some("Das ist ein Weg; Wege und Plätze bleiben frei.".into())); }
 		if is_passage(&exits, p.0, p.1) { return Ok(Some("Dort ist ein Weg hinaus; den baut niemand zu.".into())); }
-		if fires.iter().any(|b| (j::n(b, "x") - p.0).abs().max((j::n(b, "y") - p.1).abs()) <= fire_clearance()) { return Ok(Some("So nah am Feuer baut man nicht.".into())); }
+		if fires.iter().any(|b| Area::of(b).dist(p.0, p.1) <= fire_clearance()) { return Ok(Some("So nah am Feuer baut man nicht.".into())); }
 		if blocked.contains(&k) {
 			let scenery = fields_of(c.space.read_all(&tmpl("Scenery", obj! { "room" => room_id }), None).await?);
 			let piece = scenery.iter().find(|s| dist_to(*p, Rect::of(s)) == 0.0);
@@ -150,8 +150,8 @@ pub async fn refusal_locked(c: &Ctx, room: &Json, rect: Rect, green: bool, on_pe
 	let grid = crate::grid::Grid::walk(c.w(), &ground).closing(&after);
 	let reach = grid.reach(start);
 	let ok = |p: (f64, f64)| grid.index_of(p).is_some_and(|i| reach[i]);
-	if !exits.iter().all(|x| ok(xy(x))) || spawn.is_some_and(|s| !ok(xy(s))) || !(ok(xy(&c.actor)) || dist_to(xy(&c.actor), rect) == 0.0) { return Ok(Some("Damit wäre ein Weg zugebaut.".into())); }
-	if !fires.iter().all(|b| DIRS.iter().any(|(dx, dy)| ok((j::n(b, "x") + dx, j::n(b, "y") + dy)))) { return Ok(Some("Damit käme niemand mehr ans Feuer.".into())); }
+	if !exits.iter().all(|x| Area::of(x).cells().into_iter().any(ok)) || spawn.is_some_and(|s| !ok(xy(s))) || !(ok(xy(&c.actor)) || dist_to(xy(&c.actor), rect) == 0.0) { return Ok(Some("Damit wäre ein Weg zugebaut.".into())); }
+	if !fires.iter().all(|b| Area::of(b).beside(false).into_iter().any(ok)) { return Ok(Some("Damit käme niemand mehr ans Feuer.".into())); }
 	Ok(None)
 }
 

@@ -36,7 +36,7 @@ pub async fn occupied_in(space: &Space, room: &str, except: Option<&str>) -> Res
 }
 
 /// `isPassage`: an exit's cell or one next to it.
-pub fn is_passage(exits: &[Json], x: f64, y: f64) -> bool { exits.iter().any(|e| (j::n(e, "x") - x).abs().max((j::n(e, "y") - y).abs()) <= passage()) }
+pub fn is_passage(exits: &[Json], x: f64, y: f64) -> bool { exits.iter().any(|e| crate::grid::Area::of(e).dist(x, y) <= passage()) }
 
 /// `releaseSpot`.
 pub async fn release_spot(space: &Space, txn: &str, char_id: &str) -> Result<()> {
@@ -79,11 +79,11 @@ pub async fn claimed_in(space: &Space, room: &str, txn: Option<&str>) -> Result<
 	Ok(out)
 }
 
-/// `blockedIn`: the cells of persisted fires and of footprints.
+/// `blockedIn`: the cells of persisted fires (their areas) and of footprints.
 pub async fn blocked_in(space: &Space, room: &str) -> Result<HashSet<String>> { blocked_in_txn(space, room, None).await }
 /// `blockedIn` with `txn`: the footprints read inside a transaction that holds the room's lock (the fires from the copy).
 pub async fn blocked_in_txn(space: &Space, room: &str, txn: Option<&str>) -> Result<HashSet<String>> {
-	let mut out: HashSet<String> = space.read_all(&tmpl("Beacon", obj! { "room" => room }), None).await?.iter().map(|e| cell_of(fields(e))).collect();
+	let mut out: HashSet<String> = space.read_all(&tmpl("Beacon", obj! { "room" => room }), None).await?.iter().flat_map(|e| crate::grid::Area::of(fields(e)).cells()).map(|(x, y)| cell_key(x, y)).collect();
 	out.extend(claimed_in(space, room, txn).await?.into_keys());
 	Ok(out)
 }

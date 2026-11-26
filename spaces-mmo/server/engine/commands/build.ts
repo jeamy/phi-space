@@ -39,7 +39,7 @@ import { roadCellsIn, routeDeliver, routeNear, routeWork } from "./road.ts";
 import { spendRested } from "./sleep.ts";
 import { interiorOf, interiorSweep, isInterior, makeInterior, nearBuildings } from "./interior.ts";
 import { COMMAND_LOCK_WAIT_MS, holdRoom, holdRoomOrRefuse } from "../room-lock.ts";
-import { closing, indexOf, reachIn, walkGrid } from "../../../shared/grid.ts";
+import { areaCells, besideArea, closing, distToArea, indexOf, reachIn, walkGrid } from "../../../shared/grid.ts";
 import { BESIDE, FIRE_CLEARANCE, SITE_REACH, EXIT_REACH, MOVE_BUILDING, MOVE_WINDOW, onRing } from "../../../shared/rules.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
@@ -87,7 +87,7 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 		if (!walkable(c.world, room.ground, p.x, p.y)) return "Dort ist kein fester Boden.";
 		if (room.ground[p.y]?.[p.x] === PATH) return "Das ist ein Weg; Wege und Plätze bleiben frei.";
 		if (isPassage(exits, p)) return "Dort ist ein Weg hinaus; den baut niemand zu.";
-		if (fires.some((b) => Math.max(Math.abs(b.x - p.x), Math.abs(b.y - p.y)) <= FIRE_CLEARANCE)) return "So nah am Feuer baut man nicht.";
+		if (fires.some((b) => distToArea(p, b) <= FIRE_CLEARANCE)) return "So nah am Feuer baut man nicht.";
 		if (blocked.has(k)) { const piece = (await c.space.readAll({ type: "Scenery", fields: { room: room.roomId } })).map((e) => fieldsOf<SceneryFields>(e)).find((s) => distTo(p, s) === 0); return piece && !piece.fixed ? `Dort steht ${piece.name}; erst abräumen (räume).` : "Dort steht schon etwas oder wird gebaut."; }
 		if (!onPeople && people.has(k)) return "Dort steht jemand.";
 		if (things.has(k)) return "Dort liegt etwas; räum es erst weg.";
@@ -97,8 +97,8 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 	const start = room.spawn && !after.has(cellKey(room.spawn)) ? room.spawn : exits[0] ? { x: exits[0].x, y: exits[0].y } : { x: c.actor.x, y: c.actor.y };
 	const grid = closing(walkGrid(c.world.tiles, room.ground), after), reach = reachIn(grid, start);
 	const ok = (p: { x: number; y: number }) => { const i = indexOf(grid, p); return i >= 0 && reach[i] === 1; };
-	if (!exits.every((x) => ok(x)) || (room.spawn && !ok(room.spawn)) || !(ok(c.actor) || distTo(c.actor, rect) === 0)) return "Damit wäre ein Weg zugebaut.";
-	if (!fires.every((b) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ok({ x: b.x + dx!, y: b.y + dy! })))) return "Damit käme niemand mehr ans Feuer.";
+	if (!exits.every((x) => areaCells(x).some(ok)) || (room.spawn && !ok(room.spawn)) || !(ok(c.actor) || distTo(c.actor, rect) === 0)) return "Damit wäre ein Weg zugebaut.";
+	if (!fires.every((b) => besideArea(b).some(ok))) return "Damit käme niemand mehr ans Feuer.";
 	return null;
 }
 

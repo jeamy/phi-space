@@ -7,7 +7,7 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type FootprintFields, type SessionFields, type SpotFields } from "../model.ts";
 import { peek } from "../space.ts";
 import { walkable, type WorldDef } from "./world.ts";
-import { nearestOpen } from "../../shared/grid.ts";
+import { areaCells, distToArea, nearestOpen, type Area } from "../../shared/grid.ts";
 import { PASSAGE } from "../../shared/rules.ts";
 
 type Cell = { x: number; y: number };
@@ -29,11 +29,11 @@ export async function occupiedIn(space: SpaceLike, room: string, except?: string
 	return out;
 }
 
-/** A passage: an exit's cell or one next to it (where one arrives and from where one leaves). Nobody holds such a cell:
+/** A passage: an exit's cell (one of its area) or one next to it (where one arrives and from where one leaves). Nobody holds such a cell:
  *  several stand on it and walk through each other, so a crowd at a door does not close the way (arrow keys walk only
  *  cell by cell, they cannot go round). */
-export function isPassage(exits: ReadonlyArray<{ x: number; y: number }>, cell: { x: number; y: number }): boolean {
-	return exits.some((e) => Math.max(Math.abs(e.x - cell.x), Math.abs(e.y - cell.y)) <= PASSAGE);
+export function isPassage(exits: ReadonlyArray<Area>, cell: { x: number; y: number }): boolean {
+	return exits.some((e) => distToArea(cell, e) <= PASSAGE);
 }
 
 /** Leaves the character's cell without taking another (it stands on a passage now). */
@@ -72,11 +72,11 @@ export async function claimedIn(space: SpaceLike, room: string, txn: string | nu
 	return out;
 }
 
-/** Cells nobody walks onto: persisted fires and the cells objects stand on. `txn`: the footprints as the space holds
+/** Cells nobody walks onto: persisted fires (their areas) and the cells objects stand on. `txn`: the footprints as the space holds
  *  them now, read inside a transaction that holds the room's lock (room-lock.ts; the fires stay read from the copy: a
  *  read in the transaction would keep their own changes waiting). */
 export async function blockedIn(space: SpaceLike, _w: WorldDef, room: string, txn: string | null = null): Promise<Set<string>> {
-	const out = new Set((await space.readAll({ type: "Beacon", fields: { room } })).map((e) => cellKey(e.fields as unknown as Cell)));
+	const out = new Set((await space.readAll({ type: "Beacon", fields: { room } })).flatMap((e) => areaCells(e.fields as unknown as Area).map(cellKey)));
 	for (const k of (await claimedIn(space, room, txn)).keys()) out.add(k);
 	return out;
 }

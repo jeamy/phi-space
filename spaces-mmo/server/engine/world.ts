@@ -7,7 +7,7 @@ import type { SceneryFields } from "../model.ts";
 import type { WorldDef } from "../../shared/world-def.ts";
 import { parseLocks } from "./locks.ts";
 import { typeChain } from "./typeclasses.ts";
-import { closing, pathIn, walkGrid } from "../../shared/grid.ts";
+import { areaCells, closing, inArea, pathIn, walkGrid } from "../../shared/grid.ts";
 import { useGridScale } from "../../shared/rules.ts";
 
 // the types of the definition live in shared/world-def.ts (the browser reads them too)
@@ -69,13 +69,13 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 	for (const e of w.exits) {
 		const from = room(e.room), to = room(e.destination);
 		if (!from || !to) throw new Error(`exit ${e.exitId}: unknown room`);
-		if (!walkable(w, from.ground, e.x, e.y) || !walkable(w, to.ground, e.arrive.x, e.arrive.y)) throw new Error(`exit ${e.exitId}: cell or arrival not walkable`);
-		if (w.exits.some((o) => o.room === e.destination && o.x === e.arrive.x && o.y === e.arrive.y)) throw new Error(`exit ${e.exitId}: arrives on another exit`);
+		if (areaCells(e).some((c) => !walkable(w, from.ground, c.x, c.y)) || !walkable(w, to.ground, e.arrive.x, e.arrive.y)) throw new Error(`exit ${e.exitId}: cell or arrival not walkable`);
+		if (w.exits.some((o) => o.room === e.destination && inArea(o, e.arrive))) throw new Error(`exit ${e.exitId}: arrives on another exit`);
 		parseLocks(e.locks ?? "");
 	}
 	for (const b of w.beacons) {
 		const r = room(b.room);
-		if (!r || !walkable(w, r.ground, b.x, b.y) || b.covers.some((c) => !room(c))) throw new Error(`beacon ${b.beaconId}: unknown room or not walkable`);
+		if (!r || areaCells(b).some((c) => !walkable(w, r.ground, c.x, c.y)) || b.covers.some((c) => !room(c))) throw new Error(`beacon ${b.beaconId}: unknown room or not walkable`);
 	}
 	for (const p of Object.keys(w.fire.fuel)) if (!w.prototypes.some((q) => q.key === p)) throw new Error(`fire fuel: unknown prototype ${p}`);
 	for (const f of w.flood.rooms) if (!room(f.room)) throw new Error(`flood: unknown room ${f.room}`);

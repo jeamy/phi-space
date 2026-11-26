@@ -515,11 +515,10 @@ impl Sammler {
 }
 
 /// `nextTo`: walks to a free cell next to `at` (a fire).
-pub async fn next_to(n: &Npc, l: &Look, at: (f64, f64)) -> Result<()> {
+pub async fn next_to(n: &Npc, l: &Look, at: crate::grid::Area) -> Result<()> {
 	let ground = ground_of(&n.w(), l.room());
 	let busy: Vec<String> = n.space.read_all(&tmpl("Character", obj! { "room" => l.room() }), None).await?.iter().map(|e| format!("{},{}", nt(j::n(fields(e), "x")), nt(j::n(fields(e), "y")))).collect();
-	for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)] {
-		let (x, y) = (at.0 + dx, at.1 + dy);
+	for (x, y) in at.beside(true) {
 		if busy.contains(&format!("{},{}", nt(x), nt(y))) || !",.:".contains(tile(&ground, x, y).as_str()) { continue; }
 		n.act(&format!("move {} {}", nt(x), nt(y))).await?;
 		return Ok(());
@@ -544,13 +543,13 @@ impl Huter {
 		let weak = f.as_ref().is_none_or(|f| j::n(f, "until") - now < piece * 3.0);
 		let broom = j::s(&beacon, "room").to_owned();
 		let homes = homes_of(&def, &broom);
-		let bxy = (j::n(&beacon, "x"), j::n(&beacon, "y"));
+		let ba = crate::grid::Area::of(&beacon);
 		let mut acted = self.talk.run(n, &l).await?;
 		if !acted && weak && !fuel.is_empty() {
 			if travel(n, &l, &broom).await? {
 				let me = l.xy();
-				if (me.0 - bxy.0).abs().max((me.1 - bxy.1).abs()) <= feed_fire() { n.act(&format!("put {} in {}", j::s(fuel[0], "name"), first_alias(&beacon))).await?; }
-				else { next_to(n, &l, bxy).await?; }
+				if ba.dist(me.0, me.1) <= feed_fire() { n.act(&format!("put {} in {}", j::s(fuel[0], "name"), first_alias(&beacon))).await?; }
+				else { next_to(n, &l, ba).await?; }
 			}
 			acted = true;
 		}

@@ -15,7 +15,8 @@ import { handOff } from "../handover.ts";
 import { deedsOf, deedText } from "../deeds.ts";
 import { regionOfRoom } from "../regions.ts";
 import { DEFAULT_APPEARANCE, describeAppearance, parseAppearance } from "../appearance.ts";
-import { REACH_POINT, FEED_FIRE, FREE_CELL_RADIUS, COMMAND_PATH } from "../../../shared/rules.ts";
+import { REACH_POINT, FEED_FIRE, FREE_CELL_RADIUS, COMMAND_PATH, STEP_LENGTH } from "../../../shared/rules.ts";
+import { areaCells, distToArea, inArea } from "../../../shared/grid.ts";
 
 const MAX_SAY = 300;
 
@@ -33,18 +34,19 @@ export async function online(c: Pick<CommandCtx, "space">, room: string | null):
 }
 
 /** Moves the actor to `to` in its room: a cell another online character stands on is refused (`path`: the whole walk
- *  must get around them). An exit on the target cell is taken at once. Nothing is locked: the Spot written with the
- *  space's unique check is what refuses a second character on the cell (engine/occupancy.ts). */
-async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: boolean; room?: RoomFields } = {}): Promise<void> {
+ *  must get around them). An exit on the target cell (one of its area) is taken at once. Nothing is locked: the Spot written with the
+ *  space's unique check is what refuses a second character on the cell (engine/occupancy.ts). True: it went through an
+ *  exit. */
+async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: boolean; room?: RoomFields } = {}): Promise<boolean> {
 	const exits = (await exitsHere(c)).map((x) => x.f);
-	const exit = exits.find((x) => x.x === to.x && x.y === to.y);
-	if (exit) return traverse(c, exit);
+	const exit = exits.find((x) => inArea(x, to));
+	if (exit) { await traverse(c, exit); return true; }
 	const room = o.room ?? (await roomOf(c));
 	const solid = await blockedIn(c.space, c.world, room.roomId);
 	// who stands on a bed or field dug under their feet walks off over it
 	const claimed = solid.has(cellKey(to)) ? await claimedIn(c.space, room.roomId) : new Map<string, string>();
 	const inside = claimed.get(cellKey(c.actor));
-	if (solid.has(cellKey(to)) && !(inside && claimed.get(cellKey(to)) === inside)) throw new CommandError(c.world.beacons.some((b) => b.room === room.roomId && b.x === to.x && b.y === to.y) ? "Dort brennt das Leuchtfeuer; da läuft man nicht hinein." : "Dort steht ein Bau; da geht man außen herum.");
+	if (solid.has(cellKey(to)) && !(inside && claimed.get(cellKey(to)) === inside)) throw new CommandError(c.world.beacons.some((b) => b.room === room.roomId && inArea(b, to)) ? "Dort brennt das Leuchtfeuer; da läuft man nicht hinein." : "Dort steht ein Bau; da geht man außen herum.");
 	// at a door nobody holds a cell (isPassage): one walks onto it and through whoever stands there
 	const passage = isPassage(exits, to);
 	if (o.path) {
@@ -55,6 +57,7 @@ async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: b
 	}
 	if (passage) await releaseSpot(c.space, c.txn, c.actor.charId);
 	await relocate(c, { room: room.roomId, x: to.x, y: to.y }, { spot: !passage });
+	return false;
 }
 
 /** Takes the actor's character and writes it at a new place; its Spot goes along (`spot` false: the place is known to
@@ -78,11 +81,11 @@ export async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; 
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
 	const blocked = await blockedIn(c.space, c.world, room.roomId);
 	const keepOff = new Set(o.avoid ?? []);
-	if (o.exits !== false && !keepOff.has(cellKey(at)) && isPassage(exits, at) && !exits.some((x) => x.x === at.x && x.y === at.y) && walkable(c.world, room.ground, at.x, at.y) && !blocked.has(cellKey(at))) {
+	if (o.exits !== false && !keepOff.has(cellKey(at)) && isPassage(exits, at) && !exits.some((x) => inArea(x, at)) && walkable(c.world, room.ground, at.x, at.y) && !blocked.has(cellKey(at))) {
 		await releaseSpot(c.space, c.txn, c.actor.charId);
 		return at;
 	}
-	const avoid = new Set([...(await occupiedIn(c.space, room.roomId, c.actor.charId)).keys(), ...blocked, ...(o.exits === false ? [] : (await exitsHere(c, room.roomId)).map((x) => cellKey(x.f))), ...keepOff]);
+	const avoid = new Set([...(await occupiedIn(c.space, room.roomId, c.actor.charId)).keys(), ...blocked, ...(o.exits === false ? [] : exits.flatMap((x) => areaCells(x).map(cellKey))), ...keepOff]);
 	for (let tries = 0; tries < 4; tries++) {
 		const cell = freeCellNear(c.world, room.ground, at, avoid, FREE_CELL_RADIUS);
 		if (!cell) break;
@@ -239,20 +242,30 @@ const step: Command = {
 	help: "step <dx> <dy> – einen Schritt gehen (das tun Klick und Pfeiltaste)",
 	async func(c, arg) {
 		const [dx, dy] = arg.split(/\s+/).map(Number);
-		if (!Number.isInteger(dx) || !Number.isInteger(dy) || Math.abs(dx!) + Math.abs(dy!) !== 1) throw new CommandError("So geht es: step <dx> <dy> mit einem Schritt, z. B. step 1 0");
-		const to = { x: c.actor.x + dx!, y: c.actor.y + dy! };
+		// a step covers STEP_LENGTH cells on one axis at most (at scale 2 two: the same physical step as one at scale 1)
+		const n = Math.abs(dx!) + Math.abs(dy!);
+		if (!Number.isInteger(dx) || !Number.isInteger(dy) || n < 1 || n > STEP_LENGTH || (dx !== 0 && dy !== 0)) throw new CommandError(STEP_LENGTH > 1 ? `So geht es: step <dx> <dy> mit einem bis ${STEP_LENGTH} Schritten in einer Richtung, z. B. step ${STEP_LENGTH} 0` : "So geht es: step <dx> <dy> mit einem Schritt, z. B. step 1 0");
+		const ux = Math.sign(dx!), uy = Math.sign(dy!), start = { x: c.actor.x, y: c.actor.y };
 		try {
 			// Growth changes persisted terrain, including rooms present in the world definition.
 			const room = await roomOf(c);
-			if (!walkable(c.world, room.ground, to.x, to.y)) throw new CommandError("Da geht es nicht weiter.");
-			await moveTo(c, to, { room });
+			// leg by leg, each checked as a step of its own (plan section 3, "Execution"): an exit on one ends the step there,
+			// a refused leg keeps the figure where the one before it ended, in the same transaction
+			for (let leg = 1; leg <= n; leg++) {
+				const to = { x: c.actor.x + ux, y: c.actor.y + uy };
+				if (!walkable(c.world, room.ground, to.x, to.y)) throw new CommandError("Da geht es nicht weiter.");
+				if (await moveTo(c, to, { room })) return;
+				if (leg < n) { const { refused: _cleared, ...at } = c.actor; c.actor = { ...at, x: to.x, y: to.y }; }
+			}
 		} catch (e) {
 			// a numbered step of a page that cannot be taken (a wall, someone there, the fire, the fog at an exit) is still
 			// answered: the character stays and carries the step's number, so the page walks on from where it really is. The
-			// reason is told when it is new (a held key against the same wall says it once)
-			if (!(e instanceof CommandError) || !c.step) throw e;
+			// reason is told when it is new (a held key against the same wall says it once). A refused later leg of a double
+			// step keeps the legs before it, numbered or not
+			const moved = c.actor.x !== start.x || c.actor.y !== start.y;
+			if (!(e instanceof CommandError) || (!c.step && !moved)) throw e;
 			if (c.actor.refused !== e.message) await msg(c, c.actor.charId, "error", e.message);
-			await relocate(c, { room: c.actor.room, x: c.actor.x, y: c.actor.y }, { spot: false, refused: e.message });
+			if (c.step) await relocate(c, { room: c.actor.room, x: c.actor.x, y: c.actor.y }, { spot: false, refused: e.message });
 		}
 	},
 };
@@ -416,7 +429,7 @@ const put: Command = {
 		if (!found.length) throw new NotUnderstood(what ? `Du trägst nichts, was „${what.slice(0, 30)}“ heißt.` : "Was möchtest du nachlegen? Zum Beispiel: put treibholz in feuer");
 		const beacon = byName(await beaconsIn(c, c.actor.room), where, c.actor)[0];
 		if (!beacon) throw new NotUnderstood(`Hier ist kein ${where.slice(0, 30)}.`);
-		if (reach(beacon.f, c.actor) > FEED_FIRE) throw new CommandError(`Das ${beacon.f.name} ist zu weit weg; geh näher heran.`);
+		if (distToArea(c.actor, beacon.f) > FEED_FIRE) throw new CommandError(`Das ${beacon.f.name} ist zu weit weg; geh näher heran.`);
 		const plural = counted.count === null && !found.some((i) => [i.f.name, ...i.f.aliases].some((n) => n.toLowerCase() === what.toLowerCase())) && stem(what) !== what.toLowerCase();
 		const want = counted.count ?? (plural ? Infinity : 1);
 		if (want === 1) { await feed(c, found[0]!, beacon.f); return; }

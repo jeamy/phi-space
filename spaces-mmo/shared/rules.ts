@@ -36,6 +36,7 @@ export const RULE_TABLE = {
 	ARENA_MAX_TRAIL: { value: 20_000, kind: "length", places: "the trail steps an arena run keeps (arena.ts MAX_TRAIL; the same walk takes twice the steps at scale 2)" },
 	MENU_NEAR: { value: 2, kind: "length", places: "the client's menu offers a road or the own figure within this (client/cellActions.ts, client/MapView.tsx)" },
 	TARGET_RINGS: { value: 6, kind: "length", places: "a tap on an occupied cell looks for a free one within this (client/walk.ts chooseTarget)" },
+	STEP_LENGTH: { value: 1, kind: "length", places: "the cells one numbered step covers, on one axis (default.ts step and the gateways' step check): at scale 2 two consecutive cells, the same physical step" },
 } as const satisfies Record<string, RuleRow>;
 
 export type RuleName = keyof typeof RULE_TABLE;
@@ -56,7 +57,7 @@ export let MOVE_BUILDING = at("MOVE_BUILDING"), MOVE_WINDOW = at("MOVE_WINDOW"),
 export let FREE_CELL_RADIUS = at("FREE_CELL_RADIUS"), COMMAND_PATH = at("COMMAND_PATH");
 export let SPAWN_SCATTER_X = at("SPAWN_SCATTER_X"), SPAWN_SCATTER_Y = at("SPAWN_SCATTER_Y"), NPC_WANDER_X = at("NPC_WANDER_X"), NPC_WANDER_Y = at("NPC_WANDER_Y");
 export let ARENA_TRAIL_PATH = at("ARENA_TRAIL_PATH"), ARENA_SUBGOAL_NEAR = at("ARENA_SUBGOAL_NEAR"), ARENA_MAX_TRAIL = at("ARENA_MAX_TRAIL");
-export let MENU_NEAR = at("MENU_NEAR"), TARGET_RINGS = at("TARGET_RINGS");
+export let MENU_NEAR = at("MENU_NEAR"), TARGET_RINGS = at("TARGET_RINGS"), STEP_LENGTH = at("STEP_LENGTH");
 
 /** The scale the constants above are at. */
 export const gridScale = (): number => scale;
@@ -73,10 +74,13 @@ export function useGridScale(s: number): void {
 	FREE_CELL_RADIUS = at("FREE_CELL_RADIUS"); COMMAND_PATH = at("COMMAND_PATH");
 	SPAWN_SCATTER_X = at("SPAWN_SCATTER_X"); SPAWN_SCATTER_Y = at("SPAWN_SCATTER_Y"); NPC_WANDER_X = at("NPC_WANDER_X"); NPC_WANDER_Y = at("NPC_WANDER_Y");
 	ARENA_TRAIL_PATH = at("ARENA_TRAIL_PATH"); ARENA_SUBGOAL_NEAR = at("ARENA_SUBGOAL_NEAR"); ARENA_MAX_TRAIL = at("ARENA_MAX_TRAIL");
-	MENU_NEAR = at("MENU_NEAR"); TARGET_RINGS = at("TARGET_RINGS");
+	MENU_NEAR = at("MENU_NEAR"); TARGET_RINGS = at("TARGET_RINGS"); STEP_LENGTH = at("STEP_LENGTH");
 }
 
 /** On the ring beside a footprint: not on it, within BESIDE (at scale 1 exactly 1; inventory 1.3, decision for phase 1). */
 export const onRing = (d: number) => d >= 1 && d <= BESIDE;
 /** A flower's neighbour: within FLOWER_NEIGHBOUR, Manhattan, not on its cell (at scale 1 exactly 1; inventory 1.3). */
 export const flowerNeighbour = (d: number) => d >= 1 && d <= FLOWER_NEIGHBOUR;
+/** The plants a bed of `w` × `h` cells holds: as many as the same physical bed at scale 1, `w·h / gridScale²`
+ *  (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 2.1, "Beds and fields"); any free cell may take one until then. */
+export const bedCapacity = (b: { w: number; h: number }): number => Math.floor((b.w * b.h) / (scale * scale));
