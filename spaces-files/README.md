@@ -293,7 +293,7 @@ From this directory (or with `npm --prefix spaces-files` from the repository roo
 - `npm test` (root: `npm run test:spaces-files`; node test runner, `tests/*.test.ts`; the store test starts the service
   as child processes)
 
-Variables, read from `spaces-files/.env` (values already in the environment win):
+Variables, read from `spaces-files/.env` (values already in the environment win; `.env.example` lists them all with their defaults and where the directories lie without one):
 
 - `FILES_DATA_DIR`: the data directory (default `spaces-files/.local/data`, created with mode 700)
 - `FILES_STATE_DIR`: the deployment-state directory (default `spaces-files/.local/state`, mode 700, never inside the
