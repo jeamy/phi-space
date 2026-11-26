@@ -6,7 +6,7 @@ import { DEFAULT_FS_LIMITS, type FsLimits } from "./limits.ts";
 import { CapacityExceeded, InvalidInput, canonicalName } from "./schema.ts";
 
 /** The operations that may name the workspace root with a lone dot. */
-const ROOT_OPERATIONS = new Set(["list", "grant", "revoke", "listGrants", "maintenanceList", "maintenanceListGrants", "maintenancePutGrant"]);
+const ROOT_OPERATIONS = new Set(["list", "grant", "revoke", "listGrants", "remove", "restrict", "unrestrict", "maintenanceList", "maintenanceListGrants", "maintenancePutGrant"]);
 
 /** The canonical segments of a path below its workspace root; `[]` is the root itself. */
 export function parsePath(path: unknown, operation: string, limits: Pick<FsLimits, "maxNameBytes" | "maxPathDepth" | "maxPathBytes"> = DEFAULT_FS_LIMITS): string[] {

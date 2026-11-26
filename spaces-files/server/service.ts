@@ -832,6 +832,131 @@ export class FilesService {
 		});
 	}
 
+	/**
+	 * Moves (and so renames) a file or directory, within its workspace or into another of the tenant (section 5, move and
+	 * delete): owner on the node, editor on its parent and on the destination's parent. The node keeps its ID, so its
+	 * versions, blobs, grants and restriction stay with it; what it inherits changes with its new place at once. A
+	 * workspace root does not move; a destination inside the moved directory is `invalidInput`; a taken destination
+	 * name `alreadyExists`; a subtree that would lie deeper than `maxPathDepth` is `capacityExceeded` (a larger subtree
+	 * than `maxMoveDirs` directories, whose depth is not measured, likewise).
+	 */
+	move(handle: unknown, workspace: unknown, path: unknown, toWorkspace: unknown, toPath: unknown, operationId: unknown): Promise<{ status: "moved" | "unchanged" }> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, "move", this.limits);
+			const toWs = schema.canonicalName(toWorkspace, this.limits.maxNameBytes);
+			const toSegs = parsePath(toPath, "move", this.limits);
+			if (segs.length === 0 || toSegs.length === 0) throw new schema.InvalidInput("a workspace root is not moved, and nothing moves into a root's place");
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			const d = spaceData(space);
+			// both parents first: they stay where they are, so a retry after a lost reply is authorized like the call
+			if (!atLeast((await resolve(d, s, ws, segs.slice(0, -1), { limits: this.limits })).role, "editor")) throw new schema.PermissionDenied("move needs editor on the parent");
+			const dest = await this.#creationParent(s, space, toWs, toSegs);
+			const digest = requestDigest("move", { workspace: ws, path: pathString(segs), toWorkspace: toWs, toPath: pathString(toSegs) });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return { status: done.status as "moved" | "unchanged" };
+			const r = await resolve(d, s, ws, segs, { limits: this.limits });
+			if (!atLeast(r.role, "owner")) throw new schema.PermissionDenied("move needs owner on the node");
+			const node = r.node, name = toSegs[toSegs.length - 1];
+			const noop = async () => {
+				const rows = [receiptRow(s, id, digest, { status: "unchanged" })];
+				await this.#admitRows(s, space, { id, operation: "move", targets: [node.nodeId], rows });
+				await this.#commitMutation(s, space, id, "move", [node.nodeId], rows, null);
+				return { status: "unchanged" as const };
+			};
+			if (dest.nodeId === node.parentId && name === node.name) return noop();
+			// the destination's ancestors must not include the node (a directory moved into itself)
+			for (let at: NodeRow | null = dest, n = 0; at !== null && at.parentId !== schema.WORKSPACES; at = await d.node(at.parentId), n++) {
+				if (at.nodeId === node.nodeId || n > this.limits.maxPathDepth) throw new schema.InvalidInput("a directory cannot move into itself");
+			}
+			if (dest.nodeId === node.nodeId) throw new schema.InvalidInput("a directory cannot move into itself");
+			if (await childNamed(d, dest.nodeId, name)) throw new schema.AlreadyExists("a child of that name exists");
+			if (toSegs.length > segs.length && node.kind === "dir") {
+				const below = await this.#subtreeHeight(space, node.nodeId);
+				if (toSegs.length + below > this.limits.maxPathDepth) throw new schema.CapacityExceeded(`the moved subtree would lie deeper than ${this.limits.maxPathDepth} levels`);
+			}
+			const moved = schema.node(node.nodeId, dest.nodeId, name, node.kind);
+			const takes: Array<{ type: string; fields: Record<string, string> }> = [{ type: schema.T.node, fields: { nodeId: node.nodeId, parentId: node.parentId, name: node.name } }];
+			const rows = [moved];
+			if (await isRestricted(d, node.nodeId)) {
+				// the marker names the parent, so that a directory's restricted children are one lookup: it moves too
+				takes.push({ type: schema.T.relation, fields: { objectKind: "node", objectId: node.nodeId, relation: RESTRICTED, subjectKind: "node", subjectId: node.parentId, subjectRelation: schema.DIRECT } });
+				rows.push(schema.relation("node", node.nodeId, RESTRICTED, "node", dest.nodeId));
+			}
+			rows.push(receiptRow(s, id, digest, { status: "moved" }));
+			await this.#admitRows(s, space, { id, operation: "move", targets: [node.nodeId], rows, demand: dest.nodeId === node.parentId ? {} : { dirEntries: { parentId: dest.nodeId, n: 1 } }, replaced: takes.map((t) => ({ type: t.type, fields: { ...t.fields, kind: node.kind } })) });
+			await this.#commitMutation(s, space, id, "move", [node.nodeId], rows, null, takes);
+			return { status: "moved" as const };
+		});
+	}
+
+	/** Levels below a directory (0 for an empty one), walking at most `maxMoveDirs` directories. */
+	async #subtreeHeight(space: PhiSpaces, dirId: string): Promise<number> {
+		let level = [dirId], height = 0, walked = 0;
+		for (;;) {
+			const next: string[] = [];
+			let any = false;
+			for (const id of level) {
+				if (++walked > this.limits.maxMoveDirs) throw new schema.CapacityExceeded(`the subtree holds more than ${this.limits.maxMoveDirs} directories: move it in parts`);
+				const kids = await space.readAll({ type: schema.T.node, fields: { parentId: id } }, { limit: this.limits.maxDirEntries + 1 });
+				if (kids.length > 0) any = true;
+				for (const k of kids) if (k.fields.kind === "dir") next.push(k.fields.nodeId as string);
+			}
+			if (!any) return height;
+			height++;
+			if (next.length === 0) return height;
+			level = next;
+		}
+	}
+
+	/**
+	 * Removes a file or an empty directory (section 5, move and delete): editor on the node and on its parent; with
+	 * `expectedVersion` (a file's), a newer version is `versionConflict`. The node's content row, grants and restriction
+	 * go in the same transaction and the blob is deleted after the commit (a crash leaves an orphan for the sweep). A
+	 * directory with children is `invalidInput`, hidden children included. The path "." removes a workspace: owner on its
+	 * root, which must be empty and be no live actor's home.
+	 */
+	remove(handle: unknown, workspace: unknown, path: unknown, expectedVersion: unknown, operationId: unknown): Promise<{ status: "removed" }> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, "remove", this.limits);
+			if (expectedVersion !== undefined && expectedVersion !== null && (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1)) throw new schema.InvalidInput("expectedVersion must be a positive integer");
+			const expected = (expectedVersion ?? null) as number | null;
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			const d = spaceData(space);
+			const digest = requestDigest("remove", { workspace: ws, path: pathString(segs), expectedVersion: expected });
+			const root = segs.length === 0;
+			// the parent first (it stays), so a retry after a lost reply is authorized like the call and answers from its
+			// receipt; a removed workspace has no parent left, and its remover's own receipt answers the retry
+			if (!root && !atLeast((await resolve(d, s, ws, segs.slice(0, -1), { limits: this.limits })).role, "editor")) throw new schema.PermissionDenied("remove needs editor on the parent");
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return { status: "removed" as const };
+			const r = await resolve(d, s, ws, segs, { limits: this.limits });
+			if (root ? !atLeast(r.role, "owner") : !atLeast(r.role, "editor")) throw new schema.PermissionDenied(root ? "removing a workspace needs owner on its root" : "remove needs editor on the node");
+			const node = r.node;
+			if (node.kind === "dir" && await space.readIfExists({ type: schema.T.node, fields: { parentId: node.nodeId } }, 0)) throw new schema.InvalidInput("the directory is not empty");
+			if (root && await space.readIfExists({ type: schema.T.actor, fields: { homeNodeId: node.nodeId, state: "enabled" } }, 0) || root && await space.readIfExists({ type: schema.T.actor, fields: { homeNodeId: node.nodeId, state: "disabled" } }, 0))
+				throw new schema.InvalidInput("a workspace that is an actor's home is removed with the actor");
+			const takes: Array<{ type: string; fields: Record<string, string> }> = [{ type: schema.T.node, fields: { nodeId: node.nodeId, parentId: node.parentId, name: node.name } }];
+			const replaced: EntryDraft[] = [schema.node(node.nodeId, node.parentId, node.name, node.kind)];
+			let drop: { blobId: string; size: number } | undefined;
+			if (node.kind === "file") {
+				const cur = await this.#contentRow(s.tenantId, space, node);
+				if (expected !== null && cur.version !== expected) throw new schema.VersionConflict(cur.version);
+				takes.push({ type: schema.T.content, fields: { nodeId: node.nodeId, blobId: cur.ref.blobId } });
+				replaced.push(schema.content(node.nodeId, cur.version, cur.ref));
+				drop = { blobId: cur.ref.blobId, size: cur.ref.size };
+			} else if (expected !== null) throw new schema.InvalidInput("expectedVersion is a file's");
+			const rels = await space.readAll({ type: schema.T.relation, fields: { objectKind: "node", objectId: node.nodeId } }, { limit: this.limits.maxGrantsPerTarget + 2 });
+			if (rels.length > this.limits.maxGrantsPerTarget + 1) throw new schema.CapacityExceeded(`more than ${this.limits.maxGrantsPerTarget} grants on one target`);
+			for (const e of rels) { takes.push({ type: schema.T.relation, fields: { ...(e.fields as Record<string, string>) } }); replaced.push({ type: schema.T.relation, fields: e.fields }); }
+			const rows = [receiptRow(s, id, digest, { status: "removed" })];
+			await this.#admitRows(s, space, { id, operation: "remove", targets: [node.nodeId], rows, replaced });
+			await this.#commitMutation(s, space, id, "remove", [node.nodeId], rows, null, takes, drop);
+			return { status: "removed" as const };
+		});
+	}
+
 	// ---------------------------------------------------------------- grants and memberships (sections 4 and 5)
 
 	/** Lists the direct relation tuples on a target, in a deterministic order (owner on it). Bounded, no partial list. */
@@ -1389,7 +1514,7 @@ export class FilesService {
 	 */
 	async #commitMutation(s: Session, space: PhiSpaces, id: VerifiedOpId, operation: string, targets: string[], rows: ReturnType<typeof schema.meta>[],
 		save: { nodeId: string; newBlobId: string; oldBlobId: string | null; contentDelta: number; replace?: { version: number; blobId: string } } | null,
-		takes: Array<{ type: string; fields: Record<string, string> }> = []): Promise<void> {
+		takes: Array<{ type: string; fields: Record<string, string> }> = [], drop?: { blobId: string; size: number }): Promise<void> {
 		const seq = (await this.#lastSeq(s.tenantId, space)) + 1;
 		const all = [...rows, schema.audit(seq, this.state.now(), { kind: s.actorKind, id: s.actorId }, operation, targets, id.operationId, "ok")];
 		let txn: string | null = null;
@@ -1431,6 +1556,13 @@ export class FilesService {
 			throw new Unavailable("the outcome of a commit is unknown; retry later");
 		}
 		this.#seq.set(s.tenantId, seq);
+		if (drop) {
+			// a removed file: its bytes leave the quota, its blob goes after the commit (or to the sweep)
+			const n = this.#contentBytes.get(s.tenantId);
+			if (n !== undefined) this.#contentBytes.set(s.tenantId, n - drop.size);
+			await this.#fault("afterCommit");
+			await this.blobs.delete(s.tenantId, drop.blobId).catch(() => false);
+		}
 		if (save) {
 			const n = this.#contentBytes.get(s.tenantId);
 			if (n !== undefined) this.#contentBytes.set(s.tenantId, n + save.contentDelta);

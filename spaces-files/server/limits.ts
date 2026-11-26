@@ -57,6 +57,8 @@ export type FsLimits = {
 	/** Refused admin calls of one actor and operation within this window share one audit row with a count, so a caller
 	 *  cannot fill the audit by asking again and again. */
 	deniedAuditWindowMs: number;
+	/** Directories of a subtree `move` walks to bound its new depth; a larger subtree moves in parts. */
+	maxMoveDirs: number;
 	/** Relations `deleteActor` removes in its one transaction; an actor with more is disabled and pruned in batches. */
 	maxDeleteRelations: number;
 	/** Receipts per tenant for ordinary mutations, and the extra ones only security actions may use (section 3). */
@@ -105,6 +107,7 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxAuditAgeMs: 90 * 24 * 3600_000,
 	deniedAuditWindowMs: 3600_000,
 	maxDeleteRelations: 256,
+	maxMoveDirs: 256,
 	retryWindowMs: 3600_000,
 	clockSkewMs: 120_000,
 	maxOperationIdsPerCall: 64,

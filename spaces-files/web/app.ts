@@ -221,6 +221,15 @@ $<HTMLTextAreaElement>("text").addEventListener("input", (e) => { if (draft) { d
 $("save").onclick = () => void save();
 $("theirs").onclick = () => void loadTheirs();
 $("close").onclick = async () => { if (!(await discardOk())) return; draft = null; renderDraft(); };
+$("remove").onclick = async () => {
+	if (draft === null) return;
+	const d = draft;
+	if (!(await ask(`Remove ${d.workspace}/${d.path} (version ${d.baseVersion})? This cannot be undone.`, "Remove"))) return;
+	// the version read: a newer save by someone else is a conflict, not a silent loss
+	const r = await call("remove", { workspace: d.workspace, path: d.path, expectedVersion: d.baseVersion, operationId: await freshId() });
+	if (!r.ok) { notify(r.error.code === "versionConflict" ? "Someone saved a newer version: load it before removing." : r.error.message); return; }
+	draft = null; renderDraft(); await showDir();
+};
 $("logout").onclick = async () => {
 	const out = () => fetch("/auth/logout", { method: "POST", headers: { "x-files-csrf": csrf } });
 	if ((await out()).status === 403 && await refreshCsrf()) await out();

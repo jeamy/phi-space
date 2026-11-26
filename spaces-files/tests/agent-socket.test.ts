@@ -82,6 +82,12 @@ test("the tools: relative paths, a version conflict with the current version, bi
 		assert.deepEqual(await tools.fs_read.execute({ workspace: "conv-a", path: "blob.bin" }), { binary: true, size: 3, version: 1 });
 		assert.equal((await tools.fs_read.execute({ workspace: "conv-a", path: "/etc/passwd" }) as { error: string }).error, "invalidInput");
 		assert.equal((await tools.fs_read.execute({ workspace: "conv-b", path: "x" }) as { error: string }).error, "notFound");
+		// move and remove, with the version read
+		assert.deepEqual(await tools.fs_move.execute({ workspace: "conv-a", path: "drafts/brief.md", toWorkspace: "conv-a", toPath: "brief.md" }), { status: "moved" });
+		assert.equal((await tools.fs_remove.execute({ workspace: "conv-a", path: "brief.md", expectedVersion: 1 }) as { error: string }).error, "versionConflict");
+		assert.deepEqual(await tools.fs_remove.execute({ workspace: "conv-a", path: "brief.md", expectedVersion: 2 }), { status: "removed" });
+		assert.deepEqual(await tools.fs_remove.execute({ workspace: "conv-a", path: "drafts" }), { status: "removed" });
+		assert.deepEqual(await tools.fs_list.execute({ workspace: "conv-a", path: "." }), { entries: [{ name: "blob.bin", kind: "file" }] });
 	} finally { await done(); }
 });
 

@@ -77,6 +77,12 @@ export class FilesAgentClient {
 	async mkdir(workspace: string, path: string, operationId?: string): Promise<{ status: "created" }> {
 		return this.call("mkdir", { workspace, path, operationId: operationId ?? await this.operationId() });
 	}
+	async move(workspace: string, path: string, toWorkspace: string, toPath: string, operationId?: string): Promise<{ status: "moved" | "unchanged" }> {
+		return this.call("move", { workspace, path, toWorkspace, toPath, operationId: operationId ?? await this.operationId() });
+	}
+	async remove(workspace: string, path: string, expectedVersion: number | null = null, operationId?: string): Promise<{ status: "removed" }> {
+		return this.call("remove", { workspace, path, expectedVersion, operationId: operationId ?? await this.operationId() });
+	}
 	close(): void { this.#t.close(); }
 }
 
@@ -141,6 +147,18 @@ export function filesTools(client: FilesAgentClient): FilesTool[] {
 			description: "Create one directory; its parent must exist.",
 			parameters: { type: "object", properties: { workspace: WS, path: PATH }, required: ["workspace", "path"], additionalProperties: false },
 			execute: safe(async (a) => client.mkdir(a.workspace as string, a.path as string)),
+		},
+		{
+			name: "fs_move",
+			description: "Move or rename a file or directory, also into another workspace. Needs owner on it and editor on both parents.",
+			parameters: { type: "object", properties: { workspace: WS, path: PATH, toWorkspace: WS, toPath: PATH }, required: ["workspace", "path", "toWorkspace", "toPath"], additionalProperties: false },
+			execute: safe(async (a) => client.move(a.workspace as string, a.path as string, a.toWorkspace as string, a.toPath as string)),
+		},
+		{
+			name: "fs_remove",
+			description: "Remove a file or an empty directory. Pass the version you read as expectedVersion so a newer save is not lost.",
+			parameters: { type: "object", properties: { workspace: WS, path: PATH, expectedVersion: { type: "integer", minimum: 1 } }, required: ["workspace", "path"], additionalProperties: false },
+			execute: safe(async (a) => client.remove(a.workspace as string, a.path as string, (a.expectedVersion as number | undefined) ?? null)),
 		},
 	];
 }

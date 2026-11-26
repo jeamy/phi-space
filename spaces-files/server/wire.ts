@@ -61,6 +61,8 @@ export const FILE_OPS: Record<string, Op> = {
 	listGrants: (s, h, a) => s.listGrants(h, a.workspace, a.path) as Promise<Json>,
 	grant: (s, h, a) => s.grant(h, a.workspace, a.path, a.relation, a.subject, a.operationId),
 	revoke: (s, h, a) => s.revoke(h, a.workspace, a.path, a.relation, a.subject, a.operationId),
+	move: (s, h, a) => s.move(h, a.workspace, a.path, a.toWorkspace, a.toPath, a.operationId),
+	remove: (s, h, a) => s.remove(h, a.workspace, a.path, a.expectedVersion ?? null, a.operationId),
 	restrict: (s, h, a) => s.restrict(h, a.workspace, a.path, a.operationId),
 	unrestrict: (s, h, a) => s.unrestrict(h, a.workspace, a.path, a.operationId),
 };
