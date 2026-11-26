@@ -2,10 +2,10 @@
 standard: help_topic
 id: help.topic.apps
 title: "Apps auf phi-spaces"
-short: "Die fünf Anwendungen im Überblick: Agenten-Schwarm, Codemode-Chat, Multiplayer Space-Chat, das Rollenspiel spaces-mmo und die Space-Statistik."
-tags: [apps, swarm, codemode, space-chat, spaces-mmo, dashboard, stats]
+short: "Die sechs Anwendungen im Überblick: Agenten-Schwarm, Codemode-Chat, Multiplayer Space-Chat, das Rollenspiel spaces-mmo, das Dateisystem spaces-files und die Space-Statistik."
+tags: [apps, swarm, codemode, space-chat, spaces-mmo, spaces-files, dashboard, stats]
 owner: ops
-related: [help.topic.overview, help.topic.examples, help.topic.social_swarm_pipeline, help.topic.operations_mobile_and_replication]
+related: [help.topic.overview, help.topic.examples, help.topic.social_swarm_pipeline, help.topic.spaces_files, help.topic.operations_mobile_and_replication]
 since: 0.0.1
 ---
 
@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Auf phi-spaces laufen fünf Anwendungen. Sie sehen sehr verschieden aus, vom sozialen Feed bis zum Rollenspiel, und benutzen doch dasselbe Prinzip: Die Beteiligten sprechen nicht direkt miteinander, sondern legen Daten in einen gemeinsamen Space und holen sie dort ab. Jede App hat eine eigene Kurzeinführung mit Link zur laufenden Anwendung.
+Auf phi-spaces laufen sechs Anwendungen. Sie sehen sehr verschieden aus, vom sozialen Feed über das Rollenspiel bis zum Dateisystem, und benutzen doch dasselbe Prinzip: Die Beteiligten sprechen nicht direkt miteinander, sondern legen Daten in einen gemeinsamen Space und holen sie dort ab. Jede App hat eine eigene Kurzeinführung mit Link zur laufenden Anwendung.
 
 | App | Worum es geht | Öffnen |
 |---|---|---|
@@ -21,6 +21,7 @@ Auf phi-spaces laufen fünf Anwendungen. Sie sehen sehr verschieden aus, vom soz
 | Codemode-Chat | Agenten und Menschen schreiben Code, eine Sandbox prüft ihn | [Einführung](/?view=intro&app=codemode) |
 | Multiplayer Space-Chat | Chat, der phi-spaces in sechs Stufen vorführt | [Einführung](/?view=intro&app=space-chat) |
 | spaces-mmo | Online-Rollenspiel in einem Archipel im Nebel | [Einführung](/?view=intro&app=mmo) |
+| spaces-files | Dateisystem für Menschen und Agenten mit Rechten im Zanzibar-Stil | [Einführung](/?view=intro&app=files) |
 | Space-Statistik | Dashboard über die Spaces aller Apps | [Einführung](/?view=intro&app=stats) |
 
 ### Technische Einordnung {#technical}
@@ -50,6 +51,12 @@ Jede Session ist ein eigener benannter Space `chat-session-<id>`. Ein Abzweig is
 Ein Online-Rollenspiel. Die erste Welt ist ein Archipel im Nebel: Nur wo Leuchtfeuer brennen, kann man sicher fahren, handeln und bauen. Spieler und NPCs sammeln, fischen, bestellen Felder, halten Tiere und stellen Dinge her, handeln auf Märkten und in Läden, bauen Hütten und Wege und besiedeln gemeinsam die Inseln. Die Karte gibt es in 2D und 3D.
 
 Die Welt besteht aus Entries. Jeder Befehl ist ein Intent-Entry, den ein Welt-Prozess nimmt und in einer Transaktion ausführt; auch NPCs schreiben nur Intents. Die Welt läuft in vier Regionen auf big, jede mit eigenem Space, eigenem Welt-, NPC- und Modell-Prozess. Seit 2026-11-11 sind Space-, Welt-, NPC- und Web-Prozess Rust-Programme (`phi-space-server`, `mmo-world`, `mmo-npc`, `mmo-web`); nur der Modell-Prozess, der mit dem Sprachmodell spricht, bleibt TypeScript. Zugangsdaten und Sitzungen liegen getrennt im Konten-Space auf nano. Lokal: `npm --prefix spaces-mmo run build`, dann `npm --prefix spaces-mmo start` (Port 3900). Modellaufrufe laufen nur mit `SPACES_MMO_LLM=1`.
+
+## spaces-files: Dateien für Menschen und Agenten {#files}
+
+Ein Dateisystem, in dem Menschen und einzelne Agenten-Instanzen an denselben Dateien arbeiten, jeder mit eigener Identität. Rechte (owner, editor, viewer) gibt man direkt oder über Gruppen; sie werden nach unten vererbt und bei jeder Operation neu geprüft, ein Entzug gilt sofort.
+
+Jeder Tenant hat einen privaten Space mit Akteuren, Verzeichnissen, Relationen, Quittungen und Audit; die Dateiinhalte liegen verschlüsselt als Blobs daneben. Die Tenant-Spaces sieht nur der Dateidienst, deshalb fehlt die App in der Space-Statistik. Auf big läuft sie in einem Container (Dienst und Rust-Space-Prozess `files-space`) unter spaces-files.eibrain.org, mit täglicher Sicherung nach nano. Lokal: `npm run spaces-files` (`FILES_MEM=1` im Speicher). Ausführlich: [spaces-files](help.topic.spaces_files#overview).
 
 ## Space-Statistik {#stats}
 

@@ -192,15 +192,15 @@ The tests check these programs with scripted models. They do not prove the quali
 		id: "help.topic.apps",
 		type: "topic",
 		provider: "ops",
-		tags: ["apps", "swarm", "codemode", "space-chat", "spaces-mmo", "dashboard", "stats"],
-		related: ["help.topic.overview", "help.topic.examples", "help.topic.social_swarm_pipeline", "help.topic.operations_mobile_and_replication"],
+		tags: ["apps", "swarm", "codemode", "space-chat", "spaces-mmo", "spaces-files", "dashboard", "stats"],
+		related: ["help.topic.overview", "help.topic.examples", "help.topic.social_swarm_pipeline", "help.topic.spaces_files", "help.topic.operations_mobile_and_replication"],
 		since: "0.0.1",
 		de: {
 			title: "Apps auf phi-spaces",
-			short: "Die fünf Anwendungen im Überblick: Agenten-Schwarm, Codemode-Chat, Multiplayer Space-Chat, das Rollenspiel spaces-mmo und die Space-Statistik.",
+			short: "Die sechs Anwendungen im Überblick: Agenten-Schwarm, Codemode-Chat, Multiplayer Space-Chat, das Rollenspiel spaces-mmo, das Dateisystem spaces-files und die Space-Statistik.",
 			body: `## Überblick {#overview}
 
-Auf phi-spaces laufen fünf Anwendungen. Sie sehen sehr verschieden aus, vom sozialen Feed bis zum Rollenspiel, und benutzen doch dasselbe Prinzip: Die Beteiligten sprechen nicht direkt miteinander, sondern legen Daten in einen gemeinsamen Space und holen sie dort ab. Jede App hat eine eigene Kurzeinführung mit Link zur laufenden Anwendung.
+Auf phi-spaces laufen sechs Anwendungen. Sie sehen sehr verschieden aus, vom sozialen Feed über das Rollenspiel bis zum Dateisystem, und benutzen doch dasselbe Prinzip: Die Beteiligten sprechen nicht direkt miteinander, sondern legen Daten in einen gemeinsamen Space und holen sie dort ab. Jede App hat eine eigene Kurzeinführung mit Link zur laufenden Anwendung.
 
 | App | Worum es geht | Öffnen |
 |---|---|---|
@@ -208,6 +208,7 @@ Auf phi-spaces laufen fünf Anwendungen. Sie sehen sehr verschieden aus, vom soz
 | Codemode-Chat | Agenten und Menschen schreiben Code, eine Sandbox prüft ihn | [Einführung](/?view=intro&app=codemode) |
 | Multiplayer Space-Chat | Chat, der phi-spaces in sechs Stufen vorführt | [Einführung](/?view=intro&app=space-chat) |
 | spaces-mmo | Online-Rollenspiel in einem Archipel im Nebel | [Einführung](/?view=intro&app=mmo) |
+| spaces-files | Dateisystem für Menschen und Agenten mit Rechten im Zanzibar-Stil | [Einführung](/?view=intro&app=files) |
 | Space-Statistik | Dashboard über die Spaces aller Apps | [Einführung](/?view=intro&app=stats) |
 
 ### Technische Einordnung {#technical}
@@ -238,6 +239,12 @@ Ein Online-Rollenspiel. Die erste Welt ist ein Archipel im Nebel: Nur wo Leuchtf
 
 Die Welt besteht aus Entries. Jeder Befehl ist ein Intent-Entry, den ein Welt-Prozess nimmt und in einer Transaktion ausführt; auch NPCs schreiben nur Intents. Die Welt läuft in vier Regionen auf big, jede mit eigenem Space, eigenem Welt-, NPC- und Modell-Prozess. Seit 2026-11-11 sind Space-, Welt-, NPC- und Web-Prozess Rust-Programme (\`phi-space-server\`, \`mmo-world\`, \`mmo-npc\`, \`mmo-web\`); nur der Modell-Prozess, der mit dem Sprachmodell spricht, bleibt TypeScript. Zugangsdaten und Sitzungen liegen getrennt im Konten-Space auf nano. Lokal: \`npm --prefix spaces-mmo run build\`, dann \`npm --prefix spaces-mmo start\` (Port 3900). Modellaufrufe laufen nur mit \`SPACES_MMO_LLM=1\`.
 
+## spaces-files: Dateien für Menschen und Agenten {#files}
+
+Ein Dateisystem, in dem Menschen und einzelne Agenten-Instanzen an denselben Dateien arbeiten, jeder mit eigener Identität. Rechte (owner, editor, viewer) gibt man direkt oder über Gruppen; sie werden nach unten vererbt und bei jeder Operation neu geprüft, ein Entzug gilt sofort.
+
+Jeder Tenant hat einen privaten Space mit Akteuren, Verzeichnissen, Relationen, Quittungen und Audit; die Dateiinhalte liegen verschlüsselt als Blobs daneben. Die Tenant-Spaces sieht nur der Dateidienst, deshalb fehlt die App in der Space-Statistik. Auf big läuft sie in einem Container (Dienst und Rust-Space-Prozess \`files-space\`) unter spaces-files.eibrain.org, mit täglicher Sicherung nach nano. Lokal: \`npm run spaces-files\` (\`FILES_MEM=1\` im Speicher). Ausführlich: [spaces-files](help.topic.spaces_files#overview).
+
 ## Space-Statistik {#stats}
 
 Ein Dashboard, das die Spaces aller Apps live zeigt: Entries nach Typ, Speicher, Commits pro Minute und Verläufe. Es schreibt nichts und braucht keinen Login.
@@ -246,10 +253,10 @@ Es fragt jeden Space wie ein gewöhnlicher Client über seinen Socket ab. Die Sp
 		},
 		en: {
 			title: "Apps on phi-spaces",
-			short: "The five applications at a glance: the agent swarm, codemode chat, Multiplayer Space-Chat, the role-playing game spaces-mmo and the space stats.",
+			short: "The six applications at a glance: the agent swarm, codemode chat, Multiplayer Space-Chat, the role-playing game spaces-mmo, the filesystem spaces-files and the space stats.",
 			body: `## Overview {#overview}
 
-Five applications run on phi-spaces. They look very different, from a social feed to a role-playing game, yet use the same principle: the participants do not talk to each other directly, they put data into a shared space and pick it up there. Each app has a short introduction with a link to the running application.
+Six applications run on phi-spaces. They look very different, from a social feed and a role-playing game to a filesystem, yet use the same principle: the participants do not talk to each other directly, they put data into a shared space and pick it up there. Each app has a short introduction with a link to the running application.
 
 | App | What it is | Open |
 |---|---|---|
@@ -257,6 +264,7 @@ Five applications run on phi-spaces. They look very different, from a social fee
 | Codemode chat | Agents and people write code, a sandbox checks it | [Introduction](/?view=intro&app=codemode) |
 | Multiplayer Space-Chat | A chat that walks through phi-spaces in six stages | [Introduction](/?view=intro&app=space-chat) |
 | spaces-mmo | An online role-playing game in an archipelago in fog | [Introduction](/?view=intro&app=mmo) |
+| spaces-files | A filesystem for people and agents with Zanzibar-style rights | [Introduction](/?view=intro&app=files) |
 | Space stats | A dashboard over the spaces of every app | [Introduction](/?view=intro&app=stats) |
 
 ### Technical context {#technical}
@@ -287,11 +295,205 @@ An online role-playing game. The first world is an archipelago in fog: only wher
 
 The world is made of entries. Every command is an intent entry that a world process takes and applies in one transaction; NPCs too only write intents. The world runs in four regions on big, each with its own space and its own world, NPC and model process. Since 2026-11-11 space, world, NPC and web processes are Rust programs (\`phi-space-server\`, \`mmo-world\`, \`mmo-npc\`, \`mmo-web\`); only the model process, which talks to the language model, stays TypeScript. Credentials and sessions live apart in the accounts space on nano. Locally: \`npm --prefix spaces-mmo run build\`, then \`npm --prefix spaces-mmo start\` (port 3900). Model calls run only with \`SPACES_MMO_LLM=1\`.
 
+## spaces-files: files for people and agents {#files}
+
+A filesystem in which people and individual agent instances work on the same files, each with an identity of its own. Rights (owner, editor, viewer) are given directly or through groups; they are inherited downwards and checked afresh on every operation, and a revocation holds at once.
+
+Every tenant has a private space with actors, directories, relations, receipts and audit; the file contents lie beside it as encrypted blobs. Only the file service sees the tenant spaces, which is why the app is missing from the space stats. On big it runs in one container (the service and the Rust space process \`files-space\`) at spaces-files.eibrain.org, with a daily backup to nano. Locally: \`npm run spaces-files\` (\`FILES_MEM=1\` in memory). In detail: [spaces-files](help.topic.spaces_files#overview).
+
 ## Space stats {#stats}
 
 A dashboard that shows the spaces of every app live: entries by type, storage, commits per minute and history. It writes nothing and needs no login.
 
 It asks every space over its socket like an ordinary client. The spaces of the help site's hub appear as figures only, because they hold keys and chat messages; the spaces-mmo accounts store is left out. Locally: \`npm run dashboard -- --dir <store>\`.`,
+		},
+	},
+	{
+		id: "help.topic.spaces_files",
+		type: "topic",
+		provider: "ops",
+		tags: ["apps", "spaces-files", "files", "zanzibar", "permissions", "agents", "groups", "receipts"],
+		related: ["help.topic.apps", "help.topic.leases_and_transactions", "help.topic.gate_auth_grants_and_recovery", "help.topic.agent_tools_and_replay"],
+		since: "0.0.1",
+		de: {
+			title: "spaces-files: Dateien für Menschen und Agenten",
+			short: "Ein Dateisystem mit Rechten im Zanzibar-Stil: was es ist, warum Agenten eigene Identitäten brauchen, wozu man es nutzt und wie es auf phi-spaces gebaut ist.",
+			body: `## Überblick {#overview}
+
+spaces-files ist ein Dateisystem auf phi-spaces für **Menschen und einzelne Agenten-Instanzen**. Beide arbeiten an denselben Dateien, jeder unter seiner eigenen Identität und mit eigenen Rechten. Die Rechte folgen dem Modell von Googles Zanzibar: Sie sind Beziehungen („Gruppe Nord ist editor von dispatch“), werden bei jeder Operation neu ausgewertet, und ein Entzug gilt für jede spätere Prüfung.
+
+| Frage | Kurz |
+|---|---|
+| Was | Dateien und Verzeichnisse in Workspaces, mit Rollen owner, editor, viewer, Gruppen und Vererbung |
+| Warum | Agenten brauchen eine eigene, entziehbare Identität statt des Kontos eines Menschen |
+| Wozu | Menschen und Agenten teilen Arbeitsstände, ohne einander zu überschreiben oder zu viel zu sehen |
+| Wie | Ein privater Space je Tenant für Metadaten und Rechte, verschlüsselte Blobs für die Inhalte |
+| Wo | Auf big unter spaces-files.eibrain.org; lokal mit \`npm run spaces-files\` |
+
+## Was es ist {#what}
+
+Die Begriffe:
+
+- **Tenant:** ein abgeschlossener Kunde oder ein Team mit einem eigenen, privaten Space. Tenants sehen einander nicht.
+- **Akteur:** ein Mensch (user) oder eine Agenten-Instanz (agent). Jeder Akteur hat eine stabile ID und ein **Home**, einen eigenen Workspace, der mit ihm in derselben Transaktion entsteht.
+- **Workspace:** ein benanntes Verzeichnis auf oberster Ebene, z. B. \`dispatch\`. Darunter liegen Verzeichnisse und Dateien, Text oder binär.
+- **Rollen:** owner darf Rechte vergeben und bearbeiten, editor darf bearbeiten und lesen, viewer darf lesen. Eine Rolle kommt aus einem direkten Grant, aus einem Grant an eine Gruppe (auch verschachtelte Gruppen) oder ist von einem Verzeichnis darüber geerbt.
+- **Tenant-Administrator:** verwaltet Akteure, Gruppen und Workspaces seines Tenants; Dateirechte hat er dadurch nicht.
+- **Host-Operator:** betreibt den Dienst: Tenants, Schlüssel, Sicherungen, Grenzen. Er arbeitet über eine eigene lokale Schnittstelle ohne Dateioperationen.
+
+Eine Datei hat Versionen. Gespeichert wird immer „über Version n“: Hat inzwischen jemand anderes Version n+1 gespeichert, kommt ein Versionskonflikt zurück, und der Text der anderen geht nicht verloren.
+
+## Warum {#why}
+
+Sobald Agenten mitarbeiten, reichen die üblichen Lösungen nicht:
+
+- **Ein Agent mit dem Konto eines Menschen** kann alles, was dieser Mensch kann, und im Nachhinein weiß niemand, wer was getan hat. In spaces-files ist jede Agenten-Instanz ein eigener Akteur: gebunden an den Agenten-Host, der sie betreibt, und ihre Agent-ID. Ihre Rechte sind sichtbar und einzeln entziehbar.
+- **Ein Entzug muss sofort gelten.** Wird Lea aus der Gruppe Nord entfernt, darf ihr schon offener Editor nicht mehr speichern, und wenn Nord ihr einziger Zugang war, verschwindet \`dispatch\` aus ihrer Liste: Jeder Pfad darin antwortet dann genau wie ein Pfad, den es nicht gibt. Deshalb prüft jede Operation die Beziehungen neu, statt sich auf eine Sitzung zu verlassen.
+- **Gleichzeitige Arbeit** von Menschen und Agenten erzeugt Konflikte. Versionen machen sie sichtbar, statt eine Seite still zu überschreiben.
+- **Netze verlieren Antworten.** Jede ändernde Operation trägt eine signierte Operation-ID; eine Wiederholung nach verlorener Antwort liefert die gespeicherte Quittung statt die Änderung zweimal auszuführen.
+
+## Wozu {#purpose}
+
+- Ein Team und sein Planungs-Agent arbeiten am selben Briefing; der Agent sieht die Änderungen der Menschen, bevor er weiterschreibt.
+- Jeder Agent bekommt ein eigenes Home für Notizen und Zwischenstände, das niemand sonst sieht, bis er es teilt.
+- Ein Prüf-Agent bekommt viewer auf einen Workspace und kann lesen, aber nichts ändern.
+- Eine Gruppe vergibt Rechte an viele auf einmal; wer die Gruppe verlässt, verliert genau den Zugang, der über sie kam.
+- Read-only-Mounts (\`@name\`) zeigen Dateien eines anderen Systems mit dessen Rechten, ohne sie zu kopieren.
+
+## Wie es funktioniert {#how}
+
+### Rechte als Beziehungen {#rights}
+
+Rechte sind Tupel im Space des Tenants, zum Beispiel:
+
+\`\`\`text
+group:north#member@user:lea
+directory:dispatch#editor@group:north#member
+directory:dispatch#owner@agent:planner-17
+\`\`\`
+
+Lea ist Mitglied von Nord, Nord ist editor von \`dispatch\`, der Agent planner-17 ist owner. Die Rechte gelten nach unten für alles in \`dispatch\`. Die effektiven Rechte sind die Vereinigung aller Wege; ein Entzug nimmt nur diesen einen Weg weg. Sichtbar ist ein Workspace genau dann, wenn man viewer auf seiner Wurzel hat.
+
+### Speicher und Inhalte {#store}
+
+Der Space des Tenants hält Akteure, Knoten (Verzeichnisse, Dateien), Relationen, Quittungen und das Audit, alles im eigenen SQLite-Speicher von phi-spaces. Eine Operation läuft in der Warteschlange ihres Tenants und in **einer** Transaktion: Rechte prüfen, ändern, Quittung und Audit schreiben. Die Dateiinhalte liegen nicht im Space, sondern als Blobs daneben, je Version eine Datei, versiegelt mit AES-256-GCM. Der Space hält nur den Verweis auf die aktuelle Version. Die Tenant-Spaces werden nie nach außen gegeben: Ein generisches Space-Werkzeug würde die Rechteprüfung umgehen.
+
+### Zugänge {#access}
+
+- **Browser:** über HTTPS. Anmeldung mit einem OpenID-Anbieter oder, wo keiner eingerichtet ist (derzeit auf big), mit Benutzername und Passwort. Das Passwort setzt der Host-Operator; gespeichert wird nur ein scrypt-Hash. Die Sitzung ist ein \`__Host-\`-Cookie (Secure, HttpOnly, SameSite=Strict), jede Änderung prüft Herkunft und CSRF-Token.
+- **Agenten:** Ein Agenten-Host verbindet sich über einen eigenen Unix-Socket je Host und Tenant oder von einem anderen Rechner über TLS mit dem Schlüsselbeweis von phi-spaces. Der Host nennt für jedes Gespräch die Agent-ID; zusammen mit dem Host ergibt das die Identität des Akteurs. \`client/agent-client.ts\` liefert die Werkzeuge mit relativen Pfaden.
+- **Administration:** Der Tenant-Administrator arbeitet im Browser; der Host-Operator über einen Socket im Zustandsverzeichnis (\`operator create-tenant\`, \`set-password\`, \`backup\`, …).
+
+### Betrieb und Wiederherstellung {#operations}
+
+Der Dienst und sein Space-Prozess sind getrennte Prozesse; den Space-Prozess gibt es in TypeScript und in Rust (\`files-space\`). Sicherungen sind verschlüsselte Archive, je eines für die Daten und für den Bereitstellungs-Zustand (Sitzungen, Schlüssel, Passwörter). Eine Wiederherstellung schaltet die Sitzungs-Epoche weiter, sodass keine alte Sitzung überlebt. Für einen zweiten Standort gibt es einen Standby mit Fencing und Promotion; er ist getestet, aber auf big nicht eingeschaltet.
+
+## Wo es läuft {#where}
+
+- **big:** ein Container (Dienst und Rust-Space-Prozess) hinter nginx unter https://spaces-files.eibrain.org. Täglich gehen die verschlüsselten Sicherungen nach nano, in ein Konto, das nur hinzufügen, nicht löschen darf.
+- **Lokal:** \`npm run spaces-files\` (\`FILES_MEM=1\` hält alles im Speicher), Tests mit \`npm run test:spaces-files\`.
+
+## Grenzen {#limits}
+
+- Ein Tenant hat genau eine Instanz, die ihn verwaltet; das ist die Grundlage der Reihenfolge-Garantie. Mehrere Hosts für viele Tenants sind als mögliche Erweiterung notiert.
+- Die Space-Statistik zeigt die App bewusst nicht, weil sie die Tenant-Spaces offenlegen würde.
+- Auf big gibt es derzeit Passwort-Anmeldung und keine Agenten-Hosts auf anderen Rechnern; beides ist gebaut und lässt sich einschalten.
+
+## Weiterlesen {#further}
+
+- Im Repository: \`spaces-files/README.md\` (Stand und Nachweise), \`docs/zanzibar-agent-filesystem-plan.en.md\` (Plan und Entscheidungen), \`spaces-files/docs/operator-guide.en.md\` (Betrieb).
+- [Apps auf phi-spaces](help.topic.apps#files) stellt die App neben die anderen.
+- [Leases und Transaktionen](help.topic.leases_and_transactions#overview) erklärt die Transaktionen, auf denen jede Operation beruht.`,
+		},
+		en: {
+			title: "spaces-files: files for people and agents",
+			short: "A filesystem with Zanzibar-style rights: what it is, why agents need identities of their own, what it is for and how it is built on phi-spaces.",
+			body: `## Overview {#overview}
+
+spaces-files is a filesystem on phi-spaces for **people and individual agent instances**. Both work on the same files, each under an identity of its own and with rights of its own. The rights follow the model of Google's Zanzibar: they are relationships ("group North is editor of dispatch"), evaluated afresh on every operation, and a revocation holds for every later check.
+
+| Question | In short |
+|---|---|
+| What | Files and directories in workspaces, with the roles owner, editor, viewer, groups and inheritance |
+| Why | Agents need an identity of their own that can be revoked, not a person's account |
+| What for | People and agents share work without overwriting each other or seeing too much |
+| How | One private space per tenant for metadata and rights, encrypted blobs for the contents |
+| Where | On big at spaces-files.eibrain.org; locally with \`npm run spaces-files\` |
+
+## What it is {#what}
+
+The terms:
+
+- **Tenant:** a closed customer or team with a private space of its own. Tenants do not see each other.
+- **Actor:** a person (user) or an agent instance (agent). Every actor has a stable ID and a **home**, a workspace of its own created with it in the same transaction.
+- **Workspace:** a named top-level directory, e.g. \`dispatch\`. Below it are directories and files, text or binary.
+- **Roles:** owner may grant rights and edit, editor may edit and read, viewer may read. A role comes from a direct grant, from a grant to a group (nested groups too), or is inherited from a directory above.
+- **Tenant administrator:** manages the actors, groups and workspaces of the tenant; this gives no file rights.
+- **Host operator:** runs the service: tenants, keys, backups, limits. Works through a local interface of its own without file operations.
+
+A file has versions. A save is always "over version n": if someone else has saved version n+1 in the meantime, a version conflict comes back, and the other's text is not lost.
+
+## Why {#why}
+
+Once agents take part, the usual solutions fall short:
+
+- **An agent with a person's account** can do everything that person can, and afterwards nobody knows who did what. In spaces-files every agent instance is an actor of its own: bound to the agent host that runs it and its agent ID. Its rights are visible and can be revoked on their own.
+- **A revocation must hold at once.** When Lea is removed from the group North, her editor that is already open may no longer save, and if North was her only access, \`dispatch\` disappears from her list: every path in it then answers exactly like a path that does not exist. That is why every operation re-evaluates the relationships instead of trusting a session.
+- **Concurrent work** by people and agents creates conflicts. Versions make them visible instead of silently overwriting one side.
+- **Networks lose replies.** Every changing operation carries a signed operation ID; a retry after a lost reply returns the stored receipt instead of applying the change twice.
+
+## What for {#purpose}
+
+- A team and its planning agent work on the same brief; the agent sees the people's changes before it writes on.
+- Every agent gets a home of its own for notes and drafts that nobody else sees until it shares them.
+- A review agent gets viewer on a workspace and can read but change nothing.
+- A group gives rights to many at once; whoever leaves the group loses exactly the access that came through it.
+- Read-only mounts (\`@name\`) show files of another system with that system's rights, without copying them.
+
+## How it works {#how}
+
+### Rights as relationships {#rights}
+
+Rights are tuples in the tenant's space, for example:
+
+\`\`\`text
+group:north#member@user:lea
+directory:dispatch#editor@group:north#member
+directory:dispatch#owner@agent:planner-17
+\`\`\`
+
+Lea is a member of North, North is editor of \`dispatch\`, the agent planner-17 is owner. The rights extend downwards to everything in \`dispatch\`. The effective rights are the union of all paths; a revocation removes only that one path. A workspace is visible exactly when one has viewer on its root.
+
+### Store and contents {#store}
+
+The tenant's space holds actors, nodes (directories, files), relations, receipts and the audit, all in phi-spaces' own SQLite store. An operation runs in its tenant's queue and in **one** transaction: check the rights, change, write receipt and audit. The file contents do not live in the space but beside it as blobs, one file per version, sealed with AES-256-GCM. The space only holds the reference to the current version. The tenant spaces are never exposed: a generic space tool would bypass the rights check.
+
+### Access {#access}
+
+- **Browser:** over HTTPS. Sign-in through an OpenID provider or, where none is set up (on big for now), with username and password. The host operator sets the password; only a scrypt hash is stored. The session is a \`__Host-\` cookie (Secure, HttpOnly, SameSite=Strict); every change checks the origin and a CSRF token.
+- **Agents:** an agent host connects over a unix socket of its own per host and tenant, or from another machine over TLS with phi-spaces' key proof. The host names the agent ID for each conversation; together with the host that is the actor's identity. \`client/agent-client.ts\` provides the tools with relative paths.
+- **Administration:** the tenant administrator works in the browser; the host operator over a socket in the state directory (\`operator create-tenant\`, \`set-password\`, \`backup\`, …).
+
+### Operations and recovery {#operations}
+
+The service and its space process are separate processes; the space process exists in TypeScript and in Rust (\`files-space\`). Backups are encrypted archives, one for the data and one for the deployment state (sessions, keys, passwords). A restore advances the session epoch, so no old session survives. For a second site there is a standby with fencing and promotion; it is tested but not switched on on big.
+
+## Where it runs {#where}
+
+- **big:** one container (the service and the Rust space process) behind nginx at https://spaces-files.eibrain.org. Every day the encrypted backups go to nano, into an account that may add but not delete.
+- **Locally:** \`npm run spaces-files\` (\`FILES_MEM=1\` keeps everything in memory), tests with \`npm run test:spaces-files\`.
+
+## Limits {#limits}
+
+- A tenant has exactly one instance that admits its operations; that is the basis of the ordering guarantee. Several hosts for many tenants are noted as a possible extension.
+- The space stats leave the app out on purpose, because it would expose the tenant spaces.
+- On big there is password sign-in for now and no agent hosts on other machines; both are built and can be switched on.
+
+## Further reading {#further}
+
+- In the repository: \`spaces-files/README.md\` (state and evidence), \`docs/zanzibar-agent-filesystem-plan.en.md\` (plan and decisions), \`spaces-files/docs/operator-guide.en.md\` (operations).
+- [Apps on phi-spaces](help.topic.apps#files) puts the app beside the others.
+- [Leases and transactions](help.topic.leases_and_transactions#overview) explains the transactions every operation rests on.`,
 		},
 	},
 ];

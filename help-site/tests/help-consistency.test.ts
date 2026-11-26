@@ -49,7 +49,7 @@ test("help corpus: identities, API facts, links, anchors and table structure are
 	const catalog = JSON.parse(await readFile(new URL("../corpus/help_product_catalog.json", import.meta.url), "utf8"));
 	const facts = JSON.parse(await readFile(new URL("../corpus/api_facts.json", import.meta.url), "utf8"));
 	validateCorpus(ALL_ARTICLES, catalog, facts);
-	assert.equal(ALL_ARTICLES.length, 47);
+	assert.equal(ALL_ARTICLES.length, 48);
 	const broken = structuredClone(ALL_ARTICLES);
 	broken[0]!.de.body += "\n[broken](help.topic.overview#absent)";
 	assert.throws(() => validateCorpus(broken, catalog, facts), /Broken link/);
@@ -178,7 +178,7 @@ test("help live sync: actual PhiSpaces puts/deletes converge without mutating th
 });
 
 test("every app has an introduction before its link: ?view=intro&app=… round-trips, an unknown app falls back home", () => {
-	for (const app of ["swarm", "codemode", "space-chat", "mmo", "stats"] as const) {
+	for (const app of ["swarm", "codemode", "space-chat", "mmo", "files", "stats"] as const) {
 		const url = helpUrl({ kind: "intro", app }, "de");
 		assert.deepEqual(parseHelpView(url), { kind: "intro", app });
 	}

@@ -162,7 +162,7 @@ Lokale Browserprüfungen ergänzen diese Nachweise, sind aber keine vollständig
 
 ### Help-Corpus pflegen
 
-Der Corpus enthält **47 Artikel / 94 DE–EN-Datensätze**, neun Bereiche und 14 API-Referenzgruppen. Acht Praxisleitfäden erklären Erststart, asynchrone Interaktion, Task-Lebenszyklus, Live-Synchronisation, Social-Swarm-Datenfluss, Fehlerbehandlung, sicheren Betrieb und Topologie/Reifegrad. Das [vollständige Tutorial](../examples/tuple-basics.ts) ist ohne Modelle ausführbar; der [Live-Mirror](../examples/shared/live-mirror.ts) demonstriert Snapshot-Seiten, Changes, Löschungen und Cursor-Neuaufbau.
+Der Corpus enthält **48 Artikel / 96 DE–EN-Datensätze**, neun Bereiche und 14 API-Referenzgruppen. Acht Praxisleitfäden erklären Erststart, asynchrone Interaktion, Task-Lebenszyklus, Live-Synchronisation, Social-Swarm-Datenfluss, Fehlerbehandlung, sicheren Betrieb und Topologie/Reifegrad. Das [vollständige Tutorial](../examples/tuple-basics.ts) ist ohne Modelle ausführbar; der [Live-Mirror](../examples/shared/live-mirror.ts) demonstriert Snapshot-Seiten, Changes, Löschungen und Cursor-Neuaufbau.
 
 Inhalte in `scripts/corpus-articles-data.ts`, `scripts/corpus-workflows-and-api.ts` oder `scripts/corpus-practical-guides.ts` ändern, nicht in den generierten Markdown-Dateien unter `corpus/{de,en}`. `api_facts.json` enthält die API-Klassifikation; `scripts/api-signatures.ts` leitet Signaturen aus echten TypeScript-Exports ab. Der Build prüft Links, Anker, Sprachparität und Katalogreferenzen, speichert echte Git-Revision/Dirty-Status und hasht den vollständigen Inhalt.
 
@@ -178,7 +178,7 @@ npm --prefix help-site run build
 - [`VERGLEICH-EARENDIL-VS-PHI-SPACES.md`](../COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md) – **Architektur- und Konzeptvergleich (Deutsch)**: Earendil Multiplayer Chat (`Pi Durable on Cloudflare`) vs. `phi-spaces` (`v1` In-Memory bis `v5`/`v6` Federated Space) mit detaillierter Vor-/Nachteilsanalyse aller Stufen.
 - [`COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md`](../COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md) – **Architectural & Concept Comparison (English)**: Full English edition of the comparison from In-Memory (`v1`) to Federated Space (`v5`/`v6`).
 - [`PLAN.md`](../PLAN.en.md) – Architektur- und Umsetzungsplan, kein alleiniger Nachweis des aktuellen Laufzeitverhaltens. Die ausführbaren Stufen zeigen lokale Bausteine von Memory über SQLite/Socket und Authentifizierung bis Föderations-/Betriebssteuerung; reale Netz-, Geräte- und Failover-Abnahmen stehen getrennt in den Root-Dokumenten.
-- Die Artikel `help.topic.examples` (alle Beispiele, ihr Start, welche Tokens kosten) und `help.topic.apps` (die fünf Anwendungen) sind der Einstieg für Lesende; sie stehen in `scripts/corpus-examples-and-apps.ts`.
+- Die Artikel `help.topic.examples` (alle Beispiele, ihr Start, welche Tokens kosten) und `help.topic.apps` (die sechs Anwendungen) und `help.topic.spaces_files` (das Dateisystem ausführlich) sind der Einstieg für Lesende; sie stehen in `scripts/corpus-examples-and-apps.ts`.
 - [API-Referenz](../../docs/api.en.md), [Beispiele](../../docs/examples.en.md) und [Implementierungsstand](../../docs/implementierungsstand.en.md) beschreiben die aktuellen Verträge.
 
 ## Verzeichnisstruktur

@@ -45,6 +45,7 @@
       "articleIds": [
         "help.topic.overview",
         "help.topic.apps",
+        "help.topic.spaces_files",
         "help.topic.architecture_layers",
         "help.topic.guarantees_and_boundaries",
         "help.topic.comparison_earendil_vs_phi_spaces",

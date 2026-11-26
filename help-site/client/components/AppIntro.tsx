@@ -12,6 +12,8 @@ type Intro = {
 	spaces: Text[];
 	where: Text[];
 	open: Text;
+	/** A corpus article with the detailed description, linked beside the app. */
+	article?: string;
 };
 
 const INTROS: Record<IntroApp, Intro> = {
@@ -97,6 +99,29 @@ const INTROS: Record<IntroApp, Intro> = {
 		],
 		open: { de: "spaces-mmo öffnen", en: "Open spaces-mmo" },
 	},
+	files: {
+		icon: "▣",
+		title: { de: "spaces-files: Dateien für Menschen und Agenten", en: "spaces-files: files for people and agents" },
+		lead: {
+			de: "Ein Dateisystem, in dem Menschen und einzelne Agenten-Instanzen an denselben Dateien arbeiten – jeder mit eigener Identität und eigenen Rechten, die bei jedem Zugriff neu geprüft werden.",
+			en: "A filesystem in which people and individual agent instances work on the same files – each with an identity and rights of its own, checked afresh on every access.",
+		},
+		what: [
+			{ de: "Jeder Mensch und jede Agenten-Instanz bekommt ein eigenes Home; gemeinsame Workspaces teilt man mit den Rollen owner, editor und viewer, direkt oder über Gruppen, nach unten vererbt.", en: "Every person and every agent instance gets a home of its own; shared workspaces are shared with the roles owner, editor and viewer, directly or through groups, inherited downwards." },
+			{ de: "Warum: Ein Agent arbeitet nicht unter dem Konto eines Menschen, sondern als er selbst – was er darf, ist sichtbar und einzeln entziehbar. Ein Entzug gilt sofort, auch für einen schon offenen Editor.", en: "Why: an agent does not work under a person's account but as itself – what it may do is visible and can be revoked on its own. A revocation holds at once, even for an editor already open." },
+			{ de: "Wer über eine veraltete Version speichert, bekommt einen Versionskonflikt statt eines stillen Überschreibens; eine Wiederholung nach verlorener Antwort wird nicht doppelt ausgeführt.", en: "Saving over an outdated version returns a version conflict instead of a silent overwrite; a retry after a lost reply is not applied twice." },
+		],
+		spaces: [
+			{ de: "Jeder Tenant hat einen privaten Space mit Akteuren, Verzeichnissen und Dateien, Rechte-Relationen im Zanzibar-Stil, Quittungen und Audit; jede Operation prüft die Relationen in einer Transaktion neu.", en: "Every tenant has a private space with actors, directories and files, Zanzibar-style relations, receipts and audit; every operation re-evaluates the relations inside one transaction." },
+			{ de: "Dateiinhalte liegen nicht im Space, sondern daneben als mit AES-256-GCM versiegelte Blobs; der Space hält nur den Verweis auf die aktuelle Version.", en: "File contents do not live in the space but beside it as AES-256-GCM-sealed blobs; the space only holds the reference to the current version." },
+			{ de: "Die Tenant-Spaces werden nie nach außen gegeben: kein Dashboard, kein generisches Space-Werkzeug – nur der Dateidienst spricht mit ihnen.", en: "The tenant spaces are never exposed: no dashboard, no generic space tool – only the file service talks to them." },
+		],
+		where: [
+			{ de: "Auf big in einem Container: der Dateidienst und sein Space-Prozess, der Rust-Server files-space, hinter nginx unter spaces-files.eibrain.org. Anmeldung mit Benutzername und Passwort; täglich eine verschlüsselte Sicherung nach nano.", en: "On big in one container: the file service and its space process, the Rust server files-space, behind nginx at spaces-files.eibrain.org. Sign-in with username and password; every day an encrypted backup to nano." },
+		],
+		open: { de: "spaces-files öffnen", en: "Open spaces-files" },
+		article: "help.topic.spaces_files",
+	},
 	stats: {
 		icon: "▤",
 		title: { de: "Space-Statistik: alle Spaces live", en: "Space stats: every space live" },
@@ -125,7 +150,7 @@ export function introTitle(app: IntroApp, locale: "de" | "en"): string {
 }
 
 /** The introduction page; `target` is where the link below goes (an internal view or an external URL). */
-export function AppIntro(props: { app: IntroApp; locale: "de" | "en"; target: { href: string; external: boolean }; onOpen?: () => void }) {
+export function AppIntro(props: { app: IntroApp; locale: "de" | "en"; target: { href: string; external: boolean }; onOpen?: () => void; onArticle?: (id: string) => void }) {
 	const { app, locale, target } = props;
 	const t = INTROS[app];
 	const list = (items: Text[]) => <ul>{items.map((x, i) => <li key={i}>{x[locale]}</li>)}</ul>;
@@ -148,6 +173,11 @@ export function AppIntro(props: { app: IntroApp; locale: "de" | "en"; target: { 
 				>
 					<span>{t.open[locale]} →</span>
 				</a>
+				{t.article && props.onArticle ? (
+					<button type="button" className="secondary-action" onClick={() => props.onArticle!(t.article!)}>
+						<span>{locale === "de" ? "Ausführliche Beschreibung" : "Detailed description"}</span>
+					</button>
+				) : null}
 			</div>
 		</article>
 	);

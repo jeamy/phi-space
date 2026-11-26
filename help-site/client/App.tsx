@@ -17,6 +17,7 @@ import { SystemBar } from "./components/SystemBar.tsx";
 const CODEMODE_CHAT_URL = "https://codemode.eibrain.org";
 const SPACES_MMO_URL = "https://spaces-mmo.eibrain.org";
 const SPACES_STATS_URL = "https://spaces-stats.eibrain.org";
+const SPACES_FILES_URL = "https://spaces-files.eibrain.org";
 
 const PROVIDERS = ["core", "client", "tools", "remote", "security", "federation", "ops"] as const;
 
@@ -200,6 +201,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 		app === "codemode" ? { href: CODEMODE_CHAT_URL, external: true }
 			: app === "stats" ? { href: SPACES_STATS_URL, external: true }
 			: app === "mmo" ? { href: SPACES_MMO_URL, external: true }
+			: app === "files" ? { href: SPACES_FILES_URL, external: true }
 				: { href: helpUrl(app === "swarm" ? { kind: "feed" } : { kind: "space-chat", sessionId: "lobby" }, locale), external: false };
 
 	const hasRightToc = view.kind === "article" && currentArticle && (currentArticle.toc?.length ?? 0) > 0;
@@ -401,6 +403,14 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						</button>
 						<button
 							type="button"
+							className={isApp("files") ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "intro", app: "files" })}
+						>
+							<span>{locale === "de" ? "spaces-files (Dateien für Menschen und Agenten)" : "spaces-files (files for people and agents)"}</span>
+							<span className="nav-link__badge">FILES</span>
+						</button>
+						<button
+							type="button"
 							className={isApp("stats") ? "nav-link is-active" : "nav-link"}
 							onClick={() => navigate({ kind: "intro", app: "stats" })}
 						>
@@ -563,6 +573,17 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 											{locale === "de"
 												? "⚓ spaces-mmo: Rollenspiel im Nebel"
 												: "⚓ spaces-mmo: role-playing in the fog"}
+										</span>
+									</button>
+									<button
+										type="button"
+										className="secondary-action"
+										onClick={() => navigate({ kind: "intro", app: "files" })}
+									>
+										<span>
+											{locale === "de"
+												? "▣ spaces-files: Dateien für Menschen und Agenten"
+												: "▣ spaces-files: files for people and agents"}
 										</span>
 									</button>
 									<button
@@ -1323,6 +1344,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 							locale={locale}
 							target={introTarget(view.app)}
 							onOpen={() => { if (view.app === "swarm") navigate({ kind: "feed" }); else if (view.app === "space-chat") navigate({ kind: "space-chat", sessionId: "lobby" }); }}
+							onArticle={(id) => openArticle(id)}
 						/>
 					) : null}
 

@@ -270,7 +270,7 @@ deployment, phone, large-store performance, power-loss or multi-host acceptance.
 
 ## Maintaining the help corpus
 
-The corpus contains **47 articles / 94 DE–EN records**, nine areas and 14 API reference groups. Eight practical
+The corpus contains **48 articles / 96 DE–EN records**, nine areas and 14 API reference groups. Eight practical
 guides cover first setup, asynchronous interaction, task lifecycle, live synchronization, the Social Swarm
 pipeline, failure handling, safe operation, and topology/readiness. Start with the
 [complete runnable tutorial](examples/tuple-basics.ts); the [live mirror](examples/shared/live-mirror.ts)
@@ -297,7 +297,7 @@ npm --prefix help-site run build
 - [German architecture comparison](COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md) and
   [English comparison](COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md): comparison with Earendil's chat architecture.
 - The articles `help.topic.examples` (every example, how to run it, which ones cost tokens) and `help.topic.apps`
-  (the five applications) are the reader's entry points; `scripts/corpus-examples-and-apps.ts` holds them.
+  (the six applications) and `help.topic.spaces_files` (the filesystem in detail) are the reader's entry points; `scripts/corpus-examples-and-apps.ts` holds them.
 - [Root API reference](../docs/api.en.md), [examples](../docs/examples.en.md), and
   [implementation status](../docs/implementierungsstand.en.md) define the detailed current contracts.
 

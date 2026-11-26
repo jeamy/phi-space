@@ -116,7 +116,7 @@ All knowledge about `phi-spaces` is organized into **9 canonical system areas** 
 
 1. **`01` – Spaces System Map (`spaces_system_map`)**
    - Technical system map for tuple spaces, the 6 architecture layers, the data and consistency model, and binding guarantees and boundaries.
-   - Articles: `help.topic.overview`, `help.topic.apps`, `help.topic.architecture_layers`, `help.topic.guarantees_and_boundaries`, `help.topic.comparison_earendil_vs_phi_spaces`, `help.topic.async_interaction`, `help.topic.topology_and_readiness`.
+   - Articles: `help.topic.overview`, `help.topic.apps`, `help.topic.spaces_files`, `help.topic.architecture_layers`, `help.topic.guarantees_and_boundaries`, `help.topic.comparison_earendil_vs_phi_spaces`, `help.topic.async_interaction`, `help.topic.topology_and_readiness`.
 2. **`02` – Core, Entries & Transactions (`core_entries_transactions`)**
    - Pure state machine, document version 5, global IDs (gid), subtypes, wildcard templates, leases, transactions, CompletionProfiles, and byte budgets.
    - Articles: `help.topic.entries_and_templates`, `help.topic.leases_and_transactions`, `help.topic.completion_profiles_and_limits`, `help.topic.task_lifecycle`.
@@ -638,7 +638,7 @@ Each of the following articles exists in both **German (`corpus/de/...`)** and *
 ### 7.1 Concept and architecture topics (`topics/`)
 
 1. `help.topic.agent_tools_and_replay` – **The 8 LLM Agent Tools and Replay Safety**: How AI agents coordinate safely through space_write, space_read, space_take, space_list, space_txn, space_wait, space_notify, and space_lease.
-2. `help.topic.apps` – **Apps on phi-spaces**: The five applications at a glance: the agent swarm, codemode chat, Multiplayer Space-Chat, the role-playing game spaces-mmo and the space stats.
+2. `help.topic.apps` – **Apps on phi-spaces**: The six applications at a glance: the agent swarm, codemode chat, Multiplayer Space-Chat, the role-playing game spaces-mmo, the filesystem spaces-files and the space stats.
 3. `help.topic.architecture_layers` – **Architecture Layers and Module Map**: Mapping of the main source modules in src/ across the 6 architecture layers, from the pure state machine and the own store to federation, RunGate, and replication.
 4. `help.topic.async_interaction` – **Async Operations, Waiters and Agent Turns**: Calls to a space return a Promise, so your program can do other things meanwhile. Some calls wait for an entry, others report back later by themselves. This guide explains what a call waits for and which way to pick when.
 5. `help.topic.comparison_earendil_vs_phi_spaces` – **Concept Comparison: Earendil Multiplayer Chat vs. phi-spaces (v1 to v6)**: Comparison of the Cloudflare Durable Object approach and pi-durable 1.4.0 with the phi-spaces tuple-space model, including pros and cons from In-Memory (v1) to Federated Space (v5/v6).
@@ -690,6 +690,7 @@ Each of the following articles exists in both **German (`corpus/de/...`)** and *
 45. `help.api.phispaces_wait_notify_mailbox` – **wait, notify, events & ack – Reactive Delivery and Consumer Mailboxes**: Parks long-lived read/take requests or event subscriptions without blocking a turn; delivers results via durable mailboxes with prefix ACK.
 46. `help.api.phispaces_write` – **write – Write an Entry**: Creates a new typed entry with a lifetime; supports request replay, atomic singleton creation through unique, and transient output.
 47. `help.api.space_service_and_remote` – **SpaceService, serveSpace & RemoteSpace – Network RPC over Socket & TCP**: Exposes spaces over Unix socket or TCP, also as a standalone service or through pi-serverd, with role policies, and serves RemoteSpace clients with stable retry identity.
+48. `help.topic.spaces_files` – **spaces-files: files for people and agents**: A filesystem with Zanzibar-style rights: what it is, why agents need identities of their own, what it is for and how it is built on phi-spaces.
 
 ---
 
