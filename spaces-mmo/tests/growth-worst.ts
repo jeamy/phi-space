@@ -56,7 +56,7 @@ export async function writeWorstGrowth(space: SpaceLike, w: WorldDef, rooms = la
 }
 
 /** The space with every hold of the world lock timed: from the take inside a transaction to its commit or abort. */
-export function timedLock(space: SpaceLike, holds: number[]): SpaceLike {
+export function timedLock(space: SpaceLike, holds: number[], refused?: Record<string, number>): SpaceLike {
 	const since = new Map<string, number>();
 	const end = (txn: string) => { const t = since.get(txn); if (t !== undefined) { holds.push(performance.now() - t); since.delete(txn); } };
 	return new Proxy(space, {
@@ -66,6 +66,7 @@ export function timedLock(space: SpaceLike, holds: number[]): SpaceLike {
 			if (key === "takeIfExists") return async (template: { type?: string }, ms: number, o?: { txn?: string }) => {
 				const t = performance.now(), got = await f.call(target, template, ms, o);
 				if (got && o?.txn && template.type === WORLD_LOCK.type) since.set(o.txn, t);
+				if (!got && o?.txn && refused) { const k = template.type ?? "entry by id"; refused[k] = (refused[k] ?? 0) + 1; }
 				return got;
 			};
 			if (key === "commit" || key === "abort") return async (txn: string, ...rest: unknown[]) => { try { return await f.call(target, txn, ...rest); } finally { end(txn); } };

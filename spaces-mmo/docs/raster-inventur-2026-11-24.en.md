@@ -423,6 +423,35 @@ What it says:
 - **For case 6 this means:** under load "the time `WORLD_LOCK` is held per run" has no value to compare, because no run completes. What can be compared under load is the longest single hold and the ratio of the answers during a run to those outside one. Without load the lock time per run is the reference (6.1 above).
 - **The Rust engine under load was not measured.** This script cannot see how far a Rust run gets (`growth_cost.rs` reports its time only). On the fixture alone it ran complete runs (table above).
 
+**Under load after growth steps 2 and 3 (phase 1, 2026-11-26).** Same script, same Rust stack, on this development machine.
+- A room without a step takes no lock any more, so the worst case alone reaches no room at all.
+- For that reason the script now keeps a room with a step waiting beside the fixture in each window with growth: as full as the others, with its first row free.
+  - `GROWTH_GROWING` sets how many such rooms per window, one after the other, each written once the last one grew. The default is 1; `0` gives the configuration measured above.
+  - More than a few make the store heavier window by window. A run that wrote one after every growth (24 in the idle window) slowed even the `load` window to 355 / 1,031 ms and is not counted.
+- `refused` counts the takes a run was refused, by type. A `RoomGrowth` count there is a room that never grew, so it has no entry yet. A `Lock` count is `WORLD_LOCK`.
+
+| Run | Window | Growth runs | Longest single hold | Rooms with a step | Answers p50 / p95: all, during a run, outside one |
+| --- | --- | --- | --- | --- | --- |
+| A: none waiting | idle | 29, no room reached | 0 | – | – |
+| | load | – | – | – | 52 / 253 |
+| | load+growth | 20, no room reached | 0 | – | 203 / 684; 266 / 1,092 (386 commands); 174 / 580 (896) |
+| | load again | – | – | – | 550 / 1,378 |
+| B: one | idle | 29 | 44 ms | grew in its first run, 164 ms after it was written | – |
+| | load | – | – | – | 61 / 343 |
+| | load+growth | 17 | 70 ms | grew in its first run, after 494 ms; lock held 70 ms | 286 / 1,063; 366 / 1,225 (497); 246 / 857 (789) |
+| | load again | – | – | – | 777 / 1,655 |
+| C: five | idle | 28 | 44 ms | 5 of 5 in their first run, 136 ms (median); lock held 37 ms | – |
+| | load | – | – | – | 91 / 509 |
+| | load+growth | 11; `WORLD_LOCK` refused in 8 | 84 ms | 3 grew after 2 runs (median), at most 4; 4.7 s, at most 13.4 s; the fourth still waiting after 4 runs (29 s); lock held 81 ms | 572 / 1,304; 560 / 1,356 (566); 602 / 1,248 (555) |
+| | load again | – | – | – | 1,041 / 2,471 |
+
+What it says:
+
+- **Case 6 under load is met.** The longest single hold is 70 to 84 ms against 104 ms at phase 0. The comparable ratio is run A, the same fixture without a room waiting. There, commands sent during a run answered at 1.5 times the median of the others and 1.9 times their p95. At phase 0 the ratios were 2.8 and 2.4. A run holds no lock there; what is left is the cost of its reads through the space. In run C the ratio is about 1: runs took 1.7 s (median) under load, so half the commands fall during one and the split no longer tells them apart.
+- **A busy region's room still grows, but late.** Without load a room with a step grows in the first run. Under the load of 50 figures, `WORLD_LOCK` refused 8 of 11 runs (`NO_WAIT`, a command open), and a room took up to 4 runs. The servers run growth 150 s apart (6.1 above, "How often a run comes"), so 4 runs there are 600 s.
+- **The open question is not fixed in phase 1.** Making growth get through under steady load would change how growth takes `WORLD_LOCK`: waiting for it, a bounded retry, or a turn before new commands. Every one of these changes every command's wait. That is a decision for plan section 3, not part of the switch at the same behaviour.
+- **The windows still drift.** As before, `load again` is the slowest of all windows in every run, without growth. Only the split inside a window compares.
+
 ### 6.2 Cells looked at per target choice
 
 **Measurement.** `node --no-warnings --experimental-strip-types tests/perf/target-choice.ts`, with no browser and no space:
@@ -617,7 +646,7 @@ Whether the stores on big and nano hold such objects is shown by a `--check` on 
 - *Two attempts on the same cells.* The admin moves its hut onto a rectangle (`versetze`, which takes no fire's light) while a player stakes out a hut on it, and two players stake out a hut there, each for `CONTENTION_ROUNDS` rounds (default 12). The move is sent a little later each round, across the time `bau` takes before its lock. Each round leaves exactly one object on the cells, and the objects, their Footprint entries and the locks agree. With `holdRoomOrRefuse` made a no-op, round 0 leaves two objects there, in both cases.
 - *A world worker killed in such a round.* The intent it held comes back with its transaction's lease (`SPACES_MMO_TXN_MS` 4 s in the test) and the other worker runs it; one object, every lock back.
 - *A holder killed while it holds the lock* (`tests/lock-holder.ts`, killed with SIGKILL). Until its lease runs out, `bau` is refused and leaves no footprint and no light used. Then the lock is back with the version it had (the killed transaction's write-back is gone), and the same `bau` goes through and counts the version up.
-- *Building against growth.* A command reads `WORLD_LOCK` in its transaction (`pinTerrain`, or the read in the world worker's first batch), and a read under a transaction keeps any other transaction from taking that entry. Growth takes `WORLD_LOCK` with `NO_WAIT`, so it cannot commit while a command runs, and a command does not start while growth holds it. A command never sees the room's grid change under it. `tests/growth-gate.test.ts` holds a command's transaction open in its search (`pinTerrain`, no room lock yet): growth grows nothing, then the command takes the room's lock and rewrites a footprint, commits, and the room grows with that footprint there once. With `pinTerrain` made a no-op the room grows during the search and the test fails. It runs in a space process of the stack, so with `SPACES_MMO_SPACE_SERVER=rust/target/release/mmo-space` against the Rust core as well. Left open: growth gives up its run (`NO_WAIT` on WORLD_LOCK) while any command of the region is open, and commands now run up to 100 ms longer when they wait for a lock; whether a busy region's rooms still grow in time has not been measured.
+- *Building against growth.* A command reads `WORLD_LOCK` in its transaction (`pinTerrain`, or the read in the world worker's first batch), and a read under a transaction keeps any other transaction from taking that entry. Growth takes `WORLD_LOCK` with `NO_WAIT`, so it cannot commit while a command runs, and a command does not start while growth holds it. A command never sees the room's grid change under it. `tests/growth-gate.test.ts` holds a command's transaction open in its search (`pinTerrain`, no room lock yet): growth grows nothing, then the command takes the room's lock and rewrites a footprint, commits, and the room grows with that footprint there once. With `pinTerrain` made a no-op the room grows during the search and the test fails. It runs in a space process of the stack, so with `SPACES_MMO_SPACE_SERVER=rust/target/release/mmo-space` against the Rust core as well. Left open: growth gives up its run (`NO_WAIT` on WORLD_LOCK) while any command of the region is open, and commands now run up to 100 ms longer when they wait for a lock. Measured on 2026-11-26 (6.1, "Under load after growth steps 2 and 3"): under 50 figures a room with a step grows after up to 4 runs, `WORLD_LOCK` refused in 8 of 11. The longest hold (84 ms) and the ratio of the answers (1.5 / 1.9) are within the phase 0 reference.
 - *Abort and retry* is `tests/room-lock.test.ts` (refused while held, through once free), with the killed holder above.
 
 The test found two defects at the fire's light use (`LightUse`, `build.ts` `lightFor`), both in TypeScript and Rust.
