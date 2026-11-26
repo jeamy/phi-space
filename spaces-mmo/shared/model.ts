@@ -44,7 +44,8 @@ export type Variety = { id: string; name: string; color: string; breeder: string
 /** A name given to a variety, `unique` on `nameKey` within its region's space. */
 export type VarietyFields = { varietyId: string; name: string; nameKey: string; sort: string; color: string; breeder: string; breederName: string; at: number };
 /** A way out of a room, on a cell of it; stepping on the cell or `go <name>` leads to `destination`, arriving at `arrive`. */
-export type ExitFields = { exitId: string; name: string; aliases: string[]; desc: string; location: string; destination: string; x: number; y: number; arrive: { x: number; y: number }; arriveGrowthRevision?: number; locks: string; fogMax?: number };
+/** `w`×`h`: the exit's footprint from `x`,`y` (plan section 2.2: an area, s×s at scale s; absent: 1×1, a point of scale 1). */
+export type ExitFields = { exitId: string; name: string; aliases: string[]; desc: string; location: string; destination: string; x: number; y: number; w?: number; h?: number; arrive: { x: number; y: number }; arriveGrowthRevision?: number; locks: string; fogMax?: number };
 /** A label on an object (Tags cannot be array fields: templates match whole values). */
 export type TagFields = { target: string; key: string; category: string };
 /** A template to spawn items from; `parent` names the prototype whose fields it extends. */
@@ -55,7 +56,8 @@ export type PrototypeFields = { key: string; parent: string | null; typeclass: s
 	 *  icon, so whatever wants the other takes it (a log from a tree is driftwood to every recipe and site). */ stands?: string; /** It turns after `afterMs` of the second clock (the decay clock: real days by default): into `into` (a young animal grows up), or into nothing (fresh meat spoils). */ turns?: { afterMs: number; into?: string } };
 /** A beacon: where a fire can burn. It is also the lock every change of its fire takes (feeding, the fire tick), so
  *  two players feeding at once cannot light two flames. `lit` is what the fire tick last saw. */
-export type BeaconFields = { beaconId: string; name: string; aliases: string[]; room: string; x: number; y: number; covers: string[]; lit: boolean };
+/** `w`×`h`: the fire's footprint from `x`,`y`, as an exit's. */
+export type BeaconFields = { beaconId: string; name: string; aliases: string[]; room: string; x: number; y: number; w?: number; h?: number; covers: string[]; lit: boolean };
 /** A fire: it burns while the world time is before `until` (world milliseconds, docs/weltzeit.en.md); it stays as an entry
  *  when it has gone out, and the clock decides. `litAt`: since when it burns, in world time. */
 export type FlameFields = { beaconId: string; until: number; litAt: number };

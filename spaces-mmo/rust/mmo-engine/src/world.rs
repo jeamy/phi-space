@@ -8,12 +8,25 @@ use phi_json::Json;
 use crate::j;
 use crate::space::{Error, Result};
 
+/// `gridScaleOfEnv`: the scale of the world definition a process loads, SPACES_MMO_GRID_SCALE (default 1; 2: the one
+/// derived from it, plan section 2.4).
+pub fn grid_scale_of_env() -> Result<f64> {
+	match std::env::var("SPACES_MMO_GRID_SCALE").unwrap_or_default().as_str() {
+		"" | "1" => Ok(1.0),
+		"2" => Ok(2.0),
+		v => Err(Error::Other(format!("SPACES_MMO_GRID_SCALE: 1 or 2, got {v}"))),
+	}
+}
+
+/// `worldFile`: the file of a world's definition at `scale` (scripts/world-json.ts writes both).
+pub fn world_file(scale: f64) -> String { if scale == 1.0 { "world.json".into() } else { format!("world-scale{}.json", phi_json::number_text(scale)) } }
+
 /// `loadWorld(id)` below `root` (the spaces-mmo folder).
 pub fn load_world(root: &Path, id: &str) -> Result<Json> {
 	if id.is_empty() || id.len() > 40 || !id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
 		return Err(Error::Other(format!("SPACES_MMO_WORLD: a-z, 0-9 and -, got {id}")));
 	}
-	let text = std::fs::read_to_string(root.join("worlds").join(id).join("world.json")).map_err(|e| Error::Other(format!("world {id}: {e}")))?;
+	let text = std::fs::read_to_string(root.join("worlds").join(id).join(world_file(grid_scale_of_env()?))).map_err(|e| Error::Other(format!("world {id}: {e}")))?;
 	let w = phi_json::parse(&text).map_err(|e| Error::Other(format!("world {id}: {e:?}")))?;
 	// the rule values of this process are the world's scale (rules.rs): one world per process
 	crate::rules::use_grid_scale(j::opt(&w, "gridScale").and_then(Json::as_f64).unwrap_or(1.0)).map_err(|e| Error::Other(format!("world {id}: {e}")))?;

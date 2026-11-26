@@ -4,11 +4,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { worldJson, worldJsonPath } from "../scripts/world-json.ts";
-import { loadWorld } from "../server/engine/world.ts";
+import { SCALES, worldJson, worldJsonPath } from "../scripts/world-json.ts";
+import { loadWorld, worldFile } from "../server/engine/world.ts";
 
-test("worlds/leuchtfeuer/world.json is what world.ts generates (else: npm run world:json)", async () => {
-	assert.ok(readFileSync(worldJsonPath("leuchtfeuer"), "utf8") === await worldJson("leuchtfeuer"), "world.json is not current: run npm --prefix spaces-mmo run world:json");
+test("worlds/leuchtfeuer/world.json and world-scale2.json are what world.ts generates (else: npm run world:json)", async () => {
+	for (const scale of SCALES) assert.ok(readFileSync(worldJsonPath("leuchtfeuer", scale), "utf8") === await worldJson("leuchtfeuer", scale), `${worldFile(scale)} is not current: run npm --prefix spaces-mmo run world:json`);
 });
 
 test("the JSON keeps the whole definition, and loadWorld reads it", async () => {

@@ -2,6 +2,8 @@
 //! per process, so this is a test binary of its own, with its one test (the lib's tests run in threads beside each
 //! other at scale 1).
 use mmo_engine::rules::{beside, command_path, free_cell_radius, grid_scale, is_flower_neighbour, on_ring, use_grid_scale};
+use mmo_engine::world::load_world;
+use std::path::Path;
 
 #[test]
 fn the_values_follow_the_scale_and_a_refused_scale_changes_nothing() {
@@ -14,4 +16,17 @@ fn the_values_follow_the_scale_and_a_refused_scale_changes_nothing() {
 	assert_eq!(grid_scale(), 2.0, "a refused scale changes nothing");
 	use_grid_scale(1.0).unwrap();
 	assert_eq!((beside(), command_path()), (1.0, 40.0));
+
+	// load_world reads the definition of SPACES_MMO_GRID_SCALE and sets the scale to the world's
+	let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+	let room = |w: &phi_json::Json| { let r = w.get("rooms").unwrap().as_array().unwrap().iter().find(|r| r.get("roomId").and_then(|v| v.as_str()) == Some("graue-bucht")).unwrap().clone(); let g = r.get("ground").unwrap().as_array().unwrap().clone(); (g[0].as_str().unwrap().chars().count(), g.len()) };
+	std::env::set_var("SPACES_MMO_GRID_SCALE", "2");
+	let w2 = load_world(&root, "leuchtfeuer").unwrap();
+	assert_eq!((grid_scale(), beside(), room(&w2)), (2.0, 2.0, (48, 32)));
+	std::env::set_var("SPACES_MMO_GRID_SCALE", "1");
+	let w1 = load_world(&root, "leuchtfeuer").unwrap();
+	assert_eq!((grid_scale(), beside(), room(&w1)), (1.0, 1.0, (24, 16)));
+	std::env::set_var("SPACES_MMO_GRID_SCALE", "3");
+	assert!(load_world(&root, "leuchtfeuer").is_err());
+	std::env::remove_var("SPACES_MMO_GRID_SCALE");
 }

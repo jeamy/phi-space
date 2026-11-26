@@ -27,11 +27,22 @@ const WORLD_ID = /^[a-z0-9-]{1,40}$/;
 
 /** The world named by SPACES_MMO_WORLD (default leuchtfeuer), checked: every row as wide as the first, every tile key
  *  known, every spawn walkable. */
+/** The scale of the world definition a process loads: SPACES_MMO_GRID_SCALE (default 1, the definition the servers run
+ *  until the cut; 2: the one derived from it, plan section 2.4). */
+export function gridScaleOfEnv(): number {
+	const v = process.env.SPACES_MMO_GRID_SCALE;
+	if (!v) return 1;
+	if (!/^[12]$/.test(v)) throw new Error(`SPACES_MMO_GRID_SCALE: 1 or 2, got ${v}`);
+	return Number(v);
+}
+/** The file of a world's definition at `scale` (scripts/world-json.ts writes both). */
+export const worldFile = (scale: number) => (scale === 1 ? "world.json" : `world-scale${scale}.json`);
+
 export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeuer"): Promise<WorldDef> {
 	if (!WORLD_ID.test(id)) throw new Error(`SPACES_MMO_WORLD: a-z, 0-9 and -, got ${id}`);
 	// the definition is data (worlds/<id>/world.json, written by npm run world:json from the world's world.ts); the engine
 	// runs nothing a world brings
-	const w = JSON.parse(readFileSync(join(ROOT, "worlds", id, "world.json"), "utf8")) as WorldDef;
+	const w = JSON.parse(readFileSync(join(ROOT, "worlds", id, worldFile(gridScaleOfEnv())), "utf8")) as WorldDef;
 	// the rule values of this process are the world's scale (shared/rules.ts): one world per process
 	useGridScale(w.gridScale ?? 1);
 	const grid = (what: string, ground: string[], spawn: { x: number; y: number }) => {
