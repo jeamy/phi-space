@@ -13,6 +13,7 @@ import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 import type { EntryDraft } from "phi-spaces/core";
 import { DEFAULT_LIMITS, FOREVER, UniqueConflict } from "phi-spaces/core";
 import { Metrics } from "./metrics.ts";
+import type { MountCaller, MountProvider } from "./mounts.ts";
 import { assertLimitsFit, assertRowFits, DEFAULT_FS_LIMITS, encodedBytes, type FsLimits } from "./limits.ts";
 import { checkQuotas, sumContentBytes, type Demand } from "./quotas.ts";
 import { Admission, Unavailable, type AdmissionOptions } from "./admission.ts";
@@ -103,6 +104,8 @@ export type FilesServiceOptions = AdmissionOptions & {
 	stateRestore?: boolean;
 	/** Tests only: called at the named points of a save (section 6.3), to inject a failure or a crash there. */
 	faultHook?: (point: FaultPoint) => void | Promise<void>;
+	/** Read-only providers, each mounted as the workspace `@<name>` (section 8, virtual files). */
+	mounts?: ReadonlyMap<string, MountProvider>;
 };
 
 /** Where a save can be interrupted: before the blob write, between it and the commit, around the commit call (its
@@ -129,6 +132,7 @@ export class FilesService {
 	readonly state: DeploymentState;
 	readonly blobs: BlobStore;
 	readonly limits: FsLimits;
+	readonly mounts: ReadonlyMap<string, MountProvider>;
 	/** Process-wide counters: queue wait and run time, adapter calls, evaluator work (server/metrics.ts). */
 	readonly metrics = new Metrics();
 	readonly #stopService: () => Promise<void>;
@@ -157,6 +161,7 @@ export class FilesService {
 		this.admission = new Admission({ ...o, observe: (w, r) => { this.metrics.queueWait.add(w); this.metrics.queueRun.add(r); } });
 		this.#now = o.now ?? Date.now;
 		this.limits = { ...DEFAULT_FS_LIMITS, ...o.limits };
+		this.mounts = new Map(o.mounts ?? []);
 		this.#fault = o.faultHook ?? (() => {});
 		this.#saveLeaseMs = o.saveTxnLeaseMs ?? 10_000;
 	}
@@ -270,7 +275,7 @@ export class FilesService {
 	async createTenant(tenantId: string, admin: FirstAdmin): Promise<CreateTenantResult> {
 		tenantAlias(tenantId);
 		const id = schema.actorId(admin.actorId);
-		const homeName = schema.canonicalName(admin.homeName, this.limits.maxNameBytes);
+		const homeName = schema.workspaceName(admin.homeName, this.limits.maxNameBytes);
 		const identity = { issuer: schema.identityPart(admin.issuer, "issuer"), subject: schema.identityPart(admin.subject, "subject") };
 		await this.reserveTenantSpace(tenantId);
 		const r = await this.#inSpace(tenantId, async (space): Promise<CreateTenantResult> => {
@@ -304,7 +309,7 @@ export class FilesService {
 	async provisionActor(tenantId: string, by: { actorKind: schema.ActorKind; actorId: string }, kind: schema.ActorKind, actorId: string, homeName: string, identity: schema.UserIdentity | schema.AgentIdentity): Promise<{ actorId: string; homeNodeId: string }> {
 		const ident = schema.identityOf(kind, identity);
 		const id = schema.actorId(actorId);
-		const name = schema.canonicalName(homeName, this.limits.maxNameBytes);
+		const name = schema.workspaceName(homeName, this.limits.maxNameBytes);
 		const r = await this.inTenant(tenantId, async (space) => {
 			const caller = await this.#enabledActor(space, by.actorKind, by.actorId);
 			if (caller.fields.actorKind !== "user" || !(await this.#has(space, schema.relation("tenant", tenantId, "admin", "user", by.actorId))))
@@ -550,7 +555,7 @@ export class FilesService {
 		const op = "recoveryProvisionAdmin";
 		const ident = schema.identityOf("user", identity) as schema.UserIdentity;
 		const aid = schema.actorId(actorId);
-		const name = schema.canonicalName(homeName, this.limits.maxNameBytes);
+		const name = schema.workspaceName(homeName, this.limits.maxNameBytes);
 		return this.#recovery(handle, async (s, space, who) => {
 			const id = verifyOperationId(this.state, s, operationId, this.limits);
 			const digest = requestDigest(op, { actorId: aid, homeName: name, identity: ident as Record<string, string> });
@@ -710,8 +715,8 @@ export class FilesService {
 	// ---------------------------------------------------------------- file operations (section 5)
 
 	/** The workspaces whose root the session's actor can view, in name order; bounded like `list`. */
-	workspaces(handle: unknown): Promise<string[]> {
-		return this.withSession(handle, async (s, space) => {
+	async workspaces(handle: unknown): Promise<string[]> {
+		const { out, caller } = await this.withSession(handle, async (s, space) => {
 			const roots = await space.readAll({ type: schema.T.node, fields: { parentId: schema.WORKSPACES } }, { limit: this.limits.maxWorkspaces + 1 });
 			if (roots.length > this.limits.maxWorkspaces) throw new schema.CapacityExceeded(`more than ${this.limits.maxWorkspaces} workspaces`);
 			const d = spaceData(space), out: string[] = [];
@@ -719,13 +724,90 @@ export class FilesService {
 				try { await resolve(d, s, r.fields.name as string, [], { limits: this.limits }); out.push(r.fields.name as string); }
 				catch (e) { if (!(e instanceof schema.NotFound)) throw e; }
 			}
-			return out.sort(byName);
+			return { out, caller: this.mounts.size ? await this.#callerOf(s, space) : null };
 		});
+		// the mounts the caller's binding sees, asked outside the queue; one that fails or is late is left out
+		if (caller !== null) for (const [name, p] of [...this.mounts].sort(([a], [b]) => byName(a, b))) {
+			if (await this.#withDeadline(caller, (c) => p.visible(c)).catch(() => false)) out.push(schema.MOUNT_PREFIX + name);
+		}
+		return out.sort(byName);
+	}
+
+	// ---------------------------------------------------------------- mounts (section 8, virtual files)
+
+	#isMount(workspace: unknown): boolean { return typeof workspace === "string" && workspace.startsWith(schema.MOUNT_PREFIX); }
+
+	/** A workspace a mutation or a grant may name: every mount is read-only, absent or not (`permissionDenied`). */
+	#storedWs(workspace: unknown): string {
+		const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+		if (ws.startsWith(schema.MOUNT_PREFIX)) throw new schema.PermissionDenied("mounted files are read-only");
+		return ws;
+	}
+
+	/** The caller's verified binding, read inside the tenant queue from its FsActor row. */
+	async #callerOf(s: Session, space: PhiSpaces): Promise<Omit<MountCaller, "signal">> {
+		const a = await space.readIfExists({ type: schema.T.actor, fields: { actorKind: s.actorKind, actorId: s.actorId } }, 0);
+		if (a === null) throw new schema.Unauthenticated();
+		const f = a.fields as Record<string, string>;
+		const identity = s.actorKind === "user" ? { issuer: f.issuer, subject: f.subject } : { enrolledHostPeerId: f.enrolledHostPeerId, agentId: f.agentId };
+		return Object.freeze({ tenantId: s.tenantId, actor: Object.freeze({ kind: s.actorKind, id: s.actorId }), identity: Object.freeze(identity) });
+	}
+
+	/** One provider call with the mount deadline: late is `unavailable`, a provider's NotFound passes, any other failure is
+	 *  `unavailable` and says nothing of the source. */
+	async #withDeadline<T>(caller: Omit<MountCaller, "signal">, f: (c: MountCaller) => Promise<T>): Promise<T> {
+		const ac = new AbortController();
+		let timer: NodeJS.Timeout | undefined;
+		const late = new Promise<never>((_, reject) => { timer = setTimeout(() => { ac.abort(); reject(new Unavailable("the mount did not answer in time")); }, this.limits.mountTimeoutMs); });
+		try { return await Promise.race([f({ ...caller, signal: ac.signal }), late]); }
+		catch (e) {
+			if (e instanceof schema.NotFound || e instanceof Unavailable) throw e;
+			console.error(`[files] a mount call failed (${(e as Error)?.name ?? "error"})`);
+			throw new Unavailable("the mount failed");
+		} finally { clearTimeout(timer); }
+	}
+
+	/** Resolves a mount for a caller: the session and its binding in the queue, then the provider outside it. An unknown
+	 *  mount and one the binding does not see are `notFound`, like an absent workspace. */
+	async #mount(handle: unknown, workspace: string, path: unknown): Promise<{ p: MountProvider; caller: Omit<MountCaller, "signal">; segs: string[] }> {
+		const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+		const segs = parsePath(path, "list", this.limits);
+		const caller = await this.withSession(handle, async (s, space) => this.#callerOf(s, space));
+		const p = this.mounts.get(ws.slice(schema.MOUNT_PREFIX.length));
+		if (p === undefined || !(await this.#withDeadline(caller, (c) => p.visible(c)))) throw new schema.NotFound();
+		return { p, caller, segs };
+	}
+
+	async #mountList(handle: unknown, workspace: string, path: unknown): Promise<ListEntry[]> {
+		const { p, caller, segs } = await this.#mount(handle, workspace, path);
+		const got = await this.#withDeadline(caller, (c) => p.list(c, segs));
+		if (!Array.isArray(got) || got.length > this.limits.maxListPage) throw new Unavailable("the mount's listing exceeds one reply");
+		const seen = new Set<string>();
+		const out: ListEntry[] = [];
+		for (const e of got) {
+			// the provider's names are checked like stored ones: canonical, unique, of a known kind
+			let name: string;
+			try { name = schema.canonicalName(e?.name, this.limits.maxNameBytes); } catch { throw new Unavailable("the mount answered an invalid name"); }
+			if (name !== e.name || seen.has(name) || (e.kind !== "dir" && e.kind !== "file")) throw new Unavailable("the mount answered an invalid listing");
+			seen.add(name);
+			out.push({ name, kind: e.kind });
+		}
+		return out.sort((a, b) => byName(a.name, b.name));
+	}
+
+	async #mountRead(handle: unknown, workspace: string, path: unknown): Promise<{ bytes: Buffer; version: number }> {
+		const { p, caller, segs } = await this.#mount(handle, workspace, path);
+		if (segs.length === 0) throw new schema.InvalidInput("read needs a file");
+		const got = await this.#withDeadline(caller, (c) => p.read(c, segs));
+		if (!Buffer.isBuffer(got?.bytes) || !Number.isSafeInteger(got.version) || got.version < 1) throw new Unavailable("the mount answered an invalid file");
+		if (got.bytes.length > this.limits.maxFileBytes) throw new schema.CapacityExceeded(`a file has at most ${this.limits.maxFileBytes} bytes`);
+		return { bytes: got.bytes, version: got.version };
 	}
 
 	/** The immediate children of a visible directory, in name order (viewer on it). No partial listing: a directory with
 	 *  more than `maxListPage` children is `capacityExceeded` here and is listed by `listPage`. */
 	list(handle: unknown, workspace: unknown, path: unknown): Promise<ListEntry[]> {
+		if (this.#isMount(workspace)) return this.#mountList(handle, workspace as string, path);
 		return this.withSession(handle, async (s, space) => {
 			const { entries } = await this.#listing(s, space, workspace, path);
 			if (entries.length > this.limits.maxListPage) throw new schema.CapacityExceeded(`a directory with more than ${this.limits.maxListPage} entries is listed by pages (listPage)`);
@@ -742,6 +824,11 @@ export class FilesService {
 	 * created or moved in between appears on a later page exactly when its name sorts after the cursor.
 	 */
 	listPage(handle: unknown, workspace: unknown, path: unknown, cursor: unknown, limit: unknown): Promise<{ entries: ListEntry[]; next: string | null }> {
+		// a mount answers in one page (its listing is bounded by maxListPage)
+		if (this.#isMount(workspace)) {
+			if (cursor !== undefined && cursor !== null) return Promise.reject(new schema.InvalidInput("a stale or foreign cursor: list from the start"));
+			return this.#mountList(handle, workspace as string, path).then((entries) => ({ entries, next: null }));
+		}
 		return this.withSession(handle, async (s, space) => {
 			const n = limit === undefined || limit === null ? this.limits.maxListPage : limit;
 			if (!Number.isSafeInteger(n) || (n as number) < 1 || (n as number) > this.limits.maxListPage) throw new schema.InvalidInput(`limit is 1 to ${this.limits.maxListPage}`);
@@ -783,6 +870,7 @@ export class FilesService {
 	/** A file's bytes and version, from the same ordered operation (viewer on the file). The whole blob is read and
 	 *  authenticated inside the queue slot, so no later save can delete it under the reader (section 6.1). */
 	read(handle: unknown, workspace: unknown, path: unknown): Promise<{ bytes: Buffer; version: number }> {
+		if (this.#isMount(workspace)) return this.#mountRead(handle, workspace as string, path);
 		return this.withSession(handle, async (s, space) => {
 			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
 			const segs = parsePath(path, "read", this.limits);
@@ -799,7 +887,7 @@ export class FilesService {
 	 */
 	mkdir(handle: unknown, workspace: unknown, path: unknown, operationId: unknown): Promise<{ status: "created" }> {
 		return this.withSession(handle, async (s, space) => {
-			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const ws = this.#storedWs(workspace);
 			const segs = parsePath(path, "mkdir", this.limits);
 			const id = verifyOperationId(this.state, s, operationId, this.limits);
 			const parent = await this.#creationParent(s, space, ws, segs);
@@ -824,7 +912,7 @@ export class FilesService {
 	 */
 	write(handle: unknown, workspace: unknown, path: unknown, bytes: unknown, expectedVersion: unknown, operationId: unknown): Promise<{ version: number }> {
 		return this.withSession(handle, async (s, space) => {
-			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const ws = this.#storedWs(workspace);
 			const segs = parsePath(path, "write", this.limits);
 			const data = checkContents(bytes, this.limits);
 			if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) throw new schema.InvalidInput("expectedVersion must be a non-negative integer");
@@ -884,9 +972,9 @@ export class FilesService {
 	 */
 	move(handle: unknown, workspace: unknown, path: unknown, toWorkspace: unknown, toPath: unknown, operationId: unknown): Promise<{ status: "moved" | "unchanged" }> {
 		return this.withSession(handle, async (s, space) => {
-			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const ws = this.#storedWs(workspace);
 			const segs = parsePath(path, "move", this.limits);
-			const toWs = schema.canonicalName(toWorkspace, this.limits.maxNameBytes);
+			const toWs = this.#storedWs(toWorkspace);
 			const toSegs = parsePath(toPath, "move", this.limits);
 			if (segs.length === 0 || toSegs.length === 0) throw new schema.InvalidInput("a workspace root is not moved, and nothing moves into a root's place");
 			const id = verifyOperationId(this.state, s, operationId, this.limits);
@@ -960,7 +1048,7 @@ export class FilesService {
 	 */
 	remove(handle: unknown, workspace: unknown, path: unknown, expectedVersion: unknown, operationId: unknown): Promise<{ status: "removed" }> {
 		return this.withSession(handle, async (s, space) => {
-			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const ws = this.#storedWs(workspace);
 			const segs = parsePath(path, "remove", this.limits);
 			if (expectedVersion !== undefined && expectedVersion !== null && (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1)) throw new schema.InvalidInput("expectedVersion must be a positive integer");
 			const expected = (expectedVersion ?? null) as number | null;
@@ -1004,7 +1092,7 @@ export class FilesService {
 	/** Lists the direct relation tuples on a target, in a deterministic order (owner on it). Bounded, no partial list. */
 	listGrants(handle: unknown, workspace: unknown, path: unknown): Promise<Array<{ relation: string; subject: Subject }>> {
 		return this.withSession(handle, async (s, space) => {
-			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const ws = this.#storedWs(workspace);
 			const segs = parsePath(path, "listGrants", this.limits);
 			const r = await resolve(spaceData(space), s, ws, segs, { limits: this.limits });
 			if (!atLeast(r.role, "owner")) throw new schema.PermissionDenied("listGrants needs owner on the target");
@@ -1041,7 +1129,7 @@ export class FilesService {
 
 	#putGrant(op: "grant" | "revoke", handle: unknown, workspace: unknown, path: unknown, relation: unknown, subject: unknown, operationId: unknown): Promise<{ status: string }> {
 		return this.withSession(handle, async (s, space) => {
-			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const ws = this.#storedWs(workspace);
 			const segs = parsePath(path, op, this.limits);
 			if (relation !== "owner" && relation !== "editor" && relation !== "viewer") throw new schema.InvalidInput(`unknown relation ${JSON.stringify(relation)}`);
 			const subj = parseSubject(subject, this.limits.maxNameBytes);
@@ -1099,7 +1187,7 @@ export class FilesService {
 
 	#putRestriction(op: "restrict" | "unrestrict", handle: unknown, workspace: unknown, path: unknown, operationId: unknown): Promise<{ status: string }> {
 		return this.withSession(handle, async (s, space) => {
-			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const ws = this.#storedWs(workspace);
 			const segs = parsePath(path, op, this.limits);
 			const id = verifyOperationId(this.state, s, operationId, this.limits);
 			const d = spaceData(space);
@@ -1181,7 +1269,7 @@ export class FilesService {
 	 */
 	createWorkspace(handle: unknown, name: unknown, owner: unknown, operationId: unknown): Promise<{ nodeId: string }> {
 		return this.#session("admin", handle, async (s, space) => {
-			const ws = schema.canonicalName(name, this.limits.maxNameBytes);
+			const ws = schema.workspaceName(name, this.limits.maxNameBytes);
 			const o = parseSubject(owner, this.limits.maxNameBytes);
 			if (o.kind === "group") throw new schema.InvalidInput("the first owner of a workspace is a user or an agent");
 			const id = verifyOperationId(this.state, s, operationId, this.limits);
@@ -1210,7 +1298,7 @@ export class FilesService {
 		if (kind !== "user" && kind !== "agent") throw new schema.InvalidInput(`unknown actor kind ${JSON.stringify(kind)}`);
 		const ident = schema.identityOf(kind, identity);
 		const aid = schema.actorId(actorId);
-		const name = schema.canonicalName(homeName, this.limits.maxNameBytes);
+		const name = schema.workspaceName(homeName, this.limits.maxNameBytes);
 		let tenant = "";
 		const r = await this.#session("admin", handle, async (s, space) => {
 			tenant = s.tenantId;

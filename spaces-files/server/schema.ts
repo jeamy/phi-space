@@ -106,6 +106,15 @@ export function canonicalName(name: unknown, maxBytes = MAX_NAME_BYTES): string 
 	return n;
 }
 
+/** Workspace names starting with this are mounts of read-only providers (section 8, virtual files), never stored. */
+export const MOUNT_PREFIX = "@";
+/** A new workspace or home name: canonical, and not in the mounts' reserved form. */
+export function workspaceName(name: unknown, maxBytes = MAX_NAME_BYTES): string {
+	const n = canonicalName(name, maxBytes);
+	if (n.startsWith(MOUNT_PREFIX)) throw new InvalidInput(`names starting with ${MOUNT_PREFIX} are reserved for mounts`);
+	return n;
+}
+
 /** A verified identity string (issuer, subject, enrolled host peer): non-empty, bounded, no control characters. */
 export function identityPart(v: unknown, what: string): string {
 	if (typeof v !== "string" || v === "" || v.length > 512 || /\p{Cc}/u.test(v) || !v.isWellFormed()) throw new InvalidInput(`invalid ${what}`);

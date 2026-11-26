@@ -59,6 +59,8 @@ export type FsLimits = {
 	/** Refused admin calls of one actor and operation within this window share one audit row with a count, so a caller
 	 *  cannot fill the audit by asking again and again. */
 	deniedAuditWindowMs: number;
+	/** How long a mount's provider may take for one call before the caller gets `unavailable` (section 8, virtual files). */
+	mountTimeoutMs: number;
 	/** Directories of a subtree `move` walks to bound its new depth; a larger subtree moves in parts. */
 	maxMoveDirs: number;
 	/** Relations `deleteActor` removes in its one transaction; an actor with more is disabled and pruned in batches. */
@@ -111,6 +113,7 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	deniedAuditWindowMs: 3600_000,
 	maxDeleteRelations: 256,
 	maxMoveDirs: 256,
+	mountTimeoutMs: 5000,
 	retryWindowMs: 3600_000,
 	clockSkewMs: 120_000,
 	maxOperationIdsPerCall: 64,

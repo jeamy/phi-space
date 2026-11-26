@@ -8,6 +8,7 @@
 //   FILES_MEM=1             in memory, throwaway (no operator socket)
 //   FILES_LIMITS=…/limits.json  overrides of the filesystem limits (server/limits.ts), checked on start
 //   FILES_UPKEEP_MS         how often each tenant's upkeep runs (default 600000; 0 turns it off)
+//   FILES_MOUNTS=…/mounts.json  read-only directory mounts, each the workspace @<name> (server/mounts.ts)
 //
 //   FILES_PUBLIC_ORIGIN     the browser's origin (default https://localhost:4200); FILES_HTTP_HOST (default 127.0.0.1)
 //                           and FILES_HTTP_PORT (default: the origin's port) where it listens
@@ -24,6 +25,7 @@ import { ROOT, loadDotEnv } from "./env.ts";
 import { serveHttp, type HttpServer } from "./http.ts";
 import { OidcClient } from "./oidc.ts";
 import { serveOperator } from "./operator.ts";
+import { parseMounts } from "./mounts.ts";
 import { parseLimits } from "./limits.ts";
 import { FilesService } from "./service.ts";
 
@@ -52,7 +54,9 @@ process.on("SIGTERM", () => void shutdown());
 const notes: string[] = [];
 try {
 	const limits = env.FILES_LIMITS ? parseLimits(readFileSync(env.FILES_LIMITS, "utf8"), env.FILES_LIMITS) : undefined;
-	service = await FilesService.open({ dataDir, stateDir, blobDir, limits });
+	const mounts = env.FILES_MOUNTS ? parseMounts(readFileSync(env.FILES_MOUNTS, "utf8"), env.FILES_MOUNTS) : undefined;
+	service = await FilesService.open({ dataDir, stateDir, blobDir, limits, mounts });
+	for (const name of mounts?.keys() ?? []) notes.push(`mount @${name}`);
 	if (stateDir) { servers.push(await serveOperator(service, stateDir)); notes.push(`operator ${join(stateDir, "operator.sock")}`); }
 	for (const a of parseAgentSockets(env.FILES_AGENT_SOCKETS ?? "")) { servers.push(await serveAgentSocket(service, a)); notes.push(`agents of ${a.hostPeerId} in ${a.tenantId} at ${a.path}`); }
 	const origin = env.FILES_PUBLIC_ORIGIN || "https://localhost:4200";

@@ -265,6 +265,7 @@ Section 8 of the plan, item by item, each decided in the plan and built after th
 | Nested groups: group members may be another group's members, bounded by `maxGroupDepth`, cycles refused on write and `inconsistentState` when stored | section 4, *Nested groups* | `tests/nested-groups.test.ts` |
 | Move and delete: `move` keeps the node ID with versions, blobs, grants and restriction, inheritors of the old place lose it at once; `remove` takes files, empty directories and empty workspaces with their content, grants and blob, through crashes at the commit | section 5, *Move and delete* | `tests/move-remove.test.ts`, `tests/agent-socket.test.ts` |
 | Scale: measured (operator guide, section 8); `listPage` pages a directory in name order, every page rechecks access, the cursor is bound to tenant, actor and directory; no decision cache, no store per tenant yet | section 5, *Scale* | `tests/scale.test.ts`, `tests/agent-socket.test.ts` |
+| Virtual files: read-only providers as `@<name>` workspaces, called outside the queue with the caller's verified binding only, a deadline and no cache; mutations refused, `@` names reserved; a directory provider with a per-identity access table (`FILES_MOUNTS`) | section 5, *Virtual files* | `tests/mounts.test.ts` |
 | Restricted children: an owner restricts a node below the root; viewers and editors above lose it at once unless they hold a grant on it, owners above keep it; `list` leaves hidden children out | section 4, *Restricted children*; section 5 | `tests/restricted.test.ts` |
 
 ## Commands
@@ -304,6 +305,8 @@ Variables, read from `spaces-files/.env` (values already in the environment win)
 - `FILES_AGENT_SOCKETS`: `hostPeer@tenant=/absolute/path.sock;…`, one socket per enrolled agent host and tenant
 - `FILES_LIMITS`: a JSON file of limit overrides (`server/limits.ts`), checked on start
 - `FILES_UPKEEP_MS`: how often each tenant's upkeep runs (default 600000; 0 turns it off)
+- `FILES_MOUNTS`: a JSON file of read-only directory mounts, `[{"name": "docs", "kind": "directory", "root": "/abs",
+  "access": {"<tenant>/user:<issuer> <subject>": ["path/below/root", …]}}]`, each the workspace `@docs`
 - `FILES_BACKUP_KEY`, `FILES_STATE_BACKUP_KEY`: the key files of the data and the state backup (operator commands)
 
 A first local run: `npm run dev-cert`, `npm run dev-idp` in one terminal, `npm start` in another, then

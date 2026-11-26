@@ -45,6 +45,12 @@ npm run operator -- new-backup-key /secure/data.key      # FILES_BACKUP_KEY
 A key file is mode 600. The commands refuse to overwrite an existing key and refuse to read a key that group or
 others can read.
 
+**Mounts.** `FILES_MOUNTS` names a JSON file of read-only directory mounts (README, variables). Each appears to the
+identities its access table names as the workspace `@<name>`, with only the paths listed for them. The service reads
+the directory as its own account, so keep the directory readable by the service and nothing in it that no listed
+identity may see beside the listed paths; links in it are never followed. A mount that does not answer within
+`mountTimeoutMs` is `unavailable` for that call. Changing the file takes effect at the next start.
+
 **Limits.** `FILES_LIMITS` names a JSON file that overrides the filesystem limits of `server/limits.ts`, for example
 `{"maxFileBytes": 8388608}`. Unknown keys and values that are not positive integers are refused. On start the service
 also refuses a set of limits that does not fit the tenant Spaces. Changing the file takes effect at the next start.
