@@ -10,8 +10,9 @@
 //   … roster-add|roster-remove <tenant> <issuer> <subject> | roster | approve-reconciler <tenant> <issuer> <subject>
 //   … mark-reconciled <tenant> | restore-status
 //   … health | metrics | maintain [tenant] | compact
-//   … new-backup-key <file> | backup-offline <file> | restore <file> | restore-state <file>   (offline: the service stopped)
+//   … new-backup-key <file> | backup-offline <file> | restore <file> | restore-state <file> | promote-standby   (offline: the service stopped)
 //   (root: npm --prefix spaces-files run operator -- …; FILES_STATE_DIR names the state directory)
+import { promoteStandby } from "./standby.ts";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -91,6 +92,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 		try { console.log(JSON.stringify(await restoreData(resolve(rest[0]), readBackupKey(dataKey()), { dataDir, stateDir, blobDir, limits }), null, 2)); process.exit(0); }
 		catch (e) { console.error(`[operator] restore failed: ${(e as Error).message}`); process.exit(1); }
 	}
+	if (cmd === "promote-standby" && rest.length === 0) {
+		// on the standby's machine, its process stopped: FILES_STATE_DIR and FILES_BLOB_DIR are the standby's directories
+		try { promoteStandby({ stateDir, blobDir }); console.log(`[operator] standby promoted: ${stateDir}, ${blobDir}; the old primary is fenced`); process.exit(0); }
+		catch (e) { console.error(`[operator] promote-standby failed: ${(e as Error).message}`); process.exit(1); }
+	}
 	if (cmd === "restore-state" && rest.length === 1) {
 		try { console.log(JSON.stringify(await restoreState(resolve(rest[0]), readBackupKey(stateKey()), { dataDir, stateDir, blobDir, limits }), null, 2)); process.exit(0); }
 		catch (e) { console.error(`[operator] restore-state failed: ${(e as Error).message}`); process.exit(1); }
@@ -118,7 +124,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 		: cmd === "metrics" ? { op: "metrics" }
 		: null;
 	if (!call) {
-		console.error("usage: operator.ts create-tenant <tenant> <adminId> <homeName> <issuer> <subject> | tenants | mode normal|maintenance | backup <file> | backup-state <file> | rotate-content-key | roster-add|roster-remove <tenant> <issuer> <subject> | roster | approve-reconciler <tenant> <issuer> <subject> | mark-reconciled <tenant> | restore-status | enroll-host <peerId> <tenant,…> | revoke-host <peerId> | hosts | health | metrics | maintain [tenant] | compact | new-backup-key <file> | backup-offline <file> | restore <file> | restore-state <file>");
+		console.error("usage: operator.ts create-tenant <tenant> <adminId> <homeName> <issuer> <subject> | tenants | mode normal|maintenance | backup <file> | backup-state <file> | rotate-content-key | roster-add|roster-remove <tenant> <issuer> <subject> | roster | approve-reconciler <tenant> <issuer> <subject> | mark-reconciled <tenant> | restore-status | enroll-host <peerId> <tenant,…> | revoke-host <peerId> | hosts | health | metrics | maintain [tenant] | compact | new-backup-key <file> | backup-offline <file> | restore <file> | restore-state <file> | promote-standby");
 		process.exit(2);
 	}
 	const t = socketTransport({ path: join(stateDir, OPERATOR_SOCKET) });

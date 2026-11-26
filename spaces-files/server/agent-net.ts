@@ -174,6 +174,6 @@ export async function serveAgentNet(svc: FilesService, o: AgentNetOptions): Prom
 /** The launcher's FILES_AGENT_NET: `host:port`. */
 export function parseListen(spec: string): { host: string; port: number } {
 	const m = /^(\[[0-9a-fA-F:]+\]|[^:\s]+):(\d{1,5})$/.exec(spec.trim());
-	if (!m || Number(m[2]) > 65535) throw new Error(`FILES_AGENT_NET: "${spec}" is not host:port`);
+	if (!m || Number(m[2]) > 65535) throw new Error(`"${spec}" is not host:port`);
 	return { host: m[1].replace(/^\[|\]$/g, ""), port: Number(m[2]) };
 }

@@ -13,6 +13,11 @@
 //                           binary with its command line (the Rust one), `inprocess` keeps the store in this process;
 //                           its socket is space.sock in the data directory. When it ends, this process ends too (exit
 //                           1), so the supervisor restarts both.
+//   FILES_STANDBY           `host:port` of the standby (server/standby-host.ts on another machine): every change of the
+//                           deployment state and every blob reaches it before it is answered (section 6.7), over mutual
+//                           TLS with FILES_STANDBY_CERT / _KEY (this service's client certificate) and FILES_STANDBY_CA
+//                           (what signed the standby's); FILES_STANDBY_NAME the name its certificate carries (default:
+//                           the host). An unreachable standby closes admission; the next start seeds it anew.
 //
 //   FILES_PUBLIC_ORIGIN     the browser's origin (default https://localhost:4200); FILES_HTTP_HOST (default 127.0.0.1)
 //                           and FILES_HTTP_PORT (default: the origin's port) where it listens
@@ -36,6 +41,7 @@ import { serveOperator } from "./operator.ts";
 import { parseMounts } from "./mounts.ts";
 import { parseLimits } from "./limits.ts";
 import { FilesService } from "./service.ts";
+import { netStandby } from "./standby-net.ts";
 import { fileURLToPath } from "node:url";
 
 loadDotEnv();
@@ -68,7 +74,12 @@ try {
 	const spaceProcess = space === "inprocess" ? null
 		: space && space !== "ts" ? [space]
 		: [process.execPath, "--no-warnings", "--experimental-strip-types", fileURLToPath(new URL("./space-host.ts", import.meta.url))];
-	service = await FilesService.open({ dataDir, stateDir, blobDir, limits, mounts, spaceProcess, onSpaceLost: () => void shutdown(1) });
+	const need = (k: string) => { const v = env[k]; if (!v) throw new Error(`FILES_STANDBY needs ${k}`); return v; };
+	const standby = env.FILES_STANDBY ? netStandby({
+		...parseListen(env.FILES_STANDBY), servername: env.FILES_STANDBY_NAME || undefined,
+		tls: { cert: readFileSync(need("FILES_STANDBY_CERT")), key: readFileSync(need("FILES_STANDBY_KEY")), ca: readFileSync(need("FILES_STANDBY_CA")) },
+	}) : undefined;
+	service = await FilesService.open({ dataDir, stateDir, blobDir, limits, mounts, spaceProcess, standby, onSpaceLost: () => void shutdown(1) });
 	notes.push(`tenant Spaces ${service.store.where === "in-process" ? "in this process" : `in the Space process ${service.store.pid} at ${service.store.where}`}`);
 	for (const name of mounts?.keys() ?? []) notes.push(`mount @${name}`);
 	if (stateDir) { servers.push(await serveOperator(service, stateDir)); notes.push(`operator ${join(stateDir, "operator.sock")}`); }

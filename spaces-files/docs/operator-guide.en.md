@@ -349,3 +349,36 @@ and the host must trust its CA. Open the port to the agent hosts only.
 
 The enrollments, revocations and every enrollment attempt land in the operator audit (`agentHost.*`). A data restore
 revokes every host key.
+
+## 10. A standby of the deployment state and the blobs
+
+The deployment state and the sealed blobs can be kept on a standby on another machine, so that a promoted replica
+has the keys and contents it needs beside the Space store (plan section 6.7). Every change of the state and every
+blob reaches the standby before the operation it belongs to is answered.
+
+On the standby's machine, with its own state and blob directories (mode 700 each) and a server certificate:
+
+```
+node --experimental-strip-types server/standby-host.ts --state /srv/files-standby/state --blobs /srv/files-standby/blobs \
+  --listen 0.0.0.0:4300 --cert standby.pem --key standby.key --ca primary-ca.pem
+```
+
+`--ca` is what signed the primary's client certificate; no other client is served, and only one at a time. On the
+primary, before the service starts:
+
+| Variable | Meaning |
+|---|---|
+| `FILES_STANDBY` | `host:port` of the standby process |
+| `FILES_STANDBY_CERT` / `_KEY` | the service's client certificate and key |
+| `FILES_STANDBY_CA` | what signed the standby's certificate |
+| `FILES_STANDBY_NAME` | the name in the standby's certificate (default: the host) |
+
+Every start seeds the standby anew from a snapshot. If the standby does not confirm a change, the operation fails
+with `unavailable` and admission closes; restart the service once the standby is back. The Space store replicates
+through phi-spaces' primary/sync journal, not through this process.
+
+To promote the standby after its Space store was promoted: stop `standby-host.ts`, run
+`FILES_STATE_DIR=… FILES_BLOB_DIR=… npm --prefix spaces-files run operator -- promote-standby` on its directories,
+then start the service on them. The marker that command writes fences the old primary: it can no longer seed or
+write the standby. Agent hosts enroll again after a promotion (their keys live in `control.sqlite`, which is not
+replicated).

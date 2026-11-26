@@ -11,7 +11,7 @@ import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { CONTROL_SPACE, createEnroll, listSpaces, PhiSpaces, revokePeerKey, startService } from "phi-spaces";
-import { localStandby } from "./standby.ts";
+import { localStandby, type BlobReplica, type StateReplica } from "./standby.ts";
 import { inProcessStore, spaceProcessStore, type SpaceStore, type TenantSpace } from "./store.ts";
 import { HOST_ROLE, PEER_ID, tenantScope } from "./agent-net.ts";
 import type { EntryDraft } from "phi-spaces/core";
@@ -116,8 +116,11 @@ export type FilesServiceOptions = AdmissionOptions & {
 	/** The Space process ended on its own: admission is closed by then (default: only that). The launcher exits, so
 	 *  its supervisor restarts both and the crash path of section 6.1 applies. */
 	onSpaceLost?: (code: number | null, signal: string | null) => void;
-	/** The standby of the deployment state and the blobs (section 6.7): seeded on open, then kept in step. */
-	standby?: { stateDir: string; blobDir: string };
+	/**
+	 * The standby of the deployment state and the blobs (section 6.7): seeded on open, then kept in step. Directories of
+	 * this machine, or a replica reached otherwise (server/standby-net.ts); the service closes it with itself.
+	 */
+	standby?: { stateDir: string; blobDir: string } | { state: StateReplica; blobs: BlobReplica; close(): void };
 	/** Tests only: opens the tenant Spaces' store instead of `spaceProcess` (a replicated primary, section 8). */
 	openStore?: () => Promise<SpaceStore>;
 };
@@ -202,7 +205,7 @@ export class FilesService {
 			throw new StateLost(`the data in ${o.dataDir} has no deployment state in ${o.stateDir}: restore the state from its backup (operator restore-state)`);
 		const marker = markerPath === null ? null : readMarker(markerPath);
 		const mirror = (stateId: string, seq: number) => { if (markerPath !== null && existsSync(o.dataDir!)) writeMarker(markerPath, { stateId, seq }); };
-		const standby = o.standby ? await localStandby(o.standby) : null;
+		const standby = !o.standby ? null : "state" in o.standby ? o.standby : await localStandby(o.standby);
 		let poisoned: ((e: Error) => void) | null = null;
 		let state: DeploymentState;
 		try {
