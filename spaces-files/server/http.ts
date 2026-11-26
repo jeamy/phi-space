@@ -59,6 +59,7 @@ const ASSETS: Record<string, string> = {
 	"/app/style.css": "web/style.css",
 	"/app/recovery.ts": "web/recovery.ts",
 	"/app/theme.ts": "web/theme.ts",
+	"/app/help.ts": "web/help.ts",
 	"/app/palettes.ts": "web/palettes.ts",
 };
 
