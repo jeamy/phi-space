@@ -10,6 +10,7 @@ import { ThemeControls } from "./ThemeControls.tsx";
 import { diffCount, diffText, withContext, type Line } from "./lib/diff.ts";
 import { renderSection } from "./lib/safe-markdown.ts";
 import { authHeaders, loadMe, rename, signOut, type Me } from "./lib/me.ts";
+import { HelpTip } from "./HelpTip.tsx";
 import { useTheme } from "./lib/theme.ts";
 
 type RunInfo = { active: boolean; runId: string; blockId: string; table: "A" | "B"; round?: number; rounds?: number; objections?: { raised: number; open: number }; models: string[]; perModel: number; aliases: Record<string, string>; phase: "rollcall" | "kickoff" | "discuss" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise" | "stalled" | "accepted" | "done" | "tables" | "compare" | "final"; both?: boolean; tables?: Partial<Record<"A" | "B", TableInfo>>; base?: { table: "A" | "B"; how: "accepted" | "compared" | "only"; version: number; prefer?: { A: number; B: number } }; final?: { points: number; agreed?: number; accepted?: boolean; active?: TableInfo }; result?: { table: "A" | "B"; version: number }; turn?: string; ballots?: { round: number; approve: number; of: number }; accepted?: { version: number; round: number; approvals: number; of: number }; writer?: string; check?: { version: number; ok: boolean; failures: number; round: number }; talk?: { messages: number; decisions: number }; doc?: { table: string; version: number; sections: number; written: number }; items: { open: number; done: number }; usage: { tokens: number; costUsd: number }; budget: { tokens?: number; usd?: number }; note?: string; ended?: "budget" | "models" | "checks" | "rounds" | "stalled" };
@@ -258,7 +259,7 @@ export function CodemodeForum() {
 				<div className="panel">
 					<h2>{t.signInTitle}</h2>
 					<p>{t.signInText}</p>
-					<a className="btn btn--primary" href="/auth/login">{t.signIn}</a>
+					<div className="row"><a className="btn btn--primary" href="/auth/login">{t.signIn}</a> <HelpTip id="signin" lang={lang} label={t.signIn} /></div>
 				</div>
 			</main>
 		</>
@@ -278,9 +279,9 @@ export function CodemodeForum() {
 					<details className="me">
 						<summary className="pill">{person.name}</summary>
 						<form onSubmit={(e) => { e.preventDefault(); rename(nameDraft).then((m) => { setMe(m); setNameDraft(""); }).catch((err) => setMsg((err as Error).message)); }}>
-							<label>{t.yourName} <input value={nameDraft} placeholder={person.name} maxLength={40} onChange={(e) => setNameDraft(e.target.value)} /></label>
+							<label>{t.yourName} <HelpTip id="name" lang={lang} label={t.yourName} /> <input value={nameDraft} placeholder={person.name} maxLength={40} onChange={(e) => setNameDraft(e.target.value)} /></label>
 							<button className="btn" type="submit" disabled={!nameDraft.trim()}>{t.saveName}</button>
-							<button className="btn" type="button" onClick={() => void signOut()}>{t.signOut}</button>
+							<span className="row"><button className="btn" type="button" onClick={() => void signOut()}>{t.signOut}</button> <HelpTip id="signout" lang={lang} label={t.signOut} /></span>
 						</form>
 					</details>
 				)}

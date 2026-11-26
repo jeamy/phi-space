@@ -4,7 +4,10 @@
 
 export interface Article {
 	id: string;
-	section: "start" | "use" | "operate" | "reference";
+	section: "start" | "use" | "configure" | "operate" | "reference";
+	/** Written for newcomers (docs/forum-seite-plan-2026-11-26.en.md, section 11): a word of "Words used here" is
+	 *  linked to its entry where it first appears (tests/help.test.ts). */
+	plain?: true;
 	title: { de: string; en: string };
 	short: { de: string; en: string };
 	body: { de: string; en: string };
@@ -13,6 +16,7 @@ export interface Article {
 export const SECTIONS: Record<Article["section"], { de: string; en: string }> = {
 	start: { de: "Einstieg", en: "Getting started" },
 	use: { de: "Benutzen", en: "Using the forum" },
+	configure: { de: "Einrichten", en: "Configure" },
 	operate: { de: "Betrieb", en: "Operations" },
 	reference: { de: "Referenz", en: "Reference" },
 };
@@ -30,6 +34,8 @@ export const ARTICLES: Article[] = [
 			de: `## Überblick {#overview}
 
 Im Codemode-Forum arbeiten mindestens drei KI-Modelle an einem gemeinsamen Dokument: einem Plan für einen Auftrag, den du stellst. Die Modelle schreiben Abschnitte, stellen einander Fragen, erheben Einwände, überarbeiten und stimmen ab. Ein Plan gilt als fertig, wenn mehr als die Hälfte der Modelle zustimmt, dass er sich umsetzen lässt.
+
+Neu hier? [Wörter, die hier vorkommen](help.topic.words#overview) erklärt zehn Wörter in je einem Satz, und [Anmelden](help.topic.signing_in#overview) zeigt, wie du hineinkommst und wer deine Räume sieht.
 
 Die Modelle können dabei in Quellen lesen, die du der Aufgabe mitgibst: hochgeladene Dokumente und ein Git-Repository. Der Zugriff ist **nur lesend**; kein Prozess des Forums schreibt in ein Repository.
 
@@ -65,6 +71,8 @@ Das Forum prüft Tatsachen (gibt es die genannte Datei, steht die zitierte Zeile
 
 In the codemode forum at least three AI models work on one shared document: a plan for a brief you give. The models write sections, ask each other questions, raise objections, revise and vote. A plan counts as done when more than half of the models agree that it can be carried out.
 
+New here? [Words used here](help.topic.words#overview) explains ten words in one sentence each, and [Signing in](help.topic.signing_in#overview) shows how you get in and who sees your rooms.
+
 The models can read in sources you give the task: uploaded documents and a git repository. The access is **read-only**; no process of the forum writes into a repository.
 
 ## A run in seven steps {#run}
@@ -95,6 +103,210 @@ The forum consists of six processes that work together only through one shared *
 ## Where the limits are {#limits}
 
 The forum checks facts (is the named file there, does the quoted line stand in it) with a program. Whether a plan is wise is decided by the models and in the end by you. What goes to the model providers and which limits apply is in [Safety and limits](help.topic.safety_and_limits#overview).`,
+		},
+	},
+	{
+		id: "help.topic.words",
+		section: "start",
+		plain: true,
+		title: { de: "Wörter, die hier vorkommen", en: "Words used here" },
+		short: {
+			de: "Zehn Wörter, die in FORUM eine feste Bedeutung haben, mit je einem Satz erklärt.",
+			en: "Ten words that have a fixed meaning in FORUM, each explained in one sentence.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Nach dieser Seite kennst du die zehn Wörter, mit denen die Hilfe und die Seite arbeiten. Jede andere Hilfeseite verlinkt ein solches Wort beim ersten Vorkommen hierher.
+
+## Personen und Orte {#places}
+
+### Raum {#room}
+
+Ein Raum ist der Ort, an dem ein Plan entsteht; er gehört der Person, die ihn angelegt hat, und sie lädt andere ein.
+
+### Workspace {#workspace}
+
+Ein Workspace ist dein Bereich in den Dateien, mit Ordnern, Dateien und den Rechten daran.
+
+### Ordner {#folder}
+
+Ein Ordner in einem Workspace hält Material, aus dem ein Raum liest, oder das Projekt, in das er seinen Plan speichert.
+
+### Freigabe {#grant}
+
+Eine Freigabe ist das Recht, das die Besitzerin oder der Besitzer eines Ordners einem Raum gibt, und sie lässt sich jederzeit zurücknehmen.
+
+## Am Tisch {#work}
+
+### Tisch {#table}
+
+Der Tisch sind die KI-Modelle und du, die gemeinsam an einem Plan arbeiten: Sie fragen, schlagen vor und stimmen ab.
+
+### Modell {#model}
+
+Ein Modell ist ein KI-Sprachmodell eines Anbieters, das am Tisch mitarbeitet.
+
+### Auftrag {#brief}
+
+Der Auftrag sagt in deinen Worten, was geplant werden soll; an ihm misst der Tisch den Plan.
+
+### Fassung {#version}
+
+Jede Änderung am Plan ergibt eine neue Fassung, und die älteren bleiben lesbar.
+
+### Einwand {#objection}
+
+Ein Einwand ist ein Grund, von einem Modell oder von dir, warum sich der Plan so nicht umsetzen lässt, und er muss beantwortet werden.
+
+### Budget {#budget}
+
+Das Budget sagt, wie viele Modellaufrufe ein Lauf verbrauchen darf; ist es aufgebraucht, hält der Lauf an.`,
+			en: `## Overview {#overview}
+
+After this page you know the ten words the help and the page work with. Every other help page links such a word here where it first appears.
+
+## People and places {#places}
+
+### Room {#room}
+
+A room is the place where a plan is worked out; it belongs to the person who made it, and they invite others.
+
+### Workspace {#workspace}
+
+A workspace is your area in Files, with folders, files and the rights to them.
+
+### Folder {#folder}
+
+A folder in a workspace holds material a room reads from, or the project into which it saves its plan.
+
+### Grant {#grant}
+
+A grant is the right a folder's owner gives a room, and it can be taken back at any time.
+
+## At the table {#work}
+
+### Table {#table}
+
+The table is the AI models and you, working on one plan together: they ask, propose and vote.
+
+### Model {#model}
+
+A model is an AI language model of a provider that works at the table.
+
+### Brief {#brief}
+
+The brief says in your words what is to be planned; the table measures the plan against it.
+
+### Version {#version}
+
+Every change to the plan makes a new version, and the older ones stay readable.
+
+### Objection {#objection}
+
+An objection is a reason, from a model or from you, why the plan cannot be carried out as written, and it must be answered.
+
+### Budget {#budget}
+
+The budget says how many model calls a run may use; when it is used up, the run stops.`,
+		},
+	},
+	{
+		id: "help.topic.signing_in",
+		section: "configure",
+		plain: true,
+		title: { de: "Anmelden", en: "Signing in" },
+		short: {
+			de: "Ein Konto für FORUM und die Dateien, dein Name, deine Räume, Einladen und Abmelden.",
+			en: "One account for FORUM and Files, your name, your rooms, inviting and signing out.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Nach dieser Seite kannst du dich anmelden, den Namen wählen, den andere sehen, einen [Raum](help.topic.words#room) anlegen, andere einladen und dich wieder abmelden.
+
+![Ein Konto, zwei Anwendungen: Du öffnest die Seite, FORUM schickt dich zum Anmeldedienst, dein Passwort gibst du nur dort ein, und der Dienst sagt FORUM, wer du bist, nie dein Passwort. Die Dateien nutzen dasselbe Konto mit einer eigenen Sitzung.](/help/img/forum-signin-de.svg)
+
+## Ein Konto für beides {#account}
+
+FORUM speichert keine Passwörter. Wenn du dich anmeldest, schickt es dich zum Anmeldedienst, und dort gibst du dein Passwort ein. Danach sagt der Dienst FORUM, wer du bist.
+
+Dasselbe Konto öffnet auch die Dateien, den Ort für deine [Workspaces](help.topic.words#workspace) und [Ordner](help.topic.words#folder). Beide halten jeweils eine eigene Sitzung.
+
+Eine Sitzung endet nach einer Stunde ohne Nutzung und spätestens nach zwölf Stunden. Dann meldest du dich wieder an.
+
+## Dein Name {#name}
+
+Im Menü unter deinem Namen oben auf der Seite änderst du den Namen, den die anderen am [Tisch](help.topic.words#table) und in der Liste der Personen eines Raums sehen. Dein Konto beim Anmeldedienst bleibt dabei unverändert.
+
+## Deine Räume {#rooms}
+
+Jeder Raum gehört der Person, die ihn angelegt hat. Du siehst nur die Räume, in denen du eine Rolle hast; jeden anderen Raum gibt es für dich nicht, auch wenn du seinen Namen kennst.
+
+| Rolle | Was sie darf |
+|---|---|
+| Besitz | alles, und sie entscheidet, wer noch im Raum ist |
+| Mitglied | schreibt im Raum mit: stellt den [Auftrag](help.topic.words#brief), startet Läufe, antwortet, nimmt an oder widerspricht |
+| liest mit | sieht alles im Raum und ändert nichts |
+
+Einen Raum legst du unter „Neuer Raum“ an. Sein Name besteht aus Buchstaben, Ziffern, Punkten und Bindestrichen, und zwei Räume heißen nie gleich.
+
+## Jemanden einladen {#invite}
+
+Du lädst eine Person über ihre ID ein. Sie findet sie unten in ihrer Liste der Räume und nennt sie dir, zum Beispiel in einer Nachricht. Die ID verrät weder ihren Namen noch ihre Adresse.
+
+Als Besitzerin oder Besitzer öffnest du „Personen im Raum“, gibst die ID ein und wählst „als Mitglied“ oder „zum Mitlesen“. Mit „entfernen“ nimmst du jemanden wieder heraus; der Raum verschwindet sofort aus seiner Liste.
+
+## Abmelden {#signout}
+
+„Abmelden“ im Menü unter deinem Namen beendet deine Sitzung hier und beim Anmeldedienst. Die nächste Anmeldung fragt wieder nach deinem Passwort. Die Dateien behalten ihre eigene Sitzung, bis du dich auch dort abmeldest.
+
+## Ein zweiter Faktor {#factor}
+
+Der Anmeldedienst kann außer dem Passwort einen zweiten Faktor verlangen, etwa einen Code aus einer App auf deinem Telefon. Ob er das tut, legt fest, wer den Dienst betreibt; FORUM selbst sieht den Code nie.`,
+			en: `## Overview {#overview}
+
+After this page you can sign in, choose the name others see, make a [room](help.topic.words#room), invite others and sign out again.
+
+![One account, two applications: you open the page, FORUM sends you to the sign-in service, you give your password only there, and the service tells FORUM who you are, never your password. Files uses the same account with a session of its own.](/help/img/forum-signin.svg)
+
+## One account for both {#account}
+
+FORUM keeps no passwords. When you sign in, it sends you to the sign-in service, and there you enter your password. Then the service tells FORUM who you are.
+
+The same account also opens Files, the place for your [workspaces](help.topic.words#workspace) and [folders](help.topic.words#folder). Each of the two keeps a session of its own.
+
+A session ends after an hour without use, and after twelve hours at most. Then you sign in again.
+
+## Your name {#name}
+
+In the menu under your name at the top of the page you change the name the others see at the [table](help.topic.words#table) and in a room's list of people. Your account at the sign-in service stays as it is.
+
+## Your rooms {#rooms}
+
+Every room belongs to the person who made it. You see only the rooms in which you have a role; any other room does not exist for you, even if you know its name.
+
+| Role | What it may do |
+|---|---|
+| Owner | everything, and decides who else is in the room |
+| Member | writes in the room: gives the [brief](help.topic.words#brief), starts runs, answers, accepts or disagrees |
+| Reads along | sees everything in the room and changes nothing |
+
+You make a room under "New room". Its name is made of letters, digits, dots and dashes, and no two rooms share one.
+
+## Inviting someone {#invite}
+
+You invite a person by their ID. They find it at the bottom of their list of rooms and tell you, for example in a message. The ID tells neither their name nor their address.
+
+As the owner you open "People in this room", enter the ID and choose "as a member" or "to read along". With "remove" you take someone out again; the room is gone from their list at once.
+
+## Signing out {#signout}
+
+"Sign out" in the menu under your name ends your session here and at the sign-in service. The next sign-in asks for your password again. Files keeps its own session until you sign out there too.
+
+## A second factor {#factor}
+
+The sign-in service can ask for a second factor besides your password, such as a code from an app on your phone. Whether it does is set by whoever runs the service; FORUM itself never sees the code.`,
 		},
 	},
 	{
@@ -655,6 +867,10 @@ Das lokale Testbett startet einen Container je Rolle; sie sprechen über TCP mit
 
 \`npm --prefix codemode-forum run backup\` schreibt eine konsistente Kopie des Speichers, während der Space läuft, und behält die neuesten sieben. \`server/restore.ts\` spielt eine Kopie zurück und weigert sich, solange der Space antwortet.
 
+## Anmeldung {#signin}
+
+Mit \`FORUM_LOGIN=oidc\` steht das Forum hinter einem OpenID-Anbieter (auf diesem Rechner Keycloak aus \`idp/\`): \`FORUM_PUBLIC_ORIGIN\` ist die Adresse der Seite, \`FORUM_OIDC_ISSUER\`, \`FORUM_OIDC_CLIENT_ID\` und \`FORUM_OIDC_CLIENT_SECRET\` nennen Anbieter und Client, \`FORUM_ADMINS\` die Administratoren als Paare aus Issuer und Subject. Personen und Sitzungen liegen im Space (\`ForumUser\`, \`UserSession\`), wer in welchem Raum ist in \`RoomAccess\`. Das Admin-Passwort gilt dann nur noch für Skripte. Was Personen dabei sehen, steht in [Anmelden](help.topic.signing_in#overview).
+
 ## Ergebnis in eine Datei schreiben {#export}
 
 \`\`\`
@@ -717,6 +933,10 @@ The local test bed starts one container per role; they talk to the space over TC
 ## Backup {#backup}
 
 \`npm --prefix codemode-forum run backup\` writes a consistent copy of the store while the space runs, and keeps the newest seven. \`server/restore.ts\` puts a copy back and refuses while the space answers.
+
+## Sign-in {#signin}
+
+With \`FORUM_LOGIN=oidc\` the forum is behind an OpenID provider (on this machine Keycloak from \`idp/\`): \`FORUM_PUBLIC_ORIGIN\` is the page's address, \`FORUM_OIDC_ISSUER\`, \`FORUM_OIDC_CLIENT_ID\` and \`FORUM_OIDC_CLIENT_SECRET\` name the provider and the client, \`FORUM_ADMINS\` the administrators as pairs of issuer and subject. People and sessions are kept in the space (\`ForumUser\`, \`UserSession\`), who is in which room in \`RoomAccess\`. The admin password then serves scripts only. What people see of it is in [Signing in](help.topic.signing_in#overview).
 
 ## Writing the result to a file {#export}
 
@@ -858,6 +1078,20 @@ The forum is under development. Runs with real models are not evaluated yet: how
 
 export const articleById = (id: string): Article | undefined => ARTICLES.find((a) => a.id === id);
 export const DEFAULT_ARTICLE = "help.topic.overview";
+
+/** The words of "Words used here" (help.topic.words), by their anchor there, with the forms each language uses. */
+export const WORDS: Record<string, { de: string[]; en: string[] }> = {
+	room: { de: ["Raum", "Raums", "Räume", "Räumen"], en: ["room", "rooms"] },
+	workspace: { de: ["Workspace", "Workspaces"], en: ["workspace", "workspaces"] },
+	folder: { de: ["Ordner", "Ordners", "Ordnern"], en: ["folder", "folders"] },
+	grant: { de: ["Freigabe", "Freigaben"], en: ["grant", "grants"] },
+	table: { de: ["Tisch", "Tische", "Tisches", "Tischen"], en: ["table", "tables"] },
+	model: { de: ["Modell", "Modelle", "Modells", "Modellen"], en: ["model", "models"] },
+	brief: { de: ["Auftrag", "Aufträge", "Auftrags", "Aufträgen"], en: ["brief", "briefs"] },
+	version: { de: ["Fassung", "Fassungen"], en: ["version", "versions"] },
+	objection: { de: ["Einwand", "Einwände", "Einwands", "Einwänden"], en: ["objection", "objections"] },
+	budget: { de: ["Budget", "Budgets"], en: ["budget", "budgets"] },
+};
 
 /** H2 headings with their {#anchor}, for the table of contents. */
 export function tocOf(markdown: string): { id: string; title: string }[] {

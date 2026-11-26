@@ -1,7 +1,11 @@
-// The help articles: both languages, links and anchors resolve, the markdown is escaped.
+// The help articles: both languages, links and anchors resolve, the markdown is escaped; the words of "Words used
+// here" are linked where they first appear; the diagrams exist in both languages; every tip is used and links to a
+// section that exists (docs/forum-seite-plan-2026-11-26.en.md, section 11).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ARTICLES, DEFAULT_ARTICLE, SECTIONS, articleById, tocOf } from "../client/help/articles.ts";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { ARTICLES, DEFAULT_ARTICLE, SECTIONS, WORDS, articleById, tocOf } from "../client/help/articles.ts";
+import { TIPS } from "../client/lib/tips.ts";
 import { renderMarkdownToHtml } from "../client/lib/markdown.ts";
 
 const langs = ["de", "en"] as const;
@@ -45,4 +49,46 @@ test("markdown: headings get ids, help links are intercepted, html is escaped", 
 	assert.ok(!html.includes("<script>"));
 	assert.match(html, /<code>a&lt;b<\/code>/);
 	assert.match(html, /<table>/);
+});
+
+const client = new URL("../client/", import.meta.url), pub = new URL("../public/", import.meta.url);
+
+test("every word of \"Words used here\" has its entry, and a plain article links it where it first appears", () => {
+	const words = articleById("help.topic.words")!;
+	for (const l of langs) for (const w of Object.keys(WORDS)) assert.match(words.body[l], new RegExp(`^### [^\\n]+ \\{#${w}\\}$`, "m"), `${l}: no entry for ${w}`);
+	const plain = ARTICLES.filter((a) => a.plain && a.id !== words.id);
+	assert.ok(plain.length >= 1);
+	for (const a of plain) for (const l of langs) {
+		// headings and image captions are not read for this: a heading carries no link, a caption repeats the text
+		const text = a.body[l].split("\n").map((line) => (/^(#|!\[)/.test(line) ? " ".repeat(line.length) : line)).join("\n");
+		const links = [...text.matchAll(/\[([^\]]*)\]\(help\.topic\.words#([a-z]+)\)/g)].map((m) => ({ from: m.index!, to: m.index! + m[0].length, word: m[2]! }));
+		for (const [w, forms] of Object.entries(WORDS)) {
+			const first = new RegExp(`(?<!\\p{L})(${forms[l].join("|")})(?!\\p{L})`, "u").exec(text);
+			if (!first) continue;
+			assert.ok(links.some((k) => k.word === w && k.from <= first.index && first.index < k.to), `${a.id} ${l}: "${first[1]}" first appears unlinked (help.topic.words#${w})`);
+		}
+	}
+});
+
+test("a diagram of an article exists in the page's files, in the article's language", () => {
+	let seen = 0;
+	for (const a of ARTICLES) for (const l of langs) for (const m of a.body[l].matchAll(/^!\[[^\]]+\]\((\/help\/img\/[a-z0-9-]+)\.svg\)$/gm)) {
+		seen++;
+		assert.ok(existsSync(new URL("." + m[1] + ".svg", pub)), `${a.id} ${l}: ${m[1]}.svg is missing`);
+		assert.equal(m[1]!.endsWith("-de"), l === "de", `${a.id} ${l}: ${m[1]}.svg is the other language's diagram`);
+	}
+	assert.ok(seen >= 2);
+});
+
+test("every tip has both languages, links to a section that exists, and is used in the page", () => {
+	const sources = readdirSync(client, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".tsx")).map((f) => readFileSync(new URL(f, client), "utf8")).join("\n");
+	for (const [id, tip] of Object.entries(TIPS)) {
+		const target = articleById(tip.article);
+		assert.ok(target, `tip ${id}: unknown article ${tip.article}`);
+		for (const l of langs) {
+			assert.ok(tip.text[l].trim(), `tip ${id} ${l}`);
+			assert.ok(anchorsOf(target!.body[l]).has(tip.anchor), `tip ${id} ${l}: unknown anchor ${tip.article}#${tip.anchor}`);
+		}
+		assert.match(sources, new RegExp(`<HelpTip id="${id}"`), `tip ${id} is not used`);
+	}
 });

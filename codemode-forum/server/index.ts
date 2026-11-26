@@ -64,11 +64,11 @@ const cookieOf = (req: http.IncomingMessage, name: string): string | undefined =
 
 /** `space`: the shared space (default FORUM_SPACE, else unix:/tmp/codemode-forum-space.sock). */
 /** `login`: the sign-in (default FORUM_LOGIN from the environment; null: open, as for play on one machine). */
-export async function startServer(o: { port?: number; bind?: string; space?: string; useNext?: boolean; dev?: boolean; login?: LoginConfig | null } = {}) {
+export async function startServer(o: { port?: number; bind?: string; space?: string; useNext?: boolean; dev?: boolean; login?: LoginConfig | null; /** the sign-in's clock (tests) */ now?: () => number } = {}) {
 	const login = o.login === undefined ? loginConfig() : o.login;
 	const conn = connectSpace(o.space);
 	const hub = new ForumHub(conn.space);
-	const auth = login ? new Auth(login, conn.space) : null;
+	const auth = login ? new Auth(login, conn.space, o.now) : null;
 	const presence = announce(conn.space, "web");
 
 	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;

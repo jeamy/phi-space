@@ -20,6 +20,11 @@ const COPIES = {
 	"server/env.ts": across("server/env.ts", ["codemode-chat", "codemode-forum", "spaces-files", "spaces-mmo"]),
 	// the relying party of the browser sign-in (docs/forum-seite-plan-2026-11-26.en.md, section 5)
 	"server/oidc.ts": across("server/oidc.ts", ["spaces-files", "codemode-forum"]),
+	// the "?" beside a control; each project has its own client/lib/tips.ts
+	"client/HelpTip.tsx": across("client/HelpTip.tsx", ["codemode-chat", "codemode-forum"]),
+	// the diagrams of the forum's help (codemode-forum/public/help/img), copies of the documentation's, in both languages
+	...Object.fromEntries(["signin", "signin-de"].map((n) =>
+		[`forum-${n}.svg`, [`docs/img/forum-${n}.svg`, `codemode-forum/public/help/img/forum-${n}.svg`]])),
 	// the diagrams the help site shows in its articles (help-site/corpus/img), copies of the documentation's
 	...Object.fromEntries(["architecture", "relationships", "workspaces", "revocation", "save", "restore"].map((n) =>
 		[`zanzibar-${n}.svg`, [`docs/img/zanzibar-${n}.svg`, `help-site/corpus/img/zanzibar-${n}.svg`]])),

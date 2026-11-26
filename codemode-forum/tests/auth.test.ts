@@ -73,9 +73,9 @@ test.before(async () => {
 });
 test.after(async () => { await idp.close(); await stack.close(); });
 
-const signedIn = async (o: { admins?: string } = {}) => {
+const signedIn = async (o: { admins?: string; now?: () => number } = {}) => {
 	const login = loginConfig({ FORUM_LOGIN: "oidc", FORUM_PUBLIC_ORIGIN: ORIGIN, FORUM_OIDC_ISSUER: idp.issuer, FORUM_OIDC_CLIENT_ID: "forum-test", FORUM_OIDC_CLIENT_SECRET: "s3cret", FORUM_ADMINS: o.admins ?? "" });
-	return startServer({ stack, login });
+	return startServer({ stack, login, ...(o.now ? { now: o.now } : {}) });
 };
 
 test("without FORUM_LOGIN the forum is open as before, and has no sign-in routes", async () => {
@@ -227,5 +227,22 @@ test("rooms: the owner invites by ID; a room one has no role in does not exist; 
 		assert.equal((await owner.post("/api/rooms/sky-app/access", { userId: await id(mia), role: null })).status, 200);
 		assert.equal((await mia.request("GET", "/api/rooms/sky-app")).status, 404);
 		assert.deepEqual((await mia.request("GET", "/api/rooms")).json.rooms, []);
+	} finally { await srv.close(); }
+});
+
+test("a session ends twelve hours after the sign-in, however busy it was", async () => {
+	let skew = 0;
+	const srv = await signedIn({ now: () => Date.now() + skew });
+	try {
+		const b = new Browser(srv.url);
+		await b.signIn(idp, "lea");
+		assert.equal((await b.request("GET", "/api/me")).status, 200);
+		skew = 12 * 3600_000 - 60_000;
+		assert.equal((await b.request("GET", "/api/me")).status, 200, "a minute before the end");
+		skew = 12 * 3600_000 + 1000;
+		const r = await b.request("GET", "/api/me");
+		assert.deepEqual({ status: r.status, json: r.json }, { status: 401, json: { login: true, user: null } });
+		assert.equal((await b.post("/api/rooms", { room: "late" })).status, 401);
+		assert.equal(await upgrade(srv.url, "/ws/late", { origin: ORIGIN, cookie: `__Host-forum=${b.jar.get("__Host-forum")}` }), 401);
 	} finally { await srv.close(); }
 });

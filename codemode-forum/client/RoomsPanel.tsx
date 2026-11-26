@@ -3,6 +3,7 @@
 // their role, a new room, and for the room's owner the people in it, invited by their ID.
 import { useEffect, useState } from "react";
 import { authHeaders } from "./lib/me.ts";
+import { HelpTip } from "./HelpTip.tsx";
 import type { Lang } from "./lib/theme.ts";
 
 export type RoomRole = "owner" | "member" | "viewer";
@@ -50,7 +51,7 @@ export function RoomsPanel({ lang, room, rooms, reload, userId }: { lang: Lang; 
 
 	return (
 		<div className="panel rooms">
-			<h2>{t.rooms}</h2>
+			<h2>{t.rooms} <HelpTip id="rooms" lang={lang} label={t.rooms} /></h2>
 			{rooms && !mine && <p className="hint">{t.notHere}</p>}
 			{rooms && rooms.length === 0 && <p className="hint">{t.none}</p>}
 			<ul className="roomlist">
@@ -61,6 +62,7 @@ export function RoomsPanel({ lang, room, rooms, reload, userId }: { lang: Lang; 
 			<form className="row" onSubmit={(e) => { e.preventDefault(); void create(); }}>
 				<input aria-label={t.newRoom} placeholder={t.namePh} value={name} maxLength={48} onChange={(e) => setName(e.target.value)} />
 				<button className="btn" type="submit" disabled={!name.trim()}>{t.create}</button>
+				<HelpTip id="newroom" lang={lang} label={t.newRoom} />
 			</form>
 			{owner && access && (
 				<details>
@@ -72,6 +74,7 @@ export function RoomsPanel({ lang, room, rooms, reload, userId }: { lang: Lang; 
 					</ul>
 					<div className="row">
 						<input aria-label={t.invite} placeholder={t.idPh} value={invitee} onChange={(e) => setInvitee(e.target.value.trim())} />
+						<HelpTip id="invite" lang={lang} label={t.invite} />
 					</div>
 					<div className="row">
 						<button className="btn" type="button" disabled={!invitee} onClick={() => void give(invitee, "member")}>{t.invite} {t.asMember}</button>
@@ -80,7 +83,7 @@ export function RoomsPanel({ lang, room, rooms, reload, userId }: { lang: Lang; 
 				</details>
 			)}
 			{err && <p className="error">{err}</p>}
-			<p className="muted small">{t.yourId}: <code>{userId}</code></p>
+			<p className="muted small">{t.yourId}: <code>{userId}</code> <HelpTip id="yourid" lang={lang} label={t.yourId} /></p>
 		</div>
 	);
 }

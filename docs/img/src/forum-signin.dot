@@ -1,0 +1,17 @@
+// One account, two applications (docs/forum-seite-plan-2026-11-26.en.md, section 11). The labels are in a file per
+// language (forum-signin.en.sed, forum-signin.de.sed): render as style.inc says, with "-f forum-signin.en.sed" added
+// to the sed for ../forum-signin.svg and "-f forum-signin.de.sed" for ../forum-signin-de.svg.
+digraph "@title@" {
+#include
+	rankdir=LR;
+	you [label="@you@", fillcolor="#fcf2d9"];
+	idp [label="@idp@", fillcolor="#d8eeea"];
+	forum [label="@forum@"];
+	files [label="@files@"];
+	you -> forum [label="@open@"];
+	forum -> idp [label="@send@"];
+	you -> idp [label="@password@", style=dashed];
+	idp -> forum [label="@back@"];
+	files -> idp [label="@same@", style=dashed, dir=both];
+	{ rank=same; forum; files; }
+}
