@@ -11,7 +11,7 @@ use std::collections::HashSet;
 
 use phi_json::{number_text as nt, obj, Json};
 
-use super::build::{days, human, no_article, plural, rested, tire, SITE_REACH};
+use super::build::{days, human, no_article, plural, rested, tire, site_reach};
 use super::epoch::{epoch_name, epoch_of, island_of};
 use super::settlement::{huts_in, need_rank, settlement_in};
 use crate::clock::decay_now_of;
@@ -275,7 +275,7 @@ async fn decide(space: &Space, w: &Json, txn: &str, r: &mut Json, now: f64, earl
 pub async fn route_near(c: &Ctx) -> Result<Option<Json>> {
 	let (ax, ay) = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
 	let parts: Vec<Json> = c.space.read_all(&tmpl("Road", obj! { "room" => c.room() }), c.txn()).await?.iter().map(|e| fields(e).clone()).collect();
-	let Some(near) = parts.iter().find(|p| j::s(p, "state") == "build" && j::a(p, "cells").iter().any(|q| (j::n(q, "x") - ax).abs().max((j::n(q, "y") - ay).abs()) <= SITE_REACH)) else { return Ok(None) };
+	let Some(near) = parts.iter().find(|p| j::s(p, "state") == "build" && j::a(p, "cells").iter().any(|q| (j::n(q, "x") - ax).abs().max((j::n(q, "y") - ay).abs()) <= site_reach())) else { return Ok(None) };
 	Ok(c.space.take_if_exists(&tmpl("Route", obj! { "routeId" => j::at(near, "routeId").clone() }), NO_WAIT, c.txn()).await?.map(|e| fields(&e).clone()))
 }
 
@@ -499,7 +499,7 @@ async fn mend(c: &mut Ctx) -> Result<()> {
 	let def = def_of(c.w()).cloned().unwrap_or(Json::Null);
 	let (ax, ay) = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
 	let parts: Vec<Json> = c.space.read_all(&tmpl("Road", obj! { "room" => c.room() }), c.txn()).await?.iter().map(|e| fields(e).clone()).collect();
-	let Some(near) = parts.iter().find(|p| j::s(p, "state") == "built" && j::a(p, "cells").iter().any(|q| (j::n(q, "x") - ax).abs().max((j::n(q, "y") - ay).abs()) <= SITE_REACH)) else { return refuse("Neben dir ist keine fertige Straße.") };
+	let Some(near) = parts.iter().find(|p| j::s(p, "state") == "built" && j::a(p, "cells").iter().any(|q| (j::n(q, "x") - ax).abs().max((j::n(q, "y") - ay).abs()) <= site_reach())) else { return refuse("Neben dir ist keine fertige Straße.") };
 	let Some(e) = c.space.take_if_exists(&tmpl("Route", obj! { "routeId" => j::at(near, "routeId").clone() }), NO_WAIT, c.txn()).await? else { return refuse("Die Straße ist gerade nicht greifbar; bitte noch einmal.") };
 	let mut r = fields(&e).clone();
 	let pack = inventory(c).await?;

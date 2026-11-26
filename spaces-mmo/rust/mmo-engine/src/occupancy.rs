@@ -7,7 +7,7 @@ use phi_json::{obj, Json};
 use crate::fire::key_text;
 use crate::j;
 use crate::space::{by_id, fields, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
-use crate::rules::PASSAGE;
+use crate::rules::passage;
 
 /// `cellKey`.
 pub fn cell_key(x: f64, y: f64) -> String { format!("{},{}", phi_json::number_text(x), phi_json::number_text(y)) }
@@ -36,7 +36,7 @@ pub async fn occupied_in(space: &Space, room: &str, except: Option<&str>) -> Res
 }
 
 /// `isPassage`: an exit's cell or one next to it.
-pub fn is_passage(exits: &[Json], x: f64, y: f64) -> bool { exits.iter().any(|e| (j::n(e, "x") - x).abs().max((j::n(e, "y") - y).abs()) <= PASSAGE) }
+pub fn is_passage(exits: &[Json], x: f64, y: f64) -> bool { exits.iter().any(|e| (j::n(e, "x") - x).abs().max((j::n(e, "y") - y).abs()) <= passage()) }
 
 /// `releaseSpot`.
 pub async fn release_spot(space: &Space, txn: &str, char_id: &str) -> Result<()> {

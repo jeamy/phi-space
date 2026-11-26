@@ -4,7 +4,7 @@
 //! `tree_tick` writes it only when that date has come.
 use phi_json::{obj, Json};
 
-use super::build::{besides, dist_to, free_cells, give_back, human, light_for, no_article, refusal, release_light, rested, take_near, tire, use_light, Rect, SITE_REACH};
+use super::build::{besides, dist_to, free_cells, give_back, human, light_for, no_article, refusal, release_light, rested, take_near, tire, use_light, Rect, site_reach};
 use super::garden::{grow_factor, proto_name};
 use super::settlement::need_rank;
 use super::trade::{consume, move_item};
@@ -147,10 +147,10 @@ async fn baum(c: &mut Ctx, arg: &str) -> Result<()> {
 async fn tree_here(c: &Ctx, d: &Json, arg: &str, admin: bool) -> Result<Json> {
 	let at = js::caps(&js::re(r"^(\d+)\s+(\d+)$", ""), js::trim(arg)).map(|m| (js::to_number(m[1].as_deref().unwrap_or("")), js::to_number(m[2].as_deref().unwrap_or(""))));
 	let place = |t: &Json| at.is_none_or(|(x, y)| j::n(t, "x") == x && j::n(t, "y") == y);
-	let r = take_near(c, "Tree", "treeId", SITE_REACH, &|t: &Json| place(t) && (admin || mine(c, t))).await?;
+	let r = take_near(c, "Tree", "treeId", site_reach(), &|t: &Json| place(t) && (admin || mine(c, t))).await?;
 	let far = match r { Ok(t) => return Ok(t), Err(far) => far };
 	let me = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	let other = c.space.read_all(&tmpl("Tree", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).find(|t| place(t) && dist_to(me, Rect::of(t)) <= SITE_REACH);
+	let other = c.space.read_all(&tmpl("Tree", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).find(|t| place(t) && dist_to(me, Rect::of(t)) <= site_reach());
 	if let Some(o) = other { return refuse(format!("Dieser Baum ({}) gehört {}; fällen darf ihn nur, wer ihn gepflanzt hat.", sort_name(d, &o), txt(j::at(&o, "ownerName")))); }
 	not_understood(if far { "Geh näher an deinen Baum heran (höchstens zwei Schritte entfernt)." } else { "Hier steht kein Baum, den du gepflanzt hast." })
 }
@@ -203,7 +203,7 @@ pub async fn harvest_tree(c: &mut Ctx, named: bool) -> Result<bool> {
 	let Some(d) = j::opt(c.w(), "trees").cloned() else { return Ok(false) };
 	let me_at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
 	let bears = |t: &Json| sort_of_tree(&d, j::s(t, "sort")).and_then(crop).is_some();
-	let near: Vec<Json> = c.space.read_all(&tmpl("Tree", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|t| bears(t) && dist_to(me_at, Rect::of(t)) <= SITE_REACH).collect();
+	let near: Vec<Json> = c.space.read_all(&tmpl("Tree", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|t| bears(t) && dist_to(me_at, Rect::of(t)) <= site_reach()).collect();
 	if near.is_empty() { if named { return not_understood("Hier steht kein Baum, der etwas trägt (höchstens zwei Schritte entfernt)."); } return Ok(false); }
 	let own: Vec<&Json> = near.iter().filter(|t| mine(c, t)).collect();
 	if own.is_empty() { return refuse(format!("Dieser Baum ({}) gehört {}; ernten darf nur, wer ihn gepflanzt hat.", sort_name(&d, &near[0]), txt(j::at(&near[0], "ownerName")))); }
@@ -214,7 +214,7 @@ pub async fn harvest_tree(c: &mut Ctx, named: bool) -> Result<bool> {
 		let left = span(0f64.max(j::n(next, "dueWorldMs") - now));
 		return refuse(if j::n(next, "stage") < 2.0 { format!("{name}: noch zu jung zum Tragen; ausgewachsen in etwa {left}.") } else { format!("{name}: noch nichts reif; in etwa {left} wieder.") });
 	}
-	let Ok(t) = take_near(c, "Tree", "treeId", SITE_REACH, &|t: &Json| mine(c, t) && j::b(t, "ripe")).await? else { return refuse("Der Baum ist gerade nicht greifbar; bitte noch einmal.") };
+	let Ok(t) = take_near(c, "Tree", "treeId", site_reach(), &|t: &Json| mine(c, t) && j::b(t, "ripe")).await? else { return refuse("Der Baum ist gerade nicht greifbar; bitte noch einmal.") };
 	let s = sort_of_tree(&d, j::s(&t, "sort")).cloned().unwrap_or(Json::Null);
 	let cr = crop(&s).cloned().unwrap_or(Json::Null);
 	let now = world_now_of(&c.space, c.txn()).await?;

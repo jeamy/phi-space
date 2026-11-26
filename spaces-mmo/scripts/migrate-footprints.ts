@@ -18,7 +18,7 @@
 import { fileURLToPath } from "node:url";
 import { FOREVER, NO_WAIT, peek, type SpaceLike } from "phi-spaces";
 import { FOOTPRINTS, occupancyId, storeOccupancyReport, type FootprintType, type OccupancyEntry } from "../shared/footprints.ts";
-import { SUPPORTED_FORMAT, type GridFormatFields } from "../shared/grid-format.ts";
+import { FOOTPRINTS_FORMAT, type GridFormatFields } from "../shared/grid-format.ts";
 import type { FootprintFields } from "../shared/model.ts";
 import { footprintCells, takeFootprint, writeFootprint } from "../server/engine/occupancy.ts";
 import { holdIsland, holdRoom, islandLock, lockReport, roomLock, writeIslandLock, writeRoomLock } from "../server/engine/room-lock.ts";
@@ -92,7 +92,7 @@ export async function migrateFootprints(space: SpaceLike, o: { check?: boolean; 
 	const result = (outcome: MigrationResult["outcome"], report: string[], more: Partial<MigrationResult> = {}): MigrationResult => ({ outcome, report, orphans: 0, objects: 0, locks: 0, roads: 0, ...more });
 	if (markers.length > 1) return result("refused", [`the store holds ${markers.length} GridFormat entries; it is damaged, restore it from its backup`]);
 	const marker = markers[0];
-	if (marker && (marker.gridScale !== SUPPORTED_FORMAT.gridScale || marker.occupancy !== SUPPORTED_FORMAT.occupancy)) return result("refused", [`the store is in the grid format gridScale ${marker.gridScale}, occupancy ${marker.occupancy}: not one this migration takes`]);
+	if (marker && (marker.gridScale !== FOOTPRINTS_FORMAT.gridScale || marker.occupancy !== FOOTPRINTS_FORMAT.occupancy)) return result("refused", [`the store is in the grid format gridScale ${marker.gridScale}, occupancy ${marker.occupancy}: not one this migration takes`]);
 	if (marker?.state === "complete" && !plots && !o.check) {
 		// a store migrated before the roads' cells had entries of their own (phase 1 step 10): those are written now
 		const roads = roadReport(entries);
@@ -123,7 +123,7 @@ export async function migrateFootprints(space: SpaceLike, o: { check?: boolean; 
 
 	// the marker first: a binary of the switch refuses the store until the last step has written "complete"
 	if (!marker) {
-		const format: GridFormatFields = { worldId: worlds[0]!, gridScale: SUPPORTED_FORMAT.gridScale, occupancy: SUPPORTED_FORMAT.occupancy, state: "running" };
+		const format: GridFormatFields = { worldId: worlds[0]!, gridScale: FOOTPRINTS_FORMAT.gridScale, occupancy: FOOTPRINTS_FORMAT.occupancy, state: "running" };
 		await space.write({ type: "GridFormat", fields: format as never }, null, FOREVER);
 		log(`[migrate] ${format.worldId}: GridFormat running`);
 	} else log(`[migrate] ${marker.worldId}: GridFormat running already, going on`);

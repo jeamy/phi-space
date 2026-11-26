@@ -30,7 +30,8 @@ export type WorldDef = {
 	/** Raised when the definition changes: a world worker loads a newer version (rooms, exits, prototypes, help). */
 	version: number;
 	/** Cells per scale-1 cell edge (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 2); absent: 1. A binary runs
-	 *  the scales of `SUPPORTED_FORMAT` (shared/grid-format.ts) only. */
+	 *  the scales of `SUPPORTED_SCALES` (shared/grid-format.ts) only, and sets its rule values to this one
+	 *  (shared/rules.ts useGridScale). */
 	gridScale?: number;
 	/** The scale the generator was designed at, resampled to `gridScale` (section 2); absent: designed natively. */
 	derivedFrom?: number;

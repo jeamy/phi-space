@@ -28,7 +28,7 @@ use crate::settings::{setting, work_rest_ms};
 use crate::source::{hex, random_bytes, time_now};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::world::walkable;
-use crate::rules::{BESIDE, FIRE_CLEARANCE, MOVE_BUILDING, MOVE_WINDOW, on_ring};
+use crate::rules::{self, fire_clearance, move_building, move_window, on_ring};
 
 pub const ARTICLE: &str = r"^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+";
 pub fn no_article(s: &str) -> String { js::re(ARTICLE, "i").replace(s, "") }
@@ -97,7 +97,7 @@ const DIRS: [(f64, f64); 4] = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)]
 /// The cobbles of paths and plazas: nothing is built or dug on them.
 pub const PATH: &str = ":";
 /// How far from an exit a plan `atExit` may lie.
-pub use crate::rules::EXIT_REACH;
+pub use crate::rules::exit_reach;
 
 /// `refusal`: why `rect` cannot be built on (None: it can). `green`: a green plan or a bed; `on_people`: dug under
 /// anyone's feet.
@@ -129,7 +129,7 @@ pub async fn refusal_locked(c: &Ctx, room: &Json, rect: Rect, green: bool, on_pe
 		if !walkable(c.w(), &ground, p.0, p.1) { return Ok(Some("Dort ist kein fester Boden.".into())); }
 		if tile(&ground, p.0, p.1).as_deref() == Some(PATH) { return Ok(Some("Das ist ein Weg; Wege und Plätze bleiben frei.".into())); }
 		if is_passage(&exits, p.0, p.1) { return Ok(Some("Dort ist ein Weg hinaus; den baut niemand zu.".into())); }
-		if fires.iter().any(|b| (j::n(b, "x") - p.0).abs().max((j::n(b, "y") - p.1).abs()) <= FIRE_CLEARANCE) { return Ok(Some("So nah am Feuer baut man nicht.".into())); }
+		if fires.iter().any(|b| (j::n(b, "x") - p.0).abs().max((j::n(b, "y") - p.1).abs()) <= fire_clearance()) { return Ok(Some("So nah am Feuer baut man nicht.".into())); }
 		if blocked.contains(&k) {
 			let scenery = fields_of(c.space.read_all(&tmpl("Scenery", obj! { "room" => room_id }), None).await?);
 			let piece = scenery.iter().find(|s| dist_to(*p, Rect::of(s)) == 0.0);
@@ -198,12 +198,12 @@ async fn jetty_to_water(space: &Space, w: &Json, txn: &str, ty: &str, b: &Json) 
 	let (long, short) = (br.w.max(br.h), br.w.min(br.h));
 	let mut tries: Vec<Rect> = Vec::new();
 	for (sw, sh) in [(long, short), (short, long)] {
-		let mut y = br.y - MOVE_WINDOW - sh;
-		while y <= br.y + br.h + MOVE_WINDOW {
-			let mut x = br.x - MOVE_WINDOW - sw;
-			while x <= br.x + br.w + MOVE_WINDOW {
+		let mut y = br.y - move_window() - sh;
+		while y <= br.y + br.h + move_window() {
+			let mut x = br.x - move_window() - sw;
+			while x <= br.x + br.w + move_window() {
 				let r = Rect { x, y, w: sw, h: sh };
-				if !cells(r).iter().all(|p| dist_to(*p, br) > MOVE_BUILDING) { tries.push(r); }
+				if !cells(r).iter().all(|p| dist_to(*p, br) > move_building()) { tries.push(r); }
 				x += 1.0;
 			}
 			y += 1.0;
@@ -247,7 +247,7 @@ fn jetty_tries(c: &Ctx, pw: f64, ph: f64, at: Option<(f64, f64)>) -> Vec<Rect> {
 /// `siteNear`: whether a site lies within reach of the actor (nothing taken).
 async fn site_near(c: &Ctx) -> Result<bool> {
 	let me = xy(&c.actor);
-	Ok(c.space.read_all(&tmpl("Site", obj! { "room" => c.room() }), c.txn()).await?.iter().any(|e| dist_to(me, Rect::of(fields(e))) <= SITE_REACH))
+	Ok(c.space.read_all(&tmpl("Site", obj! { "room" => c.room() }), c.txn()).await?.iter().any(|e| dist_to(me, Rect::of(fields(e))) <= site_reach()))
 }
 
 /// `besides`: the rectangles beside the actor where a plan of `w`×`h` could go, nearest sides first.
@@ -382,7 +382,7 @@ pub async fn use_light(c: &Ctx, l: &Light, points: f64) -> Result<()> {
 }
 
 /// How far from a site one still delivers and works on it.
-pub use crate::rules::SITE_REACH;
+pub use crate::rules::site_reach;
 
 /// `takeNear`: the entry of `ty` within `reach` of the actor whose cells carry `id_key`, taken in the transaction;
 /// Err(far): none within reach (`far`: one in the room).
@@ -413,11 +413,11 @@ pub async fn take_near(c: &Ctx, ty: &str, id_key: &str, reach: f64, named: &dyn 
 	Ok(Err(!all.is_empty()))
 }
 
-/// `siteHere`: the site within SITE_REACH of the actor (by plan name when given), taken in the transaction.
+/// `siteHere`: the site within site_reach() of the actor (by plan name when given), taken in the transaction.
 pub async fn site_here(c: &Ctx, name: &str) -> Result<Json> {
 	let w = c.world.clone();
 	let named = |s: &Json| name.is_empty() || plan_of(&w, name).is_some_and(|p| j::at(p, "key") == j::at(s, "plan")) || txt(j::at(s, "name")).to_lowercase() == name.to_lowercase();
-	match take_near(c, "Site", "buildId", SITE_REACH, &named).await? {
+	match take_near(c, "Site", "buildId", site_reach(), &named).await? {
 		Ok(s) => Ok(s),
 		Err(far) => not_understood(if far { "Geh näher an die Baustelle heran (höchstens zwei Schritte entfernt)." } else { "Hier ist keine Baustelle. „bau <plan>“ steckt eine ab." }),
 	}
@@ -573,7 +573,7 @@ pub async fn bau(c: &mut Ctx, arg: &str) -> Result<()> {
 		let no = if water { water_refusal(&c.space, &w, &room, r, None).await? } else { match refusal(c, &room, r, green, green).await? {
 			Some(n) => Some(n),
 			None if j::b(plan, "shore") && !touches_water(&w, &ground, r) => Some("Das muss ans Wasser grenzen.".to_owned()),
-			None if j::b(plan, "atExit") && !exits.iter().any(|x| dist_to(xy(x), r) <= EXIT_REACH) => Some("Das gehört neben einen Ausgang.".to_owned()),
+			None if j::b(plan, "atExit") && !exits.iter().any(|x| dist_to(xy(x), r) <= exit_reach()) => Some("Das gehört neben einen Ausgang.".to_owned()),
 			None => None,
 		} };
 		match no { None => { rect = Some(r); break; } Some(n) => if why.is_empty() { why = n; } }
@@ -814,7 +814,7 @@ fn counted(items: &[Json]) -> String {
 async fn lager(c: &mut Ctx, arg: &str) -> Result<()> {
 	let me = xy(&c.actor);
 	let near = fields_of(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?);
-	let Some(b) = near.iter().find(|x| plan_has(c.w(), j::at(x, "plan"), "store") && dist_to(me, Rect::of(x)) <= BESIDE).cloned() else { return not_understood("Geh direkt neben ein Lagerhaus.") };
+	let Some(b) = near.iter().find(|x| plan_has(c.w(), j::at(x, "plan"), "store") && dist_to(me, Rect::of(x)) <= rules::beside()).cloned() else { return not_understood("Geh direkt neben ein Lagerhaus.") };
 	let right = store_right(c, &b).await?;
 	let who = c.char_id().to_owned();
 	let a = js::trim(arg);
@@ -876,10 +876,10 @@ async fn chest_named(c: &Ctx, target: &str) -> Result<OwnChest> {
 	let w = c.w();
 	let t = js::re(r"^(?:meine[nm]?|my)\s+", "").replace(&no_article(&js::trim(target).to_lowercase()), "");
 	let me = xy(&c.actor);
-	let beside = |list: &[&OwnChest]| list.iter().find(|x| x.region.is_none() && j::s(&x.b, "room") == c.room() && dist_to(me, Rect::of(&x.b)) <= BESIDE).map(|x| (*x).clone());
+	let beside = |list: &[&OwnChest]| list.iter().find(|x| x.region.is_none() && j::s(&x.b, "room") == c.room() && dist_to(me, Rect::of(&x.b)) <= rules::beside()).map(|x| (*x).clone());
 	if t.is_empty() || js::re(r"^(?:truhe|kiste|chest)$", "").test(&t) {
 		// inside one's hut: its chest
-		let inside = all.iter().find(|x| x.region.is_none() && if j::s(&x.b, "room") == c.room() { dist_to(me, Rect::of(&x.b)) <= BESIDE } else { c.room() == super::interior::interior_of(j::s(&x.b, "buildId")) });
+		let inside = all.iter().find(|x| x.region.is_none() && if j::s(&x.b, "room") == c.room() { dist_to(me, Rect::of(&x.b)) <= rules::beside() } else { c.room() == super::interior::interior_of(j::s(&x.b, "buildId")) });
 		if let Some(b) = inside { return Ok(b.clone()); }
 		if all.len() == 1 { return Ok(all[0].clone()); }
 		return refuse(format!("In welche Truhe? {}. Sag zum Beispiel „verstaue 3 muscheln in 2“.", numbered(w, &all)));
@@ -948,7 +948,7 @@ async fn verstaue(c: &mut Ctx, arg: &str) -> Result<()> {
 		return refuse(format!("{} kommt nicht in die Truhe; neben deinem Bau lässt „einstallen {}“ {} dort wachen.", j::s(kp, "name"), j::s(kp, "key"), j::s(kp, "acc")));
 	}
 	let me = xy(&c.actor);
-	let near: Vec<Json> = fields_of(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?).into_iter().filter(|b| dist_to(me, Rect::of(b)) <= BESIDE).collect();
+	let near: Vec<Json> = fields_of(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?).into_iter().filter(|b| dist_to(me, Rect::of(b)) <= rules::beside()).collect();
 	let own_beside = near.iter().any(|b| mine(c, b) && plan_has(c.w(), j::at(b, "plan"), "chest") && !plan_has(c.w(), j::at(b, "plan"), "store"));
 	let store_beside = near.iter().find(|b| plan_has(c.w(), j::at(b, "plan"), "store")).cloned();
 	let proto = j::at(&first, "proto").clone();
@@ -991,7 +991,7 @@ async fn verstaue(c: &mut Ctx, arg: &str) -> Result<()> {
 	let k = fit.min(MOVES_PER_COMMAND);
 	let label = chest_label(c.w(), &chest);
 	if k <= 0.0 { return refuse(format!("Die Truhe deiner {label} ist voll ({}).", nt(cap))); }
-	let beside = own.region.is_none() && j::s(&chest, "room") == c.room() && dist_to(me, Rect::of(&chest)) <= BESIDE;
+	let beside = own.region.is_none() && j::s(&chest, "room") == c.room() && dist_to(me, Rect::of(&chest)) <= rules::beside();
 	let mut moved = 0.0;
 	if let Some(region) = &own.region {
 		// another region: a courier carries them (courier.rs); until then they lie with it, out of anyone's reach
@@ -1097,7 +1097,7 @@ async fn abriss(c: &mut Ctx, arg: &str) -> Result<()> {
 	let me = xy(&c.actor);
 	let actor = txt(j::at(&c.actor, "name"));
 	let sites = fields_of(c.space.read_all(&tmpl("Site", obj! { "room" => c.room() }), None).await?);
-	let site = sites.iter().find(|s| dist_to(me, Rect::of(s)) <= BESIDE && mine(c, s));
+	let site = sites.iter().find(|s| dist_to(me, Rect::of(s)) <= rules::beside() && mine(c, s));
 	if let Some(site) = site.filter(|s| name.is_empty() || js::re("baustelle", "i").test(arg) || plan_of(c.w(), &name).is_some_and(|p| j::at(p, "key") == j::at(s, "plan"))) {
 		if c.space.take_if_exists(&tmpl("Site", obj! { "buildId" => j::at(site, "buildId").clone() }), 5_000.0, c.txn()).await?.is_none() { return refuse("Die Baustelle ist gerade nicht greifbar; bitte noch einmal."); }
 		let back = give_back(c, &j::a(site, "needs").iter().map(|n| (txt(j::at(n, "proto")), j::n(n, "have"))).collect::<Vec<_>>()).await?;
@@ -1108,8 +1108,8 @@ async fn abriss(c: &mut Ctx, arg: &str) -> Result<()> {
 		return msg(c, "*", "info", &format!("{actor} gibt die Baustelle {} auf.{}", txt(j::at(site, "name")), if back.is_empty() { String::new() } else { format!(" Zurück an {actor}: {}.", back.join(", ")) }), info()).await;
 	}
 	let ruin_name = js::re(r"^ruine?\s*(?:(?:der|des|einer|eines|von|of the|of)\s+)?", "i").replace(&name, "");
-	let own_near = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let b = fields(e); mine(c, b) && dist_to(me, Rect::of(b)) <= BESIDE });
-	let ruins: Vec<Json> = fields_of(c.space.read_all(&tmpl("Ruin", obj! { "room" => c.room() }), None).await?).into_iter().filter(|r| dist_to(me, Rect::of(r)) <= BESIDE && (ruin_name.is_empty() || plan_of(c.w(), &ruin_name).is_some_and(|p| j::at(p, "key") == j::at(r, "plan")) || txt(j::at(r, "name")).to_lowercase() == ruin_name.to_lowercase())).collect();
+	let own_near = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let b = fields(e); mine(c, b) && dist_to(me, Rect::of(b)) <= rules::beside() });
+	let ruins: Vec<Json> = fields_of(c.space.read_all(&tmpl("Ruin", obj! { "room" => c.room() }), None).await?).into_iter().filter(|r| dist_to(me, Rect::of(r)) <= rules::beside() && (ruin_name.is_empty() || plan_of(c.w(), &ruin_name).is_some_and(|p| j::at(p, "key") == j::at(r, "plan")) || txt(j::at(r, "name")).to_lowercase() == ruin_name.to_lowercase())).collect();
 	let ruin = if js::re(r"^ruine?\b", "i").test(&name) || !own_near { ruins.iter().find(|r| mine(c, r)).or(ruins.first()).cloned() } else { None };
 	if let Some(ruin) = ruin {
 		if c.account.as_ref().is_none_or(|a| j::b(a, "guest")) { return refuse("Ruinen räumen nur registrierte Spieler."); }

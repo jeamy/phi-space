@@ -15,7 +15,7 @@ use crate::prototypes::{resolve_prototype, spawn, At};
 use crate::source::{hex, random_bytes, random_int, time_now};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::worldtime::SEASONS;
-use crate::rules::BESIDE;
+use crate::rules::beside;
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
@@ -35,7 +35,7 @@ fn members(c: &Ctx) -> Result<Json> {
 fn place_of(d: &Json, kind: &str) -> String { if kind == "regatta" { j::opt(d, "regatta").map_or_else(|| txt(j::at(d, "plan")), txt) } else { txt(j::at(d, "plan")) } }
 async fn park_beside(c: &Ctx, plan: &str) -> Result<bool> {
 	let at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	Ok(c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan }), c.txn()).await?.iter().any(|e| dist_to(at, Rect::of(fields(e))) <= BESIDE))
+	Ok(c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan }), c.txn()).await?.iter().any(|e| dist_to(at, Rect::of(fields(e))) <= beside()))
 }
 fn at_park(c: &Ctx, plan: &str) -> String { format!("direkt neben {}", plan_of(c.w(), plan).and_then(|p| j::opt(p, "dative")).map_or_else(|| "einem Park".to_owned(), txt)) }
 /// What a flower is worth at the show: a named sort over a bred one over a wild one.

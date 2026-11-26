@@ -9,12 +9,16 @@ use phi_json::{obj, Json};
 use crate::j;
 use crate::space::{Error, Result, Space};
 
-/// The format this binary runs: scale 1, the occupancy in Footprint entries (phase 1, step 6). A store without a
-/// GridFormat entry that holds a world is of the legacy format (scale 1, plots) and refused; an empty one gets this
-/// format's entry from the loader's first transaction.
-pub const SUPPORTED_SCALE: f64 = 1.0;
+/// `SUPPORTED_OCCUPANCY`: the occupancy this binary runs, in Footprint entries (phase 1, step 6). A store without a
+/// GridFormat entry that holds a world is of the legacy format (scale 1, plots) and refused; an empty one gets its entry
+/// from the loader's first transaction, at the world definition's scale.
 pub const SUPPORTED_OCCUPANCY: &str = "footprints";
-/// `LEGACY_FORMAT`'s occupancy.
+/// `SUPPORTED_SCALES`: the scales this binary runs; the store's marker must have the world definition's.
+pub const SUPPORTED_SCALES: [f64; 2] = [1.0, 2.0];
+/// `GRID_MIGRATION`: how the migration of the grid is run, named in a refusal (phase 2).
+pub const GRID_MIGRATION: &str = "npm --prefix spaces-mmo run migrate:grid -- --space <address>";
+/// `LEGACY_FORMAT`: its scale and occupancy.
+pub const LEGACY_SCALE: f64 = 1.0;
 pub const LEGACY_OCCUPANCY: &str = "plots";
 /// `FOOTPRINTS_MIGRATION`: how the migration from plots to footprints is run, named in a refusal.
 pub const FOOTPRINTS_MIGRATION: &str = "npm --prefix spaces-mmo run migrate:footprints -- --space <address>";
@@ -43,19 +47,20 @@ fn scale_text(v: Option<f64>) -> String { v.map_or("none".into(), phi_json::numb
 /// `gridRefusal`: why a store cannot be run by this binary, or none.
 pub fn grid_refusal(w: &Json, markers: &[Json], types: &[String]) -> Option<String> {
 	let scale = j::opt(w, "gridScale").and_then(Json::as_f64).unwrap_or(1.0);
-	if scale != SUPPORTED_SCALE { return Some(format!("the world definition has gridScale {}; this binary runs gridScale {} only", phi_json::number_text(scale), phi_json::number_text(SUPPORTED_SCALE))); }
+	if !SUPPORTED_SCALES.contains(&scale) { return Some(format!("the world definition has gridScale {}; this binary runs gridScale 1 or 2 only", phi_json::number_text(scale))); }
 	if markers.len() > 1 { return Some(format!("the store holds {} GridFormat entries; it is damaged, restore it from its backup", markers.len())); }
 	if let Some(m) = markers.first() {
 		let id = j::s(w, "id");
 		if j::s(m, "worldId") != id { return Some(format!("the store's grid format is of the world {}, not {id}", j::s(m, "worldId"))); }
 		if j::s(m, "state") != "complete" { return Some(format!("a grid migration of this store has not finished (GridFormat state {}): run the migration again from its backup", j::s(m, "state"))); }
 		let (ms, mo) = (j::n(m, "gridScale"), j::s(m, "occupancy"));
-		if ms != SUPPORTED_SCALE || mo != SUPPORTED_OCCUPANCY { return Some(format!("the store is in the grid format gridScale {}, occupancy {mo}; this binary runs gridScale {}, occupancy {SUPPORTED_OCCUPANCY} only (a store migrated by the grid switch needs the binaries of its cut)", phi_json::number_text(ms), phi_json::number_text(SUPPORTED_SCALE))); }
+		if mo != SUPPORTED_OCCUPANCY { return Some(format!("the store is in the grid format gridScale {}, occupancy {mo}; this binary runs occupancy {SUPPORTED_OCCUPANCY} only", phi_json::number_text(ms))); }
+		if ms != scale { return Some(format!("the store is in the grid format gridScale {}, the world definition has gridScale {}{}", phi_json::number_text(ms), phi_json::number_text(scale), if ms < scale { format!(": migrate the grid first ({GRID_MIGRATION})") } else { String::new() })); }
 		let (md, wd) = (j::opt(m, "derivedFrom").and_then(Json::as_f64), j::opt(w, "derivedFrom").and_then(Json::as_f64));
 		if md != wd { return Some(format!("the store's geometry is derived from scale {}, the world definition's from {}", scale_text(md), scale_text(wd))); }
 	} else if types.iter().any(|t| t == "WorldLoaded") {
 		// no marker: an empty store (the loader writes the marker with the world) or one of the legacy format
-		return Some(format!("the store is in the legacy grid format (gridScale {}, occupancy {LEGACY_OCCUPANCY}, no GridFormat entry); this binary runs occupancy {SUPPORTED_OCCUPANCY} only: migrate it first ({FOOTPRINTS_MIGRATION})", phi_json::number_text(SUPPORTED_SCALE)));
+		return Some(format!("the store is in the legacy grid format (gridScale {}, occupancy {LEGACY_OCCUPANCY}, no GridFormat entry); this binary runs occupancy {SUPPORTED_OCCUPANCY} only: migrate it first ({FOOTPRINTS_MIGRATION})", phi_json::number_text(LEGACY_SCALE)));
 	}
 	if types.iter().any(|t| t == "Route") && !types.iter().any(|t| t == "RoadCells") { return Some(format!("the store's roads have no RoadCells entries (from before phase 1 step 10 of the grid switch); this binary reads a road's cells from them only: migrate it first ({FOOTPRINTS_MIGRATION})")); }
 	if types.iter().any(|t| t == "Plot") { return Some(format!("the store holds Plot entries of the legacy occupancy; this binary reads {SUPPORTED_OCCUPANCY} only: migrate it first ({FOOTPRINTS_MIGRATION})")); }
@@ -109,9 +114,13 @@ mod tests {
 			assert!(grid_refusal(&w, &[marker(f)], &[]).is_some(), "{f}");
 		}
 		assert!(grid_refusal(&w, &[marker(""), marker("")], &[]).unwrap().contains("2 GridFormat entries"));
-		let mut w2 = world();
-		w2.as_object_mut().unwrap().insert("gridScale", Json::Number(2.0));
-		assert!(grid_refusal(&w2, &[], &[]).unwrap().contains("gridScale 2"));
+		// a definition of a scale this binary does not run; a store at its definition's scale, an empty one at either
+		let at = |s: f64| { let mut w = world(); w.as_object_mut().unwrap().insert("gridScale", Json::Number(s)); w.as_object_mut().unwrap().insert("derivedFrom", Json::Number(1.0)); w };
+		assert!(grid_refusal(&at(3.0), &[], &[]).unwrap().contains("gridScale 3; this binary runs gridScale 1 or 2 only"));
+		assert_eq!(grid_refusal(&at(2.0), &[], &[]), None);
+		assert_eq!(grid_refusal(&at(2.0), &[marker(r#","gridScale":2,"derivedFrom":1"#)], &["Room".into()]), None);
+		assert!(grid_refusal(&at(2.0), &[marker(r#","derivedFrom":1"#)], &["Room".into()]).unwrap().ends_with(&format!("gridScale 1, the world definition has gridScale 2: migrate the grid first ({GRID_MIGRATION})")));
+		assert!(grid_refusal(&w, &[marker(r#","gridScale":2"#)], &["Room".into()]).unwrap().ends_with("gridScale 2, the world definition has gridScale 1"));
 		assert!(grid_refusal(&w, &[], &["Hovercraft".into()]).unwrap().contains("without a grid class: Hovercraft"));
 		assert_eq!(class_row("Bundle", j::at(&w, "typeclasses")).as_deref(), Some("Item"));
 	}

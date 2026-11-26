@@ -8,6 +8,7 @@ import type { WorldDef } from "../../shared/world-def.ts";
 import { parseLocks } from "./locks.ts";
 import { typeChain } from "./typeclasses.ts";
 import { closing, pathIn, walkGrid } from "../../shared/grid.ts";
+import { useGridScale } from "../../shared/rules.ts";
 
 // the types of the definition live in shared/world-def.ts (the browser reads them too)
 export type * from "../../shared/world-def.ts";
@@ -31,6 +32,8 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 	// the definition is data (worlds/<id>/world.json, written by npm run world:json from the world's world.ts); the engine
 	// runs nothing a world brings
 	const w = JSON.parse(readFileSync(join(ROOT, "worlds", id, "world.json"), "utf8")) as WorldDef;
+	// the rule values of this process are the world's scale (shared/rules.ts): one world per process
+	useGridScale(w.gridScale ?? 1);
 	const grid = (what: string, ground: string[], spawn: { x: number; y: number }) => {
 		const width = ground[0]?.length ?? 0;
 		if (!width || ground.some((row) => row.length !== width)) throw new Error(`${what}: rows of different width`);

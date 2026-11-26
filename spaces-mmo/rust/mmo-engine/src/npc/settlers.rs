@@ -19,7 +19,7 @@ use crate::regions::region_world;
 use crate::settings::setting;
 use crate::source::random_int;
 use crate::space::{fields, tmpl, Result};
-use crate::rules::{BESIDE, FEED_FIRE, SETTLER_CLEARANCE, SITE_REACH};
+use crate::rules::{beside, feed_fire, settler_clearance, site_reach};
 
 fn nt(n: f64) -> String { phi_json::number_text(n) }
 fn name_of(w: &Json, proto: &str) -> String { j::by(j::a(w, "prototypes"), "key", proto).map_or_else(|| proto.to_owned(), |p| txt(j::at(p, "name"))) }
@@ -102,7 +102,7 @@ async fn free_ground(n: &Npc, room: &str, w: f64, h: f64) -> Result<Option<(f64,
 		while y < y0 + h {
 			let mut x = x0;
 			while x < x0 + w {
-				if tile(&ground, x, y) != t || busy.contains(&format!("{},{}", nt(x), nt(y))) || near.iter().any(|e| (e.0 - x).abs().max((e.1 - y).abs()) <= SETTLER_CLEARANCE) { return false; }
+				if tile(&ground, x, y) != t || busy.contains(&format!("{},{}", nt(x), nt(y))) || near.iter().any(|e| (e.0 - x).abs().max((e.1 - y).abs()) <= settler_clearance()) { return false; }
 				x += 1.0;
 			}
 			y += 1.0;
@@ -166,7 +166,7 @@ impl Siedler {
 				if !travel(n, l, j::s(fire, "room")).await? { return Ok(()); }
 				let fxy = (j::n(fire, "x"), j::n(fire, "y"));
 				let (mx, my) = l.xy();
-				if (mx - fxy.0).abs().max((my - fxy.1).abs()) <= FEED_FIRE { n.act(&format!("put {} in {}", j::s(fuel[0], "name"), first_alias(fire))).await?; } else { next_to(n, l, fxy).await?; }
+				if (mx - fxy.0).abs().max((my - fxy.1).abs()) <= feed_fire() { n.act(&format!("put {} in {}", j::s(fuel[0], "name"), first_alias(fire))).await?; } else { next_to(n, l, fxy).await?; }
 				return Ok(());
 			}
 		}
@@ -181,7 +181,7 @@ impl Siedler {
 		let astray = own.iter().map(|o| (o.clone(), true)).chain(mine_built.drain(..).map(|b| (b, false))).find(|(r, _)| on_path(&w, r));
 		if let Some((a, is_own)) = astray {
 			let (r, room) = at_rect(&a);
-			if !beside_of(n, l, &r, &room, BESIDE).await? { n.act(&format!("abriss {}", if is_own { "baustelle" } else { j::s(&a, "name") })).await?; }
+			if !beside_of(n, l, &r, &room, beside()).await? { n.act(&format!("abriss {}", if is_own { "baustelle" } else { j::s(&a, "name") })).await?; }
 			return Ok(());
 		}
 		if let Some(o) = &own { if self.at_site(n, l, o, tired).await? { return Ok(()); } }
@@ -194,7 +194,7 @@ impl Siedler {
 			let decay = n.clock.decay_now().await.unwrap_or(0.0);
 			if j::n(b, "untilWorldMs") - decay > 2.0 * 24.0 * 3_600_000.0 || !cost.iter().all(|r| l.count(j::s(r, "proto")) as f64 >= j::n(r, "count")) { continue; }
 			let (r, room) = at_rect(b);
-			if !beside_of(n, l, &r, &room, BESIDE).await? { n.act(&format!("repariere {}", j::s(b, "name"))).await?; }
+			if !beside_of(n, l, &r, &room, beside()).await? { n.act(&format!("repariere {}", j::s(b, "name"))).await?; }
 			return Ok(());
 		}
 		let beds: Vec<Json> = if g.is_some() { all_of(&n.space.read_all(&obj! { "type" => "Bed" }, None).await?).into_iter().filter(|b| j::s(b, "accountId") == me_id).collect() } else { vec![] };
@@ -253,7 +253,7 @@ impl Siedler {
 			if heap.len() > 6 && self.may("chest") {
 				self.later("chest", 10);
 				let (r, room) = at_rect(hut);
-				if !beside_of(n, l, &r, &room, BESIDE).await? { n.act(&format!("verstaue alle {}", j::s(&heap[0], "name"))).await?; }
+				if !beside_of(n, l, &r, &room, beside()).await? { n.act(&format!("verstaue alle {}", j::s(&heap[0], "name"))).await?; }
 				return Ok(());
 			}
 		}
@@ -279,7 +279,7 @@ impl Siedler {
 			if give.is_none() && j::n(open, "work") >= j::n(open, "workNeed") { return Ok(false); }
 			let cells = j::a(open, "cells");
 			let Some(cell) = cells.iter().find(|c| j::s(c, "room") == l.room()).or(cells.first()) else { return Ok(false) };
-			if beside_of(n, l, &Rect::cell(j::n(cell, "x"), j::n(cell, "y")), j::s(cell, "room"), SITE_REACH).await? { return Ok(true); }
+			if beside_of(n, l, &Rect::cell(j::n(cell, "x"), j::n(cell, "y")), j::s(cell, "room"), site_reach()).await? { return Ok(true); }
 			self.later("road", 2);
 			n.act(&give.map_or_else(|| "arbeite an der straße".to_owned(), |g| format!("liefere {} an die straße", j::s(&g, "name")))).await?;
 			return Ok(true);
@@ -310,11 +310,11 @@ impl Siedler {
 			let loading = croom == l.room() && croom != market && cargo < j::n(d, "capacity") && !heap.is_empty() && self.may("karren");
 			if cargo == 0.0 && !loading {
 				if !travel(n, l, &croom).await? { return Ok(true); }
-				if !beside_of(n, l, &at, &croom, BESIDE).await? { n.act("karren nimm").await?; }
+				if !beside_of(n, l, &at, &croom, beside()).await? { n.act("karren nimm").await?; }
 				return Ok(true);
 			}
 			if croom != l.room() { travel(n, l, &croom).await?; return Ok(true); }
-			if beside_of(n, l, &at, &croom, BESIDE).await? { return Ok(true); }
+			if beside_of(n, l, &at, &croom, beside()).await? { return Ok(true); }
 			if croom == market { n.act("karren entlade").await?; self.later("karren", 30); return Ok(true); }
 			if loading { n.act(&format!("karren lade {}", j::s(&heap[0], "name"))).await?; return Ok(true); }
 			if road_path(&road_links(&n.space, w, None).await?, &croom, &market).is_none() { n.act("karren entlade").await?; self.later("karren", 20); return Ok(true); }
@@ -356,7 +356,7 @@ impl Siedler {
 			return Ok(false);
 		}
 		let (r, room) = at_rect(s);
-		if beside_of(n, l, &r, &room, SITE_REACH).await? { return Ok(true); }
+		if beside_of(n, l, &r, &room, site_reach()).await? { return Ok(true); }
 		n.act(&give.map_or_else(|| "arbeite".to_owned(), |g| format!("liefere {}", j::s(&g, "name")))).await?;
 		Ok(true)
 	}
@@ -391,14 +391,14 @@ impl Siedler {
 					let thing = if blumen { flower } else { l.pack.iter().find(|i| has(&cr, j::s(i, "proto"))) };
 					if let Some(t) = thing {
 						if !travel(n, l, &room).await? { return Ok(true); }
-						if !beside_of(n, l, &r, &room, BESIDE).await? { n.act(&format!("zeige {}", j::s(t, "name"))).await?; if blumen { self.later(&key, 100_000); } }
+						if !beside_of(n, l, &r, &room, beside()).await? { n.act(&format!("zeige {}", j::s(t, "name"))).await?; if blumen { self.later(&key, 100_000); } }
 						return Ok(true);
 					}
 				}
 			}
 			if flower.is_some() && self.may("pflege") {
 				if !travel(n, l, &room).await? { return Ok(true); }
-				if !beside_of(n, l, &r, &room, BESIDE).await? { n.act("pflege").await?; self.later("pflege", 60); }
+				if !beside_of(n, l, &r, &room, beside()).await? { n.act("pflege").await?; self.later("pflege", 60); }
 				return Ok(true);
 			}
 		}
@@ -411,7 +411,7 @@ impl Siedler {
 		let g = j::at(&w, "garden").clone();
 		let (r, room) = at_rect(b);
 		let plants = j::a(b, "plants");
-		let near = |line: String| { let room = room.clone(); async move { if !beside_of(n, l, &r, &room, BESIDE).await? { n.act(&line).await?; } Ok::<bool, crate::space::Error>(true) } };
+		let near = |line: String| { let room = room.clone(); async move { if !beside_of(n, l, &r, &room, beside()).await? { n.act(&line).await?; } Ok::<bool, crate::space::Error>(true) } };
 		if plants.iter().any(|p| j::n(p, "stage") == 2.0) { return near("ernte".into()).await; }
 		if j::truthy(j::at(b, "weedy")) || plants.iter().any(|p| j::n(p, "stage") == 3.0) { return near("jäte".into()).await; }
 		let growing = plants.iter().any(|p| j::n(p, "stage") < 2.0);
@@ -421,7 +421,7 @@ impl Siedler {
 				if self.may("schoepfe") {
 					self.later("schoepfe", 6);
 					let (br, broom) = at_rect(barrel);
-					if !beside_of(n, l, &br, &broom, BESIDE).await? { n.act("schöpfe").await?; }
+					if !beside_of(n, l, &br, &broom, beside()).await? { n.act("schöpfe").await?; }
 					return Ok(true);
 				}
 			}
@@ -454,7 +454,7 @@ impl Deliverer {
 		let jobs = paid_jobs(n, homes, &self.tried, self.turn).await?;
 		let Some((o, s)) = jobs.into_iter().find(|(o, _)| { let p = j::s(o, "proto"); !p.is_empty() && l.count(p) > 0 }) else { return Ok(false) };
 		let (r, room) = at_rect(&s);
-		if beside_of(n, l, &r, &room, BESIDE).await? { return Ok(true); }
+		if beside_of(n, l, &r, &room, beside()).await? { return Ok(true); }
 		self.tried.insert(j::s(&o, "orderId").to_owned(), self.turn + 10);
 		n.act(&format!("liefere {} {}", nt(j::n(&o, "left").min(l.count(j::s(&o, "proto")) as f64)), j::s(&o, "name"))).await?;
 		Ok(true)
@@ -478,7 +478,7 @@ impl Bauhelfer {
 			let work = if free { jobs.iter().find(|(o, _)| j::s(o, "proto").is_empty()).cloned() } else { None };
 			if let Some((o, s)) = work {
 				let (r, room) = at_rect(&s);
-				if !beside_of(n, &l, &r, &room, BESIDE).await? { self.tried.insert(j::s(&o, "orderId").to_owned(), self.turn + 5); n.act("arbeite").await?; }
+				if !beside_of(n, &l, &r, &room, beside()).await? { self.tried.insert(j::s(&o, "orderId").to_owned(), self.turn + 5); n.act("arbeite").await?; }
 			} else if jobs.iter().any(|(o, _)| !j::s(o, "proto").is_empty()) {
 				let protos: Vec<String> = jobs.iter().map(|(o, _)| j::s(o, "proto").to_owned()).collect();
 				if !gather(n, &l, &protos).await? { self.home = (self.home + 1) % homes.len(); travel(n, &l, &homes[self.home]).await?; }
@@ -538,7 +538,7 @@ async fn chores(n: &Npc, l: &Look, room: &str) -> Result<bool> {
 				Some(f) => {
 					if !travel(n, l, j::s(fire, "room")).await? { return Ok(true); }
 					let fxy = (j::n(fire, "x"), j::n(fire, "y"));
-					if dist_to(l.xy(), &Rect::cell(fxy.0, fxy.1)) <= FEED_FIRE { n.act(&format!("put {} in {}", j::s(f, "name"), first_alias(fire))).await?; } else { next_to(n, l, fxy).await?; }
+					if dist_to(l.xy(), &Rect::cell(fxy.0, fxy.1)) <= feed_fire() { n.act(&format!("put {} in {}", j::s(f, "name"), first_alias(fire))).await?; } else { next_to(n, l, fxy).await?; }
 					return Ok(true);
 				}
 			}
@@ -551,12 +551,12 @@ async fn chores(n: &Npc, l: &Look, room: &str) -> Result<bool> {
 	let Some(dry) = dry else { return Ok(false) };
 	if l.count(j::s(&g, "can")) > 0 {
 		let (r, broom) = at_rect(&dry);
-		if !beside_of(n, l, &r, &broom, BESIDE).await? { n.act("gieße").await?; }
+		if !beside_of(n, l, &r, &broom, beside()).await? { n.act("gieße").await?; }
 		return Ok(true);
 	}
 	let Some(barrel) = n.space.read_all(&tmpl("Building", obj! { "room" => room, "plan" => j::at(&g, "barrel").clone() }), None).await?.first().map(|e| fields(e).clone()) else { return Ok(false) };
 	let (r, broom) = at_rect(&barrel);
-	if !beside_of(n, l, &r, &broom, BESIDE).await? { n.act("schöpfe").await?; }
+	if !beside_of(n, l, &r, &broom, beside()).await? { n.act("schöpfe").await?; }
 	Ok(true)
 }
 

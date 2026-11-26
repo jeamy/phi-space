@@ -7,7 +7,7 @@ use super::Npc;
 use crate::j;
 use crate::js::{self, JsRegex};
 use crate::space::{fields, tmpl, Result};
-use crate::rules::FEED_FIRE;
+use crate::rules::feed_fire;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request { Gather(f64), Feed, Greet, Unclear }
@@ -80,10 +80,10 @@ pub async fn gather(n: &Npc, me_char: &str, from: &str, mut count: f64) -> Resul
 			let bxy = xy(beacon);
 			let pos = |p: Option<(f64, f64, String)>| p.map_or((at.0, at.1), |p| (p.0, p.1));
 			for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)] {
-				if reach(pos(position(n).await?), bxy) <= FEED_FIRE { break; }
+				if reach(pos(position(n).await?), bxy) <= feed_fire() { break; }
 				n.act(&format!("move {} {}", phi_json::number_text(bxy.0 + dx), phi_json::number_text(bxy.1 + dy))).await?;
 			}
-			if reach(pos(position(n).await?), bxy) <= FEED_FIRE {
+			if reach(pos(position(n).await?), bxy) <= feed_fire() {
 				let into = j::a(beacon, "aliases").first().and_then(Json::as_str).unwrap_or("feuer").to_owned();
 				for it in &mine { if n.halted() { break; } n.act(&format!("put {} in {into}", j::s(it, "name"))).await?; }
 				return n.act(&format!("say Fertig, {from}: {} liegen im Feuer.", scheite(mine.len() as f64))).await;

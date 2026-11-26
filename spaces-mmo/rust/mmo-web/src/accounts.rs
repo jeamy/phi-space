@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 
 use crate::regions::RegionSpaces;
 use crate::{env_ms, WebError, WebResult};
-use mmo_engine::rules::{FREE_CELL_RADIUS, SPAWN_SCATTER_X, SPAWN_SCATTER_Y};
+use mmo_engine::rules::{free_cell_radius, spawn_scatter_x, spawn_scatter_y};
 
 const FOREVER: f64 = -1.0;
 const NO_WAIT: f64 = 0.0;
@@ -370,9 +370,9 @@ impl Accounts {
 		let ground: Vec<String> = j::a(&room, "ground").iter().filter_map(Json::as_str).map(str::to_owned).collect();
 		let spawn = j::at(&room, "spawn");
 		let s = (j::n(spawn, "x"), j::n(spawn, "y"));
-		let near = (s.0 + random_int(-SPAWN_SCATTER_X, SPAWN_SCATTER_X + 1.0), s.1 + random_int(-SPAWN_SCATTER_Y, SPAWN_SCATTER_Y + 1.0));
+		let near = (s.0 + random_int(-spawn_scatter_x(), spawn_scatter_x() + 1.0), s.1 + random_int(-spawn_scatter_y(), spawn_scatter_y() + 1.0));
 		let from = if walkable(&self.w, &ground, near.0, near.1) { near } else { s };
-		let at = free_cell_near(&self.w, &ground, from, &|k| avoid.iter().any(|a| a == k), FREE_CELL_RADIUS as usize).unwrap_or(s);
+		let at = free_cell_near(&self.w, &ground, from, &|k| avoid.iter().any(|a| a == k), free_cell_radius() as usize).unwrap_or(s);
 		Ok(obj! { "charId" => id("c"), "accountId" => j::at(account, "accountId").clone(), "name" => j::at(account, "name").clone(), "room" => rid, "x" => at.0, "y" => at.1, "skin" => random_int(0.0, j::a(&self.w, "skins").len() as f64), "guest" => j::at(account, "guest").clone() })
 	}
 

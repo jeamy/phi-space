@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use phi_json::{obj, Json};
 
-use super::build::{dist_to, give_back, no_article, plan_of, plural, put_back, take_near, Rect, SITE_REACH};
+use super::build::{dist_to, give_back, no_article, plan_of, plural, put_back, take_near, Rect, site_reach};
 use super::trade::craft;
 use super::wind::wind_factor;
 use crate::clock::{decay_now_of, patience_of, world_now_of};
@@ -16,7 +16,7 @@ use crate::j;
 use crate::js;
 use crate::source::{hex, random_bytes};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
-use crate::rules::BESIDE;
+use crate::rules::beside;
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
@@ -65,7 +65,7 @@ async fn mahle(c: &mut Ctx, arg: &str) -> Result<()> {
 	let at = xy(&c.actor);
 	if what.is_empty() {
 		// only a look: read, not taken (unless another command holds it right now)
-		let seen = c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan.as_str() }), None).await?.iter().map(|e| fields(e).clone()).find(|b| dist_to(at, Rect::of(b)) <= BESIDE);
+		let seen = c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan.as_str() }), None).await?.iter().map(|e| fields(e).clone()).find(|b| dist_to(at, Rect::of(b)) <= beside());
 		let b = match seen.clone() { Some(b) => b, None => mill_here(c, &m).await? };
 		if seen.is_none() { put_back(c, &b).await?; }
 		let mine: Vec<Json> = c.space.read_all(&tmpl("MillLoad", obj! { "buildId" => j::at(&b, "buildId").clone(), "charId" => me.as_str() }), None).await?.iter().map(|e| fields(e).clone()).collect();
@@ -115,7 +115,7 @@ async fn abholen(c: &mut Ctx) -> Result<()> {
 	let me = c.char_id().to_owned();
 	let mine: Vec<Json> = c.space.read_all(&tmpl("MillLoad", obj! { "room" => c.room(), "charId" => me.as_str() }), None).await?.iter().map(|e| fields(e).clone()).collect();
 	let at = xy(&c.actor);
-	let near: Vec<&Json> = mine.iter().filter(|l| dist_to(at, Rect::of(l)) <= SITE_REACH).collect();
+	let near: Vec<&Json> = mine.iter().filter(|l| dist_to(at, Rect::of(l)) <= site_reach()).collect();
 	if near.is_empty() { return refuse(if mine.is_empty() { "Hier wartet kein Mehl auf dich.".to_owned() } else { format!("Geh näher an die {}.", plan_of(c.w(), j::s(&m, "plan")).map_or_else(|| "Mühle".to_owned(), |p| txt(j::at(p, "name")))) }); }
 	let ready: Vec<&Json> = near.iter().copied().filter(|l| j::n(l, "readyWorldMs") <= now).collect();
 	if ready.is_empty() { return refuse(format!("Dein Korn ist noch nicht gemahlen; in etwa {}.", hours(near.iter().map(|l| j::n(l, "readyWorldMs")).fold(f64::INFINITY, f64::min) - now))); }

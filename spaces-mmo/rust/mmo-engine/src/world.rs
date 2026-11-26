@@ -14,7 +14,10 @@ pub fn load_world(root: &Path, id: &str) -> Result<Json> {
 		return Err(Error::Other(format!("SPACES_MMO_WORLD: a-z, 0-9 and -, got {id}")));
 	}
 	let text = std::fs::read_to_string(root.join("worlds").join(id).join("world.json")).map_err(|e| Error::Other(format!("world {id}: {e}")))?;
-	phi_json::parse(&text).map_err(|e| Error::Other(format!("world {id}: {e:?}")))
+	let w = phi_json::parse(&text).map_err(|e| Error::Other(format!("world {id}: {e:?}")))?;
+	// the rule values of this process are the world's scale (rules.rs): one world per process
+	crate::rules::use_grid_scale(j::opt(&w, "gridScale").and_then(Json::as_f64).unwrap_or(1.0)).map_err(|e| Error::Other(format!("world {id}: {e}")))?;
+	Ok(w)
 }
 
 /// `walkable(w, ground, x, y)`.

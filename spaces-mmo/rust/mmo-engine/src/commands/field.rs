@@ -3,7 +3,7 @@
 //! garden.rs); crop rotation tires the soil; `field_tick` (in the garden job) moves a field on when its date comes.
 use phi_json::{obj, Json};
 
-use super::build::{besides, free_cells, give_back, human, light_for, no_article, plural, refusal, release_light, take_near, use_light, Rect, SITE_REACH};
+use super::build::{besides, free_cells, give_back, human, light_for, no_article, plural, refusal, release_light, take_near, use_light, Rect, site_reach};
 use super::epoch::need_epoch;
 use super::food::sated_factor;
 use super::garden::grow_factor;
@@ -50,9 +50,9 @@ pub fn harvest_of(crop: &Json, cells: f64, factor: f64) -> Json { Json::Array(j:
 /// `shareOf`: the share of work point `i` of `need`; the shares add up to `total`, the points with something first.
 pub fn share_of(total: f64, need: f64, i: f64) -> f64 { (total / need).floor() + if i < total % need { 1.0 } else { 0.0 } }
 
-/// `fieldNear`: the field within SITE_REACH, taken in the transaction; None when there is none near.
+/// `fieldNear`: the field within site_reach(), taken in the transaction; None when there is none near.
 async fn field_near(c: &Ctx) -> Result<Option<Json>> {
-	match take_near(c, "Field", "fieldId", SITE_REACH, &|_| true).await? {
+	match take_near(c, "Field", "fieldId", site_reach(), &|_| true).await? {
 		Ok(f) => Ok(Some(f)),
 		Err(true) => not_understood("Geh näher an den Acker heran (höchstens zwei Schritte entfernt)."),
 		Err(false) => Ok(None),

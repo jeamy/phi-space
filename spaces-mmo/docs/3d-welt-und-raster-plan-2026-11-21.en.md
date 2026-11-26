@@ -290,7 +290,18 @@ Every loader restart and every later application of the growth history must yiel
 | 4 · Migration rehearsal | Practise the complete operating sequence of section 5 locally on a copy of the production stores, with interruption, repetition, restart and restore. |
 | 5 · Local release and cut | Release locally only after passing the function, budget, parity and device checks. Then the one cut on `big` and `nano` by section 5, without a way back after the opening. Tests with load or process kills run only on the local test system, never on the servers. |
 
-**Deploys until the cut.** The grid switch is developed on the branch `new-world` (decided 2026-11-24), from phase 0 on. master stays as deployable as before: `big` and `nano` keep taking deploys of master, fixes included, and every commit of master is merged into `new-world`. Nothing of `new-world` reaches the servers before the cut: its binaries stop on their stores (section 5). The cut merges `new-world` into master; from then on master carries the target state. Work that changes no format and is meant for the servers before the cut (a fix, a rendering step) is made on master and merged into `new-world`, not the other way round.
+**Deploys until the cut.** The grid switch was developed on the branch `new-world` from phase 0 on (decided 2026-11-24), with master kept deployable beside it. On 2026-11-26, after phase 1, new-world was merged into master, and the work goes on there. Since then master carries the occupancy format (Footprint, RoomLock, RoadCells, the start check): its binaries stop on the stores of `big` and `nano` until those are migrated at the cut (section 5), so master is not deployed there before the cut. A fix the servers need before the cut is made on a branch from the last commit they run.
+
+**Steps of phase 2.** Each step lands with the scale-1 suites and the Rust walks green; scale 2 is reached only through the world definition's `gridScale`.
+
+1. *The scale from the world.* The rule values of section 2.4 follow the loaded world's `gridScale`, one per process (`shared/rules.ts` `useGridScale`, live bindings; `rules.rs` functions); the start check runs scales 1 and 2 and demands the world's scale of a marked store; the loader writes the world's scale; the footprint migration stays at scale 1.
+2. *`world:json` at scale 2.* `derivedFrom: 1` resamples ground and decor and scales footprints, doors, interiors, scenery, spawn and the definition's values; exits and fires get `w = h = gridScale`. The scale-1 definition stays beside it, so both are tested, and the walks get a way to load the scale-2 one.
+3. *The engine's rules at scale 2*, TS then Rust: fire and exit as footprints (`isPassage`, the free arrival cell), bed capacity `w·h / gridScale²`, the double step and its two legs.
+4. *Gateways:* `gridScale` and the protocol version in `hello`, numbered double steps, old tabs refused.
+5. *Clients:* 2D and 3D at the actual cell, the atlas preview.
+6. *Arena and codemode-chat:* trail and subgoals, the bots' texts, the toy islands.
+7. *The grid migration* (section 5), on copies of the test bed after the footprint migration.
+8. *Measures:* case 4 (network bytes), case 5 against the scale-1 render reference, case 6 at scale 2.
 
 **Acceptance cases and measures**
 

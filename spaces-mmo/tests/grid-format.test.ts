@@ -8,7 +8,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FOREVER, PhiSpaces, openOwnMemoryHost } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { classRow, FOOTPRINTS_MIGRATION, GRID_CLASSES, gridRefusal } from "../shared/grid-format.ts";
+import { classRow, FOOTPRINTS_MIGRATION, GRID_CLASSES, GRID_MIGRATION, gridRefusal } from "../shared/grid-format.ts";
 import { checkGridFormat, GridFormatRefused } from "../server/engine/grid-format.ts";
 import { loadWorld } from "../server/engine/world.ts";
 
@@ -58,11 +58,21 @@ test("a store of another grid format is refused, with the reason", async () => {
 	});
 });
 
-test("a definition of another scale and an unclassed entry type are refused", async () => withSpace(async (space) => {
-	await assert.rejects(checkGridFormat(space, { ...w, gridScale: 2, derivedFrom: 1 }), /gridScale 2/);
+test("a definition of a scale this binary does not run and an unclassed entry type are refused", async () => withSpace(async (space) => {
+	await assert.rejects(checkGridFormat(space, { ...w, gridScale: 3, derivedFrom: 1 }), /gridScale 3; this binary runs gridScale 1 or 2 only/);
 	await space.write({ type: "Hovercraft", fields: { x: 1, y: 2 } }, null, FOREVER);
 	await assert.rejects(checkGridFormat(space, w), /without a grid class: Hovercraft/);
 }));
+
+test("a store runs at its world definition's scale: an empty store at either, a marked one only at its own", () => {
+	const w2 = { ...w, gridScale: 2, derivedFrom: 1 };
+	const at = (gridScale: number, derivedFrom?: number) => ({ worldId: w.id, gridScale, ...(derivedFrom ? { derivedFrom } : {}), occupancy: "footprints" as const, state: "complete" as const });
+	assert.equal(gridRefusal(w2, [], []), null, "an empty store starts at scale 2");
+	assert.equal(gridRefusal(w2, [at(2, 1)], ["Room"]), null);
+	// a store of scale 1 under a definition of scale 2 names the grid's migration; the other way round nothing does
+	assert.ok((gridRefusal(w2, [at(1, 1)], ["Room"]) ?? "").endsWith(`gridScale 1, the world definition has gridScale 2: migrate the grid first (${GRID_MIGRATION})`));
+	assert.match(gridRefusal(w, [at(2, 1)], ["Room"]) ?? "", /gridScale 2, the world definition has gridScale 1$/);
+});
 
 test("the pure rules", () => {
 	assert.equal(gridRefusal(w, [], []), null);

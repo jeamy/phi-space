@@ -69,8 +69,8 @@ const ACT_MS = 15_000;
 /** At most this many world minutes per `wait`, and in all per world (a day). */
 export const MAX_WAIT_MINUTES = 120, MAX_WAITED_MINUTES = 24 * 60;
 const MAX_LINE = 300, MAX_THINGS = 30;
-/** The most cells a world remembers of the figure's way, and the most steps `path` gives. */
-const MAX_TRAIL = ARENA_MAX_TRAIL;
+/** The most cells a world remembers of the figure's way, and the most steps `path` gives: ARENA_MAX_TRAIL, read at
+ *  each use (a live binding of the world's scale, shared/rules.ts). */
 export const PATH_STEPS = 200;
 type Step = [room: string, x: number, y: number];
 
@@ -104,13 +104,13 @@ function run(file: string, env: Record<string, string>, ready: string): Promise<
 }
 const stop = (c: ChildProcess) => new Promise<void>((r) => { if (c.exitCode !== null || c.signalCode !== null) return r(); c.once("exit", () => r()); c.kill("SIGTERM"); setTimeout(() => c.kill("SIGKILL"), 5_000).unref(); });
 
-/** A subgoal of a plan: reached when the figure is in `room` (any room when there is none), within SUBGOAL_NEAR cells of
+/** A subgoal of a plan: reached when the figure is in `room` (any room when there is none), within ARENA_SUBGOAL_NEAR cells of
  *  `near`, and the predicate `holds` (a goal as `score` takes it, or `pack:<proto>`) is true, all of those it names. */
 export type Subgoal = { room?: string; near?: { x: number; y: number }; holds?: string };
 /** What `open` may set up: where the guest starts, what lies where, the world worker's seed, the subgoals to watch. */
 export type OpenSpec = { start?: { room: string; x: number; y: number }; setup?: { clear?: string[]; items?: Array<{ proto: string; room: string; x: number; y: number }> }; seed?: number; subgoals?: Subgoal[] };
 const MAX_SETUP_ITEMS = 50;
-export const MAX_SUBGOALS = 12, SUBGOAL_NEAR = ARENA_SUBGOAL_NEAR;
+export const MAX_SUBGOALS = 12;
 const PREDICATE = /^(?:beacon:[\w-]+|feed:[\w-]+:\d+|pack:[\w-]+)$/;
 
 /** Checks an `open` request's start, setup and seed against the world before a world is started for it. */
@@ -306,7 +306,7 @@ async function walked(x: World, before: { room: string; x: number; y: number }, 
 		for (const s of steps) {
 			const last = x.trail.at(-1);
 			if (last && last[0] === s[0] && last[1] === s[1] && last[2] === s[2]) continue;
-			if (x.trail.length >= MAX_TRAIL) return;
+			if (x.trail.length >= ARENA_MAX_TRAIL) return;
 			x.trail.push(s);
 		}
 	};
@@ -323,7 +323,7 @@ async function passed(x: World, at?: { room: string; x: number; y: number }): Pr
 	const me = at ?? await character(x.space, x.charId);
 	for (let g = x.subgoals[x.reached.length]; g; g = x.subgoals[x.reached.length]) {
 		if (g.room && g.room !== me.room) return;
-		if (g.near && Math.abs(g.near.x - me.x) + Math.abs(g.near.y - me.y) > SUBGOAL_NEAR) return;
+		if (g.near && Math.abs(g.near.x - me.x) + Math.abs(g.near.y - me.y) > ARENA_SUBGOAL_NEAR) return;
 		if (g.holds && !(await scoreNow(x, g.holds)).done) return;
 		x.reached.push([me.room, me.x, me.y]);
 	}

@@ -16,7 +16,7 @@ use crate::liner::{liner_of, ship_comes, ship_state};
 use crate::source::random_int;
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result};
 use crate::travel::count_trip;
-use crate::rules::BESIDE;
+use crate::rules;
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
@@ -35,7 +35,7 @@ fn weighted(xs: &[Json]) -> Json {
 /// Whether a building of `plan` stands right beside the actor in its room.
 async fn beside(c: &Ctx, plan: &str) -> Result<bool> {
 	let me = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	Ok(c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan }), None).await?.iter().any(|e| dist_to(me, Rect::of(fields(e))) <= BESIDE))
+	Ok(c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => plan }), None).await?.iter().any(|e| dist_to(me, Rect::of(fields(e))) <= rules::beside()))
 }
 async fn carries(c: &mut Ctx, proto: &Json) -> Result<bool> { Ok(inventory(c).await?.iter().any(|i| j::at(fields(i), "proto") == proto)) }
 
@@ -75,7 +75,7 @@ async fn rudere(c: &mut Ctx, arg: &str) -> Result<()> {
 	let island = j::by(j::a(c.w(), "rooms"), "roomId", c.room()).map(|r| j::at(r, "island").clone());
 	let jetties: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "plan" => plan.as_str() }), None).await?.iter().map(|e| fields(e).clone()).collect();
 	let me = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	if !jetties.iter().any(|b| j::s(b, "room") == c.room() && dist_to(me, Rect::of(b)) <= BESIDE) { return refuse(format!("Abgelegt wird direkt neben {}.", dative(c, &plan))); }
+	if !jetties.iter().any(|b| j::s(b, "room") == c.room() && dist_to(me, Rect::of(b)) <= rules::beside()) { return refuse(format!("Abgelegt wird direkt neben {}.", dative(c, &plan))); }
 	let there: Vec<Json> = j::a(c.w(), "rooms").iter().filter(|r| Some(j::at(r, "island").clone()) == island && j::s(r, "roomId") != c.room() && jetties.iter().any(|b| j::at(b, "room") == j::at(r, "roomId"))).cloned().collect();
 	let list = there.iter().map(|r| txt(j::at(r, "name"))).collect::<Vec<_>>().join(", ");
 	let word = js::lower(js::trim(arg));

@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use phi_json::{obj, Json};
 
 use super::animals::{collect, means_yield};
-use super::build::{besides, building_here, cells, free_cells, give_back, human, light_for, no_article, plural, put_back, refusal, release_light, take_near, use_light, Rect, SITE_REACH};
+use super::build::{besides, building_here, cells, free_cells, give_back, human, light_for, no_article, plural, put_back, refusal, release_light, take_near, use_light, Rect, site_reach};
 use super::field::{harvest_field, sow_on_field};
 use super::trees::{harvest_tree, means_tree, plant_tree};
 use super::settlement::need_rank;
@@ -20,7 +20,7 @@ use crate::js;
 use crate::prototypes::{resolve_prototype, spawn, At};
 use crate::source::{hex, random, random_bytes, random_int};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
-use crate::rules::flower_neighbour;
+use crate::rules::is_flower_neighbour;
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
@@ -96,7 +96,7 @@ pub fn barrel_water(g: &Json, b: &Json, now: f64) -> (f64, f64) {
 /// `bedHere`: a bed within reach (`own`: one's own; `may`: one this figure may do something at), taken in the transaction.
 pub async fn bed_here(c: &Ctx, own: bool, may: Option<&dyn Fn(&Json) -> bool>, reach: Option<f64>) -> Result<Json> {
 	let pick = |b: &Json| (!own || mine(c, b)) && may.is_none_or(|m| m(b));
-	match take_near(c, "Bed", "bedId", reach.unwrap_or(SITE_REACH), &pick).await? {
+	match take_near(c, "Bed", "bedId", reach.unwrap_or(site_reach()), &pick).await? {
 		Ok(b) => Ok(b),
 		Err(far) => not_understood(if far { if own { "Geh näher an dein Beet heran." } else { "Geh näher an das Beet heran (höchstens zwei Schritte entfernt)." } } else { "Hier ist kein Beet. „umgraben“ legt eins an (mit einem Spaten)." }),
 	}
@@ -378,7 +378,7 @@ pub fn crossings(g: &Json, plants: &[Json], ripe: &[usize]) -> Vec<(usize, usize
 	for &i in ripe {
 		let p = &plants[i];
 		if !zier(p) { continue; }
-		let beside: Vec<usize> = (0..plants.len()).filter(|&k| { let q = &plants[k]; k != i && j::n(q, "stage") < 3.0 && zier(q) && flower_neighbour((j::n(q, "x") - j::n(p, "x")).abs() + (j::n(q, "y") - j::n(p, "y")).abs()) && strain(q) != strain(p) }).collect();
+		let beside: Vec<usize> = (0..plants.len()).filter(|&k| { let q = &plants[k]; k != i && j::n(q, "stage") < 3.0 && zier(q) && is_flower_neighbour((j::n(q, "x") - j::n(p, "x")).abs() + (j::n(q, "y") - j::n(p, "y")).abs()) && strain(q) != strain(p) }).collect();
 		if !beside.is_empty() && random() < j::n(g, "crossChance") { let k = (random() * beside.len() as f64).floor() as usize % beside.len(); out.push((i, beside[k])); }
 	}
 	out
@@ -506,7 +506,7 @@ async fn pate(c: &mut Ctx, arg: &str) -> Result<()> {
 	let (first, rest) = words(arg);
 	let remove = js::re(r"^(?:weg|ende|kündige|kuendige|stop|remove)$", "i").test(&first);
 	let name = js::trim(&if remove { rest.join(" ") } else { arg.to_owned() }).to_owned();
-	let mut b = bed_here(c, true, Some(&|x: &Json| kind(x) != "gemein"), Some(SITE_REACH)).await?;
+	let mut b = bed_here(c, true, Some(&|x: &Json| kind(x) != "gemein"), Some(site_reach())).await?;
 	let me = c.char_id().to_owned();
 	let sponsors = j::a(&b, "sponsors").to_vec();
 	if name.is_empty() {

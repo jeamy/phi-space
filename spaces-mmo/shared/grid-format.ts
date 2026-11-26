@@ -12,12 +12,20 @@ export type GridFormatFields = { worldId: string; gridScale: number; derivedFrom
 
 /** The format a store without a `GridFormat` entry has. */
 export const LEGACY_FORMAT = { gridScale: 1, occupancy: "plots" as Occupancy };
-/** The format this binary runs: scale 1, the occupancy in Footprint entries (phase 1, step 6). A store in the legacy
- *  format is refused and named for the migration (scripts/migrate-footprints.ts); an empty one gets this format's
- *  GridFormat entry from the loader's first transaction (engine/loader.ts). */
-export const SUPPORTED_FORMAT = { gridScale: 1, occupancy: "footprints" as Occupancy };
+/** The occupancy this binary runs: in Footprint entries (phase 1, step 6). A store in the legacy format is refused and
+ *  named for the migration (scripts/migrate-footprints.ts); an empty one gets its GridFormat entry from the loader's
+ *  first transaction (engine/loader.ts), at the world definition's scale. */
+export const SUPPORTED_OCCUPANCY: Occupancy = "footprints";
+/** The scales this binary runs (plan section 2: 1 and 2). Which one a store has is the world definition's (`gridScale`,
+ *  absent: 1), and the store's marker must have the same. */
+export const SUPPORTED_SCALES: readonly number[] = [1, 2];
+/** The format the migration from plots to footprints writes: it runs at scale 1, before the grid is scaled (plan
+ *  section 2.3, "One cut, occupancy first"). */
+export const FOOTPRINTS_FORMAT = { gridScale: 1, occupancy: SUPPORTED_OCCUPANCY };
 /** How the migration from plots to footprints is run, named in a refusal. */
 export const FOOTPRINTS_MIGRATION = "npm --prefix spaces-mmo run migrate:footprints -- --space <address>";
+/** How the migration of the grid from one scale to the next is run, named in a refusal (phase 2). */
+export const GRID_MIGRATION = "npm --prefix spaces-mmo run migrate:grid -- --space <address>";
 
 /** How a coordinate field changes with the grid (plan section 2.2): `area` position and footprint × gridScale, `point`
  *  one exact cell, `path` an ordered list of cells (missing cells inserted), `growth` the growth history's own rule,
@@ -88,19 +96,20 @@ export function classRow(type: string, typeclasses: Record<string, string | null
  *  types it holds. A store without a marker that holds no world yet (no WorldLoaded) is empty and runs. */
 export function gridRefusal(w: { id: string; gridScale?: number; derivedFrom?: number; typeclasses: Record<string, string | null> }, markers: GridFormatFields[], types: string[]): string | null {
 	const scale = w.gridScale ?? 1;
-	if (scale !== SUPPORTED_FORMAT.gridScale) return `the world definition has gridScale ${scale}; this binary runs gridScale ${SUPPORTED_FORMAT.gridScale} only`;
+	if (!SUPPORTED_SCALES.includes(scale)) return `the world definition has gridScale ${scale}; this binary runs gridScale ${SUPPORTED_SCALES.join(" or ")} only`;
 	if (markers.length > 1) return `the store holds ${markers.length} GridFormat entries; it is damaged, restore it from its backup`;
 	const m = markers[0];
 	if (m) {
 		if (m.worldId !== w.id) return `the store's grid format is of the world ${m.worldId}, not ${w.id}`;
 		if (m.state !== "complete") return `a grid migration of this store has not finished (GridFormat state ${m.state}): run the migration again from its backup`;
-		if (m.gridScale !== SUPPORTED_FORMAT.gridScale || m.occupancy !== SUPPORTED_FORMAT.occupancy) return `the store is in the grid format gridScale ${m.gridScale}, occupancy ${m.occupancy}; this binary runs gridScale ${SUPPORTED_FORMAT.gridScale}, occupancy ${SUPPORTED_FORMAT.occupancy} only (a store migrated by the grid switch needs the binaries of its cut)`;
+		if (m.occupancy !== SUPPORTED_OCCUPANCY) return `the store is in the grid format gridScale ${m.gridScale}, occupancy ${m.occupancy}; this binary runs occupancy ${SUPPORTED_OCCUPANCY} only`;
+		if (m.gridScale !== scale) return `the store is in the grid format gridScale ${m.gridScale}, the world definition has gridScale ${scale}${m.gridScale < scale ? `: migrate the grid first (${GRID_MIGRATION})` : ""}`;
 		if ((m.derivedFrom ?? null) !== (w.derivedFrom ?? null)) return `the store's geometry is derived from scale ${m.derivedFrom ?? "none"}, the world definition's from ${w.derivedFrom ?? "none"}`;
 	}
 	// no marker: an empty store (the loader writes the marker with the world) or one of the legacy format
-	else if (types.includes("WorldLoaded")) return `the store is in the legacy grid format (gridScale ${LEGACY_FORMAT.gridScale}, occupancy ${LEGACY_FORMAT.occupancy}, no GridFormat entry); this binary runs occupancy ${SUPPORTED_FORMAT.occupancy} only: migrate it first (${FOOTPRINTS_MIGRATION})`;
+	else if (types.includes("WorldLoaded")) return `the store is in the legacy grid format (gridScale ${LEGACY_FORMAT.gridScale}, occupancy ${LEGACY_FORMAT.occupancy}, no GridFormat entry); this binary runs occupancy ${SUPPORTED_OCCUPANCY} only: migrate it first (${FOOTPRINTS_MIGRATION})`;
 	if (types.includes("Route") && !types.includes("RoadCells")) return `the store's roads have no RoadCells entries (from before phase 1 step 10 of the grid switch); this binary reads a road's cells from them only: migrate it first (${FOOTPRINTS_MIGRATION})`;
-	if (types.includes("Plot")) return `the store holds Plot entries of the legacy occupancy; this binary reads ${SUPPORTED_FORMAT.occupancy} only: migrate it first (${FOOTPRINTS_MIGRATION})`;
+	if (types.includes("Plot")) return `the store holds Plot entries of the legacy occupancy; this binary reads ${SUPPORTED_OCCUPANCY} only: migrate it first (${FOOTPRINTS_MIGRATION})`;
 	const unknown = types.filter((t) => classRow(t, w.typeclasses) === null).sort();
 	if (unknown.length) return `the store holds entry types without a grid class: ${unknown.join(", ")} (shared/grid-format.ts GRID_CLASSES)`;
 	return null;

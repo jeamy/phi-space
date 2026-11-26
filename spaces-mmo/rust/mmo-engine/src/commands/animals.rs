@@ -17,7 +17,7 @@ use crate::js;
 use crate::prototypes::{resolve_prototype, spawn, At};
 use crate::source::random_int;
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
-use crate::rules::BESIDE;
+use crate::rules::beside;
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
@@ -89,7 +89,7 @@ pub async fn settle_herd(space: &Space, txn: &str, w: &Json, b: &Json, now: f64)
 /// `houseHere`: the coop or pen beside the actor, taken in the transaction, its herd brought up to now.
 async fn house_here(c: &Ctx, d: &Json, prefer: &dyn Fn(&Json) -> bool) -> Result<House> {
 	let me = me_xy(c);
-	let fit = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let f = fields(e); is_house(d, f) && dist_to(me, Rect::of(f)) <= BESIDE && at_cell(c, f) && prefer(f) });
+	let fit = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let f = fields(e); is_house(d, f) && dist_to(me, Rect::of(f)) <= beside() && at_cell(c, f) && prefer(f) });
 	let pick = |b: &Json| is_house(d, b) && (!fit || prefer(b));
 	let Ok(b) = take_near(c, "Building", "buildId", 1.0, &pick).await? else { return not_understood(format!("Geh direkt neben einen Stall ({}).", house_names(c, d))) };
 	let now = world_now_of(&c.space, c.txn()).await?;
@@ -242,7 +242,7 @@ async fn fuettere(c: &mut Ctx, arg: &str) -> Result<()> {
 	if let Some((kp, rest)) = keeper_named(c, arg) { return feed_keeper(c, Some(&kp), &rest).await; }
 	// no coop or pen beside, but a dog or cat on guard: it is the one to feed
 	let me_at = me_xy(c);
-	let near: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me_at, Rect::of(b)) <= BESIDE && at_cell(c, b)).collect();
+	let near: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me_at, Rect::of(b)) <= beside() && at_cell(c, b)).collect();
 	if !near.iter().any(|b| is_house(&d, b)) && near.iter().any(|b| j::b(b, "keeper")) { return feed_keeper(c, None, arg).await; }
 	let line = js::re(r"^mit\s+", "i").replace(&js::re(r"^(?:die|den)\s+(?:tiere|hühner|huehner|schafe|ziegen)(?:\s+mit)?\s*", "i").replace(js::trim(arg), ""), "");
 	let m = js::caps(&js::re(FEED_LINE, "i"), &line).unwrap_or_default();
@@ -399,7 +399,7 @@ pub async fn collect(c: &mut Ctx, arg: &str) -> Result<()> {
 	};
 	if cell.is_some() || !kinds.is_empty() {
 		let me = me_xy(c);
-		let there = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let h = fields(e); is_house(&d, h) && dist_to(me, Rect::of(h)) <= BESIDE && at_cell(c, h) && mine(c, h) && herd_of(h).is_some() && named(h) });
+		let there = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let h = fields(e); is_house(&d, h) && dist_to(me, Rect::of(h)) <= beside() && at_cell(c, h) && mine(c, h) && herd_of(h).is_some() && named(h) });
 		if !there { return refuse(if cell.is_some() { "Dort steht neben dir kein Stall von dir mit Tieren.".to_owned() } else { format!("Neben dir ist kein Stall von dir, dessen Tiere {t} geben.") }); }
 	}
 	let House { b, k, n, now, .. } = house_here(c, &d, &|h| mine(c, h) && herd_of(h).is_some() && named(h)).await?;
@@ -460,7 +460,7 @@ async fn schlachte(c: &mut Ctx, arg: &str) -> Result<()> {
 	// (outside beside it, or inside at its block: interior.rs)
 	let shop_plan = shop.as_ref().map(|s| txt(j::at(s, "plan"))).filter(|p| !p.is_empty());
 	let near_shop = match &shop_plan { Some(p) => super::interior::near_buildings(c, Some("cook")).await?.iter().any(|b| j::s(b, "plan") == p), None => false };
-	let near_house = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let f = fields(e); is_house(&d, f) && dist_to(me_at, Rect::of(f)) <= BESIDE && at_cell(c, f) });
+	let near_house = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let f = fields(e); is_house(&d, f) && dist_to(me_at, Rect::of(f)) <= beside() && at_cell(c, f) });
 	let me = c.char_id().to_owned();
 	if near_shop && !near_house {
 		let kinds: Vec<&Json> = j::a(&d, "kinds").iter().filter(|x| !j::a(x, "slaughter").is_empty()).collect();

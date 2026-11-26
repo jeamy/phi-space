@@ -114,11 +114,11 @@ pub async fn load_into_space(space: &Space, w: &Json, o: LoadOptions) -> Result<
 	let tile = j::so(j::at(w, "growth"), "tile").unwrap_or(",").to_owned();
 	let replace: bool = under_lock!(space, txn_ms, |txn| {
 		let marker = space.peek(&tmpl("WorldLoaded", obj! { "worldId" => wid }), Some(txn)).await?;
-		// an empty store takes this binary's grid format (grid_format.rs; the start check refused any other)
+		// an empty store takes the world definition's grid format (grid_format.rs; the start check refused any other)
 		if marker.is_none() && space.peek(&obj! { "type" => "GridFormat" }, Some(txn)).await?.is_none() {
 			let mut f = Object::new();
 			f.insert("worldId", Json::from(wid));
-			f.insert("gridScale", Json::from(crate::grid_format::SUPPORTED_SCALE));
+			f.insert("gridScale", Json::from(j::opt(w, "gridScale").and_then(Json::as_f64).unwrap_or(1.0)));
 			if let Some(d) = j::opt(w, "derivedFrom").filter(|d| !d.is_null()) { f.insert("derivedFrom", d.clone()); }
 			f.insert("occupancy", Json::from(crate::grid_format::SUPPORTED_OCCUPANCY));
 			f.insert("state", Json::from("complete"));

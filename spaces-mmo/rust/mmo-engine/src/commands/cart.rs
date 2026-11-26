@@ -16,7 +16,7 @@ use crate::pack::{load_at, load_of, pack_max};
 use crate::source::{hex, random_bytes, time_now};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::travel::count_trip;
-use crate::rules::{BESIDE, REACH_POINT};
+use crate::rules::{beside, reach_point};
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
@@ -78,7 +78,7 @@ async fn mine(c: &Ctx) -> Result<Json> {
 	let all = c.space.read_all(&tmpl("Cart", obj! { "room" => c.room() }), c.txn()).await?;
 	let acc = account_id(c);
 	let (ax, ay) = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	let Some(f) = all.iter().map(fields).find(|x| *j::at(x, "accountId") == acc && (j::n(x, "x") - ax).abs().max((j::n(x, "y") - ay).abs()) <= REACH_POINT).cloned() else { return refuse("Neben dir steht kein Karren von dir.") };
+	let Some(f) = all.iter().map(fields).find(|x| *j::at(x, "accountId") == acc && (j::n(x, "x") - ax).abs().max((j::n(x, "y") - ay).abs()) <= reach_point()).cloned() else { return refuse("Neben dir steht kein Karren von dir.") };
 	if c.space.take_if_exists(&tmpl("Cart", obj! { "cartId" => j::at(&f, "cartId").clone() }), NO_WAIT, c.txn()).await?.is_none() { return refuse("Der Karren ist gerade nicht greifbar; bitte noch einmal."); }
 	Ok(f)
 }
@@ -314,7 +314,7 @@ async fn zug(c: &mut Ctx, arg: &str) -> Result<()> {
 	let island = island_of(c.w(), c.room());
 	let stations: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "plan" => j::at(&d, "plan").clone() }), c.txn()).await?.iter().map(|e| fields(e).clone()).filter(|b| island_of(c.w(), j::s(b, "room")) == island).collect();
 	let me_at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	if !stations.iter().any(|b| j::s(b, "room") == c.room() && dist_to(me_at, Rect::of(b)) <= BESIDE) { return refuse("Der Zug hält nur an Bahnhöfen; stell dich neben einen."); }
+	if !stations.iter().any(|b| j::s(b, "room") == c.room() && dist_to(me_at, Rect::of(b)) <= beside()) { return refuse("Der Zug hält nur an Bahnhöfen; stell dich neben einen."); }
 	// one stop a room, however many stations stand in it
 	let others: Vec<Json> = stations.iter().enumerate().filter(|(i, b)| j::s(b, "room") != c.room() && stations.iter().position(|x| j::at(x, "room") == j::at(b, "room")) == Some(*i)).map(|(_, b)| b.clone()).collect();
 	let names = others.iter().map(|b| name_of(c, j::s(b, "room"))).collect::<Vec<_>>().join(", ");

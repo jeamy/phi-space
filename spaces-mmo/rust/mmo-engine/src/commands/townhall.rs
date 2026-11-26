@@ -12,7 +12,7 @@ use crate::js;
 use crate::room_growth::rows;
 use crate::source::{hex, random_bytes, time_now};
 use crate::space::{fields, not_understood, refuse, tmpl, Result, Space, FOREVER, NO_WAIT};
-use crate::rules::BESIDE;
+use crate::rules::beside;
 
 /// `hallIn`.
 pub async fn hall_in(space: &Space, w: &Json, room: &str, txn: Option<&str>) -> Result<bool> {
@@ -81,7 +81,7 @@ pub async fn holds_goods(space: &Space, w: &Json, b: &Json) -> Result<bool> {
 /// `condemned`: the one building beside the actor that a vote may take down.
 async fn condemned(c: &Ctx, room: &str, hall: &str) -> Result<Json> {
 	let at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	let beside: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => room }), c.txn()).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(at, Rect::of(b)) <= BESIDE).collect();
+	let beside: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => room }), c.txn()).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(at, Rect::of(b)) <= beside()).collect();
 	if beside.is_empty() { return refuse("Stell dich neben den Bau, über dessen Abriss abgestimmt werden soll."); }
 	if beside.len() > 1 { return refuse(format!("Hier stehen mehrere Bauten nebeneinander ({}); stell dich so, dass nur einer neben dir steht.", beside.iter().map(|b| key_text(j::at(b, "name"))).collect::<Vec<_>>().join(", "))); }
 	let b = &beside[0];
@@ -109,7 +109,7 @@ pub async fn antrag(c: &mut Ctx, arg: &str) -> Result<()> {
 	let down = js::re(r"^(?:abriss|abreißen|abreissen|demolish)$", "").test(&word);
 	if (zone.is_some() || down) && halls.is_empty() { return refuse(format!("{} ein Rathaus; hier steht keines.", if zone.is_some() { "Zonen setzt" } else { "Einen Abriss beschließt" })); }
 	let at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	if zone.is_none() && !down && !halls.iter().any(|b| dist_to(at, Rect::of(b)) <= BESIDE) { return refuse(format!("Anträge stellt man direkt neben {}.", plan_of(c.w(), &plan).and_then(|p| j::so(p, "dative")).unwrap_or("einem Rathaus"))); }
+	if zone.is_none() && !down && !halls.iter().any(|b| dist_to(at, Rect::of(b)) <= beside()) { return refuse(format!("Anträge stellt man direkt neben {}.", plan_of(c.w(), &plan).and_then(|p| j::so(p, "dative")).unwrap_or("einem Rathaus"))); }
 	let s = of_settler(c, "Anträge stellen").await?;
 	let taxed = js::caps(&js::re(r"^steuer\s+(\d+)$", "i"), &text).map(|m| js::to_number(m[1].as_deref().unwrap_or("")));
 	if taxed.is_some_and(|t| t > j::n(&d, "maxTax")) { return refuse(format!("Mehr als {} Münzen je Stück trägt kein Lager.", key_text(j::at(&d, "maxTax")))); }

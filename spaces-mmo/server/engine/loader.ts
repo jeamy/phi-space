@@ -11,7 +11,7 @@ import { worldSchedules } from "./worldevents.ts";
 import { DEFAULT_START_HOUR, initialClock, worldNow } from "./worldtime.ts";
 import { holdRoom, islandLock, roomLock, writeIslandLock, writeRoomLock } from "./room-lock.ts";
 import { cellKey, claimedIn, footprint, footprintCells, writeFootprint } from "./occupancy.ts";
-import { SUPPORTED_FORMAT, type GridFormatFields } from "../../shared/grid-format.ts";
+import { SUPPORTED_OCCUPANCY, type GridFormatFields } from "../../shared/grid-format.ts";
 import { actorToken, fieldsOf, WORLD_LOCK, type AccountFields, type BeaconFields, type CharacterFields, type ExitFields, type FogFields, type RoomFields, type RoomGrowthFields, type WorldClockFields, type WorldLoadedFields } from "../model.ts";
 import { grownDecor, grownGround, grownPoint } from "./room-growth.ts";
 import { readExisting, StillHeld, peek } from "../space.ts";
@@ -80,7 +80,7 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 		const marker = await peek(space, { type: "WorldLoaded", fields: { worldId: w.id } }, { txn });
 		// an empty store takes this binary's grid format (shared/grid-format.ts; the start check refused any other)
 		if (!marker && !(await peek(space, { type: "GridFormat" }, { txn }))) {
-			const format: GridFormatFields = { worldId: w.id, gridScale: SUPPORTED_FORMAT.gridScale, ...(w.derivedFrom !== undefined ? { derivedFrom: w.derivedFrom } : {}), occupancy: SUPPORTED_FORMAT.occupancy, state: "complete" };
+			const format: GridFormatFields = { worldId: w.id, gridScale: w.gridScale ?? 1, ...(w.derivedFrom !== undefined ? { derivedFrom: w.derivedFrom } : {}), occupancy: SUPPORTED_OCCUPANCY, state: "complete" };
 			await space.write({ type: "GridFormat", fields: format as never }, txn, FOREVER);
 		}
 		return !!o.replace || (marker ? fieldsOf<WorldLoadedFields>(marker).version : 0) < w.version;

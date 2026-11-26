@@ -2,7 +2,7 @@
 //! the last stroke frees its cells, gives what was in it and leaves a mark so that no new world version brings it back.
 use phi_json::{obj, Json};
 
-use super::build::{dist_to, free_cells, give_back, rested, tire, Rect, SITE_REACH};
+use super::build::{dist_to, free_cells, give_back, rested, tire, Rect, site_reach};
 use super::settlement::need_rank;
 use crate::context::{msg, Ctx, MsgOpts};
 use crate::fire::key_text;
@@ -13,7 +13,7 @@ use crate::space::{fields, not_understood, refuse, tmpl, Result, FOREVER, NO_WAI
 async fn nearby(c: &Ctx, arg: &str) -> Result<Json> {
 	let at = js::caps(&js::re(r"^(\d+)\s+(\d+)$", ""), js::trim(arg));
 	let me = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	let here: Vec<Json> = c.space.read_all(&tmpl("Scenery", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|s| !j::truthy(j::at(s, "through")) && dist_to(me, Rect::of(s)) <= SITE_REACH).collect();
+	let here: Vec<Json> = c.space.read_all(&tmpl("Scenery", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|s| !j::truthy(j::at(s, "through")) && dist_to(me, Rect::of(s)) <= site_reach()).collect();
 	let hit = match at {
 		Some(m) => { let p = (js::to_number(m[1].as_deref().unwrap_or("")), js::to_number(m[2].as_deref().unwrap_or(""))); here.iter().find(|s| dist_to(p, Rect::of(s)) == 0.0) }
 		None => here.iter().find(|s| !j::truthy(j::at(s, "fixed"))).or(here.first()),

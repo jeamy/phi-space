@@ -17,7 +17,7 @@ use crate::source::{hex, random, random_bytes, time_now};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::world::walkable;
 use crate::worldtime::calendar;
-use crate::rules::BESIDE;
+use crate::rules;
 
 fn txt(v: &Json) -> String { key_text(v) }
 fn night(world_ms: f64) -> bool { let h = calendar(world_ms).1; h >= 20.0 || h < 6.0 }
@@ -379,7 +379,7 @@ async fn zaeune(c: &mut Ctx) -> Result<()> {
 	let wd = wild(c)?;
 	let me = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
 	let at = c.at;
-	let near = |xs: Vec<Json>| -> Vec<Json> { xs.into_iter().filter(|x| dist_to(me, Rect::of(x)) <= BESIDE && at.is_none_or(|p| dist_to(p, Rect::of(x)) == 0.0)).collect() };
+	let near = |xs: Vec<Json>| -> Vec<Json> { xs.into_iter().filter(|x| dist_to(me, Rect::of(x)) <= rules::beside() && at.is_none_or(|p| dist_to(p, Rect::of(x)) == 0.0)).collect() };
 	let read = |ty: &'static str| { let t = tmpl(ty, obj! { "room" => c.room() }); let space = c.space.clone(); async move { Ok::<_, Error>(space.read_all(&t, None).await?.iter().map(|e| fields(e).clone()).collect::<Vec<Json>>()) } };
 	let name = txt(j::at(&c.actor, "name"));
 	if near(read("Bed").await?).iter().any(|b| may_tend(c, b)) {
