@@ -13,7 +13,7 @@
 // The identity comes from the verified ID token alone; no header, parameter or body names an actor or a tenant with
 // authority: a tenant selector chooses only among the login index's bindings of that identity, and the tenant's
 // FsActor row decides. Nothing is logged: not contents, not handles, not tokens, not paths.
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
@@ -64,6 +64,11 @@ const ASSETS: Record<string, string> = {
 	"/app/palettes.ts": "web/palettes.ts",
 };
 
+/** A hash of the page's files: the HTML names them with ?v=<this>, so a cache in front (a CDN that keeps stylesheets
+ *  for hours whatever the service says) never serves an older file to a newer page. */
+const ASSET_VERSION = createHash("sha256").update(Object.values(ASSETS).map((f) => readFileSync(join(ROOT, f), "utf8")).join("\0")).digest("hex").slice(0, 12);
+const versioned = (html: string) => html.replace(/((?:src|href)=")(\/app\/[^"?]+)"/g, `$1$2?v=${ASSET_VERSION}"`);
+
 const PAGE_HEADERS = {
 	"content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 	"x-content-type-options": "nosniff",
@@ -112,8 +117,8 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 
 	const page = (res: import("node:http").ServerResponse, status: number, title: string, body: string, extra: Record<string, string | string[]> = {}) => {
 		res.writeHead(status, { ...PAGE_HEADERS, ...hsts, "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...extra });
-		res.end(`<!doctype html><html lang="en" data-mode="dark" data-palette="spaces_default"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} · PHI-SPACES Files</title><link rel="stylesheet" href="/app/style.css"><script type="module" src="/app/theme.ts"></script>`
-			+ `<header class="top"><a class="brand" href="/">PHI-<b>SPACES</b> <span class="sub">Files</span></a><span class="spacer"></span><div class="theme-controls"></div></header><main class="note"><h1>${esc(title)}</h1>${body}</main></html>`);
+		res.end(versioned(`<!doctype html><html lang="en" data-mode="dark" data-palette="spaces_default"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} · PHI-SPACES Files</title><link rel="stylesheet" href="/app/style.css"><script type="module" src="/app/theme.ts"></script>`
+			+ `<header class="top"><a class="brand" href="/">PHI-<b>SPACES</b> <span class="sub">Files</span></a><span class="spacer"></span><div class="theme-controls"></div></header><main class="note"><h1>${esc(title)}</h1>${body}</main></html>`));
 	};
 	const json = (res: import("node:http").ServerResponse, status: number, v: unknown, extra: Record<string, string | string[]> = {}) => {
 		res.writeHead(status, { ...PAGE_HEADERS, ...hsts, "content-type": "application/json", "cache-control": "no-store", ...extra });
@@ -178,7 +183,7 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 
 		if (route === "GET /") {
 			res.writeHead(200, { ...PAGE_HEADERS, ...hsts, "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-			res.end(readFileSync(join(ROOT, "web", "index.html")));
+			res.end(versioned(readFileSync(join(ROOT, "web", "index.html"), "utf8")));
 			return;
 		}
 		if (req.method === "GET" && Object.hasOwn(ASSETS, url.pathname)) {
@@ -191,7 +196,7 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 		}
 		if (route === "GET /recovery") {
 			res.writeHead(200, { ...PAGE_HEADERS, ...hsts, "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-			res.end(readFileSync(join(ROOT, "web", "recovery.html")));
+			res.end(versioned(readFileSync(join(ROOT, "web", "recovery.html"), "utf8")));
 			return;
 		}
 		if (route === "GET /auth/login" || route === "GET /recovery/login") {

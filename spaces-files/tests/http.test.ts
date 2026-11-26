@@ -127,6 +127,11 @@ test("expired and ended sessions; a body over the bound; the page and nothing el
 		assert.equal((await adm.request("POST", "/auth/logout", { headers: { "x-files-csrf": adm.csrf } })).status, 200);
 		assert.equal((await adm.call("workspaces")).status, 401);
 		const page = await adm.request("GET", "/");
+		// the page names its files with a version, so a cache in front never pairs it with older ones; the files answer under it
+		const v = /href="\/app\/style\.css\?v=([0-9a-f]{12})"/.exec(page.body)?.[1];
+		assert.ok(v, "style.css carries a version");
+		assert.match(page.body, new RegExp(`src="/app/app\\.ts\\?v=${v}"`));
+		assert.equal((await adm.request("GET", `/app/style.css?v=${v}`)).status, 200);
 		assert.equal(page.status, 200);
 		assert.match(String(page.headers["content-security-policy"]), /frame-ancestors 'none'/);
 		assert.equal(page.headers["strict-transport-security"], undefined, "no HSTS for a loopback name");
