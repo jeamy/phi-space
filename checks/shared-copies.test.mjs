@@ -18,6 +18,9 @@ const COPIES = {
 	"client/lib/palettes.ts": [...across("client/lib/palettes.ts", ["help-site", "codemode-chat", "codemode-forum", "spaces-mmo"]), `${PACKAGE_PREFIX}src/dashboard/palettes.ts`, "spaces-files/web/palettes.ts"],
 	"client/lib/markdown.ts": across("client/lib/markdown.ts", ["help-site", "codemode-chat", "codemode-forum", "spaces-mmo"]),
 	"server/env.ts": across("server/env.ts", ["codemode-chat", "codemode-forum", "spaces-files", "spaces-mmo"]),
+	// the diagrams the help site shows in its articles (help-site/corpus/img), copies of the documentation's
+	...Object.fromEntries(["architecture", "relationships", "workspaces", "revocation", "save", "restore"].map((n) =>
+		[`zanzibar-${n}.svg`, [`docs/img/zanzibar-${n}.svg`, `help-site/corpus/img/zanzibar-${n}.svg`]])),
 };
 
 /** The file without its leading `//` comment lines (each copy says where it comes from). */

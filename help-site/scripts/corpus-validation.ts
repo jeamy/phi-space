@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
 import type { ArticleSeed } from "./corpus-articles-data.ts";
 import { splitTableRow } from "../client/lib/markdown.ts";
 
@@ -6,8 +7,12 @@ export function corpusHash(value: unknown): string {
 	return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 }
 
-/** Validate all inputs before writing any generated output. */
-export function validateCorpus(seeds: ArticleSeed[], catalog: { areas: Array<{ id: string; articleIds: string[] }> }, facts: Array<{ id: string }>): void {
+/** The images articles may show: the files of corpus/img, served at /help/img/. */
+export const IMAGE_PREFIX = "/help/img/";
+export const imageFiles = (): Set<string> => new Set(readdirSync(new URL("../corpus/img/", import.meta.url)).filter((f) => /^[a-z0-9-]+\.(svg|png)$/.test(f)));
+
+/** Validate all inputs before writing any generated output; `images` are the files articles may show. */
+export function validateCorpus(seeds: ArticleSeed[], catalog: { areas: Array<{ id: string; articleIds: string[] }> }, facts: Array<{ id: string }>, images: ReadonlySet<string> = imageFiles()): void {
 	const articles = new Map<string, ArticleSeed>();
 	for (const seed of seeds) {
 		if (articles.has(seed.id)) throw new Error(`Duplicate article ID ${seed.id}`);
@@ -54,6 +59,10 @@ export function validateCorpus(seeds: ArticleSeed[], catalog: { areas: Array<{ i
 		for (const id of seed.related) if (!articles.has(id)) throw new Error(`Unknown related article ${id}`);
 		for (const locale of ["de", "en"] as const) {
 			const prose = seed[locale].body.replace(/```[\s\S]*?```/g, "");
+			for (const match of prose.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) {
+				const src = match[1]!.trim();
+				if (!src.startsWith(IMAGE_PREFIX) || !images.has(src.slice(IMAGE_PREFIX.length))) throw new Error(`Unknown image ${src} in ${seed.id}/${locale}`);
+			}
 			for (const match of prose.matchAll(/\]\((help\.[^)]+)\)/g)) {
 				const [id, anchor] = match[1]!.split("#");
 				if (!articles.has(id!) || anchor && !anchors.get(`${id}/${locale}`)?.includes(anchor)) throw new Error(`Broken link ${match[1]} in ${seed.id}/${locale}`);

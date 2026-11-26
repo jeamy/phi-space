@@ -343,6 +343,8 @@ Die Begriffe:
 
 Eine Datei hat Versionen. Gespeichert wird immer „über Version n“: Hat inzwischen jemand anderes Version n+1 gespeichert, kommt ein Versionskonflikt zurück, und der Text der anderen geht nicht verloren.
 
+![Ein Speichern prüft zuerst Sitzung und Operation-ID, dann die aktuellen Rechte, dann eine passende Quittung, und erst dann die Version, bevor der neue Inhalt committet wird.](/help/img/zanzibar-save.svg)
+
 ## Warum {#why}
 
 Sobald Agenten mitarbeiten, reichen die üblichen Lösungen nicht:
@@ -351,6 +353,8 @@ Sobald Agenten mitarbeiten, reichen die üblichen Lösungen nicht:
 - **Ein Entzug muss sofort gelten.** Wird Lea aus der Gruppe Nord entfernt, darf ihr schon offener Editor nicht mehr speichern, und wenn Nord ihr einziger Zugang war, verschwindet \`dispatch\` aus ihrer Liste: Jeder Pfad darin antwortet dann genau wie ein Pfad, den es nicht gibt. Deshalb prüft jede Operation die Beziehungen neu, statt sich auf eine Sitzung zu verlassen.
 - **Gleichzeitige Arbeit** von Menschen und Agenten erzeugt Konflikte. Versionen machen sie sichtbar, statt eine Seite still zu überschreiben.
 - **Netze verlieren Antworten.** Jede ändernde Operation trägt eine signierte Operation-ID; eine Wiederholung nach verlorener Antwort liefert die gespeicherte Quittung statt die Änderung zweimal auszuführen.
+
+![Lea liest brief.md in Version 4. Der Tenant-Administrator entfernt sie aus Nord, ihrem einzigen Zugang zu dispatch. Danach fehlt dispatch in ihrer Liste, und ein Speichern aus dem offenen Editor antwortet notFound; die Datei bleibt bei Version 4.](/help/img/zanzibar-revocation.svg)
 
 ## Wozu {#purpose}
 
@@ -361,6 +365,8 @@ Sobald Agenten mitarbeiten, reichen die üblichen Lösungen nicht:
 - Read-only-Mounts (\`@name\`) zeigen Dateien eines anderen Systems mit dessen Rechten, ohne sie zu kopieren.
 
 ## Wie es funktioniert {#how}
+
+![Browser, Agent und Tenant-Administrator erreichen den Dateidienst; der Host-Operator nutzt eine eigene, getrennt authentisierte lokale Schnittstelle. Der Dienst signiert Operation-IDs mit einem Schlüssel außerhalb des Datenverzeichnisses und erreicht jeden privaten Tenant-Space über die Warteschlange dieses Tenants.](/help/img/zanzibar-architecture.svg)
 
 ### Rechte als Beziehungen {#rights}
 
@@ -373,6 +379,10 @@ directory:dispatch#owner@agent:planner-17
 \`\`\`
 
 Lea ist Mitglied von Nord, Nord ist editor von \`dispatch\`, der Agent planner-17 ist owner. Die Rechte gelten nach unten für alles in \`dispatch\`. Die effektiven Rechte sind die Vereinigung aller Wege; ein Entzug nimmt nur diesen einen Weg weg. Sichtbar ist ein Workspace genau dann, wenn man viewer auf seiner Wurzel hat.
+
+![Lea gehört zu Nord, und Nord hat editor-Rechte auf der Workspace-Wurzel dispatch. Der Agent planner-17 ist owner von dispatch. Beide Grants reichen bis brief.md.](/help/img/zanzibar-relationships.svg)
+
+![Lea ist owner ihres Homes lea; planner-17 ist owner seines Homes und des gemeinsamen Workspace dispatch; Nord ist editor auf dispatch. Lea sieht dispatch nur, solange sie in Nord ist.](/help/img/zanzibar-workspaces.svg)
 
 ### Speicher und Inhalte {#store}
 
@@ -387,6 +397,8 @@ Der Space des Tenants hält Akteure, Knoten (Verzeichnisse, Dateien), Relationen
 ### Betrieb und Wiederherstellung {#operations}
 
 Der Dienst und sein Space-Prozess sind getrennte Prozesse; den Space-Prozess gibt es in TypeScript und in Rust (\`files-space\`). Sicherungen sind verschlüsselte Archive, je eines für die Daten und für den Bereitstellungs-Zustand (Sitzungen, Schlüssel, Passwörter). Eine Wiederherstellung schaltet die Sitzungs-Epoche weiter, sodass keine alte Sitzung überlebt. Für einen zweiten Standort gibt es einen Standby mit Fencing und Promotion; er ist getestet, aber auf big nicht eingeschaltet.
+
+![Eine Wiederherstellung bleibt geschlossen, bis unabhängig bestätigte Wiederherstellungs-Benutzer jeden Tenant in der neuen Epoche abgeglichen haben.](/help/img/zanzibar-restore.svg)
 
 ## Zanzibar: Ausgangspunkt und Umsetzung {#zanzibar}
 
@@ -466,6 +478,8 @@ The terms:
 
 A file has versions. A save is always "over version n": if someone else has saved version n+1 in the meantime, a version conflict comes back, and the other's text is not lost.
 
+![A save first checks the session and the operation ID, then current rights, then a matching receipt, and only then compares versions and commits the new content.](/help/img/zanzibar-save.svg)
+
 ## Why {#why}
 
 Once agents take part, the usual solutions fall short:
@@ -474,6 +488,8 @@ Once agents take part, the usual solutions fall short:
 - **A revocation must hold at once.** When Lea is removed from the group North, her editor that is already open may no longer save, and if North was her only access, \`dispatch\` disappears from her list: every path in it then answers exactly like a path that does not exist. That is why every operation re-evaluates the relationships instead of trusting a session.
 - **Concurrent work** by people and agents creates conflicts. Versions make them visible instead of silently overwriting one side.
 - **Networks lose replies.** Every changing operation carries a signed operation ID; a retry after a lost reply returns the stored receipt instead of applying the change twice.
+
+![Lea reads brief.md version 4. The tenant administrator removes her from North, her only grant on dispatch. After the acknowledgement her workspace list no longer contains dispatch, and a save from the open editor returns notFound; the file stays at version 4.](/help/img/zanzibar-revocation.svg)
 
 ## What for {#purpose}
 
@@ -484,6 +500,8 @@ Once agents take part, the usual solutions fall short:
 - Read-only mounts (\`@name\`) show files of another system with that system's rights, without copying them.
 
 ## How it works {#how}
+
+![The browser, the agent and the tenant administrator reach the filesystem service. The host operator uses a separately authenticated local interface. The service signs operation IDs with a key outside the data directory and reaches each private tenant Space through that tenant's queue.](/help/img/zanzibar-architecture.svg)
 
 ### Rights as relationships {#rights}
 
@@ -496,6 +514,10 @@ directory:dispatch#owner@agent:planner-17
 \`\`\`
 
 Lea is a member of North, North is editor of \`dispatch\`, the agent planner-17 is owner. The rights extend downwards to everything in \`dispatch\`. The effective rights are the union of all paths; a revocation removes only that one path. A workspace is visible exactly when one has viewer on its root.
+
+![Lea belongs to North, which has editor rights on the workspace root dispatch. Agent planner-17 owns dispatch. Both grants extend to brief.md.](/help/img/zanzibar-relationships.svg)
+
+![Lea owns her home lea; planner-17 owns its home and the shared workspace dispatch; North is editor on dispatch. Lea's workspace list contains dispatch only while she is in North.](/help/img/zanzibar-workspaces.svg)
 
 ### Store and contents {#store}
 
@@ -510,6 +532,8 @@ The tenant's space holds actors, nodes (directories, files), relations, receipts
 ### Operations and recovery {#operations}
 
 The service and its space process are separate processes; the space process exists in TypeScript and in Rust (\`files-space\`). Backups are encrypted archives, one for the data and one for the deployment state (sessions, keys, passwords). A restore advances the session epoch, so no old session survives. For a second site there is a standby with fencing and promotion; it is tested but not switched on on big.
+
+![Restore stays closed until independently verified recovery users reconcile every tenant in the new epoch.](/help/img/zanzibar-restore.svg)
 
 ## Zanzibar: starting point and implementation {#zanzibar}
 

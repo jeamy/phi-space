@@ -744,6 +744,10 @@ a.secondary-action, a.primary-action { text-decoration: none; }
 }
 .markdown-body h3 { color: var(--text-strong); font-size: 18px; margin: 28px 0 10px; }
 .markdown-body p { margin: 0 0 16px; }
+.markdown-body figure { margin: 6px 0 22px; }
+/* the diagrams are drawn for a light ground: a light card in both modes */
+.markdown-body figure img { display: block; max-width: 100%; height: auto; margin: 0 auto; padding: 16px; box-sizing: border-box; background: #f7fafc; border: 1px solid var(--line); border-radius: 10px; }
+.markdown-body figcaption { margin-top: 8px; color: var(--muted-strong); font-size: 13px; line-height: 1.5; }
 .markdown-body ul, .markdown-body ol { margin: 0 0 18px; padding-left: 22px; }
 .markdown-body li { margin: 6px 0; }
 .markdown-body li::marker { color: var(--accent-readable); }

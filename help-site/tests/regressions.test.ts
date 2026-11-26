@@ -36,6 +36,11 @@ test("F02: markdown consumes unknown block lines, H4-H6 and EOF", () => {
 		assert.ok(renderMarkdownToHtml(input).length > 0);
 	}
 	assert.equal(renderMarkdownToHtml("#### Heading"), "<h4>Heading</h4>");
+	// an image alone on its line is a figure with its text as the caption; only same-site paths and https load
+	assert.equal(renderMarkdownToHtml("![Lea & North](/help/img/x.svg)"), '<figure><img src="/help/img/x.svg" alt="Lea &amp; North" loading="lazy" decoding="async"><figcaption>Lea &amp; North</figcaption></figure>');
+	assert.equal(renderMarkdownToHtml("![bad](javascript:alert(1))"), "<p>bad)</p>");
+	assert.equal(renderMarkdownToHtml("![evil](//other.example/x.svg)"), "<p>evil</p>");
+	assert.equal(renderMarkdownToHtml("text\n![a](/x.svg)\nmore"), '<p>text</p>\n<figure><img src="/x.svg" alt="a" loading="lazy" decoding="async"><figcaption>a</figcaption></figure>\n<p>more</p>');
 	assert.equal(renderMarkdownToHtml("#invalid"), "<p>#invalid</p>");
 });
 

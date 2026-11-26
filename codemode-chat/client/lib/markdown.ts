@@ -1,6 +1,7 @@
 // Clean, presentation-neutral GFM Markdown renderer with explicit {#anchor} support.
 // Strips `{#anchor}` from visible H2/H3 text, sets `id="anchor"` on the heading element,
 // marks key-column tables with `data-help-column="key"`, and intercepts `help.*` links.
+// A line that is only `![text](src)` becomes a figure with that text as its caption; src is a root-relative path or https.
 
 function escapeHtml(text: string): string {
 	return text
@@ -28,6 +29,11 @@ export function splitTableRow(line: string): string[] {
 	cells.push(cell.trim()); return cells;
 }
 
+/** An image source this renderer accepts: a root-relative path on the same site or an https URL. */
+const imageSource = (src: string) => /^\/(?!\/)/.test(src) || /^https:\/\//i.test(src);
+/** `![text](src)` alone on a line. */
+const IMAGE_LINE = /^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$/;
+
 const listItem = (line: string) => /^( *)(?:(\d+)\.\s+|([-*])\s+)(.*)$/.exec(line);
 
 function renderInline(raw: string): string {
@@ -39,6 +45,9 @@ function renderInline(raw: string): string {
 	});
 
 	let html = escapeHtml(withPlaceholders);
+	// Images inline: ![text](src), before the links, whose pattern they contain
+	html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, src) =>
+		imageSource(src.trim()) ? `<img src="${src.trim()}" alt="${alt}" loading="lazy" decoding="async">` : alt);
 	// Links: [label](target)
 	html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label, href) => {
 		const cleanHref = href.trim();
@@ -87,6 +96,17 @@ export function renderMarkdownToHtml(markdown: string): string {
 			out.push(
 				`<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(codeLines.join("\n"))}</code></pre>`,
 			);
+			continue;
+		}
+
+		// A figure: an image alone on its line, its text as the caption
+		const image = IMAGE_LINE.exec(line);
+		if (image) {
+			const alt = escapeHtml(image[1]!), src = image[2]!.trim();
+			out.push(imageSource(src)
+				? `<figure><img src="${escapeHtml(src)}" alt="${alt}" loading="lazy" decoding="async"><figcaption>${alt}</figcaption></figure>`
+				: `<p>${alt}</p>`);
+			i++;
 			continue;
 		}
 
@@ -181,6 +201,7 @@ export function renderMarkdownToHtml(markdown: string): string {
 		while (
 			i < lines.length &&
 			lines[i]!.trim() !== "" &&
+			!IMAGE_LINE.test(lines[i]!) &&
 			!lines[i]!.trimStart().startsWith("```") &&
 			!lines[i]!.trimStart().startsWith("#") &&
 			!lines[i]!.trim().startsWith("|") &&

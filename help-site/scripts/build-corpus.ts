@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ArticleSeed } from "./corpus-articles-data.ts";
 import { ALL_ARTICLES } from "./corpus.ts";
-import { corpusHash, validateCorpus } from "./corpus-validation.ts";
+import { corpusHash, imageFiles, validateCorpus } from "./corpus-validation.ts";
 import { apiSignatures } from "./api-signatures.ts";
 import { previousArticlePaths, retireGeneratedArticles } from "./generated-articles.ts";
 
@@ -306,6 +306,12 @@ export async function buildCorpus(): Promise<{
 		modulePackages: catalog.modulePackages,
 		articles,
 	};
+
+	// the images the articles show (corpus/img, checked by validateCorpus), beside the articles at /help/img/
+	for (const pubRoot of [DIST_PUBLIC, NEXT_PUBLIC]) {
+		await mkdir(join(pubRoot, "help", "img"), { recursive: true });
+		for (const name of imageFiles()) await writeFile(join(pubRoot, "help", "img", name), await readFile(join(CORPUS_DIR, "img", name)));
+	}
 
 	const indexPath = join(DIST_PUBLIC, "help", "index.json");
 	const current = new Set(articles.map(article => article.path));
