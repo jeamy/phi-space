@@ -1,17 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-mode="dark" data-palette="spaces_default">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>phi-spaces files: recovery</title>
+<title>PHI-SPACES Files · Recovery</title>
 <link rel="stylesheet" href="/app/style.css">
+<script type="module" src="/app/theme.ts"></script>
 <script type="module" src="/app/recovery.ts"></script>
 </head>
 <body>
-<header>
-	<strong>phi-spaces files: recovery</strong>
+<header class="top">
+	<a class="brand" href="/recovery">PHI-<b>SPACES</b> <span class="sub">Files · Recovery</span></a>
 	<span id="who"></span>
+	<span class="spacer"></span>
 	<nav id="account" hidden><button id="logout" type="button">Sign out</button></nav>
+	<div class="theme-controls"></div>
 </header>
 <main id="signin" class="note" hidden>
 	<h1>Recovery</h1>

@@ -58,6 +58,8 @@ const ASSETS: Record<string, string> = {
 	"/client/draft.ts": "client/draft.ts",
 	"/app/style.css": "web/style.css",
 	"/app/recovery.ts": "web/recovery.ts",
+	"/app/theme.ts": "web/theme.ts",
+	"/app/palettes.ts": "web/palettes.ts",
 };
 
 const PAGE_HEADERS = {
@@ -108,7 +110,8 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 
 	const page = (res: import("node:http").ServerResponse, status: number, title: string, body: string, extra: Record<string, string | string[]> = {}) => {
 		res.writeHead(status, { ...PAGE_HEADERS, ...hsts, "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...extra });
-		res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)}</title><link rel="stylesheet" href="/app/style.css"><main class="note"><h1>${esc(title)}</h1>${body}</main>`);
+		res.end(`<!doctype html><html lang="en" data-mode="dark" data-palette="spaces_default"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} · PHI-SPACES Files</title><link rel="stylesheet" href="/app/style.css"><script type="module" src="/app/theme.ts"></script>`
+			+ `<header class="top"><a class="brand" href="/">PHI-<b>SPACES</b> <span class="sub">Files</span></a><span class="spacer"></span><div class="theme-controls"></div></header><main class="note"><h1>${esc(title)}</h1>${body}</main></html>`);
 	};
 	const json = (res: import("node:http").ServerResponse, status: number, v: unknown, extra: Record<string, string | string[]> = {}) => {
 		res.writeHead(status, { ...PAGE_HEADERS, ...hsts, "content-type": "application/json", "cache-control": "no-store", ...extra });

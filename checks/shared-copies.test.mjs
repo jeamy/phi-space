@@ -12,9 +12,10 @@ import { PACKAGE_PREFIX, REPO } from "./roots.mjs";
 const across = (file, projects) => projects.map((p) => `${p}/${file}`);
 
 /** Each group lists the paths (from the repository root) that must stay the same. The dashboard keeps a copy of the
- *  palettes too (src/dashboard/palettes.ts; tsconfig leaves it out, it uses the DOM). */
+ *  palettes too (src/dashboard/palettes.ts; tsconfig leaves it out, it uses the DOM), and so does spaces-files' page
+ *  (spaces-files/web/palettes.ts). */
 const COPIES = {
-	"client/lib/palettes.ts": [...across("client/lib/palettes.ts", ["help-site", "codemode-chat", "codemode-forum", "spaces-mmo"]), `${PACKAGE_PREFIX}src/dashboard/palettes.ts`],
+	"client/lib/palettes.ts": [...across("client/lib/palettes.ts", ["help-site", "codemode-chat", "codemode-forum", "spaces-mmo"]), `${PACKAGE_PREFIX}src/dashboard/palettes.ts`, "spaces-files/web/palettes.ts"],
 	"client/lib/markdown.ts": across("client/lib/markdown.ts", ["help-site", "codemode-chat", "codemode-forum", "spaces-mmo"]),
 	"server/env.ts": across("server/env.ts", ["codemode-chat", "codemode-forum", "spaces-files", "spaces-mmo"]),
 };

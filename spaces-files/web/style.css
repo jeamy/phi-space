@@ -1,23 +1,105 @@
-:root { color-scheme: light dark; --line: #8884; --accent: #2a6df4; font: 15px/1.45 system-ui, sans-serif; }
+/* The PHI-SPACES design of the projects and the dashboard (spaces/src/dashboard/style.css): theme.ts sets --color-a/b/c
+   and the label colors on <html> with data-mode from the shared palettes (palettes.ts); the surfaces below derive from
+   them. The defaults are PHI-SPACES Standard in dark mode, so the first paint matches before the script runs. */
+:root {
+	--font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--color-a: #AED83C; --color-b: #152B35; --color-c: #5C8EA0; --accent-ink: #101010; --editable-input: #3B82F6;
+	--palette-label-white: #E8EAED; --palette-label-grey: #969CA3;
+}
+:root, :root[data-mode="dark"] {
+	--bg: color-mix(in srgb, var(--color-b) 34%, #090d12);
+	--surface: color-mix(in srgb, var(--color-b) 48%, #0e141b);
+	--raised: color-mix(in srgb, var(--color-b) 62%, #151d26);
+	--header-bg: color-mix(in srgb, var(--color-b) 40%, #0a0f15);
+	--line: color-mix(in srgb, var(--color-c) 20%, #1b2430);
+	--line-strong: color-mix(in srgb, var(--color-c) 36%, #283546);
+	--text-strong: var(--palette-label-white); --text: #d5dce3; --muted: var(--palette-label-grey);
+	--accent: var(--color-a); --accent-fill: var(--color-a); --warning: #e4ae34; --danger: #ef4444; --success: #10b981;
+	--field: color-mix(in srgb, var(--color-b) 30%, #070a0e);
+	color-scheme: dark;
+}
+:root[data-mode="light"] {
+	--bg: color-mix(in srgb, var(--color-b) 18%, #f5f7f9);
+	--surface: #ffffff;
+	--raised: color-mix(in srgb, var(--color-b) 22%, #eef2f6);
+	--header-bg: color-mix(in srgb, var(--color-b) 14%, #f9fbfd);
+	--line: color-mix(in srgb, var(--color-c) 22%, #d5dde6);
+	--line-strong: color-mix(in srgb, var(--color-c) 38%, #b8c4d2);
+	--text-strong: #0f1722; --text: #1f2a37; --muted: #5b6673;
+	--accent: color-mix(in srgb, var(--color-a) 62%, #0a1017); --accent-fill: var(--color-a); --warning: #9a6a00; --danger: #b91c1c; --success: #047857;
+	--field: #ffffff;
+	color-scheme: light;
+}
+
+* { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; }
-header { display: flex; gap: 1rem; align-items: center; padding: .6rem 1rem; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-header nav { margin-left: auto; display: flex; gap: .6rem; align-items: center; }
-main { padding: 1rem; }
-main.note { max-width: 30rem; margin: 3rem auto; }
-#app { display: grid; grid-template-columns: minmax(14rem, 22rem) 1fr; gap: 1.5rem; }
-#admin { grid-column: 1 / -1; border-top: 1px solid var(--line); }
-@media (max-width: 720px) { #app { grid-template-columns: 1fr; } }
-h2 { font-size: 1.05rem; margin: 1rem 0 .4rem; }
-h3 { font-size: .95rem; margin: .8rem 0 .3rem; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font-sans); }
+button, input, select, textarea { font: inherit; color: inherit; }
+code, pre { font-family: var(--font-mono); font-size: 12.5px; }
+a { color: var(--accent); }
+h1 { font-size: 20px; margin: 0 0 12px; color: var(--text-strong); }
+h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 18px 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+section > h2:first-child { margin-top: 0; }
+h3 { font-size: 13px; margin: 12px 0 6px; color: var(--text-strong); }
+
+/* controls */
+button { border: 1px solid var(--line-strong); background: var(--raised); border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary, form.login button, #save, #ask-yes { color: var(--accent-ink); background: var(--accent-fill); border-color: var(--accent-fill); font-weight: 600; }
+#remove { color: var(--danger); }
+input, select { background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; padding: 5px 8px; font-size: 12.5px; min-width: 0; }
+input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--editable-input) 70%, transparent); outline-offset: 0; border-color: var(--editable-input); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
+form h3 { flex-basis: 100%; margin-bottom: 0; }
+
+/* header: brand, the signed-in identity, the account and the theme controls */
+header.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 16px; background: var(--header-bg); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+.brand { font-weight: 700; letter-spacing: .06em; color: var(--text-strong); text-decoration: none; }
+.brand b { color: var(--accent); }
+.brand .sub { font-weight: 400; letter-spacing: 0; color: var(--muted); margin-left: 8px; }
+#who { color: var(--muted); font-size: 12.5px; }
+.spacer { flex: 1; }
+header nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+header nav a { font-size: 12.5px; }
+.theme-controls { display: inline-flex; align-items: center; gap: 8px; }
+.mode-switch { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px; display: inline-flex; }
+.mode-switch button { color: var(--muted); font: 650 10px/1 var(--font-mono); letter-spacing: .08em; background: transparent; border: 0; border-radius: 4px; padding: 7px 8px; }
+.mode-switch button.is-active { color: var(--accent-ink); background: var(--accent-fill); }
+.theme-picker__select { border: 1px solid var(--line); background: var(--surface); color: var(--text); font: 600 10px/1 var(--font-mono); height: 34px; border-radius: 6px; padding: 0 10px; cursor: pointer; }
+
+/* the signed-in page */
+main { padding: 14px 16px; }
+#app { display: grid; grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr); gap: 14px; align-items: start; }
+#app > section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+#admin { grid-column: 1 / -1; }
+@media (max-width: 760px) { #app { grid-template-columns: minmax(0, 1fr); } main { padding: 10px 12px; } header.top { padding: 10px 12px; } }
 ul { list-style: none; padding: 0; margin: 0; }
-li { padding: .15rem 0; }
-li button.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
-textarea { width: 100%; min-height: 50vh; box-sizing: border-box; font: 14px/1.4 ui-monospace, monospace; }
-form { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; margin: .4rem 0; }
-form h3 { flex-basis: 100%; }
-#status, #admin-status { min-height: 1.4em; }
-#notice { margin: 0; padding: .5rem 1rem; background: #f4b42a33; border-bottom: 1px solid var(--line); cursor: pointer; }
-#ask { margin: .6rem 1rem; padding: .6rem 1rem; border: 1px solid var(--accent); border-radius: 4px; }
-#ask p { margin: .3rem 0; }
-#ask-detail { max-height: 40vh; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); padding: .5rem; margin: .4rem 0; }
+li { padding: 3px 0; }
+#workspaces li, #entries li { padding: 0; }
+li button.link { display: block; width: 100%; background: none; border: 1px solid transparent; border-radius: 6px; padding: 5px 8px; color: var(--text); font: inherit; text-align: left; }
+li button.link:hover { background: var(--raised); border-color: var(--line); }
+#entries li button.link { font-family: var(--font-mono); font-size: 12.5px; }
+#where, #editing { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text-strong); font-family: var(--font-mono); }
+details { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+textarea { width: 100%; min-height: 55vh; background: var(--field); border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 12px; font: 13px/1.5 var(--font-mono); resize: vertical; }
+#editor p:last-child { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; }
+#status, #admin-status { min-height: 1.4em; margin: 0 0 6px; color: var(--muted); font-size: 12.5px; }
+
+/* notices and questions */
+#notice { margin: 0; padding: 8px 16px; background: color-mix(in srgb, var(--warning) 18%, var(--surface)); color: var(--text-strong); border-bottom: 1px solid var(--line); cursor: pointer; }
+#ask { margin: 12px 16px 0; padding: 10px 14px; background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; }
+#ask p { margin: 6px 0; display: flex; gap: 6px; flex-wrap: wrap; }
+#ask-detail { max-height: 40vh; overflow: auto; white-space: pre-wrap; background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin: 6px 0; }
+
+/* the pages server/http.ts renders (sign-in, choices, errors) and the sign-in note */
+main.note { max-width: 26rem; margin: 9vh auto 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; }
+main.note p { margin: 8px 0; }
+main.note form:not(.login) { display: inline-flex; margin: 4px 6px 4px 0; }
+form.login { flex-direction: column; align-items: stretch; gap: 12px; margin-top: 4px; }
+form.login label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; letter-spacing: .04em; }
+form.login input { padding: 8px 10px; font-size: 14px; color: var(--text); }
+form.login button { padding: 8px 12px; font-size: 14px; }
