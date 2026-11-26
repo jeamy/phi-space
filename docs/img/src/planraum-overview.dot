@@ -1,0 +1,27 @@
+digraph "What runs where in a Planraum?" {
+#include
+	rankdir=TB;
+	person [label="Person\nbrowser or phone"];
+	idp [label="Identity provider\none account for both", fillcolor="#fcf2d9"];
+	providers [label="Model providers\nreceive prompts and excerpts", fillcolor="#fcf2d9"];
+	subgraph cluster_forum {
+		labelloc=b; label="codemode-forum • one Space"; labeljust=l; color="#648a85"; style=rounded;
+		web [label="web\nthe Planraum page\nsign-in, rooms, settings", fillcolor="#d8eeea"];
+		space [label="Space\ntasks, discussion, document,\nsettings, requests"];
+		agents [label="agents\nwork items"];
+		model [label="model\npi-ai, credentials"];
+		sources [label="sources\nrepositories and\nthe files connection"];
+	}
+	subgraph cluster_files {
+		labelloc=b; label="spaces-files • one tenant Space per tenant"; labeljust=l; color="#648a85"; style=rounded;
+		files [label="Filesystem service\nrights, versions, audit", fillcolor="#d8eeea"];
+		blobs [label="Workspaces\nfolders and files"];
+	}
+	person -> web [label="HTTPS, WebSocket"];
+	person -> idp [label="signs in", style=dashed];
+	person -> files [label="grants folders\nto the room", style=dashed];
+	web -> space; agents -> space; model -> space; sources -> space;
+	model -> providers [label="model calls"];
+	sources -> files [label="as the room's agent:\nlist, read, write"];
+	files -> blobs;
+}

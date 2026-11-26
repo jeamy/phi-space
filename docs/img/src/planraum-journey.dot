@@ -1,0 +1,14 @@
+digraph "From a folder to a plan and back" {
+#include
+	rankdir=LR;
+	material [label="1 Material\na folder in the workspace"];
+	brief [label="2 Brief\nwhat is to be planned"];
+	table [label="3 Table\nmodels read, ask,\npropose, vote", fillcolor="#d8eeea"];
+	plan [label="4 Plan\nversions, objections,\nacceptance", fillcolor="#d8eeea"];
+	file [label="5 File\nplan.md in the workspace"];
+	edit [label="6 People edit\nwith their own rights"];
+	person [label="The person\nanswers questions,\naccepts or objects", fillcolor="#fcf2d9"];
+	material -> brief -> table -> plan -> file -> edit;
+	edit -> material [label="the next run reads it", constraint=false];
+	person -> table [style=dashed]; person -> plan [style=dashed];
+}
