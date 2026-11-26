@@ -1,4 +1,4 @@
-digraph "What runs where in a Planraum?" {
+digraph "What runs where in FORUM?" {
 #include
 	rankdir=TB;
 	person [label="Person\nbrowser or phone"];
@@ -6,11 +6,12 @@ digraph "What runs where in a Planraum?" {
 	providers [label="Model providers\nreceive prompts and excerpts", fillcolor="#fcf2d9"];
 	subgraph cluster_forum {
 		labelloc=b; label="codemode-forum • one Space"; labeljust=l; color="#648a85"; style=rounded;
-		web [label="web\nthe Planraum page\nsign-in, rooms, settings", fillcolor="#d8eeea"];
+		web [label="web\nthe FORUM page\nsign-in, rooms, settings", fillcolor="#d8eeea"];
 		space [label="Space\ntasks, discussion, document,\nsettings, requests"];
 		agents [label="agents\nwork items"];
 		model [label="model\npi-ai, credentials"];
 		sources [label="sources\nrepositories and\nthe files connection"];
+		sandbox [label="sandbox\nruns scripts,\nno network, no files", fillcolor="#fcf2d9"];
 	}
 	subgraph cluster_files {
 		labelloc=b; label="spaces-files • one tenant Space per tenant"; labeljust=l; color="#648a85"; style=rounded;
@@ -20,7 +21,7 @@ digraph "What runs where in a Planraum?" {
 	person -> web [label="HTTPS, WebSocket"];
 	person -> idp [label="signs in", style=dashed];
 	person -> files [label="grants folders\nto the room", style=dashed];
-	web -> space; agents -> space; model -> space; sources -> space;
+	web -> space; agents -> space; model -> space; sources -> space; sandbox -> space;
 	model -> providers [label="model calls"];
 	sources -> files [label="as the room's agent:\nlist, read, write"];
 	files -> blobs;

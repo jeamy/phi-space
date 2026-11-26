@@ -4,19 +4,19 @@ digraph "Who may see what?" {
 	owner [label="Folder owner\na person in spaces-files", fillcolor="#fcf2d9"];
 	subgraph cluster_ws {
 		labelloc=b; label="Workspace in spaces-files"; labeljust=l; color="#648a85"; style=rounded;
-		src [label="material/\nthe source folder"];
-		dst [label="plans/\nthe target folder"];
+		src [label="a folder that is\nonly read"];
+		dst [label="the project folder\nuploads, plan, documents"];
 		other [label="everything else\nnever visible to the room"];
 	}
 	agent [label="The room's agent\none actor per room", fillcolor="#d8eeea"];
 	subgraph cluster_room {
 		labelloc=b; label="Room in the forum"; labeljust=l; color="#648a85"; style=rounded;
-		copy [label="Copy of the material\ntaken when a task is created"];
+		copy [label="Copy of the text and\nreduced pictures of a task"];
 		members [label="Room members\nsee the copy, the table,\nthe plan"];
 	}
 	providers [label="Model providers\nreceive excerpts", fillcolor="#fcf2d9"];
 	owner -> src [label="grants viewer"]; owner -> dst [label="grants editor"];
 	owner -> agent [label="can revoke\nat any time", style=dashed];
-	agent -> src [label="reads"]; agent -> dst [label="writes plan.md"];
+	agent -> src [label="reads"]; agent -> dst [label="reads and writes"];
 	agent -> copy; copy -> members; copy -> providers [label="excerpts in prompts"];
 }
