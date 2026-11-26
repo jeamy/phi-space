@@ -21,6 +21,10 @@
 //
 //   FILES_PUBLIC_ORIGIN     the browser's origin (default https://localhost:4200); FILES_HTTP_HOST (default 127.0.0.1)
 //                           and FILES_HTTP_PORT (default: the origin's port) where it listens
+//   FILES_LOGIN=password    sign-in with a username and password (server/passwords.ts, `operator set-password`)
+//                           instead of the OpenID provider of FILES_OIDC_*
+//   FILES_HTTP_PLAIN=1      plain HTTP on the loopback address FILES_HTTP_HOST, behind a TLS proxy (nginx) that serves
+//                           FILES_PUBLIC_ORIGIN; no certificate here
 //   FILES_TLS_CERT / _KEY   PEM files (default .local/tls/cert.pem and key.pem, `npm run dev-cert`); without them the
 //                           browser adapter stays off
 //   FILES_OIDC_ISSUER, FILES_OIDC_CLIENT_ID, FILES_OIDC_CLIENT_SECRET, FILES_OIDC_CA (a PEM file)
@@ -87,8 +91,9 @@ try {
 	const origin = env.FILES_PUBLIC_ORIGIN || "https://localhost:4200";
 	const cert = env.FILES_TLS_CERT || join(ROOT, ".local", "tls", "cert.pem");
 	const key = env.FILES_TLS_KEY || join(ROOT, ".local", "tls", "key.pem");
-	if (existsSync(cert) && existsSync(key)) {
-		const oidc = new OidcClient({
+	const plain = env.FILES_HTTP_PLAIN === "1", password = env.FILES_LOGIN === "password";
+	if (plain || (existsSync(cert) && existsSync(key))) {
+		const oidc = password ? undefined : new OidcClient({
 			issuer: env.FILES_OIDC_ISSUER || "http://127.0.0.1:4201",
 			clientId: env.FILES_OIDC_CLIENT_ID || "spaces-files-dev",
 			clientSecret: env.FILES_OIDC_CLIENT_SECRET || undefined,
@@ -96,8 +101,9 @@ try {
 			ca: env.FILES_OIDC_CA ? readFileSync(env.FILES_OIDC_CA, "utf8") : undefined,
 		});
 		const port = Number(env.FILES_HTTP_PORT || new URL(origin).port || 443);
-		servers.push(await serveHttp(service, { listen: { host: env.FILES_HTTP_HOST || "127.0.0.1", port }, tls: { cert: readFileSync(cert), key: readFileSync(key) }, origin, oidc }));
-		notes.push(`browser ${origin} (identity provider ${oidc.issuer})`);
+		const host = env.FILES_HTTP_HOST || "127.0.0.1";
+		servers.push(await serveHttp(service, { listen: { host, port }, tls: plain ? undefined : { cert: readFileSync(cert), key: readFileSync(key) }, origin, oidc }));
+		notes.push(`browser ${origin} (${oidc ? `identity provider ${oidc.issuer}` : "username and password"}; ${plain ? `plain HTTP on ${host}:${port} behind a TLS proxy` : `HTTPS on ${host}:${port}`})`);
 	} else notes.push(`browser off: no TLS certificate at ${cert} (npm run dev-cert)`);
 } catch (e) {
 	console.error(`[files] cannot start: ${(e as Error).message}`);

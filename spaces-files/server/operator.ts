@@ -12,6 +12,7 @@
 //   … health | metrics | maintain [tenant] | compact
 //   … new-backup-key <file> | backup-offline <file> | restore <file> | restore-state <file> | promote-standby   (offline: the service stopped)
 //   (root: npm --prefix spaces-files run operator -- …; FILES_STATE_DIR names the state directory)
+import { checkUsername, hashPassword, LOCAL_ISSUER, validHash } from "./passwords.ts";
 import { promoteStandby } from "./standby.ts";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -49,6 +50,9 @@ export async function serveOperator(svc: FilesService, stateDir: string): Promis
 			case "maintain": return Promise.all((a.tenantId ? [String(a.tenantId)] : await svc.tenants()).map(async (t) => ({ tenantId: t, ...(await svc.maintainTenant(t)) })));
 			case "compact": return svc.compact();
 			case "metrics": return svc.metrics.snapshot();
+			case "setPassword": { const u = checkUsername(String(a.subject)); if (!validHash(a.hash)) throw Object.assign(new Error("not a password hash"), { code: "invalidInput" }); svc.state.setPassword(u, a.hash); return { username: u, issuer: LOCAL_ISSUER }; }
+			case "removePassword": return { removed: svc.state.removePassword(checkUsername(String(a.subject))) };
+			case "passwords": return svc.state.passwordUsers();
 			case "restoreStatus": return { journal: svc.state.restoreJournal(), mode: svc.state.mode() };
 			case "rotateContentKey": return { generation: svc.state.rotateContentKey(), note: "seals nothing until the next state backup" };
 			case "setMode": await svc.setMode(a.mode === "maintenance" ? "maintenance" : a.mode === "normal" ? "normal" : (() => { throw Object.assign(new Error("mode is normal or maintenance"), { code: "invalidInput" }); })()); return { mode: svc.state.mode() };
@@ -103,6 +107,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	}
 	// an enrollment token is made here and only its hash goes to the service; the operator hands the token to the host
 	const token = newEnrollToken();
+	// a password is hashed here and only its hash goes to the service
+	let pwHash = "";
+	if (cmd === "set-password" && rest.length === 1) {
+		try { checkUsername(rest[0]); pwHash = await hashPassword(await readSecret(`password for ${rest[0]}: `)); }
+		catch (e) { console.error(`[operator] set-password: ${(e as Error).message}`); process.exit(2); }
+	}
 	const call = cmd === "create-tenant" && rest.length === 5 ? { op: "createTenant", args: { tenantId: rest[0], actorId: rest[1], homeName: rest[2], issuer: rest[3], subject: rest[4] } }
 		: cmd === "tenants" ? { op: "tenants" }
 		: cmd === "mode" && rest.length === 1 ? { op: "setMode", args: { mode: rest[0] } }
@@ -122,9 +132,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 		: cmd === "maintain" && rest.length <= 1 ? { op: "maintain", args: rest.length ? { tenantId: rest[0] } : {} }
 		: cmd === "compact" ? { op: "compact" }
 		: cmd === "metrics" ? { op: "metrics" }
+		: cmd === "set-password" && rest.length === 1 ? { op: "setPassword", args: { subject: rest[0], hash: pwHash } }
+		: cmd === "remove-password" && rest.length === 1 ? { op: "removePassword", args: { subject: rest[0] } }
+		: cmd === "passwords" ? { op: "passwords" }
 		: null;
 	if (!call) {
-		console.error("usage: operator.ts create-tenant <tenant> <adminId> <homeName> <issuer> <subject> | tenants | mode normal|maintenance | backup <file> | backup-state <file> | rotate-content-key | roster-add|roster-remove <tenant> <issuer> <subject> | roster | approve-reconciler <tenant> <issuer> <subject> | mark-reconciled <tenant> | restore-status | enroll-host <peerId> <tenant,…> | revoke-host <peerId> | hosts | health | metrics | maintain [tenant] | compact | new-backup-key <file> | backup-offline <file> | restore <file> | restore-state <file> | promote-standby");
+		console.error("usage: operator.ts create-tenant <tenant> <adminId> <homeName> <issuer> <subject> | tenants | mode normal|maintenance | backup <file> | backup-state <file> | rotate-content-key | roster-add|roster-remove <tenant> <issuer> <subject> | roster | approve-reconciler <tenant> <issuer> <subject> | mark-reconciled <tenant> | restore-status | enroll-host <peerId> <tenant,…> | revoke-host <peerId> | hosts | health | metrics | maintain [tenant] | compact | set-password <username> | remove-password <username> | passwords | new-backup-key <file> | backup-offline <file> | restore <file> | restore-state <file> | promote-standby");
 		process.exit(2);
 	}
 	const t = socketTransport({ path: join(stateDir, OPERATOR_SOCKET) });
@@ -137,4 +150,31 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 		console.error(`[operator] the service does not answer at ${join(stateDir, OPERATOR_SOCKET)}: ${(e as Error).message}`);
 		process.exitCode = 1;
 	} finally { t.close(); }
+}
+
+/** A secret from the terminal without echo, or the first line of stdin when it is not a terminal. */
+async function readSecret(prompt: string): Promise<string> {
+	const stdin = process.stdin;
+	if (!stdin.isTTY) {
+		let text = "";
+		for await (const c of stdin) text += c;
+		return text.split(/\r?\n/)[0] ?? "";
+	}
+	const ask = (p: string) => new Promise<string>((resolve) => {
+		process.stderr.write(p);
+		stdin.setRawMode(true);
+		stdin.resume();
+		let s = "";
+		const on = (b: Buffer) => {
+			for (const ch of b.toString("utf8")) {
+				if (ch === "\r" || ch === "\n") { stdin.setRawMode(false); stdin.pause(); stdin.off("data", on); process.stderr.write("\n"); return resolve(s); }
+				if (ch === "\u0003") { stdin.setRawMode(false); process.stderr.write("\n"); process.exit(130); }
+				if (ch === "\u007f") s = s.slice(0, -1); else s += ch;
+			}
+		};
+		stdin.on("data", on);
+	});
+	const one = await ask(prompt), two = await ask("again: ");
+	if (one !== two) throw new Error("the two entries differ");
+	return one;
 }

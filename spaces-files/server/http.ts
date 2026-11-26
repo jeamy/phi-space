@@ -1,9 +1,11 @@
-// The browser and admin adapter (docs/zanzibar-agent-filesystem-plan.en.md, sections 2 and 5, phase 4): HTTPS only,
-// the login through an OpenID provider (server/oidc.ts), the session as an opaque handle in a `__Host-` cookie
+// The browser and admin adapter (docs/zanzibar-agent-filesystem-plan.en.md, sections 2 and 5, phase 4): HTTPS, or
+// plain HTTP on a loopback address behind a TLS proxy (nginx) whose public origin is https; the login through an OpenID
+// provider (server/oidc.ts) or with a username and password (server/passwords.ts), the session as an opaque handle in a `__Host-` cookie
 // (Secure, HttpOnly, SameSite=Strict), every mutation and every API call checked for the service's own origin and a
 // CSRF token bound to the session before it reaches the service, and the page itself (web/).
 //
-// Routes: GET / and /app/* (the page), GET /auth/login[?tenant=], GET /auth/callback, POST /auth/select (the tenant
+// Routes: GET / and /app/* (the page), GET /auth/login[?tenant=], GET /auth/callback, POST /auth/password (the
+// form of GET /auth/login without an OpenID provider), POST /auth/select (the tenant
 // choice after a login with several bindings), POST /auth/logout, GET /api/session, POST /api/call {op, args}; and the
 // recovery interface of an open restore (section 6.5, step 2): GET /recovery/login?tenant= (the same OIDC sign-in,
 // admitted by the recovery roster alone), GET /recovery (its page), GET /api/recovery/session, POST /api/recovery
@@ -13,21 +15,27 @@
 // FsActor row decides. Nothing is logged: not contents, not handles, not tokens, not paths.
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
+import http from "node:http";
 import https from "node:https";
 import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
 import { ROOT } from "./env.ts";
 import type { OidcClient, Pending, Verified } from "./oidc.ts";
+import { Attempts, checkUsername, LOCAL_ISSUER, verifyPassword } from "./passwords.ts";
 import type { FilesService } from "./service.ts";
 import { ADMIN_OPS, base64Chars, FILE_OPS, isObj, RECOVERY_OPS, runOp, wireError } from "./wire.ts";
 import { BadCall } from "./wire.ts";
 
 export type HttpOptions = {
 	listen: { host: string; port: number };
-	tls: { cert: string | Buffer; key: string | Buffer };
+	/** HTTPS with this certificate; without it plain HTTP, admitted only on a loopback address (a TLS proxy in front). */
+	tls?: { cert: string | Buffer; key: string | Buffer };
 	/** The service's public origin, e.g. `https://localhost:4200`: the only accepted Origin, the base of the redirect URI. */
 	origin: string;
-	oidc: OidcClient;
+	/** The OpenID provider; without one, GET /auth/login shows the password form (usernames of the issuer `local`). */
+	oidc?: OidcClient;
+	/** The bounds on failed password attempts (server/passwords.ts). */
+	attempts?: Attempts;
 	/** Requests at once (default 64), counted from their arrival, before any session lookup: the one global bound of section 5. */
 	maxInflight?: number;
 	/** How long a started login may take (default 10 minutes). */
@@ -77,6 +85,8 @@ const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.fr
 export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<HttpServer> {
 	const origin = new URL(o.origin).origin;
 	if (!origin.startsWith("https://")) throw new Error("the public origin must be https");
+	if (!o.tls && !["127.0.0.1", "::1", "localhost"].includes(o.listen.host)) throw new Error("plain HTTP listens only on a loopback address, behind a TLS proxy");
+	const attempts = o.attempts ?? new Attempts({ now: o.now });
 	// HSTS pins a whole host name to https, every port: never for a loopback name, where other plain-http tools run
 	const hsts: Record<string, string> = LOOPBACK.has(new URL(origin).hostname) ? {} : { "strict-transport-security": "max-age=31536000" };
 	const now = o.now ?? Date.now;
@@ -121,6 +131,31 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			{ "set-cookie": [cookie(SESSION_COOKIE, r.handle, { maxAgeS, sameSite: "Strict" }), clear(LOGIN_COOKIE), clear(CHOICE_COOKIE)] });
 	};
 
+	/** A verified identity (from the OpenID provider or a password): into the recovery interface, a tenant, or a choice. */
+	const signedIn = async (res: import("node:http").ServerResponse, jar: Map<string, string>, who: Verified, tenant: string | null, recovery: boolean) => {
+		if (recovery) {
+			// the roster decides, not the login index or any row of the restored data
+			let r: { handle: string; expiresAt: number };
+			try { r = await svc.recoveryLogin(tenant!, who); }
+			catch { return page(res, 403, "No recovery access", "<p>No restore is open, or this account is not on the tenant's recovery roster.</p>", { "set-cookie": clear(LOGIN_COOKIE) }); }
+			const old = jar.get(RECOVERY_COOKIE);
+			if (old) svc.state.endSession(old);
+			const maxAgeS = Math.max(1, Math.floor((r.expiresAt - now()) / 1000));
+			return page(res, 200, "Signed in for recovery", `<p><a href="/recovery">Continue</a></p><meta http-equiv="refresh" content="0;url=/recovery">`,
+				{ "set-cookie": [cookie(RECOVERY_COOKIE, r.handle, { maxAgeS, sameSite: "Strict" }), clear(LOGIN_COOKIE)] });
+		}
+		const tenants = svc.state.tenantsFor(who.issuer, who.subject);
+		if (tenant !== null && !tenants.includes(tenant)) return page(res, 403, "No access", `<p>This account has no access there.</p>`, { "set-cookie": clear(LOGIN_COOKIE) });
+		const pick = tenant ?? (tenants.length === 1 ? tenants[0] : null);
+		if (tenants.length === 0) return page(res, 403, "No access", `<p>This account has no access to any tenant.</p>`, { "set-cookie": clear(LOGIN_COOKIE) });
+		if (pick !== null) return enter(res, jar, who, pick);
+		prune(choices);
+		const token = randomBytes(24).toString("base64url");
+		choices.set(token, { who, tenants, exp: now() + ttl });
+		const forms = tenants.map((t) => `<form method="post" action="/auth/select"><input type="hidden" name="tenant" value="${esc(t)}"><button>${esc(t)}</button></form>`).join("");
+		return page(res, 200, "Choose a tenant", forms, { "set-cookie": [cookie(CHOICE_COOKIE, token, { maxAgeS: Math.floor(ttl / 1000), sameSite: "Strict" }), clear(LOGIN_COOKIE)] });
+	};
+
 	const readBody = (req: import("node:http").IncomingMessage) => new Promise<Buffer | null>((resolve, reject) => {
 		const len = Number(req.headers["content-length"] ?? NaN);
 		if (Number.isFinite(len) && len > maxBody) { resolve(null); req.resume(); return; }
@@ -159,6 +194,10 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			const recovery = route === "GET /recovery/login";
 			const tenant = url.searchParams.get("tenant");
 			if (recovery && !tenant) return page(res, 400, "Recovery sign-in", "<p>Name the tenant: /recovery/login?tenant=…</p>");
+			if (!o.oidc) {
+				const hidden = `${tenant ? `<input type="hidden" name="tenant" value="${esc(tenant)}">` : ""}${recovery ? `<input type="hidden" name="recovery" value="1">` : ""}`;
+				return page(res, 200, recovery ? "Recovery sign-in" : "Sign in", `<form method="post" action="/auth/password" class="login">${hidden}<label>Username <input name="username" autocomplete="username" required autofocus></label><label>Password <input name="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form>`);
+			}
 			const pending = await o.oidc.begin();
 			const binding = randomBytes(24).toString("base64url");
 			logins.set(pending.state, { pending, binding, tenant, recovery, exp: now() + ttl });
@@ -173,30 +212,30 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			logins.delete(state); // a state is used once
 			if (!l || l.exp <= now() || !same(l.binding, jar.get(LOGIN_COOKIE) ?? "") || !code)
 				return page(res, 400, "Sign-in failed", `<p>This sign-in was not started here, has expired or was used already. <a href="/auth/login">Sign in again</a></p>`, { "set-cookie": clear(LOGIN_COOKIE) });
+			if (!o.oidc) return page(res, 404, "Sign-in failed", "<p>No identity provider is configured.</p>");
 			let who: Verified;
 			try { who = await o.oidc.complete(l.pending, code); }
 			catch { return page(res, 400, "Sign-in failed", `<p>The identity provider's answer could not be verified. <a href="/auth/login">Sign in again</a></p>`, { "set-cookie": clear(LOGIN_COOKIE) }); }
-			if (l.recovery) {
-				// the roster decides, not the login index or any row of the restored data
-				let r: { handle: string; expiresAt: number };
-				try { r = await svc.recoveryLogin(l.tenant!, who); }
-				catch { return page(res, 403, "No recovery access", "<p>No restore is open, or this account is not on the tenant's recovery roster.</p>", { "set-cookie": clear(LOGIN_COOKIE) }); }
-				const old = jar.get(RECOVERY_COOKIE);
-				if (old) svc.state.endSession(old);
-				const maxAgeS = Math.max(1, Math.floor((r.expiresAt - now()) / 1000));
-				return page(res, 200, "Signed in for recovery", `<p><a href="/recovery">Continue</a></p><meta http-equiv="refresh" content="0;url=/recovery">`,
-					{ "set-cookie": [cookie(RECOVERY_COOKIE, r.handle, { maxAgeS, sameSite: "Strict" }), clear(LOGIN_COOKIE)] });
+			return signedIn(res, jar, who, l.tenant, l.recovery);
+		}
+		if (route === "POST /auth/password") {
+			if (o.oidc) return page(res, 404, "Sign-in failed", "<p>Sign in through the identity provider. <a href=\"/auth/login\">Sign in</a></p>");
+			if (!sameOrigin(req)) return page(res, 403, "Refused", "<p>A request from another origin.</p>");
+			const body = await readBody(req);
+			const f = new URLSearchParams(body === null ? "" : body.toString("utf8"));
+			const username = (f.get("username") ?? "").trim().toLowerCase(), password = f.get("password") ?? "";
+			const tenant = f.get("tenant") || null, recovery = f.get("recovery") === "1";
+			if (recovery && !tenant) return page(res, 400, "Recovery sign-in", "<p>Name the tenant: /recovery/login?tenant=…</p>");
+			const again = `<a href="/auth/login${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""}">Sign in again</a>`;
+			let user: string;
+			try { user = checkUsername(username); } catch { return page(res, 401, "Sign-in failed", `<p>Wrong username or password. ${again}</p>`); }
+			if (!attempts.allowed(user)) return page(res, 429, "Sign-in failed", `<p>Too many failed attempts; try again later.</p>`, { "retry-after": "900" });
+			if (!(await verifyPassword(password, svc.state.passwordHash(user)))) {
+				attempts.failed(user);
+				return page(res, 401, "Sign-in failed", `<p>Wrong username or password. ${again}</p>`);
 			}
-			const tenants = svc.state.tenantsFor(who.issuer, who.subject);
-			if (l.tenant !== null && !tenants.includes(l.tenant)) return page(res, 403, "No access", `<p>This account has no access there.</p>`, { "set-cookie": clear(LOGIN_COOKIE) });
-			const pick = l.tenant ?? (tenants.length === 1 ? tenants[0] : null);
-			if (tenants.length === 0) return page(res, 403, "No access", `<p>This account has no access to any tenant.</p>`, { "set-cookie": clear(LOGIN_COOKIE) });
-			if (pick !== null) return enter(res, jar, who, pick);
-			prune(choices);
-			const token = randomBytes(24).toString("base64url");
-			choices.set(token, { who, tenants, exp: now() + ttl });
-			const forms = tenants.map((t) => `<form method="post" action="/auth/select"><input type="hidden" name="tenant" value="${esc(t)}"><button>${esc(t)}</button></form>`).join("");
-			return page(res, 200, "Choose a tenant", forms, { "set-cookie": [cookie(CHOICE_COOKIE, token, { maxAgeS: Math.floor(ttl / 1000), sameSite: "Strict" }), clear(LOGIN_COOKIE)] });
+			attempts.succeeded(user);
+			return signedIn(res, jar, { issuer: LOCAL_ISSUER, subject: user }, tenant, recovery);
 		}
 		if (route === "POST /auth/select") {
 			if (!sameOrigin(req)) return page(res, 403, "Refused", "<p>A request from another origin.</p>");
@@ -249,14 +288,15 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 		json(res, 404, { ok: false, error: { code: "notFound", message: "no such route" } });
 	};
 
-	const server = https.createServer({ cert: o.tls.cert, key: o.tls.key, minVersion: "TLSv1.2" }, (req, res) => {
+	const onRequest = (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => {
 		// the global bound: a request counts until it is answered; one with a session enters its tenant's queue, whose
 		// own bound then applies, but the HTTP layer holds every request alike until it is answered
 		if (inflight >= maxInflight) { json(res, 503, { ok: false, error: { code: "unavailable", message: "busy", retryAfterMs: 1000 } }, { "retry-after": "1" }); req.resume(); return; }
 		inflight++;
 		res.on("close", () => { inflight--; });
 		handle(req, res).catch(() => { if (!res.headersSent) json(res, 500, { ok: false, error: { code: "internal", message: "internal error" } }); else res.destroy(); });
-	});
+	};
+	const server = o.tls ? https.createServer({ cert: o.tls.cert, key: o.tls.key, minVersion: "TLSv1.2" }, onRequest) : http.createServer(onRequest);
 	server.headersTimeout = 20_000;
 	server.requestTimeout = 120_000;
 	await new Promise<void>((r, j) => { server.once("error", j); server.listen(o.listen.port, o.listen.host, r); });

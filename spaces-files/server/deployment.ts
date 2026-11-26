@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS roster (tenant_id TEXT NOT NULL, issuer TEXT NOT NULL
 CREATE TABLE IF NOT EXISTS reconcilers (tenant_id TEXT NOT NULL, epoch INTEGER NOT NULL, issuer TEXT NOT NULL, subject TEXT NOT NULL, PRIMARY KEY (tenant_id, epoch));
 CREATE TABLE IF NOT EXISTS reconciled (tenant_id TEXT NOT NULL, epoch INTEGER NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (tenant_id, epoch));
 CREATE TABLE IF NOT EXISTS recoverers (actor_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, issuer TEXT NOT NULL, subject TEXT NOT NULL, epoch INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS passwords (subject TEXT PRIMARY KEY, hash TEXT NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS operator_audit (seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL, operation TEXT NOT NULL, detail TEXT NOT NULL);
 `;
 
@@ -424,6 +425,24 @@ export class DeploymentState {
 		return j && typeof j.info.epoch === "number" ? j.info.epoch : null;
 	}
 	endRestore(): void { this.#tx(() => this.#db.prepare("DELETE FROM restore_journal").run()); }
+
+	/** Password sign-in (server/passwords.ts): one scrypt hash per username of the issuer `local`, set by the host operator. */
+	setPassword(subject: string, hash: string): void {
+		this.#tx(() => { this.#db.prepare("INSERT INTO passwords (subject, hash, updated_at) VALUES (?, ?, ?) ON CONFLICT(subject) DO UPDATE SET hash = excluded.hash, updated_at = excluded.updated_at").run(subject, hash, this.#highWater || this.#clock()); this.#bump(); });
+		this.operatorAudit("setPassword", { subject });
+	}
+	removePassword(subject: string): boolean {
+		let n = 0;
+		this.#tx(() => { n = Number(this.#db.prepare("DELETE FROM passwords WHERE subject = ?").run(subject).changes); this.#bump(); });
+		this.operatorAudit("removePassword", { subject, removed: n > 0 });
+		return n > 0;
+	}
+	passwordHash(subject: string): string | null {
+		return (this.#db.prepare("SELECT hash FROM passwords WHERE subject = ?").get(subject) as { hash: string } | undefined)?.hash ?? null;
+	}
+	passwordUsers(): string[] {
+		return (this.#db.prepare("SELECT subject FROM passwords ORDER BY subject").all() as Array<{ subject: string }>).map((r) => r.subject);
+	}
 
 	/** The recovery roster: identities the host operator approved, per tenant, outside the restorable data. */
 	rosterAdd(tenantId: string, issuer: string, subject: string): void {

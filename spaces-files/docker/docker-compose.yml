@@ -1,0 +1,25 @@
+# spaces-files on a server (spaces-files/docs/operator-guide.en.md, section 11): one container with the service and its
+# Space process (the Rust files-space), in the host network, listening with plain HTTP on the loopback address only;
+# nginx in front serves https://FILES_PUBLIC_ORIGIN and passes Host and Origin unchanged. The three directories are in
+# the volume `files`. Sign-in with a username and password (`npm run docker:operator -- set-password <name>`).
+name: phi-spaces-files
+
+services:
+  files:
+    image: phi-spaces-files:rust
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    network_mode: host
+    env_file: [{path: ../.env, required: false}]
+    environment:
+      FILES_LOGIN: password
+      FILES_HTTP_PLAIN: "1"
+      FILES_HTTP_HOST: 127.0.0.1
+      FILES_HTTP_PORT: ${FILES_HTTP_PORT:-4200}
+      FILES_PUBLIC_ORIGIN: ${FILES_PUBLIC_ORIGIN:-https://spaces-files.eibrain.org}
+    volumes: ["files:/srv/files"]
+    stop_grace_period: 30s
+
+volumes:
+  files: {}

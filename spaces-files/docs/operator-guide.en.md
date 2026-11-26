@@ -382,3 +382,38 @@ To promote the standby after its Space store was promoted: stop `standby-host.ts
 then start the service on them. The marker that command writes fences the old primary: it can no longer seed or
 write the standby. Agent hosts enroll again after a promotion (their keys live in `control.sqlite`, which is not
 replicated).
+
+## 11. On a server behind nginx (big)
+
+On big, spaces-files runs as one container (`spaces-files/docker/`): the service and its Space process, the Rust
+`files-space` (R-D12), in the host network. It speaks plain HTTP on `127.0.0.1:4200` only, and nginx in front serves
+`https://spaces-files.eibrain.org` (`spaces-files/docker/nginx-spaces-files.conf`). Sign-in is with a username and
+password (`FILES_LOGIN=password`): a username is the subject of the issuer `local`, the deployment state keeps its
+scrypt hash, and failed attempts lock a username for 15 minutes after five. The three directories live in the volume
+`phi-spaces-files_files`.
+
+From the checkout on big (`/media/docker/spaces`, master):
+
+```
+git pull --ff-only
+npm --prefix spaces-files run docker:big:rust:up        # builds phi-spaces-files:rust, starts the container
+npm --prefix spaces-files run docker:big:rust:logs      # "[files] ready"
+```
+
+The first tenant and its administrator, then the administrator's password (asked twice, without echo; only its hash
+reaches the service):
+
+```
+npm --prefix spaces-files run docker:operator -- create-tenant <tenant> <user> <user> local <user>
+npm --prefix spaces-files run docker:operator -- set-password <user>
+npm --prefix spaces-files run docker:operator -- passwords   # the usernames that have one
+```
+
+nginx, once (as root): put the port-80 block of the template alone in
+`/etc/nginx/sites-available/spaces-files.eibrain.org`, link it into `sites-enabled`, `nginx -t && systemctl reload nginx`,
+take the certificate with `certbot certonly --webroot -w /var/www/acme -d spaces-files.eibrain.org`, then install the
+whole template and reload again. The service checks every mutation's Origin against `FILES_PUBLIC_ORIGIN`, so the
+proxy passes Host and Origin unchanged.
+
+A later deploy is `git pull --ff-only` and `docker:big:rust:up` again; the volume stays. Backups (section 3) are not
+scheduled on big yet.

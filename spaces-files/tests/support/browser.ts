@@ -3,6 +3,7 @@
 // whole sign-in through the development IdP. Each browser is one jar, so two of them are two users.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import { tmpdir } from "node:os";
@@ -34,17 +35,21 @@ export class Browser {
 	readonly jar = new Map<string, string>();
 	csrf = "";
 	readonly origin: string;
-	constructor(origin: string) { this.origin = origin; }
+	/** Where requests go when it is not the origin: a plain-HTTP server behind the proxy that serves the origin. */
+	readonly base: string;
+	constructor(origin: string, base?: string) { this.origin = origin; this.base = base ?? origin; }
 
 	async request(method: string, path: string, o: { body?: string | Buffer; headers?: Record<string, string>; origin?: string | null } = {}): Promise<Res> {
-		const u = new URL(path, this.origin);
+		const u = new URL(path, this.base);
 		const headers: Record<string, string> = { ...(o.headers ?? {}) };
 		if (this.jar.size) headers.cookie = [...this.jar].map(([k, v]) => `${k}=${v}`).join("; ");
 		const originHeader = o.origin === undefined ? (method === "GET" ? null : this.origin) : o.origin;
 		if (originHeader !== null) headers.origin = originHeader;
 		if (o.body !== undefined) headers["content-length"] = String(Buffer.byteLength(o.body));
 		return new Promise((resolve, reject) => {
-			const req = https.request(u, { method, headers, ca: testCert().cert }, (res) => {
+			const req = (u.protocol === "http:" ? http.request(u, { method, headers }, onRes) : https.request(u, { method, headers, ca: testCert().cert }, onRes));
+			const self = this;
+			function onRes(res: import("node:http").IncomingMessage) {
 				const chunks: Buffer[] = [];
 				res.on("data", (c: Buffer) => chunks.push(c));
 				res.on("end", () => {
@@ -52,14 +57,14 @@ export class Browser {
 						const [pair] = c.split(";");
 						const i = pair.indexOf("=");
 						const name = pair.slice(0, i), value = pair.slice(i + 1);
-						if (/Max-Age=0/.test(c) || value === "") this.jar.delete(name); else this.jar.set(name, value);
+						if (/Max-Age=0/.test(c) || value === "") self.jar.delete(name); else self.jar.set(name, value);
 					}
 					const body = Buffer.concat(chunks).toString("utf8");
 					let json;
 					try { json = JSON.parse(body); } catch { /* a page */ }
 					resolve({ status: res.statusCode ?? 0, headers: res.headers, body, json });
 				});
-			});
+			}
 			req.on("error", reject);
 			req.end(o.body);
 		});
@@ -79,6 +84,13 @@ export class Browser {
 	async session(): Promise<Res> {
 		const r = await this.request("GET", "/api/session");
 		if (r.json?.ok) this.csrf = r.json.value.csrf;
+		return r;
+	}
+
+	/** Signs in with a username and password (/auth/login shows the form, POST /auth/password). */
+	async passwordSignIn(username: string, password: string, extra = ""): Promise<Res> {
+		const r = await this.request("POST", "/auth/password", { body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}${extra}`, headers: { "content-type": "application/x-www-form-urlencoded" } });
+		await this.session();
 		return r;
 	}
 
