@@ -447,8 +447,13 @@ SameSite=Strict). Then:
 - signing out ends the session and goes on to the provider's end-session address.
 
 Locally: `idp/` at the repository root runs Keycloak (`idp/README.md`); the realm `phi` has the client
-`codemode-forum` for `http://localhost:4100`. Rooms are still open to every signed-in person; who may enter which room
-follows with phase 1 of that plan.
+`codemode-forum` for `http://localhost:4100`. A room belongs to the person who made it
+(`server/rooms.ts`, the entry `RoomAccess`, kept for good): the owner invites others by their ID (the menu under their
+name shows it) as members, who write in the room (tasks, runs, the table, accepting and objecting), or as viewers, who
+read along. A room in which a person has no role does not exist for them (404 on the API, the WebSocket refused), an
+administrator included; a script with `x-admin-token` passes as the owner. `GET /api/rooms` lists the person's rooms,
+`POST /api/rooms {room}` makes one, `/api/rooms/<room>/access` names the people (GET for anyone in the room, POST
+`{userId, role}` with `role` `member`, `viewer` or null for the owner).
 
 ## Safety notes
 

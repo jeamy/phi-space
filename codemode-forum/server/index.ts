@@ -19,6 +19,7 @@ import { NO_WAIT } from "phi-spaces";
 import { upgradeWebSocket } from "phi-spaces/ws";
 import { Auth, loginConfig, type LoginConfig, type Who } from "./auth.ts";
 import { ForumHub } from "./hub.ts";
+import { accessOf, createRoom, may, roleIn, roomsOf, setRole, type Role } from "./rooms.ts";
 import { announce, connectSpace, takeAll } from "./space.ts";
 
 const ID = /^[a-zA-Z0-9._-]{1,48}$/;
@@ -132,6 +133,33 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			// a run's budget is counted per person with a sign-in, per address without (the key of the Spend entries)
 			const client = () => ({ ip: who ? `user:${who.user.userId}` : clientIp(req) });
 			const by = (b: Record<string, any>) => (who ? who.user.name : b.by);
+			// ---- rooms: with a sign-in only the people a room's owner invited enter it (server/rooms.ts) ----
+			if (auth && p === "/api/rooms") {
+				if (!who) return json(res, 401, { error: "Sign in first" });
+				if (req.method === "GET") return json(res, 200, { rooms: await roomsOf(conn.space, who.user.userId) });
+				if (req.method !== "POST") return json(res, 405, { error: "GET or POST expected" });
+				const room = String((await readBody(req)).room ?? "").trim();
+				if (!ID.test(room)) return json(res, 400, { error: "A room's name: 1 to 48 letters, digits, dots, dashes or underscores" });
+				await createRoom(conn.space, room, who.user.userId);
+				return json(res, 200, { room, role: "owner" });
+			}
+			const inRoom = /^\/api\/(?:rooms|plan)\/([^/]+)/.exec(p)?.[1];
+			if (auth && inRoom !== undefined) {
+				// a script with the admin password stands for the operator; a person needs a role in the room, and a room
+				// they have none in does not exist for them
+				const role: Role | null = who ? roleIn(await accessOf(conn.space, inRoom), who.user.userId) : "owner";
+				const need = req.method === "GET" ? "read" : /\/access$/.test(p) ? "own" : "write";
+				if (!may(role, need)) return role ? json(res, 403, { error: "Your role in this room does not allow this" }) : json(res, 404, { error: "No such room" });
+			}
+			const ac = /^\/api\/rooms\/([^/]+)\/access$/.exec(p);
+			if (ac) {
+				if (!auth) return json(res, 404, { error: "Rooms are open here: there is no sign-in" });
+				if (req.method === "POST") { const b = await readBody(req); await setRole(conn.space, ac[1]!, String(b.userId ?? ""), b.role === "member" || b.role === "viewer" ? b.role : null); }
+				const a = await accessOf(conn.space, ac[1]!);
+				if (!a) return json(res, 404, { error: "No such room" });
+				const named = async (id: string) => ({ id, name: ((await conn.space.readIfExists({ type: "ForumUser", fields: { userId: id } }, NO_WAIT))?.fields as { name?: string } | undefined)?.name ?? id });
+				return json(res, 200, { owner: await named(a.owner), members: await Promise.all(a.members.map(named)), viewers: await Promise.all(a.viewers.map(named)) });
+			}
 			if (p === "/api/system") return json(res, 200, await hub.systemInfo());
 			if (p === "/api/models" && req.method === "GET") return json(res, 200, (await hub.modelInfo()).info);
 			// the repositories a task may name as a source: only an admin may, so only an admin learns their names
@@ -227,7 +255,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 		if (!m) { if (nextUpgrade) nextUpgrade(req, socket, head); else socket.destroy(); return; }
 		if (sockets >= 256 || !allowed(clientIp(req))) return void socket.destroy();
 		// with a sign-in: a person, from our own page (a WebSocket is not bound by the same-origin rule)
-		const gate = auth ? (auth.sameOrigin(req) ? auth.who(req) : Promise.resolve(null)) : Promise.resolve(true);
+		const gate = auth ? (auth.sameOrigin(req) ? auth.who(req).then(async (w) => !!w && may(roleIn(await accessOf(conn.space, m[1]!), w.user.userId), "read")) : Promise.resolve(false)) : Promise.resolve(true);
 		void gate.then((ok) => {
 			if (!ok) { socket.end("HTTP/1.1 401 Unauthorized\r\nconnection: close\r\ncontent-length: 0\r\n\r\n"); return; }
 			const ws = upgradeWebSocket(req, socket, head);

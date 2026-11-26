@@ -126,9 +126,10 @@ test("sign-in: a page with a __Host- cookie (Strict, Secure, HttpOnly), the pers
 		assert.equal(me.user.id, userIdOf(idp.issuer, "lea"));
 		assert.match(me.user.name, /^Person /);
 		assert.equal(me.admin, false);
-		assert.equal((await b.request("GET", "/api/rooms/lobby")).status, 200);
-		assert.equal(await upgrade(srv.url, "/ws/lobby", { origin: ORIGIN, cookie: `__Host-forum=${b.jar.get("__Host-forum")}` }), 101);
-		assert.equal(await upgrade(srv.url, "/ws/lobby", { origin: "https://evil.example", cookie: `__Host-forum=${b.jar.get("__Host-forum")}` }), 401, "another site's page");
+		assert.equal((await b.post("/api/rooms", { room: "lea-home" })).status, 200);
+		assert.equal((await b.request("GET", "/api/rooms/lea-home")).status, 200);
+		assert.equal(await upgrade(srv.url, "/ws/lea-home", { origin: ORIGIN, cookie: `__Host-forum=${b.jar.get("__Host-forum")}` }), 101);
+		assert.equal(await upgrade(srv.url, "/ws/lea-home", { origin: "https://evil.example", cookie: `__Host-forum=${b.jar.get("__Host-forum")}` }), 401, "another site's page");
 		// a change: our origin and the session's token, or nothing
 		assert.equal((await b.post("/api/me", { name: "Lea" }, { csrf: "forged" })).status, 401);
 		assert.equal((await b.post("/api/me", { name: "Lea" }, { origin: "https://evil.example" })).status, 401);
@@ -186,5 +187,45 @@ test("sign-out ends the session here and names the provider's end-session addres
 		const first = b.jar.get("__Host-forum")!;
 		await b.signIn(idp, "lea");
 		assert.equal((await new Browser(srv.url).request("GET", "/api/me", { headers: { cookie: `__Host-forum=${first}` } })).status, 401);
+	} finally { await srv.close(); }
+});
+
+test("rooms: the owner invites by ID; a room one has no role in does not exist; a viewer reads and changes nothing", async () => {
+	const srv = await signedIn({ admins: `${idp.issuer} ada` });
+	try {
+		const owner = new Browser(srv.url), mia = new Browser(srv.url), tom = new Browser(srv.url), ada = new Browser(srv.url);
+		for (const [b, who] of [[owner, "olga"], [mia, "mia"], [tom, "tom"], [ada, "ada"]] as const) await b.signIn(idp, who);
+		const id = async (b: Browser) => (await b.request("GET", "/api/me")).json.user.id as string;
+		assert.equal((await owner.post("/api/rooms", { room: "sky app" })).status, 400, "a name of letters, digits, dots, dashes");
+		assert.equal((await owner.post("/api/rooms", { room: "sky-app" })).status, 200);
+		assert.equal((await mia.post("/api/rooms", { room: "sky-app" })).status, 400, "a name that is taken");
+		assert.deepEqual((await owner.request("GET", "/api/rooms")).json.rooms, [{ room: "sky-app", role: "owner" }]);
+		// nobody else is in it: not a stranger, not an administrator; the answer does not tell that it exists
+		for (const b of [mia, tom, ada]) {
+			assert.equal((await b.request("GET", "/api/rooms/sky-app")).status, 404);
+			assert.equal((await b.request("GET", "/api/rooms/no-such-room")).status, 404);
+			assert.equal(await upgrade(srv.url, "/ws/sky-app", { origin: ORIGIN, cookie: `__Host-forum=${b.jar.get("__Host-forum")}` }), 401);
+		}
+		assert.equal((await tom.post("/api/rooms/sky-app/stop", {})).status, 404);
+		// the owner invites mia as a member, tom to read along
+		assert.equal((await owner.post("/api/rooms/sky-app/access", { userId: "not-an-id", role: "member" })).status, 400);
+		assert.equal((await owner.post("/api/rooms/sky-app/access", { userId: await id(mia), role: "member" })).status, 200);
+		const a = await owner.post("/api/rooms/sky-app/access", { userId: await id(tom), role: "viewer" });
+		assert.deepEqual({ members: a.json.members.map((p: { name: string }) => p.name), viewers: a.json.viewers.length }, { members: [(await mia.request("GET", "/api/me")).json.user.name], viewers: 1 });
+		assert.deepEqual((await mia.request("GET", "/api/rooms")).json.rooms, [{ room: "sky-app", role: "member" }]);
+		assert.equal((await mia.request("GET", "/api/rooms/sky-app")).status, 200);
+		assert.equal((await tom.request("GET", "/api/rooms/sky-app")).status, 200);
+		assert.equal(await upgrade(srv.url, "/ws/sky-app", { origin: ORIGIN, cookie: `__Host-forum=${tom.jar.get("__Host-forum")}` }), 101);
+		// a viewer changes nothing; a member writes but does not manage the room
+		assert.equal((await tom.post("/api/rooms/sky-app/stop", {})).status, 403);
+		assert.equal((await tom.post("/api/rooms/sky-app/message", { text: "hello" })).status, 403);
+		assert.equal((await mia.post("/api/rooms/sky-app/stop", {})).status, 200);
+		assert.equal((await mia.post("/api/rooms/sky-app/access", { userId: await id(ada), role: "member" })).status, 403);
+		assert.equal((await mia.request("GET", "/api/rooms/sky-app/access")).status, 200, "a member reads who is in the room");
+		assert.equal((await owner.post("/api/rooms/sky-app/access", { userId: await id(owner), role: null })).status, 400, "the owner keeps the room");
+		// taken out again: the room is gone for her
+		assert.equal((await owner.post("/api/rooms/sky-app/access", { userId: await id(mia), role: null })).status, 200);
+		assert.equal((await mia.request("GET", "/api/rooms/sky-app")).status, 404);
+		assert.deepEqual((await mia.request("GET", "/api/rooms")).json.rooms, []);
 	} finally { await srv.close(); }
 });

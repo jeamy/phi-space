@@ -5,6 +5,7 @@
 // (docs/gemeinsame-planung-plan-2026-11-22.en.md, section 11).
 import { useEffect, useMemo, useState } from "react";
 import { AdminPanel } from "./AdminPanel.tsx";
+import { RoomsPanel, type RoomRole } from "./RoomsPanel.tsx";
 import { ThemeControls } from "./ThemeControls.tsx";
 import { diffCount, diffText, withContext, type Line } from "./lib/diff.ts";
 import { renderSection } from "./lib/safe-markdown.ts";
@@ -102,10 +103,15 @@ export function CodemodeForum() {
 	const lang = theme.lang, t = T[lang], locale = lang === "de" ? "de-DE" : "en-US";
 	const [me, setMe] = useState<Me | null>(null);
 	const [nameDraft, setNameDraft] = useState("");
-	// with a sign-in nothing is loaded before a person is signed in
-	const ready = me !== null && (!me.login || !!me.user);
-	useEffect(() => { loadMe().then(setMe).catch(() => setMe({ login: false })); }, []);
+	const [rooms, setRooms] = useState<Array<{ room: string; role: RoomRole }> | null>(null);
 	const [room, setRoom] = useState("lobby");
+	useEffect(() => { loadMe().then(setMe).catch(() => setMe({ login: false })); }, []);
+	const signedIn = !!(me?.login && me.user);
+	const loadRooms = () => { api<{ rooms: Array<{ room: string; role: RoomRole }> }>("/rooms").then((x) => setRooms(x.rooms)).catch(() => setRooms([])); };
+	useEffect(() => { if (signedIn) loadRooms(); }, [signedIn]);
+	// with a sign-in nothing is loaded before a person is signed in, and a room only once they have a role in it
+	const roleHere = rooms?.find((r) => r.room === room)?.role ?? null;
+	const ready = me !== null && (!me.login || (signedIn && roleHere !== null));
 	const [snap, setSnap] = useState<Snapshot | null>(null);
 	const [live, setLive] = useState(false);
 	const [models, setModels] = useState<Models | null>(null);
@@ -282,6 +288,7 @@ export function CodemodeForum() {
 			</header>
 			<main>
 				<aside>
+					{person && <RoomsPanel lang={lang} room={room} rooms={rooms} reload={loadRooms} userId={person.id} />}
 					<div className="panel">
 						<h2>{t.task}</h2>
 						<textarea className="task-field" rows={5} maxLength={8000} placeholder={t.brief} aria-label={t.brief} value={brief} onChange={(e) => setBrief(e.target.value)} />

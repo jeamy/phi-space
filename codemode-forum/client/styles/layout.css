@@ -91,6 +91,14 @@ input.wide { width: 100%; }
 .admin__model:has(input:checked) { background: #a9cdfb; color: #0b0f14; }
 .admin__model:has(input:checked) .muted { color: #2b3a4a; }
 .muted { color: var(--muted); }
+.small { font-size: 12px; }
+.hint { color: var(--muted); line-height: 1.45; }
+.error { color: var(--danger, #c0392b); }
+button.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.roomlist, .people { list-style: none; margin: 0 0 8px; padding: 0; }
+.roomlist li, .people li { padding: 3px 0; }
+.roomlist li.on a { font-weight: 600; }
+.rooms code { word-break: break-all; }
 /* the forum's page: the run panel on the left, the room in the middle */
 .models { border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; padding: 6px 10px; }
 .models legend { color: var(--muted); font-size: 12px; padding: 0 4px; }
