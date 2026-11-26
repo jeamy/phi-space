@@ -45,7 +45,7 @@ pub async fn move_to(c: &mut Ctx, to: (f64, f64), path: bool, room: Option<Json>
 		if let Some((_, there)) = occ.iter().find(|(k, _)| *k == at) { if !passage { return refuse(format!("Dort steht schon {there}.")); } }
 		let mut blocked: std::collections::HashSet<String> = occ.iter().filter(|(k, _)| { let mut p = k.split(',').map(js::to_number); let (x, y) = (p.next().unwrap_or(f64::NAN), p.next().unwrap_or(f64::NAN)); !is_passage(&exits, x, y) }).map(|(k, _)| k.clone()).collect();
 		blocked.extend(solid.iter().cloned());
-		if find_path(c.w(), &rows(j::at(&room, "ground")), me, to, COMMAND_PATH as usize, &|k| blocked.contains(k)).is_none() { return refuse("Dorthin führt kein freier Weg."); }
+		if find_path(c.w(), &rows(j::at(&room, "ground")), me, to, COMMAND_PATH as usize, &blocked).is_none() { return refuse("Dorthin führt kein freier Weg."); }
 	}
 	if passage { release_spot(&c.space, &c.txn, c.char_id()).await?; }
 	relocate(c, &room_id, to, !passage, None).await
@@ -358,7 +358,7 @@ async fn walk_to(c: &mut Ctx, arg: &str) -> Result<()> {
 	let (x, y) = (w.first().map_or(f64::NAN, |s| js::to_number(s)), w.get(1).map_or(f64::NAN, |s| js::to_number(s)));
 	if !is_integer(x) || !is_integer(y) || w.len() != 2 { return refuse("So geht es: move <x> <y>, zum Beispiel move 10 8"); }
 	let room = room_of(c, None).await?;
-	let Some(path) = find_path(c.w(), &rows(j::at(&room, "ground")), xy(&c.actor), (x, y), COMMAND_PATH as usize, &|_| false) else { return refuse("Dorthin führt kein Weg.") };
+	let Some(path) = find_path(c.w(), &rows(j::at(&room, "ground")), xy(&c.actor), (x, y), COMMAND_PATH as usize, []) else { return refuse("Dorthin führt kein Weg.") };
 	if !path.is_empty() { move_to(c, (x, y), true, None).await?; }
 	Ok(())
 }

@@ -7,7 +7,7 @@
 //!
 //! One Route entry holds the whole road, a Road entry per room what the page draws (written with it, `road_save`). The
 //! terms run on the decay clock; `road_tick` resolves votes and lets roads lapse.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use phi_json::{number_text as nt, obj, Json};
 
@@ -59,30 +59,38 @@ fn middle_of(w: &Json, ground: &[String], fire: Option<Cell>) -> Vec<Cell> {
 
 /// `trace`: the cheapest way over walkable, unblocked cells from `from` to one of `to` (cobbles cost less), both ends
 /// included.
-fn trace(w: &Json, ground: &[String], from: Cell, to: &[Cell], blocked: &HashSet<String>) -> Option<Vec<Cell>> {
-	let (h, wd) = (ground.len() as f64, ground.first().map_or(0, |r| js::len16(r)) as f64);
-	let goal: HashSet<String> = to.iter().map(|p| cell_key(p.0, p.1)).collect();
-	let mut dist: HashMap<String, f64> = HashMap::from([(cell_key(from.0, from.1), 0.0)]);
-	let mut before: HashMap<String, (String, Cell)> = HashMap::new();
-	let mut open: Vec<(Cell, f64)> = vec![(from, 0.0)];
+pub fn trace(w: &Json, ground: &[String], from: Cell, to: &[Cell], blocked: &HashSet<String>) -> Option<Vec<Cell>> {
+	// on the room's grid (grid.rs): the same order of the open list as with cells keyed by strings
+	let g = crate::grid::Grid::walk(w, ground).closing(blocked);
+	let start = g.index_of(from)?;
+	let n = g.w * g.h;
+	let mut goal = vec![false; n];
+	for p in to { if let Some(i) = g.index_of(*p) { goal[i] = true; } }
+	let mut dist = vec![f64::INFINITY; n];
+	let mut before = vec![usize::MAX; n];
+	dist[start] = 0.0;
+	let mut open: Vec<(usize, f64)> = vec![(start, 0.0)];
+	let cell = |i: usize| ((i % g.w) as f64, (i / g.w) as f64);
 	while !open.is_empty() {
 		// Array.prototype.sort is stable: equal distances keep the order they were pushed in
 		open.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-		let (c, d) = open.remove(0);
-		let k = cell_key(c.0, c.1);
-		if d > dist.get(&k).copied().unwrap_or(f64::INFINITY) { continue; }
-		if goal.contains(&k) {
-			let mut out = vec![c];
+		let (k, d) = open.remove(0);
+		if d > dist[k] { continue; }
+		if goal[k] {
+			let mut out = vec![cell(k)];
 			let mut at = k;
-			while let Some((prev, cell)) = before.get(&at) { out.insert(0, *cell); at = prev.clone(); }
+			while before[at] != usize::MAX { at = before[at]; out.push(cell(at)); }
+			out.reverse();
 			return Some(out);
 		}
+		let (cx, cy) = ((k % g.w) as isize, (k / g.w) as isize);
 		for (dx, dy) in STEPS {
-			let n = (c.0 + dx, c.1 + dy);
-			let nk = cell_key(n.0, n.1);
-			if n.0 < 0.0 || n.1 < 0.0 || n.0 >= wd || n.1 >= h || !walkable(w, ground, n.0, n.1) || blocked.contains(&nk) { continue; }
-			let nd = d + if at_of(ground, n.0, n.1) == ":" { 1.0 } else { 3.0 };
-			if nd < dist.get(&nk).copied().unwrap_or(f64::INFINITY) { dist.insert(nk.clone(), nd); before.insert(nk, (k.clone(), c)); open.push((n, nd)); }
+			let (x, y) = (cx + dx as isize, cy + dy as isize);
+			if x < 0 || y < 0 || x as usize >= g.w || y as usize >= g.h { continue; }
+			let nk = y as usize * g.w + x as usize;
+			if !g.open[nk] { continue; }
+			let nd = d + if at_of(ground, x as f64, y as f64) == ":" { 1.0 } else { 3.0 };
+			if nd < dist[nk] { dist[nk] = nd; before[nk] = k; open.push((nk, nd)); }
 		}
 	}
 	None

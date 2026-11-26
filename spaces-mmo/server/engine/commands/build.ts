@@ -39,6 +39,7 @@ import { roadCellsIn, routeDeliver, routeNear, routeWork } from "./road.ts";
 import { spendRested } from "./sleep.ts";
 import { interiorOf, interiorSweep, isInterior, makeInterior, nearBuildings } from "./interior.ts";
 import { COMMAND_LOCK_WAIT_MS, holdRoom, holdRoomOrRefuse } from "../room-lock.ts";
+import { closing, indexOf, reachIn, walkGrid } from "../../../shared/grid.ts";
 import { BESIDE, FIRE_CLEARANCE, SITE_REACH, EXIT_REACH, MOVE_BUILDING, MOVE_WINDOW, onRing } from "../../../shared/rules.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
@@ -57,22 +58,6 @@ export const planOf = (w: WorldDef, name: string): PlanDef | undefined => {
 	return w.building?.plans.find((p) => p.key === n || p.name.toLowerCase() === n || p.aliases.includes(n));
 };
 export const missing = (s: SiteFields) => [...s.needs.filter((n) => n.have < n.count).map((n) => `${n.count - n.have} ${n.name}`), ...(s.work < s.workNeed ? [`${s.workNeed - s.work} Arbeit`] : [])];
-
-/** The cells reachable from `from` without passing `blocked` (4 directions, as one walks). */
-function reachable(w: WorldDef, ground: string[], from: { x: number; y: number }, blocked: ReadonlySet<string>): Set<string> {
-	const seen = new Set<string>([cellKey(from)]);
-	let ring = [from];
-	while (ring.length) {
-		const next: Array<{ x: number; y: number }> = [];
-		for (const c of ring) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-			const n = { x: c.x + dx, y: c.y + dy }, k = cellKey(n);
-			if (seen.has(k) || blocked.has(k) || !walkable(w, ground, n.x, n.y)) continue;
-			seen.add(k); next.push(n);
-		}
-		ring = next;
-	}
-	return seen;
-}
 
 /** Why `rect` cannot be built on (null: it can). */
 /** The cobbles of paths and plazas: nothing is built or dug on them (docs/siedeln.en.md "Bebauung"). */
@@ -110,8 +95,8 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 	// nothing may close a way: from the room's spawn every exit, every fire's side and the builder stay reachable
 	const after = new Set([...blocked, ...cells(rect).map(cellKey)]);
 	const start = room.spawn && !after.has(cellKey(room.spawn)) ? room.spawn : exits[0] ? { x: exits[0].x, y: exits[0].y } : { x: c.actor.x, y: c.actor.y };
-	const reach = reachable(c.world, room.ground, start, after);
-	const ok = (p: { x: number; y: number }) => reach.has(cellKey(p));
+	const grid = closing(walkGrid(c.world.tiles, room.ground), after), reach = reachIn(grid, start);
+	const ok = (p: { x: number; y: number }) => { const i = indexOf(grid, p); return i >= 0 && reach[i] === 1; };
 	if (!exits.every((x) => ok(x)) || (room.spawn && !ok(room.spawn)) || !(ok(c.actor) || distTo(c.actor, rect) === 0)) return "Damit wäre ein Weg zugebaut.";
 	if (!fires.every((b) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ok({ x: b.x + dx!, y: b.y + dy! })))) return "Damit käme niemand mehr ans Feuer.";
 	return null;

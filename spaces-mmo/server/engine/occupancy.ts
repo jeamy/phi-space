@@ -7,6 +7,7 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type FootprintFields, type SessionFields, type SpotFields } from "../model.ts";
 import { peek } from "../space.ts";
 import { walkable, type WorldDef } from "./world.ts";
+import { nearestOpen } from "../../shared/grid.ts";
 import { PASSAGE } from "../../shared/rules.ts";
 
 type Cell = { x: number; y: number };
@@ -83,18 +84,9 @@ export async function blockedIn(space: SpaceLike, _w: WorldDef, room: string, tx
 /** The nearest walkable cell to `at` (itself first) that is not in `avoid`, searching outwards; null when there is
  *  none within `radius`. */
 export function freeCellNear(w: WorldDef, ground: string[], at: Cell, avoid: ReadonlySet<string> | ReadonlyMap<string, unknown>, radius: number): Cell | null {
-	const seen = new Set<string>([cellKey(at)]);
-	let ring: Cell[] = [at];
-	for (let r = 0; r <= radius && ring.length; r++) {
-		for (const c of ring) if (walkable(w, ground, c.x, c.y) && !avoid.has(cellKey(c))) return c;
-		const next: Cell[] = [];
-		for (const c of ring) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-			const n = { x: c.x + dx, y: c.y + dy };
-			if (!seen.has(cellKey(n)) && n.y >= 0 && n.y < ground.length && n.x >= 0 && n.x < (ground[0]?.length ?? 0)) { seen.add(cellKey(n)); next.push(n); }
-		}
-		ring = next;
-	}
-	return null;
+	// it ends after a few rings as a rule, so it looks only at the cells it reaches, not at the whole room's grid: those
+	// marked by their index (shared/grid.ts), each checked as it comes
+	return nearestOpen({ w: ground[0]?.length ?? 0, h: ground.length }, at, radius, (c) => walkable(w, ground, c.x, c.y) && !avoid.has(cellKey(c)));
 }
 
 const UNIQUE = ["room", "x", "y"];

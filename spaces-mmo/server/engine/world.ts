@@ -7,6 +7,7 @@ import type { SceneryFields } from "../model.ts";
 import type { WorldDef } from "../../shared/world-def.ts";
 import { parseLocks } from "./locks.ts";
 import { typeChain } from "./typeclasses.ts";
+import { closing, pathIn, walkGrid } from "../../shared/grid.ts";
 
 // the types of the definition live in shared/world-def.ts (the browser reads them too)
 export type * from "../../shared/world-def.ts";
@@ -135,29 +136,10 @@ export const walkable = (w: WorldDef, ground: string[], x: number, y: number): b
 	Number.isInteger(x) && Number.isInteger(y) && y >= 0 && y < ground.length && x >= 0 && x < (ground[0]?.length ?? 0) && !!w.tiles[ground[y]![x]!]?.walk;
 
 /** The shortest walk from one cell to another over walkable cells (4 directions) that are not `blocked` ("x,y"), at
- *  most `max` steps; null when there is none. The cells after the start, the target last. */
+ *  most `max` steps; null when there is none. The cells after the start, the target last. On the room's grid
+ *  (shared/grid.ts pathIn). */
 export function findPath(w: WorldDef, ground: string[], from: { x: number; y: number }, to: { x: number; y: number }, max: number, blocked: ReadonlySet<string> = new Set()): Array<{ x: number; y: number }> | null {
-	if (!walkable(w, ground, to.x, to.y) || blocked.has(`${to.x},${to.y}`)) return null;
-	if (from.x === to.x && from.y === to.y) return [];
-	const width = ground[0]!.length, key = (x: number, y: number) => y * width + x;
-	const prev = new Map<number, number>([[key(from.x, from.y), -1]]);
-	let frontier = [from];
-	for (let step = 0; step < max && frontier.length; step++) {
-		const next: Array<{ x: number; y: number }> = [];
-		for (const c of frontier) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-			const x = c.x + dx, y = c.y + dy, k = key(x, y);
-			if (prev.has(k) || !walkable(w, ground, x, y) || blocked.has(`${x},${y}`)) continue;
-			prev.set(k, key(c.x, c.y));
-			if (x === to.x && y === to.y) {
-				const path: Array<{ x: number; y: number }> = [];
-				for (let at = k; at !== key(from.x, from.y); at = prev.get(at)!) path.unshift({ x: at % width, y: Math.floor(at / width) });
-				return path;
-			}
-			next.push({ x, y });
-		}
-		frontier = next;
-	}
-	return null;
+	return pathIn(closing(walkGrid(w.tiles, ground), blocked), from, to, max);
 }
 
 /** The name of the first exit on the shortest way from one room to another (over the world's exits), or null. */

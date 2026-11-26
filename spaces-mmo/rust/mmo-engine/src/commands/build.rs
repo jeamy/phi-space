@@ -93,25 +93,6 @@ fn info() -> MsgOpts { MsgOpts::default() }
 
 const DIRS: [(f64, f64); 4] = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)];
 
-/// `reachable`: the cells reachable from `from` without passing `blocked`, as one walks.
-fn reachable(w: &Json, ground: &[String], from: (f64, f64), blocked: &HashSet<String>) -> HashSet<String> {
-	let mut seen: HashSet<String> = HashSet::from([cell_key(from.0, from.1)]);
-	let mut ring = vec![from];
-	while !ring.is_empty() {
-		let mut next = Vec::new();
-		for c in &ring {
-			for (dx, dy) in DIRS {
-				let n = (c.0 + dx, c.1 + dy);
-				let k = cell_key(n.0, n.1);
-				if seen.contains(&k) || blocked.contains(&k) || !walkable(w, ground, n.0, n.1) { continue; }
-				seen.insert(k);
-				next.push(n);
-			}
-		}
-		ring = next;
-	}
-	seen
-}
 
 /// The cobbles of paths and plazas: nothing is built or dug on them.
 pub const PATH: &str = ":";
@@ -165,8 +146,10 @@ pub async fn refusal_locked(c: &Ctx, room: &Json, rect: Rect, green: bool, on_pe
 		(_, Some(x)) => xy(x),
 		_ => xy(&c.actor),
 	};
-	let reach = reachable(c.w(), &ground, start, &after);
-	let ok = |p: (f64, f64)| reach.contains(&cell_key(p.0, p.1));
+	// on the room's grid (grid.rs): the cells reachable from `start` without passing `after`, as one walks
+	let grid = crate::grid::Grid::walk(c.w(), &ground).closing(&after);
+	let reach = grid.reach(start);
+	let ok = |p: (f64, f64)| grid.index_of(p).is_some_and(|i| reach[i]);
 	if !exits.iter().all(|x| ok(xy(x))) || spawn.is_some_and(|s| !ok(xy(s))) || !(ok(xy(&c.actor)) || dist_to(xy(&c.actor), rect) == 0.0) { return Ok(Some("Damit wäre ein Weg zugebaut.".into())); }
 	if !fires.iter().all(|b| DIRS.iter().any(|(dx, dy)| ok((j::n(b, "x") + dx, j::n(b, "y") + dy)))) { return Ok(Some("Damit käme niemand mehr ans Feuer.".into())); }
 	Ok(None)

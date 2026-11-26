@@ -78,14 +78,17 @@ export class Walker {
 export function nextStep(free: (x: number, y: number) => boolean, from: Cell, to: Cell, limit = 1024): [number, number] | null {
 	if (from.x === to.x && from.y === to.y) return null;
 	// from the goal back, so the first cell reached beside `from` is the step to take
-	const seen = new Set([`${to.x},${to.y}`]), queue: Cell[] = [to];
+	// cells keyed by a number (y·2^16 + x; a room is far narrower), not by "x,y" strings; a cell outside the room is
+	// never free, so never seen, and one that shares a number with it is never in a room
+	const key = (x: number, y: number) => y * 65_536 + x;
+	const seen = new Set([key(to.x, to.y)]), queue: Cell[] = [to];
 	for (let i = 0; i < queue.length && i < limit; i++) {
 		const c = queue[i]!;
 		for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
-			const n = { x: c.x + dx, y: c.y + dy }, key = `${n.x},${n.y}`;
+			const n = { x: c.x + dx, y: c.y + dy };
 			if (n.x === from.x && n.y === from.y) return [dx ? -dx : 0, dy ? -dy : 0];
-			if (seen.has(key) || !free(n.x, n.y)) continue;
-			seen.add(key);
+			if (seen.has(key(n.x, n.y)) || !free(n.x, n.y)) continue;
+			seen.add(key(n.x, n.y));
 			queue.push(n);
 		}
 	}

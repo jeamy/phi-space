@@ -22,6 +22,7 @@ import { epochName, epochOf, islandOf } from "./epoch.ts";
 import { hutsIn, needRank, settlementIn } from "./settlement.ts";
 import { ARTICLE, days, human, plural, rested, tire } from "./build.ts";
 import { SITE_REACH } from "../../../shared/rules.ts";
+import { closing, indexOf, walkGrid } from "../../../shared/grid.ts";
 
 type Cell = { x: number; y: number };
 type RouteDef = NonNullable<NonNullable<WorldDef["cart"]>["route"]>;
@@ -50,23 +51,31 @@ function middleOf(w: WorldDef, room: RoomFields, fire: Cell | undefined): Cell[]
 
 /** The cheapest way over walkable, unblocked cells from `from` to one of `to` (cobbles cost less: the road follows the
  *  paths), both ends included; null when there is none. */
-function trace(w: WorldDef, ground: string[], from: Cell, to: Cell[], blocked: ReadonlySet<string>): Cell[] | null {
-	const h = ground.length, wd = ground[0]?.length ?? 0, goal = new Set(to.map(cellKey));
-	const dist = new Map<string, number>([[cellKey(from), 0]]), before = new Map<string, string>(), open: Array<{ c: Cell; d: number }> = [{ c: from, d: 0 }];
+export function trace(w: WorldDef, ground: string[], from: Cell, to: Cell[], blocked: ReadonlySet<string>): Cell[] | null {
+	// on the room's grid (shared/grid.ts): the same order of the open list as with cells keyed by strings
+	const g = closing(walkGrid(w.tiles, ground), blocked), start = indexOf(g, from);
+	if (start < 0) return null;
+	const goal = new Uint8Array(g.w * g.h);
+	for (const c of to) { const i = indexOf(g, c); if (i >= 0) goal[i] = 1; }
+	const dist = new Float64Array(g.w * g.h).fill(Infinity), before = new Int32Array(g.w * g.h).fill(-1), open: Array<{ k: number; d: number }> = [{ k: start, d: 0 }];
+	dist[start] = 0;
 	while (open.length) {
 		open.sort((a, b) => a.d - b.d);
-		const { c, d } = open.shift()!, k = cellKey(c);
-		if (d > (dist.get(k) ?? Infinity)) continue;
-		if (goal.has(k)) {
-			const out: Cell[] = [c];
-			for (let at = k; before.has(at); ) { at = before.get(at)!; const [x, y] = at.split(",").map(Number); out.unshift({ x: x!, y: y! }); }
-			return out;
+		const { k, d } = open.shift()!;
+		if (d > dist[k]!) continue;
+		if (goal[k]) {
+			const out: Cell[] = [];
+			for (let at = k; at >= 0; at = before[at]!) out.push({ x: at % g.w, y: Math.floor(at / g.w) });
+			return out.reverse();
 		}
+		const cx = k % g.w, cy = (k - cx) / g.w;
 		for (const [dx, dy] of STEPS) {
-			const n = { x: c.x + dx, y: c.y + dy }, nk = cellKey(n);
-			if (n.x < 0 || n.y < 0 || n.x >= wd || n.y >= h || !walkable(w, ground, n.x, n.y) || blocked.has(nk)) continue;
-			const nd = d + (ground[n.y]![n.x] === ":" ? 1 : 3);
-			if (nd < (dist.get(nk) ?? Infinity)) { dist.set(nk, nd); before.set(nk, k); open.push({ c: n, d: nd }); }
+			const x = cx + dx, y = cy + dy;
+			if (x < 0 || y < 0 || x >= g.w || y >= g.h) continue;
+			const nk = y * g.w + x;
+			if (!g.open[nk]) continue;
+			const nd = d + (ground[y]![x] === ":" ? 1 : 3);
+			if (nd < dist[nk]!) { dist[nk] = nd; before[nk] = k; open.push({ k: nk, d: nd }); }
 		}
 	}
 	return null;

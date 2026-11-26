@@ -10,7 +10,7 @@ Phase 0 inventories what the grid switch touches before any format changes. This
 4. [Cells that codemode-chat keeps](#codemode) (plan section 2.2, "Arena and codemode-chat")
 5. [Decisions for phase 1](#offen), collected from the four
 6. [References at scale 1](#referenzen) (plan section 6, cases 4 and 6, phase 0; semantic examples in 6.6)
-7. [Plot writers and readers, the occupancy query](#belegung) (plan section 3, "Occupancy"; phase 1)
+7. [Plot writers and readers, the occupancy query](#belegung) (plan section 3, "Occupancy"; phase 1; the searches on the shared grid in 7.7)
 
 Each inventory names the TypeScript place. The Rust engine (`rust/mmo-engine/src`) mirrors it file for file and function for function (`commands/build.ts` → `commands/build.rs`, `npc/economy.ts` → `npc/economy.rs`). The plan's single table of rule values is written in phase 1 from this list in both engines. When it is written, every Rust counterpart is checked line by line, and differences are added here.
 
@@ -636,3 +636,32 @@ The test found two defects at the fire's light use (`LightUse`, `build.ts` `ligh
 On the Rust space server (`SPACES_MMO_SPACE_SERVER=rust/target/release/mmo-space`, as on big and nano) both cores report a held LightUse entry to `takeExisting` (StillHeld); `tests/contention.test.ts` passes with the TypeScript and the mixed world workers, and one measurement with the Rust world workers gave 0 of 470 building commands refused.
 
 A command now waits up to `COMMAND_LOCK_WAIT_MS` (100 ms, below a tick of 150 ms) for a room's or an island's lock before it refuses with `LOCK_HELD`. A job still waits `LOCK_WAIT_MS`.
+
+### 7.7 The searches on the shared grid (step 9)
+
+The plan's shared grid (section 3, "Performance strategy") was there for growth since growth step 1 (`components` in `shared/grid.ts`, `grid.rs`). Since step 9 the searches over a room use it too, in TypeScript and Rust:
+
+| Search | Before | On the grid |
+| --- | --- | --- |
+| `findPath` (`world.ts`, `world.rs`): `move`, the step check, the arena's trail | a map of indices, every cell read through `walkable`, blocked cells as "x,y" strings | `pathIn` / `Grid::path` on `walkGrid(...)` with the blocked cells closed (`closing`) |
+| the reach of a building check (`build.ts`, `build.rs` `refusal`) | a set of "x,y" strings | `reachIn` / `Grid::reach` |
+| the road's trace (`road.ts`, `road.rs` `trace`) | distances and predecessors in maps of strings | the same open list over indices |
+| `freeCellNear` (`occupancy.ts`, `occupancy.rs`) | a set of "x,y" strings for the cells reached | `nearestOpen` / `grid::nearest_open`: the cells reached by their index, each checked as it comes |
+| `nextStep` on the page (`client/walk.ts`) | a set of "x,y" strings | cells keyed by a number; the page's free cells (`App.tsx` `freeCells`) are one grid per call |
+
+- **Same answers.** The neighbour order (right, left, down, up), the levels of `findPath`'s `max`, the stable order of the trace's open list and `nextStep`'s limit of 1024 cells looked at stay as they were. `tests/grid-search.test.ts` holds every TypeScript search to the one it replaced (`tests/legacy-search.ts`) over random rooms of the world's tiles: blocked cells inside and outside the room, cut-offs at `max` and `radius`, blocked and unreachable targets, a start on its target. The test in `grid.rs` does the same for Rust. With the neighbour order changed, both fail. The engine walks pass all 28 against the oracle c391cfe, unchanged.
+- **The occupied sets stay keyed by strings at the callers.** `blockedIn`, `claimedIn` and the callers' own sets are built once per command from the entries, and a search turns them into its mask once (`closing`: one pass over the keys). Making them grids where they are built would touch every reader of 7.1 again for little at scale 1. Only the page's free cells are now one grid.
+- **`freeCellNear` does not build the room's grid.** It ends after a few rings as a rule, so a grid of the whole room cost more than its search (TypeScript at scale 2: 4 µs before, 120 µs with the whole grid). It looks only at the cells it reaches.
+- **The phase 0 references are unchanged.** `tests/perf/target-choice.ts` counts 966, 828 and 132,970 cells for the legacy choice and 312 for the one search, as in 6.2. `tests/perf/growth-cases.ts` gives the 37 rooms and 179 steps of `growth-scale1.json`, and `tests/semantic-examples.test.ts` passes. The movers' commits (6.3) do not depend on how a path is searched.
+
+*Cost* (`tests/perf/search-cost.ts`; Rust: `cargo test --release --lib search_cost -- --ignored --nocapture`). Two rooms of the world's tiles: one of the largest size at scale 1 (36 × 24) and one of the maximal size at scale 2 (72 × 48). In each, a sixth of the cells is blocked and a wall of water runs across with one gap; the way runs corner to corner. Medians of 200 runs in µs, before → after, on this machine:
+
+| Search | TS 36 × 24 | TS 72 × 48 | Rust 36 × 24 | Rust 72 × 48 |
+| --- | --- | --- | --- | --- |
+| `findPath`, max 40 (`COMMAND_PATH`) | 93 → 43 | 207 → 146 | 247 → 41 | 479 → 150 |
+| `findPath`, room-wide | 169 → 55 | 794 → 230 | 406 → 45 | 1,937 → 177 |
+| reach of a building check | 281 → 114 | 1,247 → 490 | 758 → 49 | 3,251 → 154 |
+| road trace | 717 → 320 | 3,868 → 1,985 | 1,320 → 180 | 6,466 → 1,219 |
+| `freeCellNear`, radius 8 | 12 to 13 → 13 to 19 | 3 → 8 | – | – |
+
+The TypeScript values are one of two quiet runs, which differ by up to a fifth; `freeCellNear` shows the spread of both. Its few µs more at scale 2 are the same cells looked at (the free cell is next to the start there), below what one tick notices. The Rust searches were slower than the TypeScript ones before (strings and `walkable` on UTF-16 slices, 1.4 above) and are faster now. The trace keeps sorting its open list at every step, as the TypeScript one does, so it stays the most expensive search; it runs once per road plan.

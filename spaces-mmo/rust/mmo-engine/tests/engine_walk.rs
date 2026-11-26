@@ -64,7 +64,7 @@ fn walking() {
 				let target = exits[(i / 45) % exits.len()];
 				let def = w.w.get("rooms").and_then(Json::as_array).unwrap().iter().find(|r| r.get("roomId").and_then(Json::as_str) == Some(room.as_str())).unwrap();
 				let ground = mmo_engine::room_growth::rows(def.get("ground").unwrap());
-				match mmo_engine::world::find_path(&w.w, &ground, (x, y), target, 200, &|_| false).and_then(|p| p.first().copied()) {
+				match mmo_engine::world::find_path(&w.w, &ground, (x, y), target, 200, []).and_then(|p| p.first().copied()) {
 					Some((nx, ny)) => format!("step {} {}", nx - x, ny - y),
 					None => "step 1 0".to_owned(),
 				}

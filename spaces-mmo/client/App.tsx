@@ -25,6 +25,7 @@ import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.t
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
 import { chooseTarget, MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
+import { indexOf, walkGrid } from "../shared/grid.ts";
 import { cellAbout, cellEntries, type CellInput, hereEntries, itemEntries, KEEPERS, tapTarget, wildHere } from "./cellActions.ts";
 import { hintsFor, type Hint } from "./hints.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
@@ -924,10 +925,12 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		// one next to it) others do not block: one walks through them, as the server lets one (engine/occupancy.ts)
 		const exits = [...objs.values()].filter((o) => o.kind === "exit" && o.location === hello.room.roomId);
 		const passage = (c: { x: number; y: number }) => exits.some((e) => Math.max(Math.abs(e.x - c.x), Math.abs(e.y - c.y)) <= PASSAGE);
-		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
+		const grid = walkGrid(hello.world.tiles, hello.room.ground), take = (x: number, y: number) => { const i = indexOf(grid, { x, y }); if (i >= 0) grid.open[i] = 0; };
+		for (const c of [...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)]) take(c.x, c.y);
 		// sites and buildings cover their cells: nobody walks into them (server: occupancy.ts blockedIn)
-		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || o.kind === "tree" || (o.kind === "scenery" && !o.through)) && !(from && (o.kind === "bed" || o.kind === "field") && from.x >= o.x && from.y >= o.y && from.x < o.x + (o.w ?? 1) && from.y < o.y + (o.h ?? 1)) && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
-		return (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
+		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || o.kind === "tree" || (o.kind === "scenery" && !o.through)) && !(from && (o.kind === "bed" || o.kind === "field") && from.x >= o.x && from.y >= o.y && from.x < o.x + (o.w ?? 1) && from.y < o.y + (o.h ?? 1)) && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) take(o.x + dx, o.y + dy);
+		// the room as one grid (shared/grid.ts): a search looks each cell up by its index
+		return (x: number, y: number) => { const i = indexOf(grid, { x, y }); return i >= 0 && grid.open[i] === 1; };
 	}, []);
 	const step = useCallback((d: [number, number] | { x: number; y: number }) => {
 		const from = walker.current.shown;
