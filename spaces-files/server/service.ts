@@ -115,6 +115,8 @@ export type FilesServiceOptions = AdmissionOptions & {
 	/** The Space process ended on its own: admission is closed by then (default: only that). The launcher exits, so
 	 *  its supervisor restarts both and the crash path of section 6.1 applies. */
 	onSpaceLost?: (code: number | null, signal: string | null) => void;
+	/** Tests only: opens the tenant Spaces' store instead of `spaceProcess` (a replicated primary, section 8). */
+	openStore?: () => Promise<SpaceStore>;
 };
 
 /** The control Space's store (agent host keys, section 8): in the deployment-state directory, never in a data backup. */
@@ -213,7 +215,7 @@ export class FilesService {
 				void service?.admission.close();
 				o.onSpaceLost?.(code, signal);
 			};
-			store = spaceProcess === null ? await inProcessStore(storePath, o.now) : await spaceProcessStore({ command: spaceProcess, file: storePath, dir: o.dataDir, onLost: lost });
+			store = o.openStore ? await o.openStore() : spaceProcess === null ? await inProcessStore(storePath, o.now) : await spaceProcessStore({ command: spaceProcess, file: storePath, dir: o.dataDir, onLost: lost });
 			control = o.stateDir === null ? openOwnMemoryHost() : await openSqliteHost(join(o.stateDir, CONTROL_FILE));
 			const stopControl = await startService(control, ctx, { now: o.now, watchDebounceMs: 50 });
 			service = new FilesService(store, control, stopControl, state, blobs, o);

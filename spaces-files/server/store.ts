@@ -45,7 +45,11 @@ export interface SpaceStore {
 
 /** The store opened in this process, with the reaper that clears reservations of abandoned transactions. */
 export async function inProcessStore(file: string | null, now: () => number = Date.now): Promise<SpaceStore & { readonly host: OwnStoreHost }> {
-	const host: OwnStoreHost = file === null ? openOwnMemoryHost() : await openSqliteHost(file);
+	return storeOnHost(file === null ? openOwnMemoryHost() : await openSqliteHost(file), file, now);
+}
+
+/** A store on a host opened elsewhere (a primary of the primary/sync journal, for instance); closing it closes the host. */
+export async function storeOnHost(host: OwnStoreHost, file: string | null, now: () => number = Date.now): Promise<SpaceStore & { readonly host: OwnStoreHost }> {
 	let stop: () => Promise<void>;
 	try { stop = await startService(host, ctx, { now, watchDebounceMs: 50 }); }
 	catch (e) { await host.close(ctx); throw e; }
