@@ -7,22 +7,26 @@
 //
 //   FORUM_SPACE=unix:/tmp/codemode-forum-space.sock   (default) or tcp:host:4180
 //   FORUM_REPOS=name=/abs/path,other=/abs/path        the local git repositories it offers (default: none)
+//   FORUM_GIT_HOSTS=github.com,git.example.org        hosts a remote repository may be fetched from (default: none),
+//   FORUM_GIT_MAX_MB (200), FORUM_GIT_TIMEOUT_S (60), FORUM_GIT_CACHE (.local/git-cache): remote.ts
 import "./env.ts";
 import { existsSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
 import { answer, docsPack, gitPack, indexHash, reposOf, resolveCommit, type IndexEntry, type Pack, type PlanSource, type SourceCall } from "./sources.ts";
+import { fetchRemote, gitHosts, hasCommit, remoteDir, remoteName, remoteUrl } from "./remote.ts";
 import { announce, awaitWork, connectSpace, DEFAULT_SPACE, keepAlive } from "./space.ts";
 
-/** A request to the sources process. `open`: a repository (by its name in FORUM_REPOS) at a branch, tag or commit,
- *  for the block's pack; the others: one reading call on a pack of the block. */
+/** A request to the sources process. `open`: a repository (by its name in FORUM_REPOS, or a remote one by its https
+ *  address, `url`) at a branch, tag or commit, for the block's pack; the others: one reading call on a pack of the
+ *  block. */
 export type SourceRequest = { requestId: string; session: string; blockId: string; ts: number } & (
-	| { op: "open"; repo: string; ref: string; ttl: number }
+	| { op: "open"; repo?: string; url?: string; ref: string; ttl: number }
 	| { op: "call"; sourceId: "docs" | "repo"; call: SourceCall });
 /** Its answer. `text`: what a reading call returned (also what the caller got wrong); `opened`: the pack. An `error`
  *  is a failure of the request itself (no such repository, the pack is gone). */
-export type SourceResult = { requestId: string; session: string; ok: boolean; text?: string; opened?: Pick<PlanSource, "name" | "commit" | "ref" | "files" | "bytes" | "indexHash">; error?: string; ts: number };
+export type SourceResult = { requestId: string; session: string; ok: boolean; text?: string; opened?: Pick<PlanSource, "name" | "url" | "commit" | "ref" | "files" | "bytes" | "indexHash">; error?: string; ts: number };
 
 /** A request's transaction lease, renewed while it is answered: a sources process that dies holds its request this
  *  long (FORUM_SOURCE_LEASE_MS, default 20 s). */
@@ -55,7 +59,7 @@ export function indexPages(index: IndexEntry[]): IndexEntry[][] {
 export async function startSourceHost(o: { space?: string; parallel?: number } = {}) {
 	const conn = connectSpace(o.space);
 	const space = conn.space;
-	const repos = reposOf();
+	const repos = reposOf(), hosts = gitHosts();
 	const presence = announce(space, "sources");
 	const open = new Set<string>();
 	let stopping = false;
@@ -75,7 +79,7 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 	const publish = async () => {
 		try {
 			if (infoLease) { try { await space.renew(infoLease, 30_000); return; } catch { infoLease = null; } }
-			infoLease = (await space.write({ type: "SourceInfo", fields: { procId, repos: [...repos.keys()].sort(), ts: Date.now() } }, null, 30_000)).id;
+			infoLease = (await space.write({ type: "SourceInfo", fields: { procId, repos: [...repos.keys()].sort(), hosts, ts: Date.now() } }, null, 30_000)).id;
 		} catch (e) { if (!stopping) console.error("[sources] publishing the repositories failed", (e as Error).message); }
 	};
 	await publish();
@@ -84,6 +88,16 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 	const packOf = async (req: SourceRequest & { op: "call" }): Promise<Pack> => {
 		const src = (await space.readIfExists({ type: "PlanSource", fields: { session: req.session, blockId: req.blockId, sourceId: req.sourceId } }, NO_WAIT))?.fields as unknown as PlanSource | undefined;
 		if (!src) throw new Error("This task has no such source");
+		if (src.kind === "repo" && src.url) return cached(`remote:${src.url}@${src.commit}`, async () => {
+			// a remote repository lies in this process's cache; one that is gone from there (another machine, a cleared
+			// cache) is fetched again at the task's commit, while its host is still allowed
+			const url = remoteUrl(src.url, hosts), dir = remoteDir(url);
+			if (!(await hasCommit(dir, src.commit!))) {
+				const again = await fetchRemote(url, src.commit!).catch((e) => { throw new Error(`the repository is not in this sources process's cache and could not be fetched again (${(e as Error).message})`); });
+				if (again.commit !== src.commit) throw new Error("the repository fetched again is not at the task's commit");
+			}
+			return gitPack(dir, src.commit!);
+		});
 		if (src.kind === "repo") return cached(`repo:${src.name}@${src.commit}`, () => gitPack(repoPath(src.name), src.commit!));
 		return cached(`docs:${req.session}:${req.blockId}:${src.indexHash}`, async () => {
 			const parts = (await space.readAll({ type: "SourceFile", fields: { session: req.session, blockId: req.blockId } }, { limit: 500 })).map((e) => e.fields as unknown as { path: string; part: number; text: string });
@@ -107,12 +121,15 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 			let result: Omit<SourceResult, "requestId" | "session" | "ts">;
 			try {
 				if (req.op === "open") {
-					const path = repoPath(req.repo), commit = await resolveCommit(path, req.ref);
-					const pack = await cached(`repo:${req.repo}@${commit}`, () => gitPack(path, commit));
-					if (!pack.index.length) throw new Error(`${req.repo} at ${req.ref} has no text file to read`);
+					// a remote repository is fetched now, once: one commit into this process's cache (remote.ts)
+					const url = req.url ? remoteUrl(req.url, hosts) : undefined, name = url ? remoteName(url) : String(req.repo ?? "");
+					const fetched = url ? await fetchRemote(url, req.ref) : undefined;
+					const path = fetched?.dir ?? repoPath(name), commit = fetched?.commit ?? (await resolveCommit(path, req.ref));
+					const pack = await cached(url ? `remote:${url}@${commit}` : `repo:${name}@${commit}`, () => gitPack(path, commit));
+					if (!pack.index.length) throw new Error(`${name} at ${req.ref} has no text file to read`);
 					const pages = indexPages(pack.index);
 					for (const [part, paths] of pages.entries()) await space.write({ type: "SourceIndex", fields: { session: req.session, blockId: req.blockId, sourceId: "repo", part, parts: pages.length, paths } as never }, t.id, req.ttl);
-					result = { ok: true, opened: { name: req.repo, commit, ref: req.ref, files: pack.index.length, bytes: pack.index.reduce((n, [, size]) => n + size, 0), indexHash: indexHash(pack.index) } };
+					result = { ok: true, opened: { name, ...(url ? { url } : {}), commit, ref: req.ref, files: pack.index.length, bytes: pack.index.reduce((n, [, size]) => n + size, 0), indexHash: indexHash(pack.index) } };
 				} else result = { ok: true, text: await answer(await packOf(req), req.call) };
 			} catch (err) { result = { ok: false, error: String((err as Error).message ?? err).slice(0, 300) }; }
 			await space.write({ type: "SourceResult", fields: { requestId: req.requestId, session: req.session, ...result, ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
@@ -132,7 +149,7 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 	};
 	const loops = Array.from({ length: Math.max(1, o.parallel ?? Number(process.env.FORUM_SOURCE_PARALLEL ?? 4)) }, () => worker());
 	return {
-		repos: [...repos.keys()],
+		repos: [...repos.keys()], hosts,
 		async close() {
 			stopping = true; halt.abort(); clearInterval(beat);
 			await Promise.allSettled([...open].map((id) => space.abort(id)));
@@ -164,7 +181,7 @@ export async function askSources(space: SpaceLike, req: SourceRequest, waitMs = 
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const host = await startSourceHost();
-	console.log(`[sources] reading for ${process.env.FORUM_SPACE || DEFAULT_SPACE}; repositories: ${host.repos.join(", ") || "none"}`);
+	console.log(`[sources] reading for ${process.env.FORUM_SPACE || DEFAULT_SPACE}; repositories: ${host.repos.join(", ") || "none"}; remote hosts: ${host.hosts.join(", ") || "none"}`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 4000).unref(); await host.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());

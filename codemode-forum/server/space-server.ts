@@ -12,6 +12,6 @@ export function spaceServer(env: Readonly<Record<string, string | undefined>> = 
 	const command = resolve(ROOT, binary);
 	if (!existsSync(command)) throw new Error(`FORUM_SPACE_SERVER: no such binary: ${command}`);
 	// the generic server has no profile of this application: started bare it would only print its usage
-	if (basename(command) === "phi-space-server") throw new Error(`FORUM_SPACE_SERVER: ${command} is the generic server, not the space process of codemode-forum`);
+	if (basename(command) === "phi-space-server") throw new Error(`FORUM_SPACE_SERVER: ${command} is the generic server; codemode-forum has a binary of its own, rust/target/release/forum-space`);
 	return { command, args: [] };
 }

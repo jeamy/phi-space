@@ -1,6 +1,6 @@
 // The processes a test needs, started as real OS processes: the space (in memory, or on a SQLite file to survive a
-// restart) on a socket of its own, an agents process and a model process with the fake models of tests/fakes.ts (a
-// sources process when a test starts one). The
+// restart) on a socket of its own, an agents process and a model process with the fake models of tests/fakes.ts and a checker
+// process (a sources process when a test starts one). The
 // web part runs in the test process (startServer); it reaches the space over the socket like in production. close()
 // stops them all. Taken over from codemode-chat/tests/stack.ts.
 import { spaceServer } from "../server/space-server.ts";
@@ -33,9 +33,11 @@ export type Stack = {
 	/** Starts one more model process (`fakes`: the fake models of tests/fakes.ts, or the names of some of them). */
 	model(o?: { fakes?: boolean | string[] }): Promise<ChildProcess>;
 	/** Starts one more agents process. */
-	agents(o?: { leaseMs?: number; replyWaitS?: number; personWaitS?: number }): Promise<ChildProcess>;
+	agents(o?: { leaseMs?: number; replyWaitS?: number; turnWaitS?: number; personWaitS?: number }): Promise<ChildProcess>;
 	/** Starts one more sources process (`repos`: FORUM_REPOS; `pause`: a marker file, see holdBeforeAnswer). */
-	sources(o?: { repos?: string; leaseMs?: number; pause?: string }): Promise<ChildProcess>;
+	sources(o?: { repos?: string; leaseMs?: number; pause?: string; env?: Record<string, string> }): Promise<ChildProcess>;
+	/** Starts one more checker process. */
+	checker(): Promise<ChildProcess>;
 	/** Stops the space process and starts it again on the same socket (and the same file, if it has one). */
 	restartSpace(): Promise<void>;
 	/** Stops a process: SIGTERM, or SIGKILL to make it die in the middle of its work. */
@@ -45,7 +47,7 @@ export type Stack = {
 
 /** A space process (SQLite at `dbPath`, else in memory), an agents process and a model process (the fake models unless
  *  `fakes` is false: then the real ones, which are off in the tests). */
-export async function startStack(o: { dbPath?: string; agents?: boolean; model?: boolean; fakes?: boolean | string[] } = {}): Promise<Stack> {
+export async function startStack(o: { dbPath?: string; agents?: boolean; model?: boolean; checker?: boolean; fakes?: boolean | string[] } = {}): Promise<Stack> {
 	const sock = `/tmp/forum-test-${process.pid}-${seq++}.sock`, spec = `unix:${sock}`;
 	const startSpace = () => run("server/space-host.ts", { FORUM_LISTEN: spec, ...(o.dbPath ? { FORUM_SQLITE: o.dbPath, FORUM_MEM: "" } : { FORUM_MEM: "1" }) }, (l) => l.startsWith("[space] ready"));
 	let space = await startSpace();
@@ -59,12 +61,17 @@ export async function startStack(o: { dbPath?: string; agents?: boolean; model?:
 			return c;
 		},
 		async agents(a = {}) {
-			const c = await run("server/agent-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", ...(a.leaseMs ? { FORUM_AGENT_LEASE_MS: String(a.leaseMs) } : {}), ...(a.replyWaitS !== undefined ? { FORUM_REPLY_WAIT_S: String(a.replyWaitS) } : {}), FORUM_PERSON_WAIT_S: String(a.personWaitS ?? 0) }, (l) => l.startsWith("[agents]"));
+			const c = await run("server/agent-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", ...(a.leaseMs ? { FORUM_AGENT_LEASE_MS: String(a.leaseMs) } : {}), ...(a.replyWaitS !== undefined ? { FORUM_REPLY_WAIT_S: String(a.replyWaitS) } : {}), ...(a.turnWaitS !== undefined ? { FORUM_TURN_WAIT_S: String(a.turnWaitS) } : {}), FORUM_PERSON_WAIT_S: String(a.personWaitS ?? 0) }, (l) => l.startsWith("[agents]"));
 			others.push(c);
 			return c;
 		},
 		async sources(x = {}) {
-			const c = await run("server/source-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", FORUM_REPOS: x.repos ?? "", ...(x.leaseMs ? { FORUM_SOURCE_LEASE_MS: String(x.leaseMs) } : {}), ...(x.pause ? { FORUM_TEST: "1", FORUM_TEST_SOURCE_PAUSE: x.pause } : {}) }, (l) => l.startsWith("[sources]"));
+			const c = await run("server/source-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", FORUM_REPOS: x.repos ?? "", FORUM_GIT_HOSTS: "", FORUM_GIT_CACHE: "", FORUM_GIT_MAX_MB: "", FORUM_GIT_TIMEOUT_S: "", ...(x.env ?? {}), ...(x.leaseMs ? { FORUM_SOURCE_LEASE_MS: String(x.leaseMs) } : {}), ...(x.pause ? { FORUM_TEST: "1", FORUM_TEST_SOURCE_PAUSE: x.pause } : {}) }, (l) => l.startsWith("[sources]"));
+			others.push(c);
+			return c;
+		},
+		async checker() {
+			const c = await run("server/check-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "" }, (l) => l.startsWith("[checker]"));
 			others.push(c);
 			return c;
 		},
@@ -72,6 +79,7 @@ export async function startStack(o: { dbPath?: string; agents?: boolean; model?:
 		kill: (c, sig) => stop(c, sig),
 		async close() { await Promise.all(others.map((c) => stop(c))); conn.close(); await stop(space); await rm(sock, { force: true }); },
 	};
+	if (o.checker !== false && o.model !== false) await stack.checker();
 	if (o.agents !== false) await stack.agents();
 	if (o.model !== false) await stack.model({ fakes: o.fakes ?? true });
 	return stack;

@@ -12,7 +12,9 @@ export const SOURCE_LIMITS = { docs: 10, docsBytes: 800_000, fileBytes: 200_000,
 
 /** A source pack of a block, as its PlanSource entry says: `docs` (uploaded documents) or `repo` (a repository of the
  *  operator's list, by its name there, at `commit`). */
-export type PlanSource = { session: string; blockId: string; sourceId: "docs" | "repo"; kind: "docs" | "repo"; name: string; commit?: string; ref?: string; files: number; bytes: number; indexHash: string; ts: number };
+export type PlanSource = { session: string; blockId: string; sourceId: "docs" | "repo"; kind: "docs" | "repo"; name: string;
+	/** A remote repository: the address it was fetched from (remote.ts); a local one has none. */
+	url?: string; commit?: string; ref?: string; files: number; bytes: number; indexHash: string; ts: number };
 /** A file of a pack: its path and size in bytes. */
 export type IndexEntry = [path: string, size: number];
 /** A pack as the calls see it: what files there are, and how one is read. */

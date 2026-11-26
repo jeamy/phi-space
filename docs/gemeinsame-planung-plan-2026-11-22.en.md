@@ -1,6 +1,6 @@
 # codemode-forum: several models develop one plan together (plan, 2026-11-22)
 
-Status: phases 1 to 4 implemented on 2026-11-22 (`codemode-forum/`, see its README); phases 0 and 5 to 12 open. Second version,
+Status: phases 1 to 7 implemented on 2026-11-22, phases 8 to 11 on 2026-11-23 (`codemode-forum/`, see its README); phase 0 done and phase 12 begun on 2026-11-23 (`codemode-forum/docs/live-runs-2026-11-23.en.md`: three of six runs, three rules changed after them). Second version,
 after the decisions of 2026-11-22 (section 2).
 Starting point: `codemode-chat/` and `spaces/` as of commit `87aff982`.
 
@@ -168,6 +168,12 @@ the run's budget.
 The turn is a work item only one model takes. If nobody takes it before its deadline, it passes to the next model
 and the run's note says so.
 
+As built (phase 8): a model does not write its ballot inside its turn. In its turn it objects and revises, each
+section in a work item of its own (so a section stays one model call, as everywhere else); the ballots of all follow
+after the turns of the round, and what a ballot objects to waits for the turns of the next round. In the first round
+the writer has no turn (the first draft was it); from the second round on a model whose ballot counts as an approval
+is passed over while no objection is open, so a round costs no call that has nothing to do.
+
 **Table B, at the same time.** Several writers at once.
 
 1. After the kickoff every model proposes an outline; the table decides one by the rule for proposals.
@@ -196,6 +202,23 @@ and the run's note says so.
    step and needs at least 20 runs.
 
 A run can be started with one table only (about half the cost; no comparison, no final round).
+
+As built (phase 9), where it differs from the above:
+
+- Each table gets 45 % of the budget; the comparison and the final round have what is left of the whole.
+- Each table is a run of its own beside the other, with its own roll call and kickoff.
+- A table is shown the other's document as it stood after that table's last round. Taking over is a proposal in a
+  fixed form that names a section there and a section here; once decided the section is revised with the other as
+  material and names its origin. A decision of the other table is reading material only; it is not taken over by a
+  form of its own.
+- A table whose rival agreed first still has its first round: a document nobody voted on is not compared.
+- The models compare whenever there are two documents, also when only one table agreed: that table is the base
+  then, and the comparison supplies the points for the final round.
+- The final round works at the base's table, on its document (no third document), with one round of ballots.
+- `PlanStrategyStat` counts the points of the final round and how many were agreed, not sections taken over during
+  the tables' rounds.
+- The page shows each table's state, the base, the final round, the result and the standings. Both documents side
+  by side, and the diff, come with phase 10.
 
 ## 8. Sources, read-only
 
@@ -236,6 +259,24 @@ call is admitted against the budget.
 - Only the sources process gets the repository paths, as only the model process gets credentials.
 - Runs with a repository need the admin login in the first version.
 
+As built (phase 11), remote repositories (`server/remote.ts`):
+
+- The fetch is the one moment at which the sources process opens a connection: when the task is created, and again
+  only when its cache lost the task's commit (then by the commit's id, while the host is still on the list; a server
+  that hands out no commit by its id leaves the source unreadable, and the reading call says so).
+- One commit, `--depth=1`, no tags, no submodules, into a bare repository of the cache; nothing is checked out, so
+  hooks and LFS filters never run. https only, no redirect, no credentials asked or sent, the machine's and the
+  user's git configuration not read; the address carries no user, password, query or fragment.
+- The 200 MB are measured on the disk while the fetch runs (the cache's repository of that address), the 60 s on
+  the clock; a fetch that passes either is killed with its helper and what it wrote is removed. Both are settings
+  (`FORUM_GIT_MAX_MB`, `FORUM_GIT_TIMEOUT_S`).
+- The tests serve repositories from this machine over plain http, which the sources process accepts for 127.0.0.1
+  with `FORUM_TEST=1` only; https itself was tried once by hand against a public repository.
+
+As built (phase 11), the Rust space server: `codemode-forum/rust/forum-space` is the counterpart of codemode-chat's
+`codemode-space` on `phi-space-host`; `FORUM_SPACE_SERVER` switches launch and tests to it, and
+`docker/docker-compose.rust.yml` the space container. Scripts for nano and big exist; the forum has not been deployed.
+
 ## 9. When a plan counts as agreed
 
 **Mechanical checks first.** The checker runs them for every new `PlanDoc` version, without a model:
@@ -244,11 +285,15 @@ call is admitted against the budget.
 - every quoted line is in the file it is quoted from;
 - the outline's required sections are there and none is empty;
 - every phase names how it is verified;
-- no section contradicts a `PlanDecision` by its wording where the decision names a path or a number;
 - links between sections resolve, sizes are within the limits.
 
 A version that fails gets no ballots. The failures go back to the table as objections of the checker, which nobody
 can decline.
+
+The checks need a form they can read, which every writer is told: paths in backticks, a new file marked "(new)", a
+quote as a line of its own with its file, phases numbered. Whether a section contradicts a decision of the table is
+not something a program can tell from the wording; that stays with the reviewers (phase 7). Until the review rounds
+exist, what the checker finds goes straight back to the writer, at most twice in a run.
 
 **Criteria.** Fixed for every plan task, plus those of the person:
 
@@ -267,7 +312,8 @@ be more detailed" is not one. The reviewer does not see who wrote which section.
 **Accepted** means:
 
 - more than half of the participating models approve the same version (three models: two; four: three; five: three);
-- at least one approving model wrote none of the sections changed in that version;
+- at least one approving model wrote none of the sections that changed since the last round of ballots (in the first
+  round, where every section is new, each section needs an approver who did not write it);
 - the mechanical checks of that version pass and no objection of the checker is open;
 - no question addressed to an approving model is unanswered.
 
@@ -275,7 +321,8 @@ A person's 👍 accepts a version at any time, 👎 with a reason becomes an obj
 run.
 
 **Against moving targets.** From the third round on, a model may raise a new blocking objection only against a
-section that changed since its last ballot, or with a source quote that contradicts the plan. Everything else is a
+section that changed since its last ballot (the exception for an objection backed by a source quote is not built:
+such a contradiction is the checker's to find). Everything else is a
 note; notes are appended to the document and do not block. Who raised an objection confirms in its next ballot
 whether it is resolved. An author may decline an objection with a reason; it then stays open and counts against
 approval only for the model that raised it.
@@ -310,6 +357,28 @@ before any measurement; phase 0 replaces it with a measured number.
 - `node --experimental-strip-types server/export-plan.ts --room <room> --block <id> --out <file>` writes it to a
   file, for example into `docs/`. No process of the application writes into a repository.
 
+As built (phase 10), where it adds to or differs from the above:
+
+- Which version "the result" is, in this order: the version a person accepted; else the result of the newest run
+  with both tables (`PlanResult`); else the version a table accepted by majority; else the newest draft of the table
+  the block shows, and the appendix says that nobody accepted it. `?table=` and `?version=` export another version,
+  described as what it is; `?plain=1` and `--plain` leave the appendix out. The address is served under
+  `/api/rooms/<room>/plan/<block>.md` as well.
+- The appendix is written in the language of the task, by a program (`server/export.ts`), after a line with a fixed
+  marker. Its cost is what the run recorded: each table's use from the `PlanStrategyStat`, and the whole use of the
+  room's last run when that run worked on this task. The use of earlier runs on the same task is not kept per task
+  and is not in the appendix.
+- On the page the objections that still stand are beside their sections; the discussion (messages, decisions,
+  ballots) is a panel per table, not beside the sections.
+- The difference between versions is computed in the page (`client/lib/diff.ts`), by lines and inside a changed line
+  by words, from the two versions' texts.
+- The help articles are part of the application (`/help`, eight articles in German and English), not of the help
+  site's corpus.
+- Docker: the image and a local test bed with one container per role (`docker:local:up`, ports 4110 and 4190). The
+  compose file splits the roles into the profiles nano (space, checker) and big (web, agents, model, sources)
+  already; scripts for the servers come with phase 11, when the forum has its Rust space server. The sources
+  container alone sees the repositories, mounted read-only, and its own file system is read-only.
+
 ## 12. Phases
 
 Each phase is tested with fake models, keeps the application runnable and is one commit. Checks after each:
@@ -318,18 +387,18 @@ Each phase is tested with fake models, keeps the application runnable and is one
 
 | Phase | Content | Tests |
 |---|---|---|
-| 0 | Baseline in codemode-chat as it is: both example briefs as text tasks with three models, by hand; record where it breaks, calls and cost. | none (live, costs tokens: ask first) |
+| 0 ✓ | Baseline in codemode-chat as it is: both example briefs as text tasks with three models, by hand; record where it breaks, calls and cost. | none (live, costs tokens: ask first) |
 | 1 ✓ | The directory `codemode-forum/` with the copied base: space, web, agents and model processes, launcher, admin, quotas, the run mechanics with the roll call as a run's opening, the refusal of runs with fewer than three models, a page for it; the registrations of section 3. | the stack starts and restarts; the repository's checks pass; a fake model call is booked |
 | 2 ✓ | Plan task, the document entries of section 4 (`PlanTask`, `PlanDoc`, `PlanSection`), sectioned document, snapshot and a read-only document view with its versions. One table; one model writes: after the roll call the first model at the table writes the outline and the first draft of every section. No sources. | versions share unchanged sections; a second writer of a section is refused; sizes at their limits |
 | 3 ✓ | Uploaded documents as a pack; the sources process with local repositories, read from the objects of a commit; reading in steps. | path escape, symbolic link, deny list, limits; a killed sources process; a killed agent goes on from its `ReadStep`s |
 | 4 ✓ | Discussion: messages, threads, reply items, decisions, the person's messages, limits; kickoff. Messages travel with a work call from phase 6 on (review and revise); until then they are written at the kickoff and in the replies. | an unanswered question holds the table until its deadline; a decision reaches the next context; the message limit |
-| 5 | The checker and the criteria. | each check with a plan that fails exactly it |
-| 6 | Table B: outline by proposal, parallel drafts, rounds of review and revise. | restart of all processes in a round; an objection becomes one item |
-| 7 | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
-| 8 | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
-| 9 | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
-| 10 | Page: diff, discussion, ballots, standings, export; help articles in German and English; README; Docker with the local test bed. | help links and both languages; the export equals the result |
-| 11 | `codemode-forum/rust/forum-space` and its compose files; remote repositories (admin, host allowlist). | the suite against the Rust server; refused hosts, size and time limits with a local git server |
+| 5 ✓ | The checker process and its six checks; the conventions told to the writer; check after the drafts, revision of the sections with findings, at most three checks a run. | each check with a plan that fails exactly it |
+| 6 ✓ | Table B: an outline proposed by every model and one picked, sections dealt out and drafted in parallel, rounds of review and revise with objections kept as entries; messages travel with a review. A run chooses its table (`way`). | restart of all processes in a round; an objection becomes one item |
+| 7 ✓ | Ballots per model, objection ledger, acceptance, the rule against moving targets, stall; the person's yes and no. | three agents of one model are one vote; approval by authors alone is not enough; a declined objection |
+| 8 ✓ | Table A with the turn. | a turn nobody takes passes on; a killed agent in its turn |
+| 9 ✓ | Both tables in one run: shares of the budget, exchange after each round, blind comparison, joint final round, `PlanStrategyStat`. | no table exceeds its share; a section taken over names its origin; a failed final ballot keeps the base |
+| 10 ✓ | Page: diff, discussion, ballots, standings, export; help articles in German and English; README; Docker with the local test bed. | help links and both languages; the export equals the result |
+| 11 ✓ | `codemode-forum/rust/forum-space` and its compose files; remote repositories (admin, host allowlist). | the suite against the Rust server; refused hosts, size and time limits with a local git server |
 | 12 | Live runs of both example briefs, three models, both tables, three times each; report in `codemode-forum/docs/`. | live, costs tokens: ask first |
 
 Phases 6 and 8 are independent after phase 5. Everything up to phase 12 runs on this machine; big and nano follow
@@ -366,3 +435,73 @@ Not part of this plan:
 - writing into a repository, opening pull requests, or any call that changes something;
 - any change to codemode-chat;
 - deploying to big or nano.
+
+## 15. Proposed addition: the process in a GitHub repository (asked 2026-11-22, not decided)
+
+The wish: a new repository for one decision process, named by the person; access to that repository only; every
+intermediate document and step of the decision kept there in a form one can follow; Markdown, HTML and PDF of the
+result at the end.
+
+**Access to one repository only.** A token that may create repositories can reach more than one, so the creation
+and the daily access are kept apart:
+
+1. *Once, by the operator:* a script (`server/github-setup.ts`) asks for the name, creates the private repository with
+   the operator's own `gh` login, generates a key pair, and registers the public key as a **deploy key with write
+   access** of that repository. The `gh` login is never given to a process of the forum.
+2. *From then on:* a new role, the **archive** process, pushes with that deploy key. GitHub itself confines a deploy
+   key to its one repository; nothing in the forum can widen it.
+
+**What is kept, and how.** The archive process follows the Space's change stream and turns events into commits, in
+their order, so the history of the repository is the history of the process:
+
+| Path | Content | Commit |
+|---|---|---|
+| `brief.md`, `sources.md` | the task; the source packs by name and commit (never their content) | task created |
+| `discussion/round-<n>.md`, `decisions.md` | messages by thread, votes, decisions, the person's word | each phase of talking |
+| `outlines/<model>.md` | the outlines proposed and which one the table picked | outline round |
+| `plan.md` | the document; **one commit per version**, authored as the model that wrote it, the changed sections in the message | every version |
+| `checks/v<n>.md`, `objections.md`, `ballots/v<n>.md` | what the checker found, objections with their state, votes | each check, review, ballot |
+| `runs/<run>.md` | the run's log, models at the table, cost | run ended |
+| `result/plan.md`, `plan.html`, `plan.pdf`, `PROCESS.md` | the accepted plan and the generated account of how it came about | acceptance |
+
+What a model read in the sources is not archived by default: a private source would otherwise leave through the
+archive. A cursor entry in the Space says how far the archive is, so a restart neither loses nor repeats a commit.
+
+**HTML and PDF.** HTML comes from the Markdown renderer the page already has. PDF needs a program the repository does
+not have yet: a headless Chromium on the host (`--print-to-pdf`) or pandoc. That is a new dependency to decide; without
+one, the PDF is left out and the archive says so.
+
+**Effort,** measured in phases of the size built so far (each of phases 2 to 5 was one):
+
+| Part | Size | Tests |
+|---|---|---|
+| Setup script, deploy key, the archive process, layout and commits, cursor | one phase | against a local bare repository: every event one commit, a killed archive process, a rejected push |
+| Result export (Markdown with the appendix, HTML), PDF if a renderer is decided | half a phase; overlaps the export of phase 10 | the export equals the accepted version |
+| One real run against GitHub | an hour with the operator's `gh` login | by hand |
+
+Not verified: the GitHub side (deploy keys, `gh repo create`) is written here from knowledge, not tried. Best placed
+after phase 9, when ballots and acceptance exist and there is a result to archive.
+
+## 16. Proposed addition: a map of the decision process (asked 2026-11-22, not decided)
+
+The wish: a flip chart or organisation chart of how the decision came about, clickable, with the documents linked.
+
+Everything such a map needs is already an entry with a time in the Space: the roll call, the kickoff messages, threads
+and decisions, the outlines and the picks, every version of the document with who changed which section, every check,
+every review round with its objections and what became of them. So the map is a view, not new data.
+
+- **The page.** Per table a lane, time from left to right, a node per step: roll call, kickoff, each decision, the
+  outlines and the one picked, each version, each check (passed or what it found), each review round, later ballots
+  and acceptance. Arrows say what led to what: an objection to the revision that took it up, a finding to the version
+  that mended it, a decision to the sections written under it. Colours say how a step ended.
+- **Clickable.** A node opens what it stands for: a version opens the document at that version with its changes, a
+  decision its thread with the votes, an objection the section before and after, a check its findings.
+- **Drawn without a new dependency:** as SVG from a small layout of its own (lanes and columns), like the rest of the
+  page.
+- **In the archive of section 15,** the same map as a static `process.html` whose nodes link to the files of the
+  repository at their commits.
+
+**Effort:** about half a phase for the map on the page (a function that turns the entries of a block into steps and
+arrows, with tests; the SVG view), and a small addition to the archive for the static copy. Best placed after phase
+9, when both tables, ballots and acceptance are steps the map can show; a first version over what exists now would
+need redoing then.

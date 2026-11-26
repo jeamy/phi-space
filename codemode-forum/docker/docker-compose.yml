@@ -1,0 +1,185 @@
+# Docker Compose for PHI-SPACES / CODEMODE FORUM: one container per role, all from the one `production` image, talking
+# only through the space over TCP. Taken over from codemode-chat/docker/docker-compose.yml.
+#
+#   profile nano:  space (SQLite in a volume) and the checker          — the host that keeps the state
+#   profile big:   web, agents, the model process and the sources      — the host that does most of the work
+#   both at once:  the pair on one machine (the local test bed, `npm run docker:local:up`): the same TCP connections
+#                  as between two hosts, host names "nano" and "big" in the system bar
+#   profile test:  the test suite
+#
+# big and nano run only the Rust space server (R-D12): docker-compose.rust.yml lays rust/forum-space over the space
+# container (`docker:rust:up` locally, `docker:nano:rust:up` on nano). The forum has not been deployed to a server yet
+# (docs/gemeinsame-planung-plan-2026-11-22.en.md). The space socket has no TLS and treats every connection as a process of the forum: never publish it on a public
+# interface.
+# Ports: 4100 (web), 4180 (space); the local test bed publishes them as 4110 and 4190.
+#
+# Sources: the repositories a task may read in are mounted read-only into the sources container at /repos, from
+# FORUM_REPOS_DIR on this machine (default: an empty directory), and named by FORUM_DOCKER_REPOS as the container sees
+# them, e.g. FORUM_REPOS_DIR=/home/me/src FORUM_DOCKER_REPOS=phi-space=/repos/phi-space. No other container sees them.
+# Remote repositories (FORUM_GIT_HOSTS) are fetched by the same container into a volume of its own; it is the only
+# container besides the model one that opens connections to the outside.
+
+name: phi-spaces-forum
+
+x-role: &role
+  # every role container is built from the same image (built once, the others reuse it)
+  build:
+    context: ../..
+    dockerfile: codemode-forum/docker/Dockerfile
+    target: production
+  image: phi-spaces-forum:prod
+  init: true
+  restart: unless-stopped
+  user: "node"
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp
+  env_file:
+    - path: ../.env
+      required: false
+  networks:
+    - forum
+
+x-big: &big
+  <<: *role
+  depends_on:
+    space:
+      condition: service_healthy
+      required: false
+
+services:
+  # ---- nano: the space and the checker ----
+  space:
+    <<: *role
+    profiles: [nano]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/space-host.ts"]
+    environment:
+      NODE_ENV: production
+      FORUM_LISTEN: tcp:0.0.0.0:4180
+      FORUM_SQLITE: /data/forum-space.sqlite
+      FORUM_MEM: ""
+      FORUM_SPACE_SERVER: ""
+      FORUM_MAX_CLAIM_MIB: "${FORUM_MAX_CLAIM_MIB:-1024}"
+      FORUM_MAX_DOC_MIB: "${FORUM_MAX_DOC_MIB:-1280}"
+      FORUM_HOST_NAME: "${NANO_HOST_NAME:-nano}"
+    cpus: "${NANO_CPUS:-0}"
+    ports:
+      # loopback by default
+      - "${FORUM_SPACE_BIND:-127.0.0.1}:${FORUM_SPACE_PORT:-4180}:4180"
+    volumes:
+      - forum-space-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(4180,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  checker:
+    <<: *role
+    profiles: [nano]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/check-host.ts"]
+    environment:
+      NODE_ENV: production
+      FORUM_SPACE: tcp:space:4180
+      FORUM_HOST_NAME: "${NANO_HOST_NAME:-nano}"
+    cpus: "${NANO_CPUS:-0}"
+    depends_on:
+      space:
+        condition: service_healthy
+
+  # ---- big: web, agents, the model process, the sources ----
+  web:
+    <<: *big
+    profiles: [big]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/index.ts"]
+    environment:
+      NODE_ENV: production
+      FORUM_SPACE: "${FORUM_DOCKER_SPACE:-tcp:space:4180}"
+      FORUM_HOST_NAME: "${BIG_HOST_NAME:-big}"
+      FORUM_BIND: 0.0.0.0
+      PORT: "4100"
+      FORUM_ADMIN_PASSWORD: "${FORUM_ADMIN_PASSWORD:-}"
+    ports:
+      # loopback by default, for a reverse proxy in front
+      - "${HOST_BIND:-127.0.0.1}:${PORT:-4100}:4100"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  agents:
+    <<: *big
+    profiles: [big]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/agent-host.ts"]
+    environment:
+      NODE_ENV: production
+      FORUM_SPACE: "${FORUM_DOCKER_SPACE:-tcp:space:4180}"
+      FORUM_HOST_NAME: "${BIG_HOST_NAME:-big}"
+
+  model:
+    <<: *big
+    profiles: [big]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/model-host.ts"]
+    environment:
+      NODE_ENV: production
+      FORUM_SPACE: "${FORUM_DOCKER_SPACE:-tcp:space:4180}"
+      FORUM_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    volumes:
+      # the only process with model credentials: the host's pi CLI login (or API keys in .env); PI_AUTH_DIR= skips it
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  sources:
+    <<: *big
+    profiles: [big]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/source-host.ts"]
+    environment:
+      NODE_ENV: production
+      FORUM_SPACE: "${FORUM_DOCKER_SPACE:-tcp:space:4180}"
+      FORUM_HOST_NAME: "${BIG_HOST_NAME:-big}"
+      # the repositories as this container sees them (the .env's FORUM_REPOS names paths of the machine, not of here)
+      FORUM_REPOS: "${FORUM_DOCKER_REPOS:-}"
+      # remote repositories (server/remote.ts): the hosts they may be fetched from (none: off), fetched into /cache
+      FORUM_GIT_HOSTS: "${FORUM_GIT_HOSTS:-}"
+      FORUM_GIT_MAX_MB: "${FORUM_GIT_MAX_MB:-200}"
+      FORUM_GIT_TIMEOUT_S: "${FORUM_GIT_TIMEOUT_S:-60}"
+      FORUM_GIT_CACHE: /cache
+    # the only container that sees repositories, and it cannot write them: its file system is read-only but for the
+    # cache of fetched remote repositories (bare, never checked out) and /tmp
+    read_only: true
+    volumes:
+      - "${FORUM_REPOS_DIR:-./no-repos}:/repos:ro"
+      - forum-git-cache:/cache
+
+  # ---- tests in Docker ----
+  codemode-forum-test:
+    build:
+      context: ../..
+      dockerfile: codemode-forum/docker/Dockerfile
+      target: dev-test
+    image: phi-spaces-forum:dev-test
+    profiles: [test]
+    init: true
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    environment:
+      NODE_ENV: test
+      FORUM_LLM: "0"
+    command: ["npm", "--prefix", "codemode-forum", "test"]
+
+networks:
+  forum: {}
+
+volumes:
+  forum-space-data: {}
+  forum-git-cache: {}

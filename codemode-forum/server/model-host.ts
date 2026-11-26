@@ -16,6 +16,7 @@ import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
 import { adminModels, callLimits, llmInfo, llmModels, llmText, metered, setAllowedModels, setCallGate, setLlmOn, type TextAnswer, type TextCall, type Usage } from "./llm.ts";
 import { packModels, spentToday, type ModelInfoView, type Spend } from "./models.ts";
 import { callPrompt, type LlmCall } from "./calls.ts";
+import { runType } from "./run.ts";
 import { awaitQuota } from "./quota.ts";
 import { ipTokensPerDay, today } from "./limits.ts";
 import { announce, awaitWork, connectSpace, DEFAULT_SPACE, keepAlive, readExisting } from "./space.ts";
@@ -85,7 +86,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 	};
 	await publish();
 	const beat = setInterval(() => void publish(), 10_000); beat.unref?.();
-	const runOf = (call: LlmCall) => ({ type: "ForumRun", fields: { session: call.session, runId: call.runId! } });
+	const runOf = (call: LlmCall) => ({ type: runType(call.runId!), fields: { session: call.session, runId: call.runId! } });
 
 	/** One call: taken, answered and the answer written in one transaction. */
 	const answerOne = async (): Promise<boolean> => {

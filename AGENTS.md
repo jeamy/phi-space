@@ -5,7 +5,7 @@ phi-spaces: a space library with its own store; the optional `agent/` package co
 
 The package (`src/`, `test/`, `examples/`, `agent/`, `scripts/`, its `package.json` with the exports, the Rust core in
 `rust/`) lives in `spaces/`; the applications (`spaces-mmo/`, `codemode-chat/`, `codemode-forum/`, `help-site/`, `spaces-files/`) sit beside it, each with
-its own Rust workspace in `<app>/rust/` (codemode-forum has none yet), and `docs/`, `de-docs/`, `checks/` and the `.env` stay at the repository root
+its own Rust workspace in `<app>/rust/`, and `docs/`, `de-docs/`, `checks/` and the `.env` stay at the repository root
 (docs/umstellung-verzeichnisse.en.md). Paths of the package below are from `spaces/`, paths of an application from
 the repository root. The root `package.json` is thin: it runs `checks/` and forwards every command of the package
 (`npm run typecheck`, `npm test`, …) to `spaces/`; the commands that take a path run the package's file from the root,
@@ -59,12 +59,20 @@ so a relative path still means the repository root (`checks/root-scripts.mjs` ke
   this machine as a test bed, port 3710)
   (changes containers on this machine; never on a shared server without asking).
 - Codemode forum (`codemode-forum/`: Next.js; at least three models develop one plan together; plan and phases in
-  `docs/gemeinsame-planung-plan-2026-11-22.en.md`, state in `codemode-forum/README.md`; roles space, sources, agents, model, web around one
+  `docs/gemeinsame-planung-plan-2026-11-22.en.md`, state in `codemode-forum/README.md`; roles space, sources, checker, agents, model, web around one
   space; its base is copied from codemode-chat, it imports nothing from there; variables `FORUM_*`, port 4100):
   `npm --prefix codemode-forum run dev`, `npm run codemode-forum` (after `npm --prefix codemode-forum run build`), tests
   `npm run test:codemode-forum` (they start the processes, with the fake models of `tests/fakes.ts`), typecheck
-  `npm --prefix codemode-forum run typecheck` (own tsconfig, not part of the root `tsc`). No Docker and no Rust space server
-  yet (phases 10 and 11): it runs on this machine only.
+  `npm --prefix codemode-forum run typecheck` (own tsconfig, not part of the root `tsc`); the result of a plan task as Markdown with
+  its generated appendix: `node --experimental-strip-types codemode-forum/server/export-plan.ts --room <room> --block <id> --out <file>`;
+  Docker `npm --prefix codemode-forum run docker:image`, then `docker:local:up|down|logs` (one container per role on this
+  machine, compose project `phi-spaces-forum-local`, port 4110, space 4190; changes containers on this machine); the Rust space
+  server `codemode-forum/rust/forum-space` (`cd codemode-forum/rust && cargo build --release && cargo test && cargo clippy --all-targets`;
+  `FORUM_SPACE_SERVER=rust/target/release/forum-space` runs launch and tests on it, relative values are read from the
+  application's directory; `docker:image:rust` and `docker:rust:up|down|logs` the local test bed with it, project
+  `phi-spaces-forum-rust`; `docker:nano:rust:up` and `docker:big:up` exist for the servers, where the forum has not been
+  deployed: never there without asking); remote repositories as a source are fetched by the sources process over https from
+  the hosts of `FORUM_GIT_HOSTS` (`server/remote.ts`, `tests/remote.test.ts` with a git server on this machine).
 - Files (`spaces-files/`: a Zanzibar-style filesystem for people and agent instances; plan, phases and exit evidence in
   `docs/zanzibar-agent-filesystem-plan.en.md`, state in `spaces-files/README.md`; one service process and its Space process,
   its tenant Spaces never exposed, the dashboard does not list it): `npm run spaces-files` (`:dev` restarts on change;

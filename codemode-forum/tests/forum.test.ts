@@ -14,6 +14,7 @@ import type { PlanView } from "../server/hub.ts";
 import { DOC_LIMITS, writeVersion } from "../server/plandoc.ts";
 import { FIXED_CRITERIA } from "../server/plantask.ts";
 import { drawAliases } from "../server/run.ts";
+import { PHASE } from "./fakes.ts";
 import { startServer, startStack } from "./stack.ts";
 
 const THREE = ["fake/alpha", "fake/beta", "fake/gamma"];
@@ -58,18 +59,20 @@ test("a run on a plan task: the roll call, then one model writes the outline and
 		for (const a of s.rollcall) assert.equal(a.text, `${a.model} is here.`);
 		// three roll call answers of 100 tokens, three kickoff answers of 150, an outline of 400, three sections of 1000
 		assert.deepEqual([s.run!.usage.tokens, Math.round(s.run!.usage.costUsd * 1000)], [4150, 415]);
-		assert.deepEqual([s.run!.items, s.run!.phase, s.run!.ended, s.run!.blockId], [{ open: 0, done: 10 }, "done", undefined, blockId]);
+		assert.deepEqual([s.run!.items, s.run!.phase, s.run!.ended, s.run!.blockId], [{ open: 0, done: 11 }, "done", undefined, blockId]); // the eleventh is the check
+		assert.deepEqual(s.run!.check, { version: 4, ok: true, failures: 0, round: 1 });
 		assert.deepEqual([s.run!.present!.length, s.run!.talk], [3, { messages: 3, decisions: 0 }]);
 		const writer = s.rollcall[0]!.model; // M1
 		assert.equal(s.run!.writer, writer);
 		assert.deepEqual(s.run!.doc, { table: "A", version: 4, sections: 3, written: 3 });
-		assert.match(s.lines.at(-1)!.text, /^Run finished: 3 of 3 models answered the roll call; 3 messages, 0 decisions; M1 wrote 3 of 3 sections of the first draft \(version 4\) \(4150 tokens, \$0\.4150\)$/);
+		assert.match(s.lines.at(-1)!.text, /^Run finished: 3 of 3 models answered the roll call; 3 messages, 0 decisions; M1 wrote 3 of 3 sections of the first draft \(version 4, checks passed\) \(4150 tokens, \$0\.4150\)$/);
 		// the document: the outline was version 1, every section written since is one more
 		const block = s.blocks[0]!;
 		assert.deepEqual([block.blockId, block.brief, block.lang, block.criteria], [blockId, BRIEF, "en", ["Names the tests of every phase"]]);
 		assert.deepEqual([block.doc!.version, block.doc!.versions, block.doc!.sections.map((x) => [x.title, x.rev, x.model])], [4, 4, [["Goal", 2, writer], ["Steps", 2, writer], ["Risks", 2, writer]]]);
 		const view = await plan(srv.url, id, blockId);
-		assert.deepEqual(view.doc.sections.map((x) => x.text), ["Goal", "Steps", "Risks"].map((h) => `The ${h.toLowerCase()} of the plan, written by ${writer}.`));
+		assert.deepEqual(view.doc.sections.map((x) => x.text), ["Goal", "Steps", "Risks"].map((h) => `The ${h.toLowerCase()} of the plan, written by ${writer}.${h === "Steps" ? PHASE : ""}`));
+		assert.deepEqual([view.check, block.doc!.check], [{ ok: true, failures: [] }, { ok: true, failures: [] }]);
 		assert.deepEqual(view.versions.map((v) => [v.version, v.changed.length]), [[1, 3], [2, 1], [3, 1], [4, 1]]);
 		assert.deepEqual((await plan(srv.url, id, blockId, 1)).doc.sections.map((x) => x.text), ["What goal must say.", "What steps must say.", "What risks must say."]);
 		assert.equal((await fetch(`${srv.url}/api/rooms/${id}/plan/${blockId}?version=9`)).status, 404);
@@ -88,7 +91,7 @@ test("a run on a plan task: the roll call, then one model writes the outline and
 		const spends = (await srv.stack.space.readAll({ type: "Spend", fields: { session: id } }, { limit: 20 })).map((e) => e.fields as unknown as Spend);
 		assert.deepEqual(spends.map((x) => [x.kind, x.tokens, x.admin]).sort(), [["draft", 1000, false], ["draft", 1000, false], ["draft", 1000, false], ["kickoff", 150, false], ["kickoff", 150, false], ["kickoff", 150, false], ["outline", 400, false], ["rollcall", 100, false], ["rollcall", 100, false], ["rollcall", 100, false]]);
 		const system = (await (await fetch(`${srv.url}/api/system`)).json()) as { hosts: Array<{ roles: string[] }>; today: { calls: number; tokens: number } };
-		assert.deepEqual(system.hosts.flatMap((h) => h.roles).sort(), ["agents", "model", "space", "web"]);
+		assert.deepEqual(system.hosts.flatMap((h) => h.roles).sort(), ["agents", "checker", "model", "space", "web"]);
 		assert.deepEqual({ calls: system.today.calls, tokens: system.today.tokens }, { calls: 10, tokens: 4150 });
 		// nothing of the run is left behind
 		for (const type of ["ForumRun", "WorkItem", "AgentSlot", "LlmCall", "LlmResult", "ItemStart"]) assert.equal(await srv.stack.space.count({ type, fields: { session: id } }), 0, type);
@@ -126,7 +129,7 @@ test("a run needs a plan task, three to five different allowed models and a budg
 		// the writer's two agents wrote the two sections side by side: each is one version, none is lost
 		assert.deepEqual(s.run!.doc, { table: "A", version: 3, sections: 2, written: 2 });
 		const view = await plan(srv.url, id, blockId);
-		assert.deepEqual(view.doc.sections.map((x) => [x.title, x.rev, x.text]), [["Ziel", 2, `The ziel of the plan, written by ${s.run!.writer}.`], ["Weg", 2, `The weg of the plan, written by ${s.run!.writer}.`]]);
+		assert.deepEqual(view.doc.sections.map((x) => [x.title, x.rev, x.text]), [["Ziel", 2, `The ziel of the plan, written by ${s.run!.writer}.`], ["Weg", 2, `The weg of the plan, written by ${s.run!.writer}.${PHASE}`]]);
 		const calls = (await srv.stack.space.readAll({ type: "FakeCall", fields: { session: id, kind: "outline" } }, { limit: 5 })).map((e) => e.fields as unknown as { prompt: string });
 		assert.match(calls[0]!.prompt, /Keep exactly these headings in this order:\n## Ziel\n## Weg/);
 		assert.match(calls[0]!.prompt, /Write in German\./);
@@ -203,6 +206,7 @@ test("a run goes on after the agents were killed and the space and the model pro
 	const stack = await startStack({ dbPath: join(dir, "space.sqlite"), agents: false, model: false });
 	const srv = await startServer({ stack });
 	try {
+		await stack.checker();
 		const agents = await stack.agents({ leaseMs: 2000 }), model = await stack.model({ fakes: true });
 		const id = room("hold");
 		const blockId = await task(srv.url, id);

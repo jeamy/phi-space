@@ -1,0 +1,10 @@
+# The Rust space server in the space container (docs/gemeinsame-planung-plan-2026-11-22.en.md, phase 11):
+# `npm run docker:rust:up` after `npm run docker:image:rust` runs the local test bed with it, as a project of its own
+# with a volume of its own. On a server the same file lays it over the nano profile (`docker:nano:rust:up`): big and
+# nano run only the Rust implementation (R-D12), so there is no nano script without it.
+services:
+  space:
+    build:
+      target: production-rust
+    image: phi-spaces-forum:rust
+    command: ["/usr/local/bin/forum-space"]

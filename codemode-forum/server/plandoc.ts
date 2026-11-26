@@ -17,17 +17,20 @@ export const DOC_LIMITS = { sectionBytes: 24_000, docBytes: 96_000, sections: 40
 
 export type SectionRef = { sectionId: string; rev: number; title: string; hash: string; bytes: number;
 	/** Who wrote this revision. */
-	author: string; model: string };
+	author: string; model: string;
+	/** Where the revision takes its content from, when the table decided to take over a section of the other table's
+	 *  document: that table, version and section. */
+	origin?: string };
 export type PlanDoc = { session: string; blockId: string; table: string; version: number; slot: string;
 	/** Who made this version, and which sections it changed. */
 	author: string; model: string; changed: string[]; sections: SectionRef[]; bytes: number; ts: number };
-export type PlanSection = { session: string; blockId: string; table: string; sectionId: string; rev: number; base: number; slot: string; title: string; text: string; hash: string; author: string; model: string; ts: number };
+export type PlanSection = { session: string; blockId: string; table: string; sectionId: string; rev: number; base: number; slot: string; title: string; text: string; hash: string; author: string; model: string; origin?: string; ts: number };
 /** A document with its texts. */
 export type FullDoc = Omit<PlanDoc, "sections"> & { sections: Array<SectionRef & { text: string }> };
 
 /** A change of one section: a new revision of an existing one (`base`: the revision it was written against), or a new
  *  section (no `sectionId`), placed after `after` (a section id; null or missing: at the end, "": at the start). */
-export type SectionChange = { sectionId?: string; base?: number; title?: string; text: string; after?: string | null };
+export type SectionChange = { sectionId?: string; base?: number; title?: string; text: string; after?: string | null; origin?: string };
 /** What a writer asks for: changes, sections to drop, and optionally the whole order (ids; new ones by `sectionId`). */
 export type Revision = { changes: SectionChange[]; remove?: string[]; order?: string[] };
 export type Writer = { author: string; model: string };
@@ -126,8 +129,8 @@ function build(d: { session: string; blockId: string; table: string }, who: Writ
 		if (bytesOf(text) > DOC_LIMITS.sectionBytes) throw new DocRefused(`section "${title}" has ${bytesOf(text)} bytes; a section holds at most ${DOC_LIMITS.sectionBytes}`);
 		const sectionId = old?.sectionId ?? newId(taken), base = old?.rev ?? 0, hash = hashOf(title, text);
 		if (old && old.hash === hash) continue; // nothing changed: no new revision
-		written.push({ ...key(d), sectionId, rev: base + 1, base, slot: `${d.blockId}:${d.table}:${sectionId}:${base}`, title, text, hash, author: who.author, model: who.model, ts });
-		refs.set(sectionId, { sectionId, rev: base + 1, title, hash, bytes: bytesOf(text), author: who.author, model: who.model });
+		written.push({ ...key(d), sectionId, rev: base + 1, base, slot: `${d.blockId}:${d.table}:${sectionId}:${base}`, title, text, hash, author: who.author, model: who.model, ...(c.origin ? { origin: c.origin } : {}), ts });
+		refs.set(sectionId, { sectionId, rev: base + 1, title, hash, bytes: bytesOf(text), author: who.author, model: who.model, ...(c.origin ? { origin: c.origin } : {}) });
 		if (!old) {
 			const at = c.after === "" ? 0 : c.after ? order.indexOf(c.after) + 1 : order.length;
 			order.splice(c.after && at === 0 ? order.length : at, 0, sectionId);
