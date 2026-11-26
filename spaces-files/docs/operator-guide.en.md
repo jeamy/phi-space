@@ -18,6 +18,9 @@ its own, the service ends with exit code 1: run the service under a supervisor t
 `Restart=on-failure`). A commit interrupted that way is resolved like any crash (section 6.1 of the plan): the
 tenant waits for the dead transactions to lapse, and a retry with its operation ID applies once.
 
+The Space process's socket is `space.sock` in the data directory: keep the data directory's path short (a unix socket's
+path is limited to about 100 bytes), or the start fails.
+
 **Three directories.** Each directory is mode 700, owned by the service user, and none lies inside another. The
 service refuses to start otherwise.
 

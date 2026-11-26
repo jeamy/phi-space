@@ -2,7 +2,7 @@
 // replicas; specified in section 6.7): the tenant Spaces' store as the primary of phi-spaces' primary/sync journal, its
 // standby journal on another file. A revocation commits, a save commits but its reply is lost, the primary is killed
 // and fenced, the standby materializes the accepted history and is promoted under a new epoch, and the service runs on
-// it: the revocation holds, and the retry of the save answers from its receipt without applying twice. The deployment
+// it: the fenced primary commits nothing, the revocation holds, and the retry of the save answers from its receipt without applying twice. The deployment
 // state and the blobs are carried over by copying them here: their replication is specified, not built (section 6.7).
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -10,6 +10,7 @@ import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { FOREVER } from "phi-spaces/core";
 import {
 	applyConfigTransition, materializeSyncHistory, OwnSyncStore, PrimarySyncBlocked, PrimarySyncJournal, primarySyncStorage, recoverPrimarySync,
 	type PrimarySyncConfig, type PrimarySyncPeer,
@@ -21,7 +22,7 @@ import { storeOnHost } from "../server/store.ts";
 const code = (c: string) => (e: Error & { code?: string }) => { assert.equal(e.code, c, e.message); return true; };
 const CONFIG: PrimarySyncConfig = { spaceId: "files-store", authorityId: "files", primaryEpoch: 1, replicaConfigVersion: 1, primaryReplica: "a", standbyReplica: "b" };
 
-test("a real handover: the revocation holds and a lost reply's retry answers from its receipt", async () => {
+test("a handover in one process: the revocation holds and a lost reply's retry answers from its receipt", async () => {
 	const root = mkdtempSync(join(tmpdir(), "spaces-files-replica-"));
 	const site = (n: string) => { const d = { dataDir: join(root, n, "data"), stateDir: join(root, n, "state"), blobDir: join(root, n, "blobs"), store: join(root, n, "store") }; mkdirSync(d.store, { recursive: true, mode: 0o700 }); return d; };
 	const a = site("a"), b = site("b");
@@ -60,6 +61,7 @@ test("a real handover: the revocation holds and a lost reply's retry answers fro
 
 		// the primary dies and is fenced; its store refuses every further commit
 		aFenced = true;
+		await assert.rejects(s.store.space(tenantAlias("acme")).write({ type: "Probe", fields: {} }, null, FOREVER), "the fenced primary commits nothing");
 		aHost.abandon();
 		await s.close().catch(() => {});
 		// what the specification has replicated beside the Space store (section 6.7), carried over here by a copy
@@ -90,8 +92,6 @@ test("a real handover: the revocation holds and a lost reply's retry answers fro
 		assert.equal(await p.store.space(tenantAlias("acme")).count({ type: T.receipt, fields: { operationId: ids[3] } }), 1);
 		// the revocation's retry answers from its receipt too
 		assert.deepEqual(await p.revoke(lea, "team", ".", "viewer", { kind: "user", id: "bob" }, ids[2]), { status: "revoked" });
-		// the old primary seals nothing more: its journal ends where the standby's history began to differ
-		assert.ok(bJournal.head().revision > aJournal.head().revision, "the promotion is a revision the old primary never had");
 	} finally {
 		await promoted?.close();
 		aJournal.close(); bJournal.close();
