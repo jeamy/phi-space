@@ -11,6 +11,7 @@ import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, r
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { prepareDataDir } from "./dirs.ts";
+import type { StateReplica } from "./standby.ts";
 
 export const STATE_FILE = "state.sqlite";
 export const KEYS_FILE = "keys.json";
@@ -18,6 +19,13 @@ export const CONTENT_KEYS_FILE = "content-keys.json";
 
 export class StateUnavailable extends Error {
 	constructor(message: string) { super(message); this.name = "StateUnavailable"; }
+}
+
+/** The standby did not confirm a change of the state (section 6.7): nothing more is written until a restart seeds it anew. */
+export class StateNotReplicated extends Error {
+	readonly code = "unavailable";
+	readonly retryAfterMs = 1000;
+	constructor(message: string) { super(message); this.name = "StateNotReplicated"; }
 }
 
 /** The effective clock jumped further ahead than allowed: issuance and cleanup wait for operator review (section 6.2). */
@@ -45,6 +53,10 @@ export type DeploymentOptions = {
 	/** Called after every change that raises the state's sequence number (keys, epoch), with the new number: the
 	 *  service mirrors it beside the data, so a lost or older state is refused on the next start. */
 	onSeq?: (stateId: string, seq: number) => void;
+	/** The standby (section 6.7): seeded on open, then every transaction reaches it before it returns. */
+	replica?: StateReplica;
+	/** The standby failed to confirm a transaction: the state refuses every further write from then on. */
+	onPoisoned?: (e: Error) => void;
 };
 
 const SCHEMA = `
@@ -79,6 +91,11 @@ export class DeploymentState {
 	#highWater: number;
 	#closed = false;
 	readonly #onSeq?: (stateId: string, seq: number) => void;
+	#replica: StateReplica | null = null;
+	readonly #onPoisoned?: (e: Error) => void;
+	#poisoned: Error | null = null;
+	/** The key files written since the last transaction: they go to the standby ahead of its changeset. */
+	#pendingFiles: Array<{ name: string; bytes: Buffer }> = [];
 	/** True when this open created the state: a deployment whose data already exists must never get one this way. */
 	fresh = false;
 
@@ -93,6 +110,7 @@ export class DeploymentState {
 		this.#absoluteMs = o.sessionAbsoluteMs ?? 12 * 3600_000;
 		this.#highWater = 0;
 		this.#onSeq = o.onSeq;
+		this.#onPoisoned = o.onPoisoned;
 	}
 
 	/** Whether a state directory holds a deployment state (checked before opening, so that a lost one is not recreated). */
@@ -115,6 +133,13 @@ export class DeploymentState {
 			db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
 			const s = new DeploymentState(db, lock, o.dir, o);
 			s.#init();
+			if (o.replica) {
+				// the standby starts from this state as it is now; from here on every transaction follows it
+				const snap = s.snapshot();
+				o.replica.seed(s.#meta("replica_unit"), snap.entries);
+				s.#pendingFiles = [];
+				s.#replica = o.replica;
+			}
 			return s;
 		} catch (e) { db?.close(); lock.close(); throw e; }
 	}
@@ -261,6 +286,7 @@ export class DeploymentState {
 		// the key file first: a generation in the database without its key would refuse every start
 		this.#keys.set(generation, secret);
 		saveKeyFile(this.#keysPath, this.#keys);
+		this.#shipFile(this.#keysPath);
 		this.#tx(() => {
 			if (previousValidUntil !== null) this.#db.prepare("UPDATE key_generations SET valid_until = ? WHERE valid_until IS NULL").run(previousValidUntil);
 			this.#db.prepare("INSERT INTO key_generations (generation, created_at, valid_until) VALUES (?, ?, NULL)").run(generation, now);
@@ -298,6 +324,7 @@ export class DeploymentState {
 		const generation = Math.max(0, ...this.#contentKeys.keys()) + 1;
 		this.#contentKeys.set(generation, randomBytes(32));
 		saveKeyFile(this.#contentKeysPath, this.#contentKeys);
+		this.#shipFile(this.#contentKeysPath);
 		this.#tx(() => { const seq = this.#bump(); this.#db.prepare("INSERT INTO content_key_generations (generation, created_at, created_seq) VALUES (?, ?, ?)").run(generation, this.#highWater || this.#clock(), seq); });
 		return generation;
 	}
@@ -518,10 +545,36 @@ export class DeploymentState {
 		this.#db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, String(value));
 	}
 
+	#shipFile(path: string | null): void {
+		if (path !== null) this.#pendingFiles.push({ name: path.slice(dirname(path).length + 1), bytes: readFileSync(path) });
+	}
+
 	#tx(f: () => void): void {
+		if (this.#poisoned) throw new StateNotReplicated(`the standby did not confirm an earlier change: restart to seed it anew (${this.#poisoned.message})`);
+		const session = this.#replica ? this.#db.createSession() : null;
+		let unit = 0;
 		this.#db.exec("BEGIN IMMEDIATE");
-		try { f(); this.#db.exec("COMMIT"); }
-		catch (e) { this.#db.exec("ROLLBACK"); this.#announce = null; throw e; }
+		try {
+			f();
+			// every transaction has its number, so the standby sees a gap and takes a repeat once
+			unit = this.#meta("replica_unit") + 1;
+			this.#setMeta("replica_unit", unit);
+			this.#db.exec("COMMIT");
+		} catch (e) { this.#db.exec("ROLLBACK"); this.#announce = null; session?.close(); throw e; }
+		if (session !== null) {
+			const changeset = session.changeset();
+			session.close();
+			const files = this.#pendingFiles;
+			this.#pendingFiles = [];
+			try { this.#replica!.accept({ n: unit, changeset, files }); }
+			catch (e) {
+				// committed here, unconfirmed there: never answered as if it had succeeded (section 6.7)
+				this.#poisoned = e as Error;
+				this.#announce = null;
+				this.#onPoisoned?.(e as Error);
+				throw new StateNotReplicated(`the standby did not confirm a change of the state: ${(e as Error).message}`);
+			}
+		}
 		const seq = this.#announce;
 		this.#announce = null;
 		if (seq !== null) this.#onSeq?.(this.stateId(), seq);

@@ -2,11 +2,12 @@
 // replicas; specified in section 6.7): the tenant Spaces' store as the primary of phi-spaces' primary/sync journal, its
 // standby journal on another file. A revocation commits, a save commits but its reply is lost, the primary is killed
 // and fenced, the standby materializes the accepted history and is promoted under a new epoch, and the service runs on
-// it: the fenced primary commits nothing, the revocation holds, and the retry of the save answers from its receipt without applying twice. The deployment
-// state and the blobs are carried over by copying them here: their replication is specified, not built (section 6.7).
+// it: the fenced primary commits nothing, the revocation holds, and the retry of the save answers from its receipt
+// without applying twice. The deployment state and the blobs reach the standby through server/standby.ts, nothing is
+// copied by hand; a change the standby does not confirm is never answered.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
@@ -15,7 +16,8 @@ import {
 	applyConfigTransition, materializeSyncHistory, OwnSyncStore, PrimarySyncBlocked, PrimarySyncJournal, primarySyncStorage, recoverPrimarySync,
 	type PrimarySyncConfig, type PrimarySyncPeer,
 } from "phi-spaces";
-import { FilesService, STATE_MARKER, tenantAlias } from "../server/service.ts";
+import { FilesService, tenantAlias } from "../server/service.ts";
+import { localStandby, promoteStandby, StandbyRefused } from "../server/standby.ts";
 import { T } from "../server/schema.ts";
 import { storeOnHost } from "../server/store.ts";
 
@@ -38,6 +40,7 @@ test("a handover in one process: the revocation holds and a lost reply's retry a
 	const aHost = await primarySyncStorage(aRaw, aJournal, toB, { assertPrimary: assertA }).open();
 	const s = await FilesService.open({
 		dataDir: a.dataDir, stateDir: a.stateDir, blobDir: a.blobDir, saveTxnLeaseMs: 300,
+		standby: { stateDir: b.stateDir, blobDir: b.blobDir },
 		openStore: () => storeOnHost(aHost, join(a.store, "files.sqlite")),
 		faultHook: (p) => { if (p === failAt) { failAt = null; throw new Error("the reply was lost"); } },
 	});
@@ -64,10 +67,11 @@ test("a handover in one process: the revocation holds and a lost reply's retry a
 		await assert.rejects(s.store.space(tenantAlias("acme")).write({ type: "Probe", fields: {} }, null, FOREVER), "the fenced primary commits nothing");
 		aHost.abandon();
 		await s.close().catch(() => {});
-		// what the specification has replicated beside the Space store (section 6.7), carried over here by a copy
-		for (const k of ["stateDir", "blobDir"] as const) { cpSync(a[k], b[k], { recursive: true }); chmodSync(b[k], 0o700); }
-		mkdirSync(b.dataDir, { recursive: true, mode: 0o700 });
-		cpSync(join(a.dataDir, STATE_MARKER), join(b.dataDir, STATE_MARKER));
+		// the deployment state and the blobs are promoted with the store: the old primary can no longer seed or write them
+		promoteStandby({ stateDir: b.stateDir, blobDir: b.blobDir });
+		const again = await localStandby({ stateDir: b.stateDir, blobDir: b.blobDir });
+		assert.throws(() => again.state.seed(0, []), StandbyRefused, "a returning old primary is fenced");
+		again.close();
 
 		// the standby: the accepted history materialized, then promoted under epoch 2 without a standby of its own
 		const bRaw = new OwnSyncStore(join(b.store, "files.sqlite"));

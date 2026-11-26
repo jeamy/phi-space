@@ -12,6 +12,7 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { closeSync, fsyncSync, openSync } from "node:fs";
 import { mkdir, open, readdir, readFile, rename, stat, unlink } from "node:fs/promises";
+import { seedBlobs, StandbyRefused, type BlobReplica } from "./standby.ts";
 import { join } from "node:path";
 import { canonicalJson } from "phi-spaces";
 import { prepareDataDir } from "./dirs.ts";
@@ -135,25 +136,38 @@ class DirMedium implements Medium {
 
 export class BlobStore {
 	readonly #m: Medium;
+	/** The standby's blobs (section 6.7): a blob reaches it before the row that names it commits. */
+	readonly #replica: BlobReplica | null;
 	readonly #keys: ContentKeys;
 	readonly dir: string | null;
 	/** While positive, no blob is deleted: a backup is copying the directory (section 6.5). */
 	#holds = 0;
 
-	private constructor(m: Medium, keys: ContentKeys, dir: string | null) { this.#m = m; this.#keys = keys; this.dir = dir; }
+	private constructor(m: Medium, keys: ContentKeys, dir: string | null, replica: BlobReplica | null) { this.#m = m; this.#keys = keys; this.dir = dir; this.#replica = replica; }
 
 	/** Opens the blob directory (mode 700, refused when others can reach it), or memory with `dir` null. */
-	static async open(dir: string | null, keys: ContentKeys): Promise<BlobStore> {
-		if (dir === null) return new BlobStore(new MemoryMedium(), keys, null);
+	static async open(dir: string | null, keys: ContentKeys, replica: BlobReplica | null = null): Promise<BlobStore> {
+		if (dir === null) {
+			if (replica) throw new Error("a standby needs blobs in a directory");
+			return new BlobStore(new MemoryMedium(), keys, null, null);
+		}
 		await prepareDataDir(dir);
-		return new BlobStore(new DirMedium(dir), keys, dir);
+		// the standby gets every blob it lacks before anything is served
+		if (replica) await seedBlobs(dir, replica);
+		return new BlobStore(new DirMedium(dir), keys, dir, replica);
 	}
 
 	/** Seals `bytes` into a new blob under a fresh ID and makes it durable; returns what the content row records. */
 	async put(o: BlobOwner, bytes: Uint8Array): Promise<BlobRef> {
 		const { generation, secret } = this.#keys.currentContentKey();
 		const blobId = newBlobId();
-		await this.#m.write(o.tenantId, blobId, seal(secret, generation, o, blobId, bytes));
+		const sealed = seal(secret, generation, o, blobId, bytes);
+		await this.#m.write(o.tenantId, blobId, sealed);
+		// on the standby before the content row can name it; failing here, the save fails before its commit
+		if (this.#replica) {
+			try { await this.#replica.write(o.tenantId, `${blobId.slice(0, 2)}/${blobId}`, sealed); }
+			catch (e) { await this.#m.remove(o.tenantId, blobId).catch(() => {}); throw new StandbyRefused(`the standby did not take the blob: ${(e as Error).message}`); }
+		}
 		return { blobId, size: bytes.length, keyGeneration: generation };
 	}
 
@@ -176,6 +190,8 @@ export class BlobStore {
 	async delete(tenantId: string, blobId: string): Promise<boolean> {
 		if (this.#holds > 0 || !BLOB_ID.test(blobId)) return false;
 		await this.#m.remove(tenantId, blobId);
+		// best effort: a blob the standby keeps is an orphan for its sweep after a promotion
+		await this.#replica?.remove(tenantId, `${blobId.slice(0, 2)}/${blobId}`).catch(() => {});
 		return true;
 	}
 
@@ -195,6 +211,7 @@ export class BlobStore {
 			if (blob && referenced.has(name)) continue;
 			if (!blob && !(name.endsWith(TMP) && BLOB_ID.test(name.slice(0, -TMP.length)))) continue; // not ours: leave it
 			await this.#m.removeName(tenantId, path);
+			if (blob) await this.#replica?.remove(tenantId, path).catch(() => {});
 			n++;
 		}
 		return n;

@@ -11,6 +11,7 @@ import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { CONTROL_SPACE, createEnroll, listSpaces, PhiSpaces, revokePeerKey, startService } from "phi-spaces";
+import { localStandby } from "./standby.ts";
 import { inProcessStore, spaceProcessStore, type SpaceStore, type TenantSpace } from "./store.ts";
 import { HOST_ROLE, PEER_ID, tenantScope } from "./agent-net.ts";
 import type { EntryDraft } from "phi-spaces/core";
@@ -115,6 +116,8 @@ export type FilesServiceOptions = AdmissionOptions & {
 	/** The Space process ended on its own: admission is closed by then (default: only that). The launcher exits, so
 	 *  its supervisor restarts both and the crash path of section 6.1 applies. */
 	onSpaceLost?: (code: number | null, signal: string | null) => void;
+	/** The standby of the deployment state and the blobs (section 6.7): seeded on open, then kept in step. */
+	standby?: { stateDir: string; blobDir: string };
 	/** Tests only: opens the tenant Spaces' store instead of `spaceProcess` (a replicated primary, section 8). */
 	openStore?: () => Promise<SpaceStore>;
 };
@@ -155,6 +158,7 @@ export class FilesService {
 	/** Process-wide counters: queue wait and run time, adapter calls, evaluator work (server/metrics.ts). */
 	readonly metrics = new Metrics();
 	readonly #stopControl: () => Promise<void>;
+	#standby: { close(): void } | null = null;
 	readonly #now: () => number;
 	/** Tenants whose FsMeta this process has seen committed; FsMeta is never removed while the store is open. */
 	readonly #ready = new Set<string>();
@@ -198,14 +202,19 @@ export class FilesService {
 			throw new StateLost(`the data in ${o.dataDir} has no deployment state in ${o.stateDir}: restore the state from its backup (operator restore-state)`);
 		const marker = markerPath === null ? null : readMarker(markerPath);
 		const mirror = (stateId: string, seq: number) => { if (markerPath !== null && existsSync(o.dataDir!)) writeMarker(markerPath, { stateId, seq }); };
-		const state = await DeploymentState.open({ clock: o.now, ...o.state, dir: o.stateDir, onSeq: mirror });
+		const standby = o.standby ? await localStandby(o.standby) : null;
+		let poisoned: ((e: Error) => void) | null = null;
+		let state: DeploymentState;
+		try {
+			state = await DeploymentState.open({ clock: o.now, ...o.state, dir: o.stateDir, onSeq: mirror, ...(standby ? { replica: standby.state, onPoisoned: (e) => poisoned?.(e) } : {}) });
+		} catch (e) { standby?.close(); throw e; }
 		try {
 			if (marker !== null && marker.stateId !== state.stateId()) throw new StateLost(`the deployment state in ${o.stateDir} belongs to another deployment than the data in ${o.dataDir}`);
 			if (marker !== null && state.seq() < marker.seq && !o.stateRestore) throw new StateLost(`the deployment state in ${o.stateDir} is older than the data has seen (sequence ${state.seq()} < ${marker.seq}): restore it from its newest backup (operator restore-state)`);
-		} catch (e) { state.close(); throw e; }
+		} catch (e) { state.close(); standby?.close(); throw e; }
 		let store: SpaceStore | undefined, control: OwnStoreHost | undefined, service: FilesService | undefined;
 		try {
-			const blobs = await BlobStore.open(blobDir, state);
+			const blobs = await BlobStore.open(blobDir, state, standby?.blobs ?? null);
 			if (o.dataDir !== null) await prepareDataDir(o.dataDir);
 			const storePath = o.dataDir === null ? null : join(o.dataDir, STORE_FILE);
 			// the store's owner runs the reaper, which clears reservations of transactions abandoned by a crash (section 6.1)
@@ -219,7 +228,10 @@ export class FilesService {
 			control = o.stateDir === null ? openOwnMemoryHost() : await openSqliteHost(join(o.stateDir, CONTROL_FILE));
 			const stopControl = await startService(control, ctx, { now: o.now, watchDebounceMs: 50 });
 			service = new FilesService(store, control, stopControl, state, blobs, o);
-		} catch (e) { await control?.close(ctx); await store?.close(); state.close(); throw e; }
+			service.#standby = standby;
+			// a change the standby did not confirm closes admission: nothing is answered that a promotion could lose
+			poisoned = (e) => { console.error(`[files] the standby did not confirm a change of the deployment state; admission is closed (${e.message})`); void service?.admission.close(); };
+		} catch (e) { await control?.close(ctx); await store?.close(); state.close(); standby?.close(); throw e; }
 		try {
 			if (o.stateRestore) await service.#bringStateForward(marker?.seq ?? 0);
 			if (markerPath !== null && (marker === null || state.seq() > marker.seq)) writeMarker(markerPath, { stateId: state.stateId(), seq: state.seq() });
@@ -1888,6 +1900,7 @@ export class FilesService {
 		await this.host.close(ctx);
 		await this.store.close();
 		this.state.close();
+		this.#standby?.close();
 	}
 }
 
