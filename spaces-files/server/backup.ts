@@ -154,6 +154,9 @@ export async function restoreData(archive: string, key: Buffer, o: Pick<FilesSer
 			const svc = await FilesService.open({ ...o });
 			try {
 				const tenants = await svc.checkRestoredBlobs();
+				// host keys come back with the data: none of them proves anything after a restore (like sessions and
+				// IDs), every agent host on another machine enrolls again (section 6.5)
+				await svc.revokeHosts(null);
 				svc.state.journalRestore("checked", { tenants });
 			} finally { await svc.close(); }
 			hook("checked");

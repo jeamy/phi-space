@@ -15,7 +15,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { serveSpace, socketTransport, type SpaceServer } from "phi-spaces";
+import { hashToken, newEnrollToken, serveSpace, socketTransport, type SpaceServer } from "phi-spaces";
 import { FilesService } from "./service.ts";
 import { checkSocketPath } from "./agent-socket.ts";
 import { newBackupKey, readBackupKey } from "./archive.ts";
@@ -41,6 +41,9 @@ export async function serveOperator(svc: FilesService, stateDir: string): Promis
 			case "roster": return svc.state.roster();
 			case "approveReconciler": svc.state.approveReconciler(String(a.tenantId), String(a.issuer), String(a.subject)); return { tenantId: a.tenantId, epoch: svc.state.restoreEpoch() };
 			case "markReconciled": svc.state.markReconciled(String(a.tenantId)); return { tenantId: a.tenantId, epoch: svc.state.restoreEpoch() };
+			case "enrollHost": return svc.createHostEnroll(String(a.peerId), (a.tenants as string[]).map(String), String(a.tokenHash));
+			case "revokeHost": return { revoked: await svc.revokeHosts(String(a.peerId)) };
+			case "hosts": return svc.listHosts();
 			case "health": return svc.health();
 			case "maintain": return Promise.all((a.tenantId ? [String(a.tenantId)] : await svc.tenants()).map(async (t) => ({ tenantId: t, ...(await svc.maintainTenant(t)) })));
 			case "compact": return svc.compact();
@@ -92,6 +95,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 		try { console.log(JSON.stringify(await restoreState(resolve(rest[0]), readBackupKey(stateKey()), { dataDir, stateDir, blobDir, limits }), null, 2)); process.exit(0); }
 		catch (e) { console.error(`[operator] restore-state failed: ${(e as Error).message}`); process.exit(1); }
 	}
+	// an enrollment token is made here and only its hash goes to the service; the operator hands the token to the host
+	const token = newEnrollToken();
 	const call = cmd === "create-tenant" && rest.length === 5 ? { op: "createTenant", args: { tenantId: rest[0], actorId: rest[1], homeName: rest[2], issuer: rest[3], subject: rest[4] } }
 		: cmd === "tenants" ? { op: "tenants" }
 		: cmd === "mode" && rest.length === 1 ? { op: "setMode", args: { mode: rest[0] } }
@@ -104,19 +109,23 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 		: cmd === "approve-reconciler" && rest.length === 3 ? { op: "approveReconciler", args: { tenantId: rest[0], issuer: rest[1], subject: rest[2] } }
 		: cmd === "mark-reconciled" && rest.length === 1 ? { op: "markReconciled", args: { tenantId: rest[0] } }
 		: cmd === "restore-status" ? { op: "restoreStatus" }
+		: cmd === "enroll-host" && rest.length === 2 ? { op: "enrollHost", args: { peerId: rest[0], tenants: rest[1].split(",").filter(Boolean), tokenHash: hashToken(token) } }
+		: cmd === "revoke-host" && rest.length === 1 ? { op: "revokeHost", args: { peerId: rest[0] } }
+		: cmd === "hosts" ? { op: "hosts" }
 		: cmd === "health" ? { op: "health" }
 		: cmd === "maintain" && rest.length <= 1 ? { op: "maintain", args: rest.length ? { tenantId: rest[0] } : {} }
 		: cmd === "compact" ? { op: "compact" }
 		: cmd === "metrics" ? { op: "metrics" }
 		: null;
 	if (!call) {
-		console.error("usage: operator.ts create-tenant <tenant> <adminId> <homeName> <issuer> <subject> | tenants | mode normal|maintenance | backup <file> | backup-state <file> | rotate-content-key | roster-add|roster-remove <tenant> <issuer> <subject> | roster | approve-reconciler <tenant> <issuer> <subject> | mark-reconciled <tenant> | restore-status | health | metrics | maintain [tenant] | compact | new-backup-key <file> | backup-offline <file> | restore <file> | restore-state <file>");
+		console.error("usage: operator.ts create-tenant <tenant> <adminId> <homeName> <issuer> <subject> | tenants | mode normal|maintenance | backup <file> | backup-state <file> | rotate-content-key | roster-add|roster-remove <tenant> <issuer> <subject> | roster | approve-reconciler <tenant> <issuer> <subject> | mark-reconciled <tenant> | restore-status | enroll-host <peerId> <tenant,…> | revoke-host <peerId> | hosts | health | metrics | maintain [tenant] | compact | new-backup-key <file> | backup-offline <file> | restore <file> | restore-state <file>");
 		process.exit(2);
 	}
 	const t = socketTransport({ path: join(stateDir, OPERATOR_SOCKET) });
 	try {
 		const r = JSON.parse(await t.request(JSON.stringify(call)));
 		console.log(JSON.stringify(r.ok ? r.value : r.error, null, 2));
+		if (r.ok && call.op === "enrollHost") console.log(`[operator] the host enrolls within 5 minutes with this one-time token (shown once): ${token}`);
 		process.exitCode = r.ok ? 0 : 1;
 	} catch (e) {
 		console.error(`[operator] the service does not answer at ${join(stateDir, OPERATOR_SOCKET)}: ${(e as Error).message}`);

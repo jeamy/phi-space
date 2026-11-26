@@ -9,7 +9,8 @@ import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
-import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
+import { CONTROL_SPACE, createEnroll, createSpace, listSpaces, PhiSpaces, revokePeerKey, startService } from "phi-spaces";
+import { HOST_ROLE, PEER_ID, tenantScope } from "./agent-net.ts";
 import type { EntryDraft } from "phi-spaces/core";
 import { DEFAULT_LIMITS, FOREVER, UniqueConflict } from "phi-spaces/core";
 import { Metrics } from "./metrics.ts";
@@ -625,6 +626,45 @@ export class FilesService {
 			this.#recoveryAudit(s, who, op, id, { status, user: uid }, false);
 			return { status };
 		});
+	}
+
+	// ---------------------------------------------------------------- agent hosts on other machines (section 2)
+
+	/** The control Space of this service's host, where enrollment tokens and host keys live (never a tenant's). */
+	#control(): PhiSpaces { return new PhiSpaces(this.host, ctx, this.#now, undefined, undefined, { space: CONTROL_SPACE }); }
+
+	/**
+	 * Opens an enrollment for an agent host on another machine (a host-operator step): the token's hash only (the token
+	 * stays with the operator and travels to the host by hand), bound to the peer ID the host will name, for the tenants
+	 * its key may act in. The host enrolls its own new key with the token within the token's life (5 minutes at most).
+	 */
+	async createHostEnroll(peerId: string, tenants: readonly string[], tokenHash: string, ttlMs?: number): Promise<{ peerId: string; tenants: string[]; expiresAt: number }> {
+		if (!PEER_ID.test(peerId)) throw new schema.InvalidInput("a peer ID is 1 to 128 of A-Z a-z 0-9 _ . : -");
+		if (tenants.length === 0) throw new schema.InvalidInput("name the tenants the host may act in");
+		for (const t of tenants) if ((await this.tenantState(t)) !== "ready") throw new schema.InvalidInput(`no tenant ${t}`);
+		const rec = await createEnroll(this.host, ctx, { tokenHash, role: HOST_ROLE, allowedPeerId: peerId, scope: tenants.map(tenantScope), ...(ttlMs ? { ttlMs } : {}), now: this.#now });
+		this.state.operatorAudit("agentHost.createEnroll", { peerId, tenants: [...tenants] });
+		return { peerId, tenants: [...tenants], expiresAt: rec.expiresAt };
+	}
+
+	/** A request generation in the control Space for a host's enrollment request (its retry keeps the identity). */
+	hostEnrollGeneration(peerId: string): Promise<{ generation: string; admitUntil: number }> { return this.#control().issueGeneration({ peerId }); }
+
+	/** The enrolled host keys: peer, key ID, tenants, state. */
+	async listHosts(): Promise<Array<{ peerId: string; keyId: string; tenants: string[]; state: string }>> {
+		if ((await listSpaces(this.host, ctx)).every((sp) => sp.alias !== CONTROL_SPACE)) return [];
+		return (await this.#control().readAll({ type: "PeerKey" })).map((e) => e.fields as Record<string, unknown>)
+			.map((f) => ({ peerId: f.peerId as string, keyId: f.keyId as string, tenants: ((f.scope as string[]) ?? []).filter((x) => x.startsWith("files:")).map((x) => x.slice(6)), state: f.state as string }))
+			.sort((a, b) => byName(a.peerId, b.peerId) || byName(a.keyId, b.keyId));
+	}
+
+	/** Revokes every active key of a host peer (or of all, with null); its connections fail at their next call. */
+	async revokeHosts(peerId: string | null): Promise<number> {
+		let n = 0;
+		for (const k of await this.listHosts())
+			if (k.state === "active" && (peerId === null || k.peerId === peerId) && await revokePeerKey(this.host, ctx, k.peerId, k.keyId, this.#now)) n++;
+		this.state.operatorAudit("agentHost.revoke", { peerId, revoked: n });
+		return n;
 	}
 
 	// ---------------------------------------------------------------- upkeep (sections 3 and 6.1)

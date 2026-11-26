@@ -17,12 +17,16 @@
 //   FILES_OIDC_ISSUER, FILES_OIDC_CLIENT_ID, FILES_OIDC_CLIENT_SECRET, FILES_OIDC_CA (a PEM file)
 //                           the identity provider; default the development IdP (`npm run dev-idp`, http://127.0.0.1:4201)
 //   FILES_AGENT_SOCKETS     `hostPeer@tenant=/path/to.sock;…`, one socket per enrolled agent host and tenant
+//   FILES_AGENT_NET         `host:port`: agent hosts on other machines over TLS (server/agent-net.ts), with the
+//                           certificate of FILES_TLS_CERT / _KEY; FILES_AGENT_NET_ID the service ID in each challenge
+//                           (default "spaces-files"); hosts enroll with `operator enroll-host <peer> <tenant,…>`
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SpaceServer } from "phi-spaces";
 import { parseAgentSockets, serveAgentSocket } from "./agent-socket.ts";
 import { ROOT, loadDotEnv } from "./env.ts";
 import { serveHttp, type HttpServer } from "./http.ts";
+import { parseListen, serveAgentNet, type AgentNetServer } from "./agent-net.ts";
 import { OidcClient } from "./oidc.ts";
 import { serveOperator } from "./operator.ts";
 import { parseMounts } from "./mounts.ts";
@@ -38,7 +42,7 @@ const blobDir = mem ? null : env.FILES_BLOB_DIR || join(ROOT, ".local", "blobs")
 
 // The handlers come first: whoever reads the ready line may signal at once, before another statement of this file runs.
 let service: FilesService | undefined;
-const servers: Array<SpaceServer | HttpServer> = [];
+const servers: Array<SpaceServer | HttpServer | AgentNetServer> = [];
 let stopping = false;
 const shutdown = async () => {
 	if (stopping) return;

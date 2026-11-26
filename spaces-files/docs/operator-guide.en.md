@@ -138,6 +138,7 @@ administrator rows prove nothing. Only the operator's roster and the operator's 
      from before the restore is refused;
    - checks every content row against its blob and closes a tenant whose contents lack a blob
      (`inconsistentState`, that tenant alone).
+   - revokes every agent host key: each host on another machine enrolls again (section 9).
 
    The steps are journaled in the deployment state. After a crash, run the same command again: it resumes at its
    step. `restore-status` shows the journal.
@@ -298,3 +299,30 @@ What they show:
 refuses a directory larger than one reply; `listPage` lists it page by page, and the page and the agent tool do so
 always. Raising `maxDirEntries` above `maxListPage` makes larger directories possible; each page reads the whole
 directory inside the tenant queue, so keep it at a few thousand.
+
+## 9. Agent hosts on other machines
+
+An agent host on another machine reaches the service over TLS instead of a local socket. Set `FILES_AGENT_NET` to the
+address it listens on (`0.0.0.0:4202`, or one interface); it uses the certificate of `FILES_TLS_CERT`/`FILES_TLS_KEY`,
+and the host must trust its CA. Open the port to the agent hosts only.
+
+1. Provision the agents as actors in the tenant, as for a local socket, with `enrolledHostPeerId` set to the host's
+   peer ID (an admin step).
+2. Open an enrollment bound to that peer and to the tenants it may act in:
+
+   ```
+   npm run operator -- enroll-host build-host-1 acme,globex
+   ```
+
+   The command prints a one-time token once; the service keeps only its hash. Hand it to the host's operator over a
+   channel you trust. It expires after five minutes; a wrong peer does not spend it.
+3. On the host, `enrollHost` of `client/agent-net-client.ts` makes a new Ed25519 key in a file of its own
+   (`hostKey`, mode 600) and enrolls it with the token. Afterwards `agentNetTransport` proves the key on every
+   connection, and `FilesAgentClient` with `tenant` set calls as each agent.
+4. `npm run operator -- hosts` lists the keys with their tenants and state. `revoke-host <peerId>` revokes every key
+   of a host; its open connections are refused at their next call. To change a host's tenants, revoke its key and
+   enroll a new one.
+
+The enrollments, revocations and every enrollment attempt land in the operator audit (`agentHost.*`). A data restore
+revokes every host key.
+

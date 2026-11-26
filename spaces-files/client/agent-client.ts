@@ -23,31 +23,35 @@ export class FilesError extends Error {
 }
 
 export type AgentClientOptions = {
-	/** The agent socket's path. */
-	path: string;
+	/** The agent socket's path (unless a transport is given). */
+	path?: string;
 	/** The agent this client acts for (frame.agent). */
 	agent: string;
+	/** The tenant, for a host on another machine (frame.tenant); a local socket's tenant is fixed by its configuration. */
+	tenant?: string;
 	/** The service's `maxFileBytes`; sizes the frames (default 16 MiB). */
 	maxFileBytes?: number;
 	/** How often a call whose reply was lost is sent again (default 3). */
 	retries?: number;
-	transport?: SocketTransport;
+	transport?: Pick<SocketTransport, "request" | "close">;
 };
 
 export class FilesAgentClient {
 	readonly agent: string;
-	readonly #t: SocketTransport;
+	readonly tenant?: string;
+	readonly #t: Pick<SocketTransport, "request" | "close">;
 	readonly #retries: number;
 	constructor(o: AgentClientOptions) {
 		this.agent = o.agent;
+		this.tenant = o.tenant;
 		const maxFrameBytes = 4 * Math.ceil((o.maxFileBytes ?? 16 * 1024 * 1024) / 3) + 64 * 1024;
-		this.#t = o.transport ?? socketTransport({ path: o.path }, { maxFrameBytes });
+		this.#t = o.transport ?? socketTransport({ path: o.path ?? "" }, { maxFrameBytes });
 		this.#retries = o.retries ?? 3;
 	}
 
 	/** One call; a lost reply or `unavailable` is retried with the same arguments, so a mutation keeps its ID. */
 	async call<T = unknown>(op: string, args: Record<string, unknown> = {}): Promise<T> {
-		const text = JSON.stringify({ op, args, frame: { agent: this.agent } });
+		const text = JSON.stringify({ op, args, frame: { agent: this.agent, ...(this.tenant !== undefined ? { tenant: this.tenant } : {}) } });
 		for (let attempt = 0; ; attempt++) {
 			let reply: { ok: boolean; value?: unknown; error?: FilesErrorInfo };
 			try { reply = JSON.parse(await this.#t.request(text)); }
