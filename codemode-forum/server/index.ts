@@ -7,13 +7,17 @@
 //      FORUM_HOST_NAME (name in the system bar),
 //      FORUM_ADMIN_PASSWORD (the admin login; scripts may send it as the header x-admin-token; unset: no admin),
 //      FORUM_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120),
-//      FORUM_TTL_HOURS (lifetime of a room's entries in hours, default 8760; 0 = for good).
+//      FORUM_TTL_HOURS (lifetime of a room's entries in hours, default 8760; 0 = for good),
+//      FORUM_LOGIN=oidc with FORUM_PUBLIC_ORIGIN, FORUM_OIDC_*, FORUM_ADMINS (server/auth.ts): every API call and the
+//      WebSocket need a signed-in person, a change also our origin and the session's CSRF token; the admin password is
+//      then taken only from scripts (x-admin-token), administrators are named by identity.
 import http from "node:http";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ROOT } from "./env.ts";
 import { pathToFileURL } from "node:url";
 import { NO_WAIT } from "phi-spaces";
 import { upgradeWebSocket } from "phi-spaces/ws";
+import { Auth, loginConfig, type LoginConfig, type Who } from "./auth.ts";
 import { ForumHub } from "./hub.ts";
 import { announce, connectSpace, takeAll } from "./space.ts";
 
@@ -58,9 +62,12 @@ const cookieOf = (req: http.IncomingMessage, name: string): string | undefined =
 };
 
 /** `space`: the shared space (default FORUM_SPACE, else unix:/tmp/codemode-forum-space.sock). */
-export async function startServer(o: { port?: number; bind?: string; space?: string; useNext?: boolean; dev?: boolean } = {}) {
+/** `login`: the sign-in (default FORUM_LOGIN from the environment; null: open, as for play on one machine). */
+export async function startServer(o: { port?: number; bind?: string; space?: string; useNext?: boolean; dev?: boolean; login?: LoginConfig | null } = {}) {
+	const login = o.login === undefined ? loginConfig() : o.login;
 	const conn = connectSpace(o.space);
 	const hub = new ForumHub(conn.space);
+	const auth = login ? new Auth(login, conn.space) : null;
 	const presence = announce(conn.space, "web");
 
 	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;
@@ -80,8 +87,10 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	// it; the entry holds the hash of the cookie, never the cookie itself
 	const sessionKey = (sid: string) => createHash("sha256").update(sid).digest("hex");
 	const loginTries = quota(10);
-	const isAdmin = async (req: http.IncomingMessage): Promise<boolean> => {
+	const isAdmin = async (req: http.IncomingMessage, who?: Who | null): Promise<boolean> => {
 		if (tokenOk(req.headers["x-admin-token"])) return true;
+		// with a sign-in, administrators are named by identity; the password's browser session is not taken
+		if (auth) return !!who?.admin;
 		const sid = cookieOf(req, ADMIN_COOKIE);
 		if (!sid || !/^[0-9a-f]{48}$/.test(sid)) return false;
 		if (!(await conn.space.readIfExists({ type: "AdminSession", fields: { key: sessionKey(sid) } }, NO_WAIT))) return false;
@@ -101,13 +110,36 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			const p = url.pathname;
 			if (p === "/healthz") return json(res, 200, { ok: true });
 			if (p.startsWith("/api/") && !allowed(clientIp(req))) return json(res, 429, { error: "Too many requests; retry in a minute" });
+			// ---- the sign-in (server/auth.ts); without FORUM_LOGIN these routes do not exist ----
+			if (auth && p === "/auth/login" && req.method === "GET") return await auth.begin(res);
+			if (auth && p === "/auth/callback" && req.method === "GET") return await auth.complete(req, res, url);
+			if (auth && p === "/auth/logout" && req.method === "POST") { const r = await auth.logout(req); res.writeHead(r.status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...r.headers }); return res.end(JSON.stringify(r.body)); }
+			// who asks: with a sign-in every API call needs a person, and one that changes something also our origin and the
+			// session's CSRF token (a script with the admin password as x-admin-token passes as an administrator)
+			let who: Who | null = null;
+			if (auth && p.startsWith("/api/")) {
+				who = req.method === "GET" ? await auth.who(req) : await auth.whoChanging(req);
+				if (p === "/api/me" && req.method === "GET") return who ? json(res, 200, { login: true, user: { id: who.user.userId, name: who.user.name }, admin: who.admin, csrf: who.csrf }) : json(res, 401, { login: true, user: null });
+				if (!who && !tokenOk(req.headers["x-admin-token"])) return json(res, 401, { error: req.method === "GET" ? "Sign in first" : "Sign in first, from this page" });
+			}
+			if (p === "/api/me") {
+				if (!auth) return req.method === "GET" ? json(res, 200, { login: false }) : json(res, 404, { error: "No sign-in here" });
+				if (req.method !== "POST" || !who) return json(res, 405, { error: "POST expected" });
+				const b = await readBody(req);
+				const u = await auth.rename(who.user.userId, b.name);
+				return json(res, 200, { login: true, user: { id: u.userId, name: u.name }, admin: who.admin, csrf: who.csrf });
+			}
+			// a run's budget is counted per person with a sign-in, per address without (the key of the Spend entries)
+			const client = () => ({ ip: who ? `user:${who.user.userId}` : clientIp(req) });
+			const by = (b: Record<string, any>) => (who ? who.user.name : b.by);
 			if (p === "/api/system") return json(res, 200, await hub.systemInfo());
 			if (p === "/api/models" && req.method === "GET") return json(res, 200, (await hub.modelInfo()).info);
 			// the repositories a task may name as a source: only an admin may, so only an admin learns their names
-			if (p === "/api/sources" && req.method === "GET") { const admin = await isAdmin(req); return json(res, 200, { repos: admin ? await hub.repos() : [], hosts: admin ? await hub.gitHosts() : [] }); }
+			if (p === "/api/sources" && req.method === "GET") { const admin = await isAdmin(req, who); return json(res, 200, { repos: admin ? await hub.repos() : [], hosts: admin ? await hub.gitHosts() : [] }); }
 			// ---- admin panel: login with the password from .env, then the choice of models ----
-			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: (await isAdmin(req)), available: !!adminSecret() });
+			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: (await isAdmin(req, who)), available: !auth && !!adminSecret() });
 			if (p === "/api/admin/login" && req.method === "POST") {
+				if (auth) return json(res, 404, { error: "Administrators are named by identity here (FORUM_ADMINS)" });
 				if (!loginTries(clientIp(req))) return json(res, 429, { error: "Too many login attempts; retry in a minute" });
 				const body = await readBody(req);
 				if (!tokenOk(body.password)) return json(res, 403, { error: "Wrong admin password" });
@@ -124,7 +156,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				return res.end(JSON.stringify({ admin: false }));
 			}
 			if (p === "/api/admin/models") {
-				if (!(await isAdmin(req))) return json(res, 403, { error: "Admin login required" });
+				if (!(await isAdmin(req, who))) return json(res, 403, { error: "Admin login required" });
 				if (req.method === "POST") {
 					const b = await readBody(req);
 					if (b.allowed !== null && !Array.isArray(b.allowed)) return json(res, 400, { error: "allowed: a list of model labels, or null for the choice of FORUM_MODELS" });
@@ -169,11 +201,11 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				// a task may bring documents (sources.ts: at most 800 kB together)
 				const b = await readBody(req, action === "task" ? 1_500_000 : 64_000);
 				// a visitor's run: the default token budget at most, counted against the day's allowance of the address
-				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria, docs: b.docs, repo: b.repo, admin: await isAdmin(req) })) });
-				if (action === "run") return json(res, 200, { ok: true, ...(await hub.startRun(id, { blockId: b.blockId, way: b.way, rounds: b.rounds, models: b.models, perModel: b.perModel, budgetTokens: b.budgetTokens, budgetUsd: b.budgetUsd, client: { ip: clientIp(req), admin: await isAdmin(req) } })) });
-				if (action === "accept") return json(res, 200, { ok: true, ...(await hub.accept(id, { blockId: b.blockId, version: b.version, by: b.by, table: b.table })) });
-				if (action === "objection") return json(res, 200, { ok: true, ...(await hub.object(id, { blockId: b.blockId, section: b.section, text: b.text, fix: b.fix, by: b.by, table: b.table })) });
-				if (action === "message") return json(res, 200, { ok: true, ...(await hub.say(id, { blockId: b.blockId, thread: b.thread, text: b.text, by: b.by })) });
+				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria, docs: b.docs, repo: b.repo, admin: await isAdmin(req, who) })) });
+				if (action === "run") return json(res, 200, { ok: true, ...(await hub.startRun(id, { blockId: b.blockId, way: b.way, rounds: b.rounds, models: b.models, perModel: b.perModel, budgetTokens: b.budgetTokens, budgetUsd: b.budgetUsd, client: { ...client(), admin: await isAdmin(req, who) } })) });
+				if (action === "accept") return json(res, 200, { ok: true, ...(await hub.accept(id, { blockId: b.blockId, version: b.version, by: by(b), table: b.table })) });
+				if (action === "objection") return json(res, 200, { ok: true, ...(await hub.object(id, { blockId: b.blockId, section: b.section, text: b.text, fix: b.fix, by: by(b), table: b.table })) });
+				if (action === "message") return json(res, 200, { ok: true, ...(await hub.say(id, { blockId: b.blockId, thread: b.thread, text: b.text, by: by(b) })) });
 				await hub.stopRun(id);
 				return json(res, 200, { ok: true });
 			}
@@ -194,10 +226,15 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 		const m = /^\/ws\/([a-zA-Z0-9._-]{1,48})$/.exec(new URL(req.url ?? "/", "http://localhost").pathname);
 		if (!m) { if (nextUpgrade) nextUpgrade(req, socket, head); else socket.destroy(); return; }
 		if (sockets >= 256 || !allowed(clientIp(req))) return void socket.destroy();
-		const ws = upgradeWebSocket(req, socket, head);
-		if (!ws) return;
-		sockets++; ws.onClose(() => { sockets--; });
-		void hub.attach(m[1]!, ws).catch((e) => { console.error("[forum] websocket attach failed", (e as Error).message); ws.close(); });
+		// with a sign-in: a person, from our own page (a WebSocket is not bound by the same-origin rule)
+		const gate = auth ? (auth.sameOrigin(req) ? auth.who(req) : Promise.resolve(null)) : Promise.resolve(true);
+		void gate.then((ok) => {
+			if (!ok) { socket.end("HTTP/1.1 401 Unauthorized\r\nconnection: close\r\ncontent-length: 0\r\n\r\n"); return; }
+			const ws = upgradeWebSocket(req, socket, head);
+			if (!ws) return;
+			sockets++; ws.onClose(() => { sockets--; });
+			void hub.attach(m[1]!, ws).catch((e) => { console.error("[forum] websocket attach failed", (e as Error).message); ws.close(); });
+		}, () => socket.destroy());
 	});
 	const port = o.port ?? Number(process.env.PORT ?? 4100), bind = o.bind ?? process.env.FORUM_BIND ?? "127.0.0.1";
 	await new Promise<void>((ok, fail) => { server.once("error", fail); server.listen(port, bind, () => ok()); });

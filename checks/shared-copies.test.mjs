@@ -18,6 +18,8 @@ const COPIES = {
 	"client/lib/palettes.ts": [...across("client/lib/palettes.ts", ["help-site", "codemode-chat", "codemode-forum", "spaces-mmo"]), `${PACKAGE_PREFIX}src/dashboard/palettes.ts`, "spaces-files/web/palettes.ts"],
 	"client/lib/markdown.ts": across("client/lib/markdown.ts", ["help-site", "codemode-chat", "codemode-forum", "spaces-mmo"]),
 	"server/env.ts": across("server/env.ts", ["codemode-chat", "codemode-forum", "spaces-files", "spaces-mmo"]),
+	// the relying party of the browser sign-in (docs/forum-seite-plan-2026-11-26.en.md, section 5)
+	"server/oidc.ts": across("server/oidc.ts", ["spaces-files", "codemode-forum"]),
 	// the diagrams the help site shows in its articles (help-site/corpus/img), copies of the documentation's
 	...Object.fromEntries(["architecture", "relationships", "workspaces", "revocation", "save", "restore"].map((n) =>
 		[`zanzibar-${n}.svg`, [`docs/img/zanzibar-${n}.svg`, `help-site/corpus/img/zanzibar-${n}.svg`]])),

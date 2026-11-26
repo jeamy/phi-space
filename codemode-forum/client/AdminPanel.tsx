@@ -3,6 +3,7 @@
 // an HttpOnly cookie, the password is not kept in the browser), then model agents on/off and the models that may take
 // part, grouped by provider: one box per provider selects all of its models, below it every model on its own.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { authHeaders } from "./lib/me.ts";
 import type { Lang } from "./lib/theme.ts";
 
 type AdminModel = { label: string; provider: string; id: string; name: string };
@@ -14,7 +15,7 @@ const T = {
 } as const;
 
 async function call<R>(path: string, body?: unknown): Promise<R> {
-	const r = await fetch("/api/admin" + path, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json", "x-forum-admin": "1" }, body: JSON.stringify(body) });
+	const r = await fetch("/api/admin" + path, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json", "x-forum-admin": "1", ...authHeaders() }, body: JSON.stringify(body) });
 	const data = await r.json().catch(() => ({}));
 	if (!r.ok) throw new Error((data as { error?: string }).error || r.statusText);
 	return data as R;

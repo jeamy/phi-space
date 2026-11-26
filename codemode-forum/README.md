@@ -430,9 +430,29 @@ repository that is too large and a server that is too slow, of which nothing sta
 covers the switch to the Rust space server. `tests/help.test.ts` holds the help articles to both languages, the
 same anchors in each, and links that lead somewhere.
 
+## Sign-in
+
+`FORUM_LOGIN=oidc` puts the forum behind an OpenID provider (`server/auth.ts`, `server/oidc.ts`, a copy of spaces-files'
+kept equal by `checks/shared-copies.test.mjs`; `docs/forum-seite-plan-2026-11-26.en.md`, section 5). The code flow with
+PKCE, state and nonce; the ID token is verified here, and a person is the pair (issuer, subject) and nothing else from
+it (`ForumUser`, with a name the person sets in the header). A session is a `UserSession` entry (the hash of the
+handle, leased for one hour of idleness, twelve hours at most) and the cookie `__Host-forum` (Secure, HttpOnly,
+SameSite=Strict). Then:
+
+- every `/api/` call and the WebSocket need a session (`GET /api/me` says who, with the CSRF token); a call that changes
+  something also needs our origin (`FORUM_PUBLIC_ORIGIN`) and the token as `x-forum-csrf`;
+- what a person writes to the table carries their name, never one from the request;
+- a run's budget of the day is counted per person (`FORUM_TOKENS_PER_IP_DAY` per person instead of per address);
+- administrators are named by identity (`FORUM_ADMINS`); the admin password is taken only as `x-admin-token`;
+- signing out ends the session and goes on to the provider's end-session address.
+
+Locally: `idp/` at the repository root runs Keycloak (`idp/README.md`); the realm `phi` has the client
+`codemode-forum` for `http://localhost:4100`. Rooms are still open to every signed-in person; who may enter which room
+follows with phase 1 of that plan.
+
 ## Safety notes
 
 Text from the sources is data: it is marked as such in every prompt, and the reading calls can change nothing. A
-repository as a source needs the admin login, because its excerpts leave the machine. Identities are unauthenticated: anyone who reaches the page can start a run in any room, within the visitor limits.
+repository as a source needs the admin login, because its excerpts leave the machine. Without `FORUM_LOGIN` identities are unauthenticated: anyone who reaches the page can start a run in any room, within the visitor limits.
 The space socket has no TLS and treats every connection as a process of the forum; never publish it on a public
 interface. Do not expose the page publicly without a reverse proxy in front.
