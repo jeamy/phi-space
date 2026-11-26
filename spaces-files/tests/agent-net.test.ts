@@ -98,6 +98,12 @@ test("two hosts with equal agent IDs act as two actors; revoking one host refuse
 		await d.svc.provisionActor("acme", ADM, "agent", "h1-conv", "h1-conv", { enrolledHostPeerId: "host-1", agentId: "conv" });
 		await d.svc.provisionActor("acme", ADM, "agent", "h2-conv", "h2-conv", { enrolledHostPeerId: "host-2", agentId: "conv" });
 		const h1 = await d.host("host-1", ["acme"]), h2 = await d.host("host-2", ["acme", "globex"]);
+		// a tenant administrator sees the hosts enrolled for its tenant, to name one when registering an agent
+		const admin = async (t: string) => (await d.svc.login(t, "user", { issuer: "i", subject: "adm" })).handle;
+		assert.deepEqual(await d.svc.listAgentHosts(await admin("acme")), ["host-1", "host-2"]);
+		assert.deepEqual(await d.svc.listAgentHosts(await admin("globex")), ["host-2"]);
+		await d.svc.provisionActor("acme", ADM, "user", "lea", "lea", { issuer: "i", subject: "lea" });
+		await assert.rejects(d.svc.listAgentHosts((await d.svc.login("acme", "user", { issuer: "i", subject: "lea" })).handle), code("permissionDenied"));
 		const a = h1.client("conv", "acme"), b = h2.client("conv", "acme");
 		assert.deepEqual(await a.workspaces(), ["h1-conv"]);
 		assert.deepEqual(await b.workspaces(), ["h2-conv"]);
@@ -111,6 +117,7 @@ test("two hosts with equal agent IDs act as two actors; revoking one host refuse
 		await assert.rejects(new FilesAgentClient({ agent: "conv", tenant: "acme", transport: t, retries: 0 }).workspaces(), refused);
 		t.close();
 		assert.deepEqual((await d.svc.listHosts()).map((k) => [k.peerId, k.state]), [["host-1", "revoked"], ["host-2", "active"]]);
+		assert.deepEqual(await d.svc.listAgentHosts(await admin("acme")), ["host-2"], "a revoked host is no choice");
 	} finally { await d.done(); }
 });
 

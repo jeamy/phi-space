@@ -121,3 +121,9 @@ form.login button { padding: 8px 12px; font-size: 14px; }
 .help-body dd { margin: 0; }
 .help-body p { margin: 8px 0; }
 @media (max-width: 560px) { .help-body dl { grid-template-columns: 1fr; gap: 2px; } .help-body dd { margin-bottom: 8px; } }
+
+/* the language switch (web/i18n.ts) beside the theme controls, and the Generate buttons of the ID fields */
+.lang-switch { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px; display: inline-flex; }
+.lang-switch button { color: var(--muted); font: 650 10px/1 var(--font-mono); letter-spacing: .08em; background: transparent; border: 0; border-radius: 4px; padding: 7px 8px; }
+.lang-switch button.is-active { color: var(--accent-ink); background: var(--accent-fill); }
+button.gen { font-size: 11.5px; padding: 5px 9px; color: var(--accent); }

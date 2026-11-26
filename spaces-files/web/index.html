@@ -6,53 +6,55 @@
 <title>PHI-SPACES Files</title>
 <link rel="stylesheet" href="/app/style.css">
 <script type="module" src="/app/theme.ts"></script>
+<script type="module" src="/app/i18n.ts"></script>
 <script type="module" src="/app/app.ts"></script>
 <script type="module" src="/app/help.ts"></script>
 </head>
 <body>
 <header class="top">
 	<a class="brand" href="/">PHI-<b>SPACES</b> <span class="sub">Files</span></a>
-	<span id="who" data-tip="You (your actor ID) in the tenant you are signed in to"></span>
+	<span id="who" data-tip-k="tip.who"></span>
 	<span class="spacer"></span>
-	<nav id="account" hidden><button id="admin-open" type="button" hidden data-tip="Manage the actors, groups and workspaces of this tenant (tenant administrators only)">Administration</button> <a href="/auth/login" data-tip="Sign in again and choose another tenant you belong to">Switch tenant</a> <button id="logout" type="button" data-tip="End this session on this device">Sign out</button></nav>
+	<nav id="account" hidden><button id="admin-open" type="button" hidden data-t="admin" data-tip-k="tip.admin">Administration</button> <a href="/auth/login" data-t="switch" data-tip-k="tip.switch">Switch tenant</a> <button id="logout" type="button" data-t="logout" data-tip-k="tip.logout">Sign out</button></nav>
+	<div class="lang-switch" role="group" data-tip-k="tip.lang"><button type="button" data-lang="de">DE</button><button type="button" data-lang="en">EN</button></div>
 	<div class="theme-controls"></div>
-	<button id="help-open" class="help-open" type="button" aria-haspopup="dialog" aria-label="Help" data-tip="What every field means">?</button>
+	<button id="help-open" class="help-open" type="button" aria-haspopup="dialog" aria-label="Help" data-aria="help" data-tip-k="tip.help">?</button>
 </header>
 <p id="notice" role="alert" title="Dismiss" hidden></p>
 <section id="ask" role="alertdialog" aria-labelledby="ask-text" hidden>
 	<p id="ask-text"></p>
 	<pre id="ask-detail" hidden></pre>
-	<p><button id="ask-yes" type="button"></button> <button id="ask-no" type="button">Cancel</button></p>
+	<p><button id="ask-yes" type="button"></button> <button id="ask-no" type="button" data-t="cancel">Cancel</button></p>
 </section>
 <main id="signin" class="note" hidden>
-	<h1>Sign in</h1>
-	<p>Your files, your workspaces and what others share with you.</p>
-	<p><a href="/auth/login">Sign in</a></p>
+	<h1 data-t="signin.title">Sign in</h1>
+	<p data-t="signin.text">Your files, your workspaces and what others share with you.</p>
+	<p><a href="/auth/login" data-t="signin.title">Sign in</a></p>
 </main>
 <main id="app" hidden>
 	<section id="browse">
-		<h2>Workspaces</h2>
+		<h2 data-t="workspaces">Workspaces</h2>
 		<ul id="workspaces"></ul>
 		<h2 id="where"></h2>
 		<ul id="entries"></ul>
 		<form id="create" hidden>
-			<input id="create-name" placeholder="name" required data-tip="Name of a new file or directory in the directory shown above. Case-sensitive; no slash, not . or ..; needs editor here">
-			<button name="kind" value="file" data-tip="Create an empty file with this name here">New file</button>
-			<button name="kind" value="dir" data-tip="Create a directory with this name here">New directory</button>
+			<input id="create-name" placeholder="name" required data-ph="name" data-tip-k="tip.createName">
+			<button name="kind" value="file" data-t="newFile" data-tip-k="tip.newFile">New file</button>
+			<button name="kind" value="dir" data-t="newDir" data-tip-k="tip.newDir">New directory</button>
 		</form>
 		<details id="grants-box" hidden>
-			<summary data-tip="Who holds which role on this directory; only an owner sees the list and changes it">Grants on this directory</summary>
+			<summary data-t="grants" data-tip-k="tip.grants">Grants on this directory</summary>
 			<ul id="grants"></ul>
 			<form id="grant-form">
-				<select id="grant-relation" data-tip="The role: viewer reads, editor also writes and creates, owner also manages grants. It applies to everything below"><option>viewer</option><option>editor</option><option>owner</option></select>
-				<select id="grant-kind" data-tip="Who receives it: a user, an agent instance, or every member of a group"><option>user</option><option>agent</option><option value="group">group</option></select>
-				<input id="grant-id" placeholder="actor ID / group" required data-tip="The actor ID as in the tenant's actor list (for user and agent), or the group's name">
-				<button name="action" value="grant" data-tip="Give this role on this directory">Grant</button>
-				<button name="action" value="revoke" data-tip="Take back exactly this grant; access through other grants or groups stays">Revoke</button>
+				<select id="grant-relation" data-tip-k="tip.relation"><option>viewer</option><option>editor</option><option>owner</option></select>
+				<select id="grant-kind" data-tip-k="tip.grantKind"><option>user</option><option>agent</option><option value="group">group</option></select>
+				<input id="grant-id" placeholder="actor ID / group" required autocomplete="off" list="dl-user" data-ph="subjectId" data-tip-k="tip.grantId">
+				<button name="action" value="grant" data-t="grant" data-tip-k="tip.grant">Grant</button>
+				<button name="action" value="revoke" data-t="revoke" data-tip-k="tip.revoke">Revoke</button>
 			</form>
 			<form id="restrict-form" hidden>
-				<button name="action" value="restrict" data-tip="Stop inheritance here: only the owners above and those with a grant on this directory keep it">Restrict</button>
-				<button name="action" value="unrestrict" data-tip="Let the roles from above pass into this directory again">Unrestrict</button>
+				<button name="action" value="restrict" data-t="restrict" data-tip-k="tip.restrict">Restrict</button>
+				<button name="action" value="unrestrict" data-t="unrestrict" data-tip-k="tip.unrestrict">Unrestrict</button>
 			</form>
 		</details>
 	</section>
@@ -61,49 +63,58 @@
 		<p id="status" role="status"></p>
 		<textarea id="text" spellcheck="false"></textarea>
 		<p>
-			<button id="save" type="button" data-tip="Save over the version you opened. If someone saved in between, you get a conflict and keep your text">Save</button>
-			<button id="theirs" type="button" hidden data-tip="Show the newer saved version and decide whether to save your text over it">Load their version</button>
-			<button id="close" type="button" data-tip="Close the file; asks first if you have unsaved changes">Close</button>
-			<button id="remove" type="button" data-tip="Delete this file; refused if someone saved a newer version">Remove file</button>
+			<button id="save" type="button" data-t="save" data-tip-k="tip.save">Save</button>
+			<button id="theirs" type="button" hidden data-t="theirs" data-tip-k="tip.theirs">Load their version</button>
+			<button id="close" type="button" data-t="close" data-tip-k="tip.close">Close</button>
+			<button id="remove" type="button" data-t="removeFile" data-tip-k="tip.removeFile">Remove file</button>
 		</p>
 	</section>
 	<section id="admin" hidden>
-		<h2>Tenant administration</h2>
+		<h2 data-t="adminTitle">Tenant administration</h2>
 		<p id="admin-status" role="status"></p>
 		<form id="register">
-			<h3>Register an actor</h3>
-			<select id="reg-kind" data-tip="user: a person signing in in the browser. agent: an agent instance that works through an agent host"><option>user</option><option>agent</option></select>
-			<input id="reg-id" placeholder="actor ID" required data-tip="The new actor's ID in this tenant, used in grants and groups: 1 to 128 of A-Z a-z 0-9 _ . : -; never reused">
-			<input id="reg-home" placeholder="home name" required data-tip="Name of the actor's own workspace, created with it; e.g. the same as the actor ID">
-			<input id="reg-a" placeholder="issuer / host peer ID" required data-tip="user: the issuer of the sign-in, local for username and password. agent: the peer ID of its enrolled agent host">
-			<input id="reg-b" placeholder="subject / agent ID" required data-tip="user: the subject, i.e. the username for password sign-in. agent: the agent ID its host names">
-			<button data-tip="Create the actor and its home in one step">Register</button>
+			<h3 data-t="register">Register an actor</h3>
+			<select id="reg-kind" data-tip-k="tip.regKind"><option>user</option><option>agent</option></select>
+			<input id="reg-a" placeholder="issuer / host peer ID" required autocomplete="off" list="dl-issuers" data-ph="regA" data-tip-k="tip.regA.user">
+			<input id="reg-b" placeholder="subject / agent ID" required autocomplete="off" data-ph="regB" data-tip-k="tip.regB.user">
+			<button id="gen-agent" type="button" class="gen" hidden data-t="generate" data-tip-k="tip.genAgent">Generate</button>
+			<input id="reg-id" placeholder="actor ID" required autocomplete="off" data-ph="actorId" data-tip-k="tip.regId">
+			<button id="gen-id" type="button" class="gen" data-t="generate" data-tip-k="tip.genId">Generate</button>
+			<input id="reg-home" placeholder="home name" required autocomplete="off" data-ph="homeName" data-tip-k="tip.regHome">
+			<button data-t="registerBtn" data-tip-k="tip.registerBtn">Register</button>
 		</form>
 		<form id="member">
-			<h3>Group membership</h3>
-			<input id="mem-group" placeholder="group" required data-tip="The group's name; a group exists as long as it has members or grants">
-			<select id="mem-kind" data-tip="Who joins: a user, an agent, or every member of another group (nested up to 4 levels)"><option>user</option><option>agent</option><option>group</option></select>
-			<input id="mem-id" placeholder="actor ID / group" required data-tip="The actor ID, or the other group's name">
-			<button name="action" value="addMember" data-tip="Add to the group: the member gets every role the group holds">Add</button>
-			<button name="action" value="removeMember" data-tip="Remove from the group: the access that came through it ends at once">Remove</button>
+			<h3 data-t="member">Group membership</h3>
+			<input id="mem-group" placeholder="group" required autocomplete="off" list="dl-group" data-ph="group" data-tip-k="tip.memGroup">
+			<select id="mem-kind" data-tip-k="tip.memKind"><option>user</option><option>agent</option><option>group</option></select>
+			<input id="mem-id" placeholder="actor ID / group" required autocomplete="off" list="dl-user" data-ph="subjectId" data-tip-k="tip.memId">
+			<button name="action" value="addMember" data-t="add" data-tip-k="tip.add">Add</button>
+			<button name="action" value="removeMember" data-t="remove" data-tip-k="tip.remove">Remove</button>
 		</form>
 		<form id="workspace">
-			<h3>Create a workspace</h3>
-			<input id="ws-name" placeholder="name" required data-tip="Name of the new shared workspace (a top-level directory); names starting with @ are reserved">
-			<select id="ws-kind" data-tip="Whether the first owner is a user or an agent"><option>user</option><option>agent</option></select>
-			<input id="ws-owner" placeholder="owner's actor ID" required data-tip="Actor ID of the first owner; the owner then gives further grants">
-			<button data-tip="Create the workspace with this owner">Create</button>
+			<h3 data-t="workspace">Create a workspace</h3>
+			<input id="ws-name" placeholder="name" required autocomplete="off" data-ph="name" data-tip-k="tip.wsName">
+			<select id="ws-kind" data-tip-k="tip.wsKind"><option>user</option><option>agent</option></select>
+			<input id="ws-owner" placeholder="owner's actor ID" required autocomplete="off" list="dl-user" data-ph="ownerId" data-tip-k="tip.wsOwner">
+			<button data-t="create" data-tip-k="tip.create">Create</button>
 		</form>
-		<h3 data-tip="Every user and agent of this tenant and its state">Actors</h3>
+		<h3 data-t="actors" data-tip-k="tip.actors">Actors</h3>
 		<ul id="actors"></ul>
-		<h3 data-tip="Every group that has members or grants">Groups</h3>
+		<h3 data-t="groups" data-tip-k="tip.groups">Groups</h3>
 		<ul id="groups"></ul>
 	</section>
 </main>
+<!-- the choices the ID fields offer (app.ts fills them: the actors and groups an administrator lists, the agent hosts
+     enrolled for this tenant; for others the subjects of the grants shown) -->
+<datalist id="dl-user"></datalist>
+<datalist id="dl-agent"></datalist>
+<datalist id="dl-group"></datalist>
+<datalist id="dl-hosts"></datalist>
+<datalist id="dl-issuers"><option value="local"></option></datalist>
 <dialog id="help" aria-labelledby="help-title">
-	<header><h2 id="help-title">Help: the fields of this page</h2><button id="help-close" type="button" aria-label="Close help">✕</button></header>
-	<div class="help-body">
-		<p>spaces-files keeps files for people and agent instances. Every person and every agent is an <b>actor</b> with an ID of its own and a <b>home</b>, its own workspace. Shared work lies in <b>workspaces</b>, top-level directories. Hovering over a field, or focusing it, shows a short description above it; this page explains them in detail.</p>
+	<header><h2 id="help-title" data-t="help">Help</h2><button id="help-close" type="button" aria-label="Close help">✕</button></header>
+	<div class="help-body" lang="en">
+		<p>spaces-files keeps files for people and agent instances. Every person and every agent is an <b>actor</b> with an ID of its own and a <b>home</b>, its own workspace. Shared work lies in <b>workspaces</b>, top-level directories. Hovering over a field, or focusing it, shows a short description above it; this page explains them in detail. <b>DE | EN</b> in the header switches the language.</p>
 
 		<h3>Roles and inheritance</h3>
 		<dl>
@@ -113,13 +124,16 @@
 		</dl>
 		<p>A role comes from a grant directly on a directory, from a grant to a group the actor belongs to, or from a directory above: roles apply to everything below. Several ways add up; revoking one takes away only that one. A workspace is visible exactly when one has at least viewer on its top. Without access, every path in it answers like a path that does not exist.</p>
 
+		<h3>IDs: choose or generate</h3>
+		<p>Fields that take an ID offer a list while you type or when you click into them: the actors (by the kind chosen beside the field), the groups, the agent hosts enrolled for this tenant, and <code>local</code> as the issuer of password sign-in. An administrator gets the full lists; anyone else gets the subjects of the grants shown. You can always type a new value instead. <b>Generate</b> fills in an ID: the actor ID from the username or agent ID if one is entered, otherwise a new random one; for an agent also a new agent ID, which its host must then use. The home name follows the actor ID until you change it.</p>
+
 		<h3>Header</h3>
 		<dl>
 			<dt>You in tenant</dt><dd>Your actor ID and the tenant (an isolated organisation or team) you are signed in to.</dd>
 			<dt>Administration</dt><dd>Opens the tenant administration below; shown to tenant administrators only.</dd>
 			<dt>Switch tenant</dt><dd>Signs in again; if your sign-in belongs to several tenants, you choose one.</dd>
 			<dt>Sign out</dt><dd>Ends this session on this device.</dd>
-			<dt>☾ / ☀ and the palette</dt><dd>Dark or light mode and the colours of the PHI-SPACES palettes; kept in this browser.</dd>
+			<dt>DE | EN, ☾ / ☀ and the palette</dt><dd>Language, dark or light mode and the colours of the PHI-SPACES palettes; kept in this browser.</dd>
 		</dl>
 
 		<h3>Workspaces and files</h3>
@@ -151,12 +165,12 @@
 		<p>Only for tenant administrators. Being an administrator gives no rights on files: an administrator reads a workspace only with a grant like anyone else.</p>
 		<dl>
 			<dt>Register an actor: user / agent</dt><dd><b>user</b> is a person who signs in in the browser, <b>agent</b> an agent instance that works through an agent host (a program that connects to this service and acts for its agents).</dd>
-			<dt>actor ID</dt><dd>The ID the actor has in this tenant, used in grants and groups: 1 to 128 characters of <code>A-Z a-z 0-9 _ . : -</code>. An ID is never reused, even after the actor is deleted.</dd>
-			<dt>home name</dt><dd>The name of the workspace the actor gets for itself, created in the same step with the actor as its owner; usually the same as the actor ID.</dd>
-			<dt>issuer / host peer ID</dt><dd>For a user: who confirms the sign-in. With username and password this is <code>local</code>; with an OpenID provider, its issuer URL. For an agent: the peer ID of the agent host it runs on, enrolled by the host operator.</dd>
-			<dt>subject / agent ID</dt><dd>For a user: who the person is at that issuer, with username and password the username (lower case). For an agent: the agent ID its host gives it.</dd>
+			<dt>issuer / host peer ID</dt><dd>For a user: who confirms the sign-in. With username and password this is <code>local</code>; with an OpenID provider, its issuer URL. For an agent: the peer ID of the agent host it runs on. A host gets its peer ID when the host operator enrolls it (<code>operator enroll-host &lt;peer&gt; &lt;tenant&gt;</code>); the list offers the hosts enrolled for this tenant.</dd>
+			<dt>subject / agent ID</dt><dd>For a user: who the person is at that issuer, with username and password the username (lower case). For an agent: the agent ID its host gives it; Generate makes a new one.</dd>
+			<dt>actor ID</dt><dd>The ID the actor has in this tenant, used in grants and groups: 1 to 128 characters of <code>A-Z a-z 0-9 _ . : -</code>. An ID is never reused, even after the actor is deleted. Generate takes the username or agent ID, or makes a new one.</dd>
+			<dt>home name</dt><dd>The name of the workspace the actor gets for itself, created in the same step with the actor as its owner; it follows the actor ID until you change it.</dd>
 			<dt>Register</dt><dd>Creates the actor and its home. A user signing in with username and password also needs a password; the host operator sets it on the server: <code>npm --prefix spaces-files run docker:operator -- set-password &lt;username&gt;</code>.</dd>
-			<dt>Group membership: group</dt><dd>The group's name. A group needs no creating: it exists as long as it has members or grants.</dd>
+			<dt>Group membership: group</dt><dd>The group's name. A group needs no creating: a new name makes a new group, which exists as long as it has members or grants.</dd>
 			<dt>user / agent / group, actor ID / group</dt><dd>Who joins or leaves: an actor by its ID, or every member of another group by the group's name (groups nest up to 4 levels; a group cannot contain itself).</dd>
 			<dt>Add / Remove</dt><dd>A member gets every role the group holds; removing ends the access that came through the group at once, also for files already open.</dd>
 			<dt>Create a workspace: name</dt><dd>A new shared workspace. Names starting with <code>@</code> are reserved for read-only mounts.</dd>
@@ -164,6 +178,72 @@
 			<dt>Actors, Groups</dt><dd>Every actor of the tenant with its state (enabled, disabled) and every group.</dd>
 		</dl>
 		<p>Every change is applied once, even if a reply is lost on the way and the page sends it again.</p>
+	</div>
+	<div class="help-body" lang="de" hidden>
+		<p>spaces-files verwaltet Dateien für Menschen und Agenten-Instanzen. Jeder Mensch und jeder Agent ist ein <b>Akteur</b> mit einer eigenen ID und einem <b>Home</b>, seinem eigenen Workspace. Gemeinsame Arbeit liegt in <b>Workspaces</b>, Verzeichnissen ganz oben. Fährt man über ein Feld oder klickt hinein, erscheint darüber eine kurze Beschreibung; hier steht alles ausführlich. <b>DE | EN</b> in der Kopfzeile wechselt die Sprache.</p>
+
+		<h3>Rollen und Vererbung</h3>
+		<dl>
+			<dt>viewer</dt><dd>Liest Dateien und listet Verzeichnisse.</dd>
+			<dt>editor</dt><dd>Alles, was ein viewer kann, und schreibt Dateien, legt Dateien und Verzeichnisse an und löscht sie.</dd>
+			<dt>owner</dt><dd>Alles, was ein editor kann, und vergibt und entzieht Rechte, schränkt Verzeichnisse ein.</dd>
+		</dl>
+		<p>Eine Rolle kommt aus einem Recht direkt auf einem Verzeichnis, aus einem Recht für eine Gruppe, zu der der Akteur gehört, oder von einem Verzeichnis darüber: Rollen gelten für alles darunter. Mehrere Wege addieren sich; ein Entzug nimmt nur genau diesen einen weg. Ein Workspace ist genau dann sichtbar, wenn man mindestens viewer auf seiner obersten Ebene hat. Ohne Zugang antwortet jeder Pfad darin wie ein Pfad, den es nicht gibt.</p>
+
+		<h3>IDs: auswählen oder erzeugen</h3>
+		<p>Felder für eine ID bieten beim Tippen oder beim Hineinklicken eine Liste an: die Akteure (nach der daneben gewählten Art), die Gruppen, die für diesen Tenant eingeschriebenen Agenten-Hosts und <code>local</code> als Issuer der Passwort-Anmeldung. Ein Administrator bekommt die vollständigen Listen, alle anderen die Subjekte der angezeigten Rechte. Man kann immer auch einen neuen Wert eintippen. <b>Erzeugen</b> trägt eine ID ein: die Akteur-ID aus dem Benutzernamen bzw. der Agent-ID, wenn eingetragen, sonst eine neue zufällige; bei einem Agenten auch eine neue Agent-ID, die sein Host dann verwenden muss. Der Home-Name folgt der Akteur-ID, bis du ihn änderst.</p>
+
+		<h3>Kopfzeile</h3>
+		<dl>
+			<dt>Du in Tenant</dt><dd>Deine Akteur-ID und der Tenant (eine abgeschlossene Organisation oder ein Team), in dem du angemeldet bist.</dd>
+			<dt>Verwaltung</dt><dd>Öffnet unten die Tenant-Verwaltung; nur für Tenant-Administratoren sichtbar.</dd>
+			<dt>Tenant wechseln</dt><dd>Meldet neu an; gehört deine Anmeldung zu mehreren Tenants, wählst du einen.</dd>
+			<dt>Abmelden</dt><dd>Beendet diese Sitzung auf diesem Gerät.</dd>
+			<dt>DE | EN, ☾ / ☀ und die Palette</dt><dd>Sprache, dunkler oder heller Modus und die Farben der PHI-SPACES-Paletten; bleiben in diesem Browser gespeichert.</dd>
+		</dl>
+
+		<h3>Workspaces und Dateien</h3>
+		<dl>
+			<dt>Workspaces</dt><dd>Jeder Workspace, den du siehst. Ein Klick öffnet ihn; die Zeile darunter zeigt, wo du bist, <code>..</code> geht ein Verzeichnis hinauf. Ein als (restricted) markiertes Verzeichnis erbt keine Rollen von oben.</dd>
+			<dt>Name, Neue Datei, Neues Verzeichnis</dt><dd>Legt im gezeigten Verzeichnis eine leere Datei oder ein Verzeichnis an. Groß-/Kleinschreibung zählt, kein Schrägstrich, nicht <code>.</code> oder <code>..</code>; du brauchst dort editor.</dd>
+		</dl>
+
+		<h3>Rechte auf diesem Verzeichnis</h3>
+		<dl>
+			<dt>Die Liste</dt><dd>Wer welche Rolle direkt auf diesem Verzeichnis hat, z. B. <code>editor: group:north#member</code> (jedes Mitglied der Gruppe north). Nur owner sehen sie.</dd>
+			<dt>Rolle (viewer, editor, owner)</dt><dd>Die Rolle, die vergeben oder zurückgenommen wird. Ein viewer-Recht unterhalb der obersten Ebene wird abgelehnt: viewer oben reicht schon für alles darunter.</dd>
+			<dt>Art (user, agent, group)</dt><dd>Wer die Rolle bekommt: eine Person, eine Agenten-Instanz oder jedes Mitglied einer Gruppe.</dd>
+			<dt>Akteur-ID / Gruppe</dt><dd>Die ID des Akteurs, wie die Akteur-Liste sie zeigt (ohne <code>user:</code> oder <code>agent:</code>), oder der Name der Gruppe.</dd>
+			<dt>Vergeben / Entziehen</dt><dd>Vergibt die Rolle oder nimmt genau dieses Recht zurück. Jeder Workspace behält mindestens einen direkten owner; den letzten kann man nicht entziehen.</dd>
+			<dt>Einschränken / Freigeben</dt><dd>Unterhalb der obersten Ebene: ein eingeschränktes Verzeichnis übernimmt keine viewer- oder editor-Rollen von oben, nur die owner darüber behalten es; wer es sonst erreichen soll, braucht ein Recht darauf. Freigeben lässt die Rollen von oben wieder durch.</dd>
+		</dl>
+
+		<h3>Eine Datei bearbeiten</h3>
+		<dl>
+			<dt>Speichern</dt><dd>Speichert deinen Text über die Version, die du geöffnet hast. Hat inzwischen jemand anderes gespeichert, wird das als Konflikt abgelehnt, und dein Text bleibt im Editor.</dd>
+			<dt>Deren Version laden</dt><dd>Nach einem Konflikt: zeigt die neuere Version; dann entscheidest du, ob dein Text darüber gespeichert wird.</dd>
+			<dt>Schließen</dt><dd>Schließt die Datei; fragt vorher, wenn Änderungen nicht gespeichert sind.</dd>
+			<dt>Datei löschen</dt><dd>Löscht die Datei; abgelehnt, wenn jemand eine neuere Version als deine gespeichert hat.</dd>
+		</dl>
+		<p>Dateien, die kein Text sind, werden heruntergeladen statt geöffnet.</p>
+
+		<h3>Tenant-Verwaltung</h3>
+		<p>Nur für Tenant-Administratoren. Administrator zu sein gibt keine Rechte auf Dateien: auch ein Administrator liest einen Workspace nur mit einem Recht darauf.</p>
+		<dl>
+			<dt>Akteur anlegen: user / agent</dt><dd><b>user</b> ist eine Person, die sich im Browser anmeldet, <b>agent</b> eine Agenten-Instanz, die über einen Agenten-Host arbeitet (ein Programm, das sich mit diesem Dienst verbindet und für seine Agenten handelt).</dd>
+			<dt>Issuer / Host-Peer-ID</dt><dd>Bei einem Benutzer: wer die Anmeldung bestätigt. Mit Benutzername und Passwort ist das <code>local</code>, mit einem OpenID-Anbieter dessen Issuer-URL. Bei einem Agenten: die Peer-ID des Agenten-Hosts, auf dem er läuft. Ein Host bekommt seine Peer-ID, wenn der Host-Operator ihn einschreibt (<code>operator enroll-host &lt;peer&gt; &lt;tenant&gt;</code>); die Liste zeigt die für diesen Tenant eingeschriebenen Hosts.</dd>
+			<dt>Subject / Agent-ID</dt><dd>Bei einem Benutzer: wer die Person bei diesem Issuer ist, mit Benutzername und Passwort der Benutzername (klein geschrieben). Bei einem Agenten: die Agent-ID, die sein Host ihm gibt; Erzeugen macht eine neue.</dd>
+			<dt>Akteur-ID</dt><dd>Die ID des Akteurs in diesem Tenant, benutzt in Rechten und Gruppen: 1 bis 128 Zeichen aus <code>A-Z a-z 0-9 _ . : -</code>. Eine ID wird nie wiederverwendet, auch nicht nach dem Löschen des Akteurs. Erzeugen übernimmt den Benutzernamen bzw. die Agent-ID oder macht eine neue.</dd>
+			<dt>Home-Name</dt><dd>Der Name des Workspace, den der Akteur für sich bekommt, im selben Schritt angelegt mit dem Akteur als owner; er folgt der Akteur-ID, bis du ihn änderst.</dd>
+			<dt>Anlegen</dt><dd>Legt den Akteur und sein Home an. Ein Benutzer mit Passwort-Anmeldung braucht außerdem ein Passwort; das setzt der Host-Operator auf dem Server: <code>npm --prefix spaces-files run docker:operator -- set-password &lt;benutzername&gt;</code>.</dd>
+			<dt>Gruppenmitgliedschaft: Gruppe</dt><dd>Der Name der Gruppe. Eine Gruppe muss nicht angelegt werden: ein neuer Name ergibt eine neue Gruppe, die besteht, solange sie Mitglieder oder Rechte hat.</dd>
+			<dt>user / agent / group, Akteur-ID / Gruppe</dt><dd>Wer beitritt oder austritt: ein Akteur über seine ID oder jedes Mitglied einer anderen Gruppe über deren Namen (Gruppen bis 4 Ebenen verschachtelt; eine Gruppe kann sich nicht selbst enthalten).</dd>
+			<dt>Hinzufügen / Entfernen</dt><dd>Ein Mitglied bekommt jede Rolle der Gruppe; Entfernen beendet den Zugang über die Gruppe sofort, auch für schon geöffnete Dateien.</dd>
+			<dt>Workspace anlegen: Name</dt><dd>Ein neuer gemeinsamer Workspace. Namen mit <code>@</code> am Anfang sind für Read-only-Mounts reserviert.</dd>
+			<dt>user / agent, Akteur-ID des Owners</dt><dd>Sein erster owner, der dann die weiteren Rechte vergibt.</dd>
+			<dt>Akteure, Gruppen</dt><dd>Jeder Akteur des Tenants mit seinem Zustand (enabled, disabled) und jede Gruppe.</dd>
+		</dl>
+		<p>Jede Änderung wird genau einmal ausgeführt, auch wenn eine Antwort unterwegs verloren geht und die Seite sie erneut sendet.</p>
 	</div>
 </dialog>
 </body>

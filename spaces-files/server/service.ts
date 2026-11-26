@@ -1567,6 +1567,16 @@ export class FilesService {
 		return this.#adminRead(handle, "listGroupMembers", (space) => membersOf(spaceData(space), schema.groupId(group, this.limits.maxNameBytes), { limits: this.limits }));
 	}
 
+	/** The peer IDs of the agent hosts enrolled for the caller's tenant with an active key: what a tenant administrator
+	 *  names when registering an agent. Another tenant's hosts and revoked keys stay out. */
+	listAgentHosts(handle: unknown): Promise<string[]> {
+		return this.#session("admin", handle, async (s, space) => {
+			await this.#requireAdmin(s, space, "listAgentHosts", null);
+			const peers = new Set((await this.listHosts()).filter((h) => h.state === "active" && h.tenants.includes(s.tenantId)).map((h) => h.peerId));
+			return [...peers].sort(byName);
+		});
+	}
+
 	#adminRead<T>(handle: unknown, op: string, read: (space: TenantSpace) => Promise<T>): Promise<T> {
 		return this.#session("admin", handle, async (s, space) => { await this.#requireAdmin(s, space, op, null); return read(space); });
 	}

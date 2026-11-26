@@ -83,6 +83,7 @@ export const ADMIN_OPS: Record<string, Op> = {
 	listActors: (s, h) => s.listActors(h),
 	listGroups: (s, h) => s.listGroups(h),
 	listGroupMembers: (s, h, a) => s.listGroupMembers(h, a.group) as Promise<Json>,
+	listAgentHosts: (s, h) => s.listAgentHosts(h),
 	// the maintenance metadata operations (section 5): maintenance mode only, an administrator's, no contents
 	maintenanceList: (s, h, a) => s.maintenanceList(h, a.workspace, a.path) as Promise<Json>,
 	maintenanceListGrants: (s, h, a) => s.maintenanceListGrants(h, a.workspace, a.path) as Promise<Json>,

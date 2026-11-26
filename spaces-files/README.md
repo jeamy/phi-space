@@ -139,6 +139,8 @@ directory of its own, and FsContent names it (plan section 3, *Contents*). Files
   `maxDeleteRelations` or one transaction's bytes is `capacityExceeded` and changes nothing (disable, remove in batches,
   then delete); `grantTenantAdmin`, `revokeTenantAdmin` (a security action); `listWorkspaces`, `listActors`,
   `listGroups`, `listGroupMembers`, each checked against `maxReplyBytes` on open (`tests/admin.test.ts`).
+  `listAgentHosts` names the agent hosts enrolled for the tenant (`tests/agent-net.test.ts`); the page offers them,
+  the actors and the groups as choices of its ID fields, generates IDs, and speaks English and German (`web/i18n.ts`).
 - Step 6, maintenance and upkeep: the admission mode (normal or maintenance) in the deployment state and in the order
   of checks; `setMode` persists the intent, refuses queued operations, drains started ones, persists the destination
   and reopens, and a restart completes an interrupted transition first. In maintenance mode only an enabled

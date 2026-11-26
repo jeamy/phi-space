@@ -3,11 +3,13 @@
 // Every call goes to POST /api/call with the session's CSRF token; the cookie carries the session, the page never sees
 // it. The editor's draft follows client/draft.ts: a conflict or a refusal keeps it.
 import { afterLostReply, afterSave, dirty, edit, openDraft, operationIdFor, rebase, type Draft, type SaveOutcome } from "../client/draft.ts";
+import { onLang, t } from "./i18n.ts";
 
 type Reply<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string; currentVersion?: number } };
 type Entry = { name: string; kind: "dir" | "file"; restricted?: true };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const val = (id: string) => $<HTMLInputElement | HTMLSelectElement>(id).value.trim();
 let csrf = "";
 let workspace: string | null = null;
 let dir: string[] = [];
@@ -32,7 +34,7 @@ function ask(question: string, yes: string, detail?: string): Promise<boolean> {
 }
 $("ask-yes").onclick = () => answer?.(true);
 $("ask-no").onclick = () => answer?.(false);
-const discardOk = async () => !(draft && dirty(draft)) || await ask("Discard your unsaved draft?", "Discard");
+const discardOk = async () => !(draft && dirty(draft)) || await ask(t("msg.discard"), t("msg.discardYes"));
 
 /** The session's CSRF token; the adapter derives it anew after a restart, so a refusal (HTTP 403) fetches it again. */
 async function refreshCsrf(): Promise<boolean> {
@@ -86,8 +88,11 @@ async function start() {
 	if (!reply.ok) { $("signin").hidden = false; $("signin").querySelector("p")!.textContent = reply.error.message; return; }
 	const s = reply.value;
 	$("admin-open").hidden = !s.admin;
+	isAdmin = s.admin;
 	csrf = s.csrf;
 	$("who").textContent = `${s.actor.id} in ${s.tenantId}`;
+	remember(s.actor.kind, s.actor.id);
+	if (isAdmin) void loadChoices();
 	$("account").hidden = false;
 	$("app").hidden = false;
 	await showWorkspaces();
@@ -115,7 +120,7 @@ async function showDir() {
 	let cursor: string | null = null;
 	do {
 		const r: Reply<{ entries: Entry[]; next: string | null }> = await call("listPage", { workspace, path: pathOf(dir), cursor });
-		if (!r.ok) { entries.append(text(r.error.code === "notFound" ? "Not found." : r.error.message)); return; }
+		if (!r.ok) { entries.append(text(r.error.code === "notFound" ? t("msg.notFound") : r.error.message)); return; }
 		all.push(...r.value.entries);
 		cursor = r.value.next;
 	} while (cursor !== null);
@@ -131,8 +136,10 @@ async function showGrants() {
 	list.replaceChildren();
 	$("restrict-form").hidden = dir.length === 0;
 	const r = await call<Array<{ relation: string; subject: { kind: string; id: string; relation?: string } }>>("listGrants", { workspace, path: pathOf(dir) });
-	if (!r.ok) { list.append(text(r.error.code === "permissionDenied" ? "Only an owner sees the grants." : r.error.message)); return; }
+	if (!r.ok) { list.append(text(r.error.code === "permissionDenied" ? t("msg.ownerOnly") : r.error.message)); return; }
 	for (const g of r.value) list.append(text(`${g.relation}: ${g.subject.kind}:${g.subject.id}${g.subject.relation ? "#" + g.subject.relation : ""}`));
+	// without the administrator's lists, the subjects shown here are the choices the ID fields offer
+	if (!isAdmin) for (const g of r.value) remember(g.subject.kind, g.subject.id);
 }
 
 function renderDraft() {
@@ -188,7 +195,7 @@ async function loadTheirs() {
 	const r = await call<{ contents: string; version: number }>("read", { workspace: draft.workspace, path: draft.path });
 	if (!r.ok) { draft = { ...draft, status: r.error.message }; return renderDraft(); }
 	const theirs = new TextDecoder().decode(unb64(r.value.contents));
-	if (!(await ask(`Version ${r.value.version} is saved. Keep your text and save over this version?`, "Keep my text", theirs.slice(0, 2000)))) return;
+	if (!(await ask(t("msg.theirsSaved", { v: r.value.version }), t("msg.keepMine"), theirs.slice(0, 2000)))) return;
 	if (draft === null) return;
 	draft = rebase(draft, theirs, r.value.version);
 	renderDraft();
@@ -206,22 +213,86 @@ async function create(kind: string) {
 	await showDir();
 }
 
+// ---- the choices of the ID fields: datalists by kind (dl-user, dl-agent, dl-group, dl-hosts), and generated IDs
+let isAdmin = false;
+const known: Record<string, Set<string>> = { user: new Set(), agent: new Set(), group: new Set(), hosts: new Set() };
+function remember(kind: string, id: string) { known[kind]?.add(id); fillList(kind); }
+function fillList(kind: string) {
+	const list = document.getElementById(kind === "hosts" ? "dl-hosts" : `dl-${kind}`);
+	if (!list || !known[kind]) return;
+	list.replaceChildren(...[...known[kind]].sort().map((v) => { const o = document.createElement("option"); o.value = v; return o; }));
+}
+/** The administrator's lists: every actor by kind, every group, the agent hosts enrolled for this tenant. */
+async function loadChoices() {
+	const [actors, groups, hosts] = await Promise.all([
+		call<Array<{ kind: string; id: string }>>("listActors"), call<string[]>("listGroups"), call<string[]>("listAgentHosts")]);
+	if (actors.ok) { known.user.clear(); known.agent.clear(); for (const a of actors.value) known[a.kind]?.add(a.id); }
+	if (groups.ok) { known.group.clear(); for (const g of groups.value) known.group.add(g); }
+	if (hosts.ok) { known.hosts.clear(); for (const h of hosts.value) known.hosts.add(h); }
+	for (const k of Object.keys(known)) fillList(k);
+}
+/** A field offers the list of the kind chosen beside it. */
+function follow(kindId: string, fieldId: string) {
+	const sync = () => $(fieldId).setAttribute("list", `dl-${val(kindId)}`);
+	$(kindId).addEventListener("change", sync);
+	sync();
+}
+const ACTOR_ID = /^[A-Za-z0-9_.:-]{1,128}$/;
+/** A random suffix of 8 lower-case letters and digits. */
+function randomPart(): string {
+	const abc = "abcdefghijkmnpqrstuvwxyz23456789", bytes = crypto.getRandomValues(new Uint8Array(8));
+	return [...bytes].map((b) => abc[b % abc.length]).join("");
+}
+/** `base` if it is a valid actor ID not yet taken, else base-2, base-3, …; with no usable base a random one. */
+function freeId(base: string, prefix: string): string {
+	const taken = (id: string) => known.user.has(id) || known.agent.has(id);
+	if (!ACTOR_ID.test(base)) return `${prefix}-${randomPart()}`;
+	if (!taken(base)) return base;
+	for (let n = 2; n < 1000; n++) if (!taken(`${base}-${n}`) && ACTOR_ID.test(`${base}-${n}`)) return `${base}-${n}`;
+	return `${prefix}-${randomPart()}`;
+}
+let homeTouched = false;
+function setActorId(id: string) {
+	$<HTMLInputElement>("reg-id").value = id;
+	if (!homeTouched) $<HTMLInputElement>("reg-home").value = id;
+}
+function registerKind() {
+	const agent = val("reg-kind") === "agent";
+	$("reg-a").setAttribute("list", agent ? "dl-hosts" : "dl-issuers");
+	const tip = (id: string, key: string) => { $(id).dataset.tipK = key; $(id).dataset.tip = t(key); };
+	tip("reg-a", agent ? "tip.regA.agent" : "tip.regA.user");
+	tip("reg-b", agent ? "tip.regB.agent" : "tip.regB.user");
+	$("gen-agent").hidden = !agent;
+}
+$("reg-kind").addEventListener("change", registerKind);
+onLang(registerKind);
+$("gen-agent").onclick = () => { $<HTMLInputElement>("reg-b").value = `agent-${randomPart()}`; };
+$("gen-id").onclick = () => {
+	const agent = val("reg-kind") === "agent", b = val("reg-b");
+	setActorId(freeId(agent ? b : b.toLowerCase(), agent ? "agent" : "user"));
+};
+$("reg-id").addEventListener("input", () => { if (!homeTouched) $<HTMLInputElement>("reg-home").value = val("reg-id"); });
+$("reg-home").addEventListener("input", () => { homeTouched = val("reg-home") !== "" && val("reg-home") !== val("reg-id"); });
+follow("grant-kind", "grant-id");
+follow("mem-kind", "mem-id");
+follow("ws-kind", "ws-owner");
+
 // The administration is offered to administrators only (the session says so) and loads on request.
 async function showAdmin() {
 	const actors = await call<Array<{ kind: string; id: string; state: string }>>("listActors");
 	$("admin").hidden = false;
-	if (!actors.ok) { $("admin-status").textContent = actors.error.code === "permissionDenied" ? "Only a tenant administrator manages the tenant." : actors.error.message; $("actors").replaceChildren(); $("groups").replaceChildren(); return; }
+	if (!actors.ok) { $("admin-status").textContent = actors.error.code === "permissionDenied" ? t("msg.adminOnly") : actors.error.message; $("actors").replaceChildren(); $("groups").replaceChildren(); return; }
 	$("actors").replaceChildren(...actors.value.map((a) => text(`${a.kind}:${a.id} (${a.state})`)));
 	const groups = await call<string[]>("listGroups");
 	$("groups").replaceChildren(...(groups.ok ? groups.value : []).map((g) => text(g)));
+	await loadChoices();
 }
 async function admin(op: string, args: Record<string, unknown>) {
 	const r = await call(op, { ...args, operationId: await freshId() });
-	$("admin-status").textContent = r.ok ? `${op}: done` : `${op}: ${r.error.code} (${r.error.message})`;
+	$("admin-status").textContent = r.ok ? t("msg.done", { op }) : `${op}: ${r.error.code} (${r.error.message})`;
 	await showAdmin();
 	await showWorkspaces();
 }
-const val = (id: string) => $<HTMLInputElement | HTMLSelectElement>(id).value.trim();
 const submitter = (e: SubmitEvent) => (e.submitter as HTMLButtonElement | null)?.value ?? "";
 
 $<HTMLTextAreaElement>("text").addEventListener("input", (e) => { if (draft) { draft = edit(draft, (e.target as HTMLTextAreaElement).value); renderDraft(); } });
@@ -231,10 +302,10 @@ $("close").onclick = async () => { if (!(await discardOk())) return; draft = nul
 $("remove").onclick = async () => {
 	if (draft === null) return;
 	const d = draft;
-	if (!(await ask(`Remove ${d.workspace}/${d.path} (version ${d.baseVersion})? This cannot be undone.`, "Remove"))) return;
+	if (!(await ask(t("msg.removeAsk", { p: `${d.workspace}/${d.path}`, v: d.baseVersion }), t("msg.removeYes")))) return;
 	// the version read: a newer save by someone else is a conflict, not a silent loss
 	const r = await call("remove", { workspace: d.workspace, path: d.path, expectedVersion: d.baseVersion, operationId: await freshId() });
-	if (!r.ok) { notify(r.error.code === "versionConflict" ? "Someone saved a newer version: load it before removing." : r.error.message); return; }
+	if (!r.ok) { notify(r.error.code === "versionConflict" ? t("msg.newer") : r.error.message); return; }
 	draft = null; renderDraft(); await showDir();
 };
 $("logout").onclick = async () => {
