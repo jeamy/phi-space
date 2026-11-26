@@ -66,6 +66,7 @@ test("a legacy store: the check lists an orphan plot and the missing locks; refu
 		assert.equal(check.orphans, 1);
 		assert.ok(check.report.some((l) => l === "graue-bucht 1,1: plot of b-gone, which is not there"), check.report.join("\n"));
 		assert.equal(check.report.filter((l) => / locks$/.test(l)).length, 2, check.report.join("\n"));
+		assert.equal(check.locks, 2, "the check counts the missing locks");
 		assert.equal((await space.stats()).entries, before, "the check writes nothing");
 
 		const refused = await migrateFootprints(space);
@@ -132,6 +133,7 @@ test("a store migrated before the roads' cells had entries of their own: refused
 		const before = (await space.stats()).entries;
 		const check = await migrateFootprints(space, { check: true });
 		assert.deepEqual(check.report, ["r-old graue-bucht: 0 RoadCells entries", "r-old klippenpfad: 0 RoadCells entries"]);
+		assert.equal(check.roads, 2, "the check counts the roads' missing cells");
 		assert.equal((await space.stats()).entries, before, "the check writes nothing");
 		const done = await migrateFootprints(space);
 		assert.equal(done.outcome, "migrated");

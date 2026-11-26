@@ -32,8 +32,9 @@ export type MigrationResult = {
 	report: string[];
 	orphans: number;
 	objects: number;
+	/** Locks written; in a check, the rooms and islands whose lock is missing. */
 	locks: number;
-	/** RoadCells entries written (a road's cells, inventory 7.4). */
+	/** RoadCells entries written (a road's cells, inventory 7.8); in a check, the roads' rooms whose entry is missing or differs. */
 	roads: number;
 };
 
@@ -102,7 +103,7 @@ export async function migrateFootprints(space: SpaceLike, o: { check?: boolean; 
 		log(`[migrate] ${n} RoadCells entries written: the store's footprints were migrated before`);
 		return result("migrated", [], { roads: n });
 	}
-	if (marker?.state === "complete" && !plots) return result("checked", roadReport(entries));
+	if (marker?.state === "complete" && !plots) { const roads = roadReport(entries); return result("checked", roads, { roads: roads.length }); }
 	if (marker?.state === "complete") return result("refused", [`the store says it is migrated but holds ${plots} Plot entries; it is damaged, restore it from its backup`]);
 	const worlds = [...new Set(entries.filter((e) => is(e, "WorldLoaded")).map((e) => String(e.fields.worldId)))];
 	if (!marker && worlds.length !== 1) return result("refused", [worlds.length ? `the store holds the worlds ${worlds.join(", ")}: one is expected` : "the store holds no WorldLoaded entry: nothing to migrate (an empty store is started by the world itself)"]);
@@ -115,7 +116,8 @@ export async function migrateFootprints(space: SpaceLike, o: { check?: boolean; 
 	// what the objects say among themselves (their rectangles as footprints, the plots left out): an overlap, a cell
 	// outside the room, a room that is not there
 	const clashes = storeOccupancyReport([...entries.filter((e) => !is(e, "Plot") && !is(e, "Footprint")), ...objects.map((f) => ({ type: "Footprint", fields: f }))], { rooms: "required" });
-	if (o.check) return result("checked", [...diffs, ...orphanLines, ...locks, ...roadReport(entries)], { orphans: orphans.length, objects: objects.length });
+	// in a check the counts are of what is missing: the locks and the roads' cells a migration would write
+	if (o.check) { const roads = roadReport(entries); return result("checked", [...diffs, ...orphanLines, ...locks, ...roads], { orphans: orphans.length, objects: objects.length, locks: locks.length, roads: roads.length }); }
 	if (o.followObjects ? clashes.length : diffs.length) return result("refused", [...(o.followObjects ? clashes : diffs), ...(!o.followObjects && !clashes.length ? ["the plots differ from their objects only: run with --follow-objects to take the objects' rectangles (after a --check)"] : [])], { orphans: orphans.length, objects: objects.length });
 	if (orphans.length && !o.dropOrphans) return result("refused", [...orphanLines, "plots of no object: run with --drop-orphans to take them (after a --check)"], { orphans: orphans.length, objects: objects.length });
 

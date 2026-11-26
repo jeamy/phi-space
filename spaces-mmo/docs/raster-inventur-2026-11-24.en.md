@@ -638,7 +638,22 @@ The copies of the local test bed's region stores (2026-11-24) were run on copies
 - nord, ost and sued lacked only the locks. They migrated in 3 to 12 s each (101, 136 and 40 objects; 21, 28 and 8 locks), and the start check then let them start.
 - west is refused. The `test:play` huts and two test railway stations were written by hand without plots. One station, at graue-bucht 13,6, also overlaps the boat scenery and a bed; that overlap is left to the store's owner. On 2026-11-25 the owner had the two stations removed from the test bed's west store (with the two estates of a test account that does not exist and the 32 items in them; a backup was kept); a `--check` now lists only the `test:play` huts, which `--follow-objects` takes as they stand.
 
-Whether the stores on big and nano hold such objects is shown by a `--check` on a copy of each. new-world is not deployed, and a local store with data from before step 6 is refused until it is migrated.
+Again on 2026-11-26, after step 10 and with the master of then (new-world merged into it), on fresh copies of the same four stores taken from the stopped test bed. The test bed itself was not touched.
+- `--check` listed the missing locks and, now, every road's rooms without RoadCells: 16, 28, 8 and 12 entries. Since that day the check also counts both in its summary line, as the migration does; before, it printed 0 for them.
+- `--follow-objects` migrated each store:
+
+  | Store | Objects | Locks written | RoadCells written | Time |
+  | --- | --- | --- | --- | --- |
+  | nord | 101 | 21 | 16 | 3.4 s |
+  | ost | 136 | 28 | 28 | 4.5 s |
+  | sued | 40 | 8 | 8 | 2.1 s |
+  | west | 180 | 35 | 12 | 6.6 s |
+
+  In west, `--follow-objects` took the `test:play` huts as they stand, as above.
+- A second run answered "already" and wrote nothing, and a `--check` after it listed nothing.
+- The start check (`checkGridFormat`, server/engine/grid-format.ts) passed on all four.
+
+Whether the stores on big and nano hold such objects is shown by a `--check` on a copy of each. Master is not deployed there before the cut, and a local store with data from before step 6, or with roads but no RoadCells, is refused until it is migrated.
 
 ### 7.6 Contention at the room lock (step 8)
 
