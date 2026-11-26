@@ -1,0 +1,17 @@
+[package]
+name = "files-space"
+description = "The Space process of spaces-files in Rust: what spaces-files/server/space-host.ts is, the tenant Spaces on phi-space-host"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "files-space"
+path = "src/main.rs"
+
+[dependencies]
+phi-core = { path = "../../../spaces/rust/phi-core" }
+phi-json = { path = "../../../spaces/rust/phi-json" }
+phi-service = { path = "../../../spaces/rust/phi-service" }
+phi-space-host = { path = "../../../spaces/rust/phi-space-host" }
+phi-store = { path = "../../../spaces/rust/phi-store" }

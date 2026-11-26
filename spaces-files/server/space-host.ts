@@ -1,17 +1,18 @@
 // The Space process of spaces-files (docs/zanzibar-agent-filesystem-plan.en.md, section 8, separate Space process):
 // it owns the store with the tenant Spaces and serves it on a private unix socket to the filesystem service, its only
-// client. It holds no logic of the filesystem: phi-spaces' Space service, plus two calls only the service makes, the
-// creation of a tenant's Space and the compaction of the store. The tenant Spaces are never exposed beyond the socket,
-// which lies in the data directory (mode 700).
+// client. It holds no logic of the filesystem: phi-spaces' Space service, and on the store's own side the two requests
+// only the service makes, the creation of a tenant's Space and the compaction of the store (server/store.ts,
+// `FilesHostRequest`). The tenant Spaces are never exposed beyond the socket, which lies in the data directory (mode 700).
 //
 //   node server/space-host.ts --store FILE|memory --listen unix:/path.sock [--exit-with-parent]
 //
 // `--exit-with-parent`: the process ends when its stdin closes, so a killed service leaves no Space process behind.
-// A Space binary in another language takes the same arguments and prints the same ready line (server/store.ts).
+// The Rust `files-space` (spaces-files/rust) takes the same arguments, answers the same requests and prints the same
+// ready line.
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { parseTarget, serveSpace, SpaceService, StaticIdentity, type SpaceServer } from "phi-spaces";
-import { inProcessStore, SPACE_PEER } from "./store.ts";
+import { PhiSpaces, parseTarget, serveSpace, SpaceService, StaticIdentity, type SpaceServer } from "phi-spaces";
+import { HOST_REPLY, HOST_REQUEST, inProcessStore, REPLY_LEASE_MS, SPACE_PEER } from "./store.ts";
 
 /** A tenant's Space alias (server/service.ts, `tenantAlias`): the only Spaces the service may create. */
 const TENANT_ALIAS = /^t-[a-z0-9][a-z0-9_-]{0,61}$/;
@@ -19,29 +20,38 @@ const TENANT_ALIAS = /^t-[a-z0-9][a-z0-9_-]{0,61}$/;
 export async function startSpaceHost(o: { file: string | null; listen: string }): Promise<{ close(): Promise<void> }> {
 	const store = await inProcessStore(o.file);
 	let server: SpaceServer;
+	let stopping = false;
+	let requests: Promise<void> = Promise.resolve();
 	try {
-		const inner = new SpaceService({
+		const service = new SpaceService({
 			host: store.host, ctx,
 			identity: new StaticIdentity({ [SPACE_PEER]: { principal: { peerId: SPACE_PEER }, roles: ["member"] } }),
 			// one client makes every call of every tenant: the per-peer bounds are the service's own admission
 			maxCallsPerWindow: 1_000_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096,
 		});
-		const service = {
-			async handleText(text: string, conn: never, maxFrameBytes?: number): Promise<string> {
-				let msg: { method?: unknown; args?: { alias?: unknown } } | null = null;
-				try { msg = JSON.parse(text); } catch { /* the Space service answers it */ }
-				if (msg?.method === "filesCreateSpace") {
-					const alias = msg.args?.alias;
-					if (typeof alias !== "string" || !TENANT_ALIAS.test(alias)) return JSON.stringify({ ok: false, error: { code: "BadRequest", message: "a tenant Space alias is t-<tenant>" } });
-					return JSON.stringify({ ok: true, result: await store.createSpace(alias) });
-				}
-				if (msg?.method === "filesCompact") return JSON.stringify({ ok: true, result: await store.compact() });
-				return inner.handleText(text, conn, maxFrameBytes);
-			},
-		};
 		server = await serveSpace(service, { listen: parseTarget(o.listen), connection: () => ({ peerId: SPACE_PEER }) });
+		// the requests, one at a time, as the store's owner (no principal of the socket)
+		const local = new PhiSpaces(store.host, ctx);
+		const answer = async (f: Record<string, unknown>): Promise<Record<string, unknown>> => {
+			try {
+				if (f.op === "createSpace") {
+					if (typeof f.alias !== "string" || !TENANT_ALIAS.test(f.alias)) return { ok: false, error: "a tenant Space alias is t-<tenant>" };
+					return { ok: true, result: await store.createSpace(f.alias) };
+				}
+				if (f.op === "compact") return { ok: true, result: await store.compact() };
+				return { ok: false, error: `unknown request ${String(f.op)}` };
+			} catch (e) { return { ok: false, error: (e as Error).message }; }
+		};
+		requests = (async () => {
+			while (!stopping) {
+				const r = await local.take({ type: HOST_REQUEST }, 500).catch(() => null);
+				if (r === null) continue;
+				const a = await answer(r.fields);
+				await local.write({ type: HOST_REPLY, fields: { id: r.fields.id, ...a } as never }, null, REPLY_LEASE_MS).catch((e) => console.error(`[files-space] reply lost: ${(e as Error).message}`));
+			}
+		})();
 	} catch (e) { await store.close(); throw e; }
-	return { async close() { await server.close(); await store.close(); } };
+	return { async close() { stopping = true; await requests; await server.close(); await store.close(); } };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

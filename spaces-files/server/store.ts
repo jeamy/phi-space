@@ -4,10 +4,17 @@
 // with the same command line). Either way the service sees the same thing: a Space per alias, the creation of a
 // tenant's Space, the list of aliases, compaction, and the store file for backups and sizes.
 //
+// The Space process serves phi-spaces' Space service and nothing else on its socket. The two things only a store's
+// owner can do, creating a tenant's Space and compacting the store, the service asks for with an entry in the default
+// Space, `FilesHostRequest {id, op, alias?}`; the Space process takes it on the store's own thread, does it, and answers
+// with `FilesHostReply {id, ok, result | error}`, which the service takes (a blocking take: no polling of its own).
+// Both are idempotent, so a request a restart interrupts is simply done again.
+//
 // Over the socket a call can fail in transit. Such a failure is `unavailable` (the client sends it again with its
 // operation ID); a commit whose reply is lost is an unknown outcome, which the service already handles by closing
 // admission until `resolveOutcomes` (section 6.1).
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +22,7 @@ import { createInterface } from "node:readline";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
+import { FOREVER } from "phi-spaces/core";
 import { createSpace, listSpaces, OutcomeUnknown, PhiSpaces, RemoteSpace, socketTransport, startService, type BatchOp, type BatchResult, type Req, type SocketTransport, type SpaceLike } from "phi-spaces";
 import { Unavailable } from "./admission.ts";
 
@@ -53,6 +61,11 @@ export async function inProcessStore(file: string | null, now: () => number = Da
 
 /** The peer every call of this service is on the Space process's private socket. */
 export const SPACE_PEER = "files";
+/** The entry types of the requests to the Space process and its replies (in the default Space). */
+export const HOST_REQUEST = "FilesHostRequest", HOST_REPLY = "FilesHostReply";
+/** How long an unclaimed reply stays. */
+export const REPLY_LEASE_MS = 60_000;
+
 /** The ready line of a Space process: `[files-space] ready on <listen> (store <file|memory>)`. */
 export const SPACE_READY = /^\[files-space\] ready on /;
 
@@ -115,19 +128,23 @@ export async function spaceProcessStore(o: SpaceProcessOptions): Promise<SpaceSt
 	const admin = remote();
 	// one client per alias: each says hello once and keeps its request generation
 	const spaces = new Map<string, TenantSpace>();
-	const call = async (method: string, args: Record<string, unknown>) => {
-		let reply: { ok: boolean; result?: unknown; error?: { code: string; message: string } };
-		try { reply = JSON.parse(await transport.request(JSON.stringify({ method, args }))); }
-		catch { throw new Unavailable("the Space process does not answer; retry later", 500); }
-		if (!reply.ok) throw new Error(`${method}: ${reply.error?.code} ${reply.error?.message}`);
-		return reply.result;
+	const call = async (op: string, args: Record<string, string>) => {
+		const id = randomUUID();
+		let reply;
+		try {
+			await admin.write({ type: HOST_REQUEST, fields: { id, op, ...args } }, null, FOREVER);
+			reply = await admin.take({ type: HOST_REPLY, fields: { id } }, 30_000);
+		} catch (e) { if (transient(e)) throw new Unavailable("the Space process does not answer; retry later", 500); throw e; }
+		if (reply === null) throw new Unavailable(`the Space process did not answer ${op}; retry later`, 500);
+		if (reply.fields.ok !== true) throw new Error(`${op}: ${String(reply.fields.error)}`);
+		return reply.fields.result;
 	};
 	return {
 		path: o.file, where: listen, pid: child.pid,
 		space: (alias) => { let s = spaces.get(alias); if (!s) { s = guarded(remote(alias) as unknown as TenantSpace); spaces.set(alias, s); } return s; },
-		createSpace: async (alias) => call("filesCreateSpace", { alias }) as Promise<{ spaceId: string; alias: string }>,
+		createSpace: async (alias) => call("createSpace", { alias }) as Promise<{ spaceId: string; alias: string }>,
 		aliases: async () => { try { return (await admin.spaces()).map((s) => s.alias); } catch (e) { if (transient(e)) throw new Unavailable("the Space process does not answer; retry later", 500); throw e; } },
-		compact: async () => call("filesCompact", {}) as Promise<{ freedPages: number; converted: boolean; error?: string } | null>,
+		compact: async () => call("compact", {}) as Promise<{ freedPages: number; converted: boolean; error?: string } | null>,
 		close: async () => {
 			closing = true;
 			transport.close();

@@ -2,19 +2,21 @@
 // process): the service reaches them over a private socket in the data directory; the Space process killed in the
 // middle of a commit is an unknown outcome (admission closes), and after the restart the retry with the same operation
 // ID applies exactly once, whether the commit had happened or not; a killed service leaves no Space process behind.
-// This file always runs the TypeScript Space process; `npm run test:space` runs every suite against one
-// (FILES_SPACE_SERVER, tests/support/space-mode.ts).
+// This file runs the TypeScript Space process, or the binary FILES_SPACE_SERVER names; `npm run test:space` runs every
+// suite against one (tests/support/space-mode.ts).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FilesService, tenantAlias, type FaultPoint } from "../server/service.ts";
 import { T } from "../server/schema.ts";
 
-const SPACE_HOST = [process.execPath, "--no-warnings", "--experimental-strip-types", fileURLToPath(new URL("../server/space-host.ts", import.meta.url))];
+// the TypeScript Space process, or the binary FILES_SPACE_SERVER names (the Rust files-space)
+const bin = process.env.FILES_SPACE_SERVER;
+const SPACE_HOST = bin && bin !== "ts" ? [bin] : [process.execPath, "--no-warnings", "--experimental-strip-types", fileURLToPath(new URL("../server/space-host.ts", import.meta.url))];
 const code = (c: string) => (e: Error & { code?: string }) => { assert.equal(e.code, c, e.message); return true; };
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const until = async (what: string, ok: () => boolean | Promise<boolean>, ms = 10_000) => {
@@ -108,6 +110,32 @@ test("a killed service leaves no Space process behind, and the next start opens 
 		await until("the orphaned Space process to end", () => !alive(pid));
 		const s = await FilesService.open(d.o);
 		try { assert.deepEqual(await s.tenants(), ["acme"]); }
+		finally { await s.close(); }
+	} finally { rmSync(d.root, { recursive: true, force: true }); }
+});
+
+const RUST = fileURLToPath(new URL("../rust/target/release/files-space", import.meta.url));
+test("one store from the TypeScript Space process to the Rust one and back", { skip: !existsSync(RUST) && "no rust/target/release/files-space (cargo build --release in spaces-files/rust)" }, async () => {
+	const d = dirs();
+	const TS = [process.execPath, "--no-warnings", "--experimental-strip-types", fileURLToPath(new URL("../server/space-host.ts", import.meta.url))];
+	try {
+		let s = await FilesService.open({ ...d.o, spaceProcess: TS });
+		await s.createTenant("acme", { actorId: "lea", homeName: "lea", issuer: "i", subject: "lea" });
+		const lea = (await s.login("acme", "user", { issuer: "i", subject: "lea" })).handle;
+		const put = async (v: number, text: string) => s.write(lea, "lea", "f.md", Buffer.from(text), v, (await s.issueOperationIds(lea, 1))[0]);
+		await put(0, "ts");
+		await s.close();
+		for (const [cmd, v, text] of [[[RUST], 1, "rust"], [TS, 2, "ts again"]] as const) {
+			s = await FilesService.open({ ...d.o, spaceProcess: cmd });
+			try {
+				assert.equal((await s.read(lea, "lea", "f.md")).version, v);
+				assert.deepEqual(await put(v, text), { version: v + 1 });
+				await s.createTenant(`t${v}`, { actorId: "adm", homeName: "adm", issuer: "i", subject: "adm" });
+				assert.deepEqual(await s.tenants(), ["acme", ...(v === 2 ? ["t1", "t2"] : ["t1"])]);
+			} finally { await s.close(); }
+		}
+		s = await FilesService.open({ ...d.o, spaceProcess: [RUST] });
+		try { assert.equal((await s.read(lea, "lea", "f.md")).bytes.toString(), "ts again"); }
 		finally { await s.close(); }
 	} finally { rmSync(d.root, { recursive: true, force: true }); }
 });
