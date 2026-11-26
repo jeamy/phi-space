@@ -20,7 +20,7 @@ import { byArrival, loadArrivals, noteArrivals, saveArrivals, type Arrivals } fr
 import { travelText, TRAVEL_GIVE_UP_MS, TRAVEL_NOTE_MS } from "./travel.ts";
 import { ROW_OUT_MS } from "./rowing3d.ts";
 import { sailPlan, type SailMode } from "./sailing3d.ts";
-import type { ChatState } from "../shared/frames.ts";
+import { PROTOCOL, type ChatState } from "../shared/frames.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
@@ -810,11 +810,13 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		let dead = false, retry = 0, timer: ReturnType<typeof setTimeout> | undefined, greeted = false;
 		const goneTimers = new Map<string, ReturnType<typeof setTimeout>>();
 		const connect = () => {
-			const s = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+			const s = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + `/ws?v=${PROTOCOL}`);
 			ws.current = s;
 			s.onopen = () => setLive(true);
 			s.onmessage = (e) => {
 				const f = JSON.parse(String(e.data)) as ServerFrame;
+				// the gateway speaks another protocol than this page (a newer build): load anew, and do not connect again before
+				if (f.t === "reload") { dead = true; setStale(true); setTimeout(() => location.reload(), 1500); return; }
 				if (f.t === "hello") {
 					// the server runs a newer build than this page: reload, so the page understands what it is sent
 					if (pageBuild && f.build && f.build !== pageBuild) { setStale(true); setTimeout(() => location.reload(), 1500); return; }

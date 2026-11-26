@@ -14,6 +14,7 @@ use mmo_engine::j;
 use mmo_engine::js;
 use mmo_engine::liner::{bays_of, liner_of};
 use mmo_engine::regions::region_of_room;
+use mmo_engine::rules::{grid_scale, step_length};
 use mmo_engine::settings::setting;
 use mmo_engine::source::{hex, random_bytes, time_now};
 use mmo_engine::space::{fields, tmpl, Space};
@@ -114,7 +115,14 @@ pub struct Gateway {
 fn now() -> f64 { time_now() }
 fn error_msg(text: &str) -> Json { obj! { "t" => "msg", "m" => obj! { "kind" => "error", "text" => text, "from" => "", "at" => now() } } }
 fn is_safe_int(v: &Json) -> bool { v.as_f64().is_some_and(phi_json::safe_integer) }
-fn unit(v: &Json) -> Option<f64> { v.as_f64().filter(|d| *d == -1.0 || *d == 0.0 || *d == 1.0) }
+/// The version of the frames the page and the gateway speak (shared/frames.ts PROTOCOL): 2 since the grid switch.
+pub const PROTOCOL: u32 = 2;
+/// The protocol a socket's query names (`v=2`), None for none (shared/frames.ts protocolOf).
+pub fn protocol_of(query: Option<&str>) -> Option<u32> {
+	let v = query?.split('&').filter_map(|kv| kv.split_once('=').or(Some((kv, "")))).find(|(k, _)| *k == "v")?.1;
+	let ok = !v.is_empty() && v.len() <= 6 && v.bytes().all(|b| b.is_ascii_digit()) && !v.starts_with('0');
+	if ok { v.parse().ok() } else { None }
+}
 fn strip_controls(s: &str) -> String { s.chars().map(|c| if (c as u32) < 0x20 || c as u32 == 0x7f { ' ' } else { c }).collect() }
 
 fn is_atlas_kind(kind: &str) -> bool { matches!(kind, "site" | "building" | "bed" | "field" | "ruin" | "road" | "beacon") }
@@ -236,8 +244,18 @@ impl Gateway {
 		j::a(j::at(&self.w, "wind"), "names").get(level as usize).cloned().filter(|x| !x.is_null()).unwrap_or_else(|| Json::from(""))
 	}
 
-	/// A browser of `me` plays now.
-	pub async fn attach(&self, ws: Rc<WsConn>, me: Me, mut messages: mpsc::UnboundedReceiver<String>, waiting: Rc<Cell<(usize, usize)>>) {
+	/// A browser of `me` plays now, if its page speaks this gateway's `protocol` (from the socket's query, protocol_of). A
+	/// page that names another one loads anew; one that names none comes from before the protocol had a number and knows
+	/// no `reload`: it is sent a hello with nothing but a build other than its own, which such a page answers by loading
+	/// anew, and nothing else of it reaches the world (gateway.ts attach).
+	pub async fn attach(&self, ws: Rc<WsConn>, me: Me, protocol: Option<u32>, mut messages: mpsc::UnboundedReceiver<String>, waiting: Rc<Cell<(usize, usize)>>) {
+		if protocol != Some(PROTOCOL) {
+			let build = self.build.clone().map_or(Json::Null, Json::from);
+			ws.send(&obj! { "t" => "reload", "protocol" => PROTOCOL as f64, "build" => build });
+			if protocol.is_none() { ws.send(&obj! { "t" => "hello", "build" => self.build.clone().unwrap_or_else(|| format!("protocol-{PROTOCOL}")) }); }
+			ws.close();
+			return;
+		}
 		let mine: Vec<Rc<Client>> = self.clients.borrow().iter().filter(|x| x.me.account_id == me.account_id).cloned().collect();
 		for old in mine.iter().take((mine.len() + 1).saturating_sub(MAX_PAGES)) { old.ws.close(); }
 		let limits = match mine.last() { Some(m) => m.limits.clone(), None => Rc::new(RefCell::new(Limits { steps: Bucket { left: STEP_BURST, at: now() }, cmds: Bucket { left: self.cmd_burst.get(), at: now() } })) };
@@ -369,9 +387,12 @@ impl Gateway {
 		let Ok(f) = phi_json::parse(text) else { return };
 		let t = j::s(&f, "t");
 		if t == "step" {
-			let (seq, dx, dy) = (j::at(&f, "seq"), unit(j::at(&f, "dx")), unit(j::at(&f, "dy")));
-			let (Some(dx), Some(dy)) = (dx, dy) else { return };
-			if !is_safe_int(seq) || dx.abs() + dy.abs() != 1.0 { return; }
+			let (seq, dx, dy) = (j::at(&f, "seq"), j::at(&f, "dx"), j::at(&f, "dy"));
+			// one axis, one cell up to STEP_LENGTH (two at scale 2; the engine checks it again for every way in)
+			if !is_safe_int(seq) || !is_safe_int(dx) || !is_safe_int(dy) { return; }
+			let (dx, dy) = (dx.as_f64().unwrap_or(0.0), dy.as_f64().unwrap_or(0.0));
+			let n = dx.abs() + dy.abs();
+			if (dx != 0.0 && dy != 0.0) || n < 1.0 || n > step_length() { return; }
 			if !spend(&mut c.limits.borrow_mut().steps, STEP_BURST, STEP_REFILL_MS) { return; }
 			self.intent(c, &format!("step {} {}", js::number_text(dx), js::number_text(dy)), Some(obj! { "conn" => c.ws.id.as_str(), "seq" => seq.clone() })).await;
 			(self.on_activity)(&c.me.account_id);
@@ -477,7 +498,7 @@ impl Gateway {
 		}
 		let fog = self.st.borrow().fog.get(&my_room).copied().unwrap_or(0.0);
 		let hello = obj! {
-			"t" => "hello", "wind" => self.wind_in(&my_room), "build" => self.build.clone().map_or(Json::Null, Json::from), "world" => Json::Object(world),
+			"t" => "hello", "wind" => self.wind_in(&my_room), "build" => self.build.clone().map_or(Json::Null, Json::from), "gridScale" => grid_scale(), "protocol" => PROTOCOL as f64, "world" => Json::Object(world),
 			"me" => obj! { "charId" => my_id.as_str(), "accountId" => c.me.account_id.as_str(), "name" => j::at(&me, "name").clone(), "guest" => c.me.guest, "admin" => c.me.admin },
 			"room" => room, "chars" => Json::Array(chars), "objs" => Json::Array(objs), "log" => Json::Array(log), "fog" => fog, "now" => now(), "worldTime" => self.world_time()
 		};
@@ -1204,5 +1225,17 @@ impl Gateway {
 			}
 			if sees(before) { cl.ws.send_text(&gone_text); }
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::protocol_of;
+
+	#[test]
+	fn the_protocol_a_query_names() {
+		assert_eq!(protocol_of(Some("v=2")), Some(2));
+		assert_eq!(protocol_of(Some("x=1&v=1")), Some(1));
+		for none in [None, Some(""), Some("v"), Some("v="), Some("v=02"), Some("v=x"), Some("v=1234567"), Some("w=2")] { assert_eq!(protocol_of(none), None, "{none:?}"); }
 	}
 }

@@ -23,6 +23,7 @@ import { pathToFileURL } from "node:url";
 import { Accounts, AuthError, type AccountOptions, type Me } from "./accounts.ts";
 import { loadWorld, worldAsset } from "./engine/world.ts";
 import { Gateway } from "./gateway.ts";
+import { protocolOf } from "../shared/frames.ts";
 import { awaitGridFormat } from "./engine/grid-format.ts";
 import { announce, connectSpace, DEFAULT_ACCOUNTS, DEFAULT_SPACE, systemInfo } from "./space.ts";
 import { RegionSpaces } from "./region-spaces.ts";
@@ -252,7 +253,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			const ws = upgradeWebSocket(req, socket, head, { maxMessagesPerMin: 600 });
 			if (!ws) return;
 			sockets++; ws.onClose(() => { sockets--; });
-			void gateway.attach(ws, me).catch((e) => { console.error("[web] websocket attach failed:", (e as Error).message); ws.close(); });
+			void gateway.attach(ws, me, protocolOf(req.url ?? "/")).catch((e) => { console.error("[web] websocket attach failed:", (e as Error).message); ws.close(); });
 		}, () => socket.destroy());
 	});
 	const port = o.port ?? Number(process.env.PORT ?? 3900), bind = o.bind ?? process.env.SPACES_MMO_BIND ?? "127.0.0.1";

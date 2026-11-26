@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { eventually, Player, startServer } from "./stack.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import type { SpaceLike } from "phi-spaces";
+import { PROTOCOL } from "../shared/frames.ts";
 
 const charAt = async (space: SpaceLike, charId: string) => (await space.readIfExists({ type: "Character", fields: { charId } }, 5_000))!.fields as Record<string, any>;
 async function player(url: string, name: string): Promise<{ p: Player; me: string }> {
@@ -39,6 +40,21 @@ test("a double step: two cells when both are free, one when the second is taken,
 		await eventually(async () => (await charAt(space, a.me)).x === 38, 10_000, "two cells on");
 		a.p.send("step -2 0");
 		await eventually(async () => (await charAt(space, a.me)).x === 36, 10_000, "and two back");
+		// the same as numbered steps through the gateway (the page's way): two cells with one ack; three cells or two axes
+		// are dropped there without an answer
+		{
+			await a.p.leave();
+			const hello = await a.p.play();
+			assert.deepEqual([hello.gridScale, hello.protocol], [2, PROTOCOL]);
+			const from = a.p.frames.length, send = (seq: number, dx: number, dy: number) => a.p.ws!.send(JSON.stringify({ t: "step", seq, dx, dy }));
+			send(1, 2, 0);
+			await a.p.until((f) => f.t === "char" && f.c.charId === a.me && f.ack === 1, 10_000, from);
+			assert.equal((await charAt(space, a.me)).x, 38);
+			send(2, 3, 0); send(3, 1, 1); send(4, -2, 0);
+			await a.p.until((f) => f.t === "char" && f.c.charId === a.me && f.ack === 4, 10_000, from);
+			assert.deepEqual([(await charAt(space, a.me)).x, (await charAt(space, a.me)).y], [36, 16]);
+			assert.equal(a.p.frames.slice(from).some((f) => f.t === "char" && (f.ack === 2 || f.ack === 3)), false, "no answer to the dropped ones");
+		}
 
 		// the second leg is taken: the figure ends on the first leg's cell, told why
 		await walk(b.p, space, b.me, 38, 16);

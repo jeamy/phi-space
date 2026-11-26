@@ -16,6 +16,7 @@ import { join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import type { ClientFrame, ServerFrame } from "../server/gateway.ts";
+import { PROTOCOL } from "../shared/frames.ts";
 import { startServer as startInProcess } from "../server/index.ts";
 import type { Accounts } from "../server/accounts.ts";
 import { connectSpace } from "../server/space.ts";
@@ -298,7 +299,7 @@ export class Player {
 	/** Opens the game socket (the frames of an earlier one are dropped); resolves with the hello frame. */
 	async play(): Promise<Extract<ServerFrame, { t: "hello" }>> {
 		this.frames = [];
-		const ws = new WebSocket(this.base.replace(/^http/, "ws") + "/ws", { headers: { cookie: this.cookie } } as never);
+		const ws = new WebSocket(this.base.replace(/^http/, "ws") + `/ws?v=${PROTOCOL}`, { headers: { cookie: this.cookie } } as never);
 		this.ws = ws;
 		ws.onmessage = (e) => this.frames.push(JSON.parse(String(e.data)));
 		await new Promise<void>((ok, fail) => { ws.onopen = () => ok(); ws.onerror = () => fail(new Error("websocket did not open")); });

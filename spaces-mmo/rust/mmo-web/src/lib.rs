@@ -328,6 +328,7 @@ impl Web {
 		if self.sockets.get() >= 1024 || !self.allowed.hit(&client_ip(&req, &peer)) { return destroy(); }
 		let Ok(Some(me)) = self.accounts.resolve(cookie_of(&req, COOKIE).as_deref()).await else { return destroy() };
 		let Some(accept) = ws::accept_of(req.method(), req.headers()) else { return destroy() };
+		let protocol = gateway::protocol_of(req.uri().query());
 		let on = hyper::upgrade::on(&mut req);
 		let web = self.clone();
 		tokio::task::spawn_local(async move {
@@ -335,7 +336,7 @@ impl Web {
 			let (conn, messages, waiting) = ws::start(io, 600);
 			web.sockets.set(web.sockets.get() + 1);
 			{ let w = Rc::downgrade(&web); conn.on_close(Box::new(move || { if let Some(w) = w.upgrade() { w.sockets.set(w.sockets.get().saturating_sub(1)); } })); }
-			web.gateway.attach(conn, me, messages, waiting).await;
+			web.gateway.attach(conn, me, protocol, messages, waiting).await;
 		});
 		Ok(Response::builder().status(StatusCode::SWITCHING_PROTOCOLS).header("upgrade", "websocket").header("connection", "Upgrade").header("sec-websocket-accept", accept).body(Full::new(Bytes::new())).expect("a response"))
 	}

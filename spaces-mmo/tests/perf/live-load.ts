@@ -14,6 +14,7 @@
 // live-load-cleanup.ts then removes them from the world (tests/perf/live-load-cleanup.ts).
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
+import { PROTOCOL } from "../../shared/frames.ts";
 
 const env = (k: string, d: string) => process.env[k] || d;
 const BASE = env("LOAD_URL", "http://127.0.0.1:3900"), BOTS = Number(env("LOAD_BOTS", "100")), SECONDS = Number(env("LOAD_SECONDS", "600"));
@@ -52,7 +53,7 @@ class Bot {
 	}
 	async join(): Promise<void> {
 		await this.post("/api/guest");
-		const ws = new WebSocket(BASE.replace(/^http/, "ws") + "/ws", { headers: { cookie: this.cookie, "x-forwarded-for": this.ip } } as never);
+		const ws = new WebSocket(BASE.replace(/^http/, "ws") + `/ws?v=${PROTOCOL}`, { headers: { cookie: this.cookie, "x-forwarded-for": this.ip } } as never);
 		this.ws = ws;
 		ws.onmessage = (e) => this.onFrame(JSON.parse(String(e.data)));
 		await new Promise<void>((ok, fail) => { ws.onopen = () => ok(); ws.onerror = () => fail(new Error("websocket did not open")); });

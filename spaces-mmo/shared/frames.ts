@@ -67,9 +67,18 @@ export type TradeView = {
 	/** Until when (world time) the figure rests from work (WorkRest: arbeite, breche, wirf netz, …), null: it does not (the page then offers that work). */
 	workRestUntilWorldMs: number | null;
 };
+/** The version of the frames the page and the gateways speak: 2 since the grid switch (a scale in `hello`, numbered
+ *  steps of up to STEP_LENGTH cells). The page names it when it connects (`/ws?v=2`); a gateway refuses a page that names
+ *  another or none (a tab from before the switch) with `reload`, and a page without a version also with a hello of the
+ *  new build only, which such a page answers by loading anew (server/gateway.ts attach). */
+export const PROTOCOL = 2;
+/** The protocol a socket's address names (`/ws?v=2`), null for none. */
+export const protocolOf = (url: string): number | null => { const v = URL.parse(url, "http://localhost")?.searchParams.get("v"); return v && /^[1-9][0-9]{0,5}$/.test(v) ? Number(v) : null; };
 /** Frames to the browser. */
 export type ServerFrame =
-	| { t: "hello"; wind: string; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[]; plans: PlanView[]; uses: ItemUses; /** The large ship's period and the rooms it lies in (engine/liner.ts). */ liner?: Timetable & { /** What the ride costs and where it goes: the island and the bay room of each. */ fare: number; routes: Array<{ island: string; room: string }>; /** The island of the room the page opens in (a sailing boat goes to the others). */ island: string }; /** The island railway: the plan of its stations (engine/rail.ts draws the tracks between them) and its timetable. */ rail?: { plan: string; everyWorldMs?: number } }; me: { charId: string; accountId?: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
+	/** The page speaks another protocol than the gateway: it loads anew (the socket is closed after this). */
+	| { t: "reload"; protocol: number; build: string | null }
+	| { t: "hello"; wind: string; build: string | null; /** the world's grid scale (shared/rules.ts) and the protocol of the frames (PROTOCOL) */ gridScale: number; protocol: number; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[]; plans: PlanView[]; uses: ItemUses; /** The large ship's period and the rooms it lies in (engine/liner.ts). */ liner?: Timetable & { /** What the ride costs and where it goes: the island and the bay room of each. */ fare: number; routes: Array<{ island: string; room: string }>; /** The island of the room the page opens in (a sailing boat goes to the others). */ island: string }; /** The island railway: the plan of its stations (engine/rail.ts draws the tracks between them) and its timetable. */ rail?: { plan: string; everyWorldMs?: number } }; me: { charId: string; accountId?: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
 	| { t: "fog"; level: number }
 	| { t: "wind"; wind: string }
 	/** The world clock changed (or the regular reminder): the browser interpolates from it; it decides nothing by it. */
@@ -88,7 +97,7 @@ export type ServerFrame =
 /** Frames from the browser. */
 /** Frames from the browser: a typed command, or a numbered step of the own character (the page walks ahead of the
  *  server and matches the answers by number, client/walk.ts). */
-export type ClientFrame = { t: "cmd"; line: string; /** the language the page shows, German when left out */ lang?: "en" } | { t: "step"; seq: number; dx: number; dy: number } | ChatClientFrame;
+export type ClientFrame = { t: "cmd"; line: string; /** the language the page shows, German when left out */ lang?: "en" } | { t: "step"; seq: number; /** one axis only, at most STEP_LENGTH cells (shared/rules.ts) */ dx: number; dy: number } | ChatClientFrame;
 
 /** A sealed chat message (client/chatcrypto.ts Box). */
 export type Box = { iv: string; ct: string; pub: string };

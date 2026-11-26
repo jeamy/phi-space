@@ -26,6 +26,7 @@ import { resolvePrototype, spawn } from "../../server/engine/prototypes.ts";
 import { regionOfRoom } from "../../server/engine/regions.ts";
 import type { BuildingFields } from "../../server/model.ts";
 import type { PrototypeFields } from "../../shared/model.ts";
+import { PROTOCOL } from "../../shared/frames.ts";
 
 const env = (k: string, d: string) => process.env[k] || d;
 const BASE = env("LOAD_URL", "http://127.0.0.1:3900"), BOTS = Number(env("LOAD_BOTS", "50")), SECONDS = Number(env("LOAD_SECONDS", "600"));
@@ -71,7 +72,7 @@ class Bot {
 	async join(): Promise<void> {
 		const r = await this.post("/api/register", { name: this.name, password: `last-${RUN}-passwort` });
 		if (r.status !== 200) throw new Error(`register: ${r.status} ${JSON.stringify(r.body)}`);
-		const ws = new WebSocket(BASE.replace(/^http/, "ws") + "/ws", { headers: { cookie: this.cookie, "x-forwarded-for": this.ip } } as never);
+		const ws = new WebSocket(BASE.replace(/^http/, "ws") + `/ws?v=${PROTOCOL}`, { headers: { cookie: this.cookie, "x-forwarded-for": this.ip } } as never);
 		this.ws = ws;
 		ws.onmessage = (e) => this.onFrame(JSON.parse(String(e.data)));
 		ws.onclose = () => { if (this.ws === ws) this.ws = null; };

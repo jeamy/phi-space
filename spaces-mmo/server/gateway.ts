@@ -31,6 +31,8 @@ import type { Appearance } from "./engine/appearance.ts";
 /** At most this many kept messages to a player come with its page's first hello. */
 const NOTICES_SHOWN = 200;
 import type { CharView, ItemUses, PlanView, ObjView, MsgView, AtlasView, AtlasOwned, AtlasState, TradeView, ServerFrame, ClientFrame } from "../shared/frames.ts";
+import { PROTOCOL } from "../shared/frames.ts";
+import { gridScale, STEP_LENGTH } from "../shared/rules.ts";
 export type { CharView, ItemUses, PlanView, ObjView, MsgView, AtlasView, AtlasOwned, AtlasState, TradeView, ServerFrame, ClientFrame } from "../shared/frames.ts";
 /** What things are good for in world `w`, sent with the page (the pack's buttons, client/hints.ts). */
 export function usesOf(w: WorldDef): ItemUses {
@@ -209,8 +211,17 @@ export class Gateway {
 		return { accountId: c.me.accountId, name: ch?.name ?? c.me.name, guest: c.me.guest };
 	}
 
-	/** A browser of `me` plays now. */
-	async attach(ws: WsConnection, me: Me): Promise<void> {
+	/** A browser of `me` plays now, if its page speaks this gateway's `protocol` (from the socket's address, shared/frames.ts
+	 *  protocolOf). A page that names another one loads anew; one that names none comes from before the protocol had a
+	 *  number and knows no `reload`: it is sent a hello with nothing but a build other than its own, which such a page
+	 *  answers by loading anew, and nothing else of it (its steps and coordinates are of another grid) reaches the world. */
+	async attach(ws: WsConnection, me: Me, protocol: number | null): Promise<void> {
+		if (protocol !== PROTOCOL) {
+			ws.send({ t: "reload", protocol: PROTOCOL, build: this.build } satisfies ServerFrame);
+			if (protocol === null) ws.send({ t: "hello", build: this.build ?? `protocol-${PROTOCOL}` });
+			ws.close();
+			return;
+		}
 		// the account's other pages share its buckets; beyond MAX_PAGES the oldest page is closed
 		const mine = [...this.#clients].filter((x) => x.me.accountId === me.accountId);
 		for (const old of mine.slice(0, Math.max(0, mine.length - MAX_PAGES + 1))) old.ws.close();
@@ -307,7 +318,8 @@ export class Gateway {
 		try { f = JSON.parse(text); } catch { return; }
 		if (f?.t === "step") {
 			const { seq, dx, dy } = f;
-			if (!Number.isSafeInteger(seq) || ![dx, dy].every((d) => d === -1 || d === 0 || d === 1) || Math.abs(dx) + Math.abs(dy) !== 1) return;
+			// one axis, one cell up to STEP_LENGTH (two at scale 2; the engine checks it again for every way in)
+			if (!Number.isSafeInteger(seq) || !Number.isSafeInteger(dx) || !Number.isSafeInteger(dy) || (dx !== 0 && dy !== 0) || Math.abs(dx) + Math.abs(dy) < 1 || Math.abs(dx) + Math.abs(dy) > STEP_LENGTH) return;
 			// a flood of steps (a stuck key, a script) is dropped beyond the burst; the page's pace never reaches the limit
 			if (!spend(c.limits.steps, STEP_BURST, STEP_REFILL_MS)) return;
 			c.chain = c.chain.then(() => this.#intent(c, `step ${dx} ${dy}`, { conn: c.ws.id, seq }));
@@ -387,7 +399,7 @@ export class Gateway {
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
 			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		});
-		c.ws.send({ t: "hello", wind: this.#windIn(self.room), build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses(), ...(this.w.liner ? { liner: { ...(() => { const t = linerOf(this.w)!; return { stops: t.stops, stayMs: t.stayMs, legMs: t.legMs, cycleMs: t.cycleMs }; })(), island: this.#rooms.get(self.room)?.island ?? "", fare: this.w.liner.fare, routes: [...baysOf(this.w.allRooms ?? this.w.rooms)].map(([island, r]) => ({ island, room: r.roomId })) } } : {}), ...(this.w.rail ? { rail: { plan: this.w.rail.plan, ...(this.w.rail.everyWorldMs ? { everyWorldMs: this.w.rail.everyWorldMs } : {}) } } : {}) }, me: { charId: self.charId, accountId: c.me.accountId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
+		c.ws.send({ t: "hello", wind: this.#windIn(self.room), build: this.build, gridScale: gridScale(), protocol: PROTOCOL, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses(), ...(this.w.liner ? { liner: { ...(() => { const t = linerOf(this.w)!; return { stops: t.stops, stayMs: t.stayMs, legMs: t.legMs, cycleMs: t.cycleMs }; })(), island: this.#rooms.get(self.room)?.island ?? "", fare: this.w.liner.fare, routes: [...baysOf(this.w.allRooms ?? this.w.rooms)].map(([island, r]) => ({ island, room: r.roomId })) } } : {}), ...(this.w.rail ? { rail: { plan: this.w.rail.plan, ...(this.w.rail.everyWorldMs ? { everyWorldMs: this.w.rail.everyWorldMs } : {}) } } : {}) }, me: { charId: self.charId, accountId: c.me.accountId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
 	/** Tells a player the word waiting for it (model.ts NoticeFields), if one of its pages is in the world, and marks it
