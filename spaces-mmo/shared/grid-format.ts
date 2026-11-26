@@ -54,6 +54,7 @@ export const GRID_CLASSES: Record<string, Record<string, GridClass>> = {
 	// paths and the growth history
 	Route: { "cells[].x,y": "path" },
 	Road: { "cells[].x,y": "path" },
+	RoadCells: { "cells[].x,y": "path" },
 	RoomGrowth: { "east,south,baseWidth,baseHeight,steps[].at,size,fill": "growth" },
 	// coordinates in text
 	Intent: { line: "text" },
@@ -98,6 +99,7 @@ export function gridRefusal(w: { id: string; gridScale?: number; derivedFrom?: n
 	}
 	// no marker: an empty store (the loader writes the marker with the world) or one of the legacy format
 	else if (types.includes("WorldLoaded")) return `the store is in the legacy grid format (gridScale ${LEGACY_FORMAT.gridScale}, occupancy ${LEGACY_FORMAT.occupancy}, no GridFormat entry); this binary runs occupancy ${SUPPORTED_FORMAT.occupancy} only: migrate it first (${FOOTPRINTS_MIGRATION})`;
+	if (types.includes("Route") && !types.includes("RoadCells")) return `the store's roads have no RoadCells entries (from before phase 1 step 10 of the grid switch); this binary reads a road's cells from them only: migrate it first (${FOOTPRINTS_MIGRATION})`;
 	if (types.includes("Plot")) return `the store holds Plot entries of the legacy occupancy; this binary reads ${SUPPORTED_FORMAT.occupancy} only: migrate it first (${FOOTPRINTS_MIGRATION})`;
 	const unknown = types.filter((t) => classRow(t, w.typeclasses) === null).sort();
 	if (unknown.length) return `the store holds entry types without a grid class: ${unknown.join(", ")} (shared/grid-format.ts GRID_CLASSES)`;

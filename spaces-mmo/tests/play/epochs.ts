@@ -28,6 +28,7 @@ import { PATH } from "../../server/engine/commands/build.ts";
 import { linerOf, shipComes } from "../../server/engine/liner.ts";
 import { trainIn } from "../../server/engine/rail.ts";
 import type { BuildingFields, CartFields, CharacterFields, RouteFields } from "../../server/model.ts";
+import { roadCellsEntries } from "../../server/engine/commands/road.ts";
 import type { ServerFrame } from "../../server/gateway.ts";
 import { Player, startRegions } from "../stack.ts";
 
@@ -482,7 +483,7 @@ try {
 		// a road from the bay to the cliff path, as road.ts leaves it once voted on and built (planning and voting: tests/cart.test.ts)
 		const pair = ["graue-bucht", "klippenpfad"].sort().join("|");
 		if (!(await west().readAll({ type: "Route" })).some((e) => (e.fields as unknown as RouteFields).pair === pair && (e.fields as unknown as RouteFields).state === "built"))
-			await west().write({ type: "Route", fields: { routeId: `play-road-${tag}`, pair, island: "grau", rooms: ["graue-bucht", "klippenpfad"], names: ["Graue Bucht", "Klippenpfad"], cells: [], state: "built", planner: a.me, plannerName: a.name, accountId: a.account, voters: [], yes: [], no: [], voteUntil: 0, needs: [], work: 0, workNeed: 0, by: {}, untilWorldMs: FOREVER, at: 0, points: 2 } satisfies RouteFields as never }, null, FOREVER);
+			{ const r: RouteFields = { routeId: `play-road-${tag}`, pair, island: "grau", rooms: ["graue-bucht", "klippenpfad"], names: ["Graue Bucht", "Klippenpfad"], cells: [], state: "built", planner: a.me, plannerName: a.name, accountId: a.account, voters: [], yes: [], no: [], voteUntil: 0, needs: [], work: 0, workNeed: 0, by: {}, untilWorldMs: FOREVER, at: 0, points: 2 }; await west().write({ type: "Route", fields: r as never }, null, FOREVER); for (const e of roadCellsEntries(r)) await west().write(e as never, null, FOREVER); }
 		await give(a.me, "karren", 1); await give(a.me, "treibholz", 1);
 		await does(a, "karren stelle", /Karren ab/);
 		await does(a, "karren lade treibholz", /auf dem Karren/);

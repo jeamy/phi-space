@@ -77,6 +77,9 @@
 	"Road": {
 		"cells[].x,y": "path"
 	},
+	"RoadCells": {
+		"cells[].x,y": "path"
+	},
 	"RoomGrowth": {
 		"east,south,baseWidth,baseHeight,steps[].at,size,fill": "growth"
 	},

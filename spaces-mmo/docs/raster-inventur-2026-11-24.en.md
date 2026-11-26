@@ -10,7 +10,7 @@ Phase 0 inventories what the grid switch touches before any format changes. This
 4. [Cells that codemode-chat keeps](#codemode) (plan section 2.2, "Arena and codemode-chat")
 5. [Decisions for phase 1](#offen), collected from the four
 6. [References at scale 1](#referenzen) (plan section 6, cases 4 and 6, phase 0; semantic examples in 6.6)
-7. [Plot writers and readers, the occupancy query](#belegung) (plan section 3, "Occupancy"; phase 1; the searches on the shared grid in 7.7)
+7. [Plot writers and readers, the occupancy query](#belegung) (plan section 3, "Occupancy"; phase 1; the searches on the shared grid in 7.7, a road's cells in 7.8)
 
 Each inventory names the TypeScript place. The Rust engine (`rust/mmo-engine/src`) mirrors it file for file and function for function (`commands/build.ts` → `commands/build.rs`, `npc/economy.ts` → `npc/economy.rs`). The plan's single table of rule values is written in phase 1 from this list in both engines. When it is written, every Rust counterpart is checked line by line, and differences are added here.
 
@@ -590,7 +590,7 @@ Settlers (`server/npc/settlers.ts`) set `later(plan, …)` before each `bau`, `u
 
 Beacons, people and items are still read from the process's copy: a transaction read of them would hold up steps and fires. Every test stack checks one lock per room and per island when it closes (`lockReport`), the engine walks on every state; `tests/room-lock.test.ts` holds a room's lock from the test and sees `bau`, `umgraben` and `abriss` refused, a step go through, and `bau` go through once the lock is free. With the refusal removed it fails, against the TypeScript world and against the Rust one (`SPACES_MMO_WORLD_CMD=rust/target/release/mmo-world`). A second test loads the world into a store with lockless rooms (an inside, a world room whose lock is gone) and finds one lock per room.
 
-One gap remains: a delivery rewrites a road's parts, so a road is not visible to others during that transaction. It is the same visibility gap the objects had. Step 6 leaves roads as they are (their cells are a path, not a rectangle, and no overlap check reads them as an obstacle); a later step closes it in the same way, with an entry for the road cells that only a holder of the island lock writes. The inventory of step 5 also named a builder's `destroy` of a Building as leaving its plots behind: `destroy` never takes a Building (it refuses buildings, sites and ruins), so that gap was not there.
+A gap was left here: a delivery rewrites a road's parts, so a road is not visible to others during that transaction. It is the same visibility gap the objects had. Step 6 left roads as they were. Step 10 closes it with an entry of its own for a road's cells (7.8). The inventory of step 5 also named a builder's `destroy` of a Building as leaving its plots behind: `destroy` never takes a Building (it refuses buildings, sites and ruins), so that gap was not there.
 
 ### 7.5 One Footprint entry per object (step 6)
 
@@ -603,7 +603,7 @@ The migration, `npm --prefix spaces-mmo run migrate:footprints -- --space <addre
 1. `--check` writes nothing. It lists the cells where the plots and the objects differ, plots of no object, and rooms and islands without their lock.
 2. Without `--check`, a store whose plots differ from its objects is refused before anything is written. `--follow-objects` takes the objects' rectangles instead. Objects that overlap each other or reach outside their room are refused either way. `--drop-orphans` takes plots of no object.
 3. Then: the `GridFormat` entry with state "running"; the missing locks; one transaction per object (the room's lock, its Footprint entry written, its plots taken); the result checked (no plot left, every object's footprint, one lock per room and island); the entry "complete".
-4. A run that was cut off goes on where it stopped. A migrated store is left as it is. `tests/migrate-footprints.test.ts` covers this.
+4. A run that was cut off goes on where it stopped. A migrated store is left as it is, except that a road without its RoadCells entries gets them (since step 10, 7.8), also in a store whose footprints were migrated before. `tests/migrate-footprints.test.ts` covers this.
 
 The copies of the local test bed's region stores (2026-11-24) were run on copies in the scratchpad:
 - nord, ost and sued lacked only the locks. They migrated in 3 to 12 s each (101, 136 and 40 objects; 21, 28 and 8 locks), and the start check then let them start.
@@ -665,3 +665,26 @@ The plan's shared grid (section 3, "Performance strategy") was there for growth 
 | `freeCellNear`, radius 8 | 12 to 13 → 13 to 19 | 3 → 8 | – | – |
 
 The TypeScript values are one of two quiet runs, which differ by up to a fifth; `freeCellNear` shows the spread of both. Its few µs more at scale 2 are the same cells looked at (the free cell is next to the start there), below what one tick notices. The Rust searches were slower than the TypeScript ones before (strings and `walkable` on UTF-16 slices, 1.4 above) and are faster now. The trace keeps sorting its open list at every step, as the TypeScript one does, so it stays the most expensive search; it runs once per road plan.
+
+### 7.8 A road's cells (step 10)
+
+**The gap.** A builder reads a road's cells as an obstacle: `refusal` in `build.ts` answers "Dort führt eine Straße entlang" for a cell of one, via `roadCellsIn`. Until step 10 `roadCellsIn` read the road's `Road` parts. Every delivery, vote and mend rewrites those parts (`roadSave`) without the island's lock, and a transaction holding them taken hides them from everyone else. So for that moment a builder could stake out a site across the road. `tests/road-cells.test.ts` showed it before the change: with a test transaction holding the road's Route and Road parts as a delivery does, `bau hütte` on a road cell staked out the hut.
+
+**The entry.** One `RoadCells` entry {routeId, room, cells} per road and room (`shared/model.ts` `RoadCellsFields`; grid class "path"). `roadCellsIn` reads it instead of the parts, in `road.ts` and `road.rs`.
+- A road's cells are set once, when it is planned, so its RoadCells entries are written only then, `unique` on road and room (`roadSave` with `fresh`). They are taken only when the road goes (`roadGone`: a vote lost, a road lapsed or not built in time).
+- Each of those callers holds the island's lock and both rooms' locks (`straße plane`, the vote, `roadTick`). A builder holds the room's lock, so it never meets a RoadCells entry that another transaction holds.
+- A delivery, a vote that keeps the road and a mend rewrite the Route and its parts, never the RoadCells entries.
+
+The page still draws the Road parts. Growth does not move a road's cells yet (plan section 3, "Growth", the road rule). When it does, it has to shift the Route's cells, the Road parts and the RoadCells entries together.
+
+**The check.** `roadReport` (`road.ts`, `road.rs` `road_report`) wants per road and room one RoadCells entry with the Route's cells of that room, and the Road part's cells the same where there is one. It reports RoadCells of no road. Every test stack runs it when it closes, and the engine walks run it on every state. Fixtures that write a Route by hand write its RoadCells with it (`roadCellsEntries`), in the tests, the walks and `tests/play/epochs.ts`.
+
+**A store of before.** A store holding Route entries but no RoadCells entry is refused at start, naming the migration (`gridRefusal`, `grid_refusal`). Plan section 5 says a binary of the target state converts nothing at start. `npm run migrate:footprints` writes the missing entries per road, holding its island's and rooms' locks. It does so in a legacy store as part of the migration, and in a store whose footprints were migrated before step 10. `--check` lists the missing entries. No store on big or nano is in the footprint format yet, so this concerns only local stores that were migrated earlier.
+
+`tests/road-cells.test.ts`:
+1. With the road visible, `bau` on a road cell is refused.
+2. With a delivery's transaction holding the road's Route and Road parts, the same `bau` is refused too, and nothing is staked.
+
+`tests/migrate-footprints.test.ts` covers a store migrated before step 10: refused at start, then migrated with two RoadCells entries, then it starts.
+
+*Seen meanwhile:* the railway tests of `tests/cart.test.ts` (freight by rail, the island railway) fail now and then under load: `zug` answers "Der Zug hält nur an Bahnhöfen" though the figure stands beside the station the test wrote. The commit before step 9 fails as often: 2 failed tests in six parallel runs of the file, as the current tree. It is a race older than steps 9 and 10, not yet explained.

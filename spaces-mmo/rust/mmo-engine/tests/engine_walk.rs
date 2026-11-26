@@ -1693,7 +1693,9 @@ fn carts_and_trains() {
 	// two finished roads (road.rs): Graue Bucht to Klippenpfad, Klippenpfad to Klippenkopf
 	let island = |room: &str| mmo_engine::j::s(mmo_engine::j::by(mmo_engine::j::a(&world, "rooms"), "roomId", room).unwrap_or(&Json::Null), "island").to_owned();
 	for (id, from, to) in [("road-1", "graue-bucht", "klippenpfad"), ("road-2", "klippenkopf", "klippenpfad")] {
-		w.write(obj! { "type" => "Route", "fields" => obj! { "routeId" => id, "pair" => format!("{from}|{to}"), "island" => island(from), "rooms" => Json::Array(vec![Json::from(from), Json::from(to)]), "names" => Json::Array(vec![Json::from(from), Json::from(to)]), "cells" => Json::Array(vec![]), "state" => "built", "untilWorldMs" => 9e15, "points" => 2.0 } });
+		let route = obj! { "routeId" => id, "pair" => format!("{from}|{to}"), "island" => island(from), "rooms" => Json::Array(vec![Json::from(from), Json::from(to)]), "names" => Json::Array(vec![Json::from(from), Json::from(to)]), "cells" => Json::Array(vec![]), "state" => "built", "untilWorldMs" => 9e15, "points" => 2.0 };
+		w.write(obj! { "type" => "Route", "fields" => route.clone() });
+		for e in mmo_engine::commands::road::road_cells_entries(&route) { w.write(e); }
 	}
 	w.compare("setup");
 	let at = std::cell::Cell::new(START);
@@ -2195,8 +2197,8 @@ fn roads_and_insides() {
 		for (k, v) in extra { walk::j_set(&mut f, k, v.clone()); }
 		obj! { "type" => "Route", "fields" => f }
 	};
-	w.write(route("r-v", "klippenkopf", "klippenpfad", "vote", &[("voteUntil", Json::from(1.0)), ("voters", Json::Array(vec![Json::from("a-walk2")])), ("yes", Json::Array(vec![])), ("no", Json::Array(vec![])), ("planner", Json::from("a-walk2")), ("plannerName", Json::from("Wanderer2"))]));
-	w.write(route("r-b", "klippenkopf", "moewenfels-strand", "built", &[]));
+	{ let r = route("r-v", "klippenkopf", "klippenpfad", "vote", &[("voteUntil", Json::from(1.0)), ("voters", Json::Array(vec![Json::from("a-walk2")])), ("yes", Json::Array(vec![])), ("no", Json::Array(vec![])), ("planner", Json::from("a-walk2")), ("plannerName", Json::from("Wanderer2"))]); for e in mmo_engine::commands::road::road_cells_entries(r.get("fields").unwrap()) { w.write(e); } w.write(r); }
+	{ let r = route("r-b", "klippenkopf", "moewenfels-strand", "built", &[]); for e in mmo_engine::commands::road::road_cells_entries(r.get("fields").unwrap()) { w.write(e); } w.write(r); }
 	w.compare("routes to tick");
 	w.tick("epoch");
 	run(&mut w, &b, "straße");

@@ -57,6 +57,7 @@ pub fn grid_refusal(w: &Json, markers: &[Json], types: &[String]) -> Option<Stri
 		// no marker: an empty store (the loader writes the marker with the world) or one of the legacy format
 		return Some(format!("the store is in the legacy grid format (gridScale {}, occupancy {LEGACY_OCCUPANCY}, no GridFormat entry); this binary runs occupancy {SUPPORTED_OCCUPANCY} only: migrate it first ({FOOTPRINTS_MIGRATION})", phi_json::number_text(SUPPORTED_SCALE)));
 	}
+	if types.iter().any(|t| t == "Route") && !types.iter().any(|t| t == "RoadCells") { return Some(format!("the store's roads have no RoadCells entries (from before phase 1 step 10 of the grid switch); this binary reads a road's cells from them only: migrate it first ({FOOTPRINTS_MIGRATION})")); }
 	if types.iter().any(|t| t == "Plot") { return Some(format!("the store holds Plot entries of the legacy occupancy; this binary reads {SUPPORTED_OCCUPANCY} only: migrate it first ({FOOTPRINTS_MIGRATION})")); }
 	let typeclasses = j::at(w, "typeclasses");
 	let mut unknown: Vec<&String> = types.iter().filter(|t| class_row(t, typeclasses).is_none()).collect();
@@ -101,6 +102,9 @@ mod tests {
 		// a world of before the switch (no marker), and plots beside a marker
 		assert!(grid_refusal(&w, &[], &["WorldLoaded".into()]).unwrap().contains(FOOTPRINTS_MIGRATION));
 		assert!(grid_refusal(&w, &[marker("")], &["Plot".into()]).unwrap().contains("Plot entries"));
+		// roads of before their RoadCells entries (phase 1 step 10)
+		assert!(grid_refusal(&w, &[marker("")], &["Route".into(), "Road".into()]).unwrap().contains("no RoadCells entries"));
+		assert_eq!(grid_refusal(&w, &[marker("")], &["Route".into(), "Road".into(), "RoadCells".into()]), None);
 		for f in [r#","gridScale":2"#, r#","occupancy":"plots""#, r#","state":"running""#, r#","worldId":"x""#, r#","derivedFrom":1"#] {
 			assert!(grid_refusal(&w, &[marker(f)], &[]).is_some(), "{f}");
 		}

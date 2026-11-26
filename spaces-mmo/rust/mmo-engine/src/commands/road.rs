@@ -152,12 +152,49 @@ async fn road_save_as(space: &Space, txn: &str, r: &Json, fresh: bool) -> Result
 		space.write(&tmpl("Road", part), Some(txn), FOREVER).await?;
 		before += n;
 	}
+	// a road just planned: its cells as builders read them (its caller holds the island's and both rooms' locks)
+	if fresh { for e in road_cells_entries(r) { space.write_unique(&e, Some(txn), FOREVER, &["routeId", "room"]).await?; } }
 	Ok(())
 }
-/// `roadGone`: the road and its parts taken away.
+/// `roadCellsEntries`: the road's cells in each of its rooms as builders read them (`RoadCells`): written with a road
+/// just planned and taken when it goes, by a holder of the island's and both rooms' locks; a delivery, a vote or a mend
+/// rewrites the Route and its Road parts, never these.
+pub fn road_cells_entries(r: &Json) -> Vec<Json> {
+	let (r0, r1) = rooms_of(r);
+	let rooms = if r0 == r1 { vec![r0] } else { vec![r0, r1] };
+	rooms.iter().map(|room| {
+		let cells: Vec<Json> = j::a(r, "cells").iter().filter(|c| j::s(c, "room") == room.as_str()).map(|c| obj! { "x" => j::at(c, "x").clone(), "y" => j::at(c, "y").clone() }).collect();
+		tmpl("RoadCells", obj! { "routeId" => j::at(r, "routeId").clone(), "room" => room.as_str(), "cells" => Json::Array(cells) })
+	}).collect()
+}
+/// `roadReport`: what differs between the roads and their cells (the walks' check): per road and room one RoadCells
+/// entry with the Route's cells of that room, the Road part's the same where there is one; RoadCells of no road.
+pub fn road_report(entries: &[Json]) -> Vec<String> {
+	let is = |e: &Json, t: &str| j::s(e, "type") == t || j::a(e, "types").iter().any(|x| x.as_str() == Some(t));
+	let cells_of = |list: &Json| -> Vec<(f64, f64)> { list.as_array().map_or(vec![], |a| a.iter().map(|c| (j::n(c, "x"), j::n(c, "y"))).collect()) };
+	let kept: Vec<&Json> = entries.iter().filter(|e| is(e, "RoadCells")).map(fields).collect();
+	let parts: Vec<&Json> = entries.iter().filter(|e| is(e, "Road")).map(fields).collect();
+	let (mut out, mut seen) = (Vec::new(), HashSet::new());
+	for r in entries.iter().filter(|e| is(e, "Route")).map(fields) {
+		let id = j::s(r, "routeId");
+		let (r0, r1) = rooms_of(r);
+		for room in if r0 == r1 { vec![r0] } else { vec![r0, r1] } {
+			seen.insert(format!("{id} {room}"));
+			let want: Vec<(f64, f64)> = j::a(r, "cells").iter().filter(|c| j::s(c, "room") == room).map(|c| (j::n(c, "x"), j::n(c, "y"))).collect();
+			let mine: Vec<&&Json> = kept.iter().filter(|k| j::s(k, "routeId") == id && j::s(k, "room") == room).collect();
+			if mine.len() != 1 { out.push(format!("{id} {room}: {} RoadCells entries", mine.len())); }
+			else if cells_of(j::at(mine[0], "cells")) != want { out.push(format!("{id} {room}: RoadCells differ from the Route's cells")); }
+			if let Some(p) = parts.iter().find(|p| j::s(p, "routeId") == id && j::s(p, "room") == room) { if cells_of(j::at(p, "cells")) != want { out.push(format!("{id} {room}: the Road part differs from the Route's cells")); } }
+		}
+	}
+	for k in kept { let key = format!("{} {}", j::s(k, "routeId"), j::s(k, "room")); if !seen.contains(&key) { out.push(format!("{key}: RoadCells of no road")); } }
+	out
+}
+/// `roadGone`: the road, its parts and its cells taken away (its caller holds the island's and both rooms' locks).
 async fn road_gone(space: &Space, txn: &str, route_id: &Json) -> Result<()> {
 	space.take_if_exists(&tmpl("Route", obj! { "routeId" => route_id.clone() }), NO_WAIT, Some(txn)).await?;
 	for e in space.read_all(&tmpl("Road", obj! { "routeId" => route_id.clone() }), Some(txn)).await? { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, Some(txn)).await?; }
+	for e in space.read_all(&tmpl("RoadCells", obj! { "routeId" => route_id.clone() }), Some(txn)).await? { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, Some(txn)).await?; }
 	Ok(())
 }
 
@@ -165,7 +202,8 @@ async fn routes_of(space: &Space, txn: Option<&str>) -> Result<Vec<Json>> { Ok(s
 /// `roadCellsIn`: the cells of roads in a room.
 pub async fn road_cells_in(space: &Space, room: &str, txn: Option<&str>) -> Result<HashSet<String>> {
 	let mut out = HashSet::new();
-	for e in space.read_all(&tmpl("Road", obj! { "room" => room }), txn).await? { for c in j::a(fields(&e), "cells") { out.insert(cell_key(j::n(c, "x"), j::n(c, "y"))); } }
+	// RoadCells, not the Road parts: a delivery holds those taken while it runs
+	for e in space.read_all(&tmpl("RoadCells", obj! { "room" => room }), txn).await? { for c in j::a(fields(&e), "cells") { out.insert(cell_key(j::n(c, "x"), j::n(c, "y"))); } }
 	Ok(out)
 }
 /// `routeLinks`: the two rooms of each finished road.

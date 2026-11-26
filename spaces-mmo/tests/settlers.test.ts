@@ -8,6 +8,7 @@ import { FOREVER } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { roadLinks } from "../server/engine/commands/cart.ts";
+import { roadCellsEntries } from "../server/engine/commands/road.ts";
 import type { BuildingFields, CartFields, RouteFields, SiteFields, WorldClockFields } from "../server/model.ts";
 import { decayNow } from "../server/engine/worldtime.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
@@ -136,6 +137,7 @@ test("a settler with things to sell and a road to its market sends them by cart,
 		// a road from that room to the market
 		const road: RouteFields = { routeId: "road-1", pair: [exit.room, market].sort().join("|"), island: w.rooms.find((r) => r.roomId === exit.room)!.island!, rooms: [exit.room, market], names: [exit.room, market], cells: [], state: "built", planner: "o", plannerName: "O", accountId: "o", voters: [], yes: [], no: [], voteUntil: 0, needs: [], work: 0, workNeed: 0, by: {}, untilWorldMs: FOREVER, at: 0, points: 2 };
 		await s.write({ type: "Route", fields: road as never }, null, FOREVER);
+		for (const e of roadCellsEntries(road)) await s.write(e as never, null, FOREVER);
 		const c = (await s.take({ type: "Character", fields: { charId: me } }, 5_000))!;
 		const spawnAt = w.rooms.find((r) => r.roomId === exit.room)!.spawn!;
 		await s.write({ type: "Character", fields: { ...c.fields, room: exit.room, x: spawnAt.x, y: spawnAt.y } }, null, FOREVER);

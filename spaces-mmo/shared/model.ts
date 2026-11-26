@@ -78,6 +78,10 @@ export type RouteFields = { routeId: string; pair: string; island: string; rooms
 	cells: Array<{ room: string; x: number; y: number }>; state: "vote" | "build" | "built"; planner: string; plannerName: string; accountId: string;
 	voters: string[]; yes: string[]; no: string[]; /** the figures that voted (a vote is cast once; the page hides it from them) */ votedBy?: string[]; voteUntil: number; needs: Array<{ proto: string; name: string; count: number; have: number }>;
 	work: number; workNeed: number; by: Record<string, number>; untilWorldMs: number; at: number; points: number };
+/** A road's cells in one of its rooms, as builders read them (engine/commands/road.ts roadCellsIn): written when the road
+ *  is planned and taken when it goes, only by a holder of its island's and both rooms' locks. A delivery, a vote or a
+ *  mend rewrites the Route and its Road parts, never this, so the cells stay visible meanwhile. */
+export type RoadCellsFields = { routeId: string; room: string; cells: Array<{ x: number; y: number }> };
 /** A road's part in one room, what a page draws (written with its Route): its cells in order from the door or to it,
  *  how many are paved, its state and what it lacks. */
 export type RoadFields = { roadId: string; routeId: string; room: string; to: string; name: string; cells: Array<{ x: number; y: number }>; paved: number; state: RouteFields["state"]; missing: string; votes: string; votedBy?: string[]; /** while it is voted on: the accounts that may vote (the page offers the vote to them only) */ voters?: string[]; /** a finished road's term on the second clock (the page offers mending near its end) */ untilWorldMs?: number };

@@ -66,6 +66,10 @@ test("a definition of another scale and an unclassed entry type are refused", as
 
 test("the pure rules", () => {
 	assert.equal(gridRefusal(w, [], []), null);
+	// roads of before their RoadCells entries (phase 1 step 10)
+	const done = { worldId: w.id, gridScale: 1, occupancy: "footprints" as const, state: "complete" as const };
+	assert.match(gridRefusal(w, [done], ["Route", "Road"]) ?? "", /no RoadCells entries.*migrate/);
+	assert.equal(gridRefusal(w, [done], ["Route", "Road", "RoadCells"]), null);
 	assert.equal(classRow("Bundle", w.typeclasses), "Item"); // Bundle → Driftwood → Item
 	assert.equal(classRow("Character", w.typeclasses), "Character");
 	assert.equal(classRow("Hovercraft", w.typeclasses), null);

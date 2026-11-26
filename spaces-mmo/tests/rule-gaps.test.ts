@@ -12,7 +12,7 @@ import { FOREVER, type SpaceLike } from "phi-spaces";
 import { decayNowOf } from "../server/engine/clock.ts";
 import { buildSweep } from "../server/engine/commands/build.ts";
 import { islandPoints } from "../server/engine/commands/epoch.ts";
-import { routePoints } from "../server/engine/commands/road.ts";
+import { roadCellsEntries, routePoints } from "../server/engine/commands/road.ts";
 import { marketTick, ordersTick } from "../server/engine/commands/trade.ts";
 import "../server/npc/scripts.ts"; // the entry of the NPC modules (they import each other in a ring)
 import { askingPrice } from "../server/npc/settlers.ts";
@@ -61,8 +61,7 @@ test("trees count towards the island's stock, eight an account in each place; a 
 
 		// a finished road counts while it stands
 		const road = (id: string, until: number): RouteFields => ({ routeId: id, pair: id, island: here.island!, rooms: [c.room, c.room], names: ["A", "B"], cells: [], state: "built", planner: "o", plannerName: "O", accountId: "o", voters: [], yes: [], no: [], voteUntil: 0, needs: [], work: 3, workNeed: 3, by: {}, untilWorldMs: until, at: 0, points: 2 });
-		await s.write({ type: "Route", fields: road("r-stands", now + 3600_000) as never }, null, FOREVER);
-		await s.write({ type: "Route", fields: road("r-over", now - 1) as never }, null, FOREVER);
+		for (const r of [road("r-stands", now + 3600_000), road("r-over", now - 1)]) { await s.write({ type: "Route", fields: r as never }, null, FOREVER); for (const e of roadCellsEntries(r)) await s.write(e as never, null, FOREVER); }
 		assert.equal((await routePoints(s, now)).get(here.island!), 2, "only the road that stands");
 	} finally { await srv.close(); }
 });

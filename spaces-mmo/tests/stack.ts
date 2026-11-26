@@ -26,6 +26,7 @@ import { loadWorld } from "../server/engine/world.ts";
 import { worldNow } from "../server/engine/worldtime.ts";
 import { occupancyId, storeOccupancyReport, type OccupancyEntry } from "../shared/footprints.ts";
 import { lockReport } from "../server/engine/room-lock.ts";
+import { roadReport } from "../server/engine/commands/road.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let seq = 0;
@@ -93,7 +94,7 @@ const stop = (c: ChildProcess, sig: NodeJS.Signals = "SIGTERM") => new Promise<v
 
 /** The occupancy check every stack makes when it closes (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 3,
  *  "Occupancy"; shared/footprints.ts): with the workers stopped, the objects' footprints give the occupancy of their
- *  Footprint entries in every room, and every room and island has its one lock. Not after a worker was killed (its open
+ *  Footprint entries in every room, every room and island has its one lock, and every road its RoadCells (road.ts roadReport). Not after a worker was killed (its open
  *  transaction holds its objects taken, their Footprint entries stay readable, until the lease runs out). A difference is written to stderr and fails the test file (the exit code), so it does not
  *  hide a failure the test itself threw. */
 async function checkOccupancy(space: SpaceLike, what: string, byHand: ByHand): Promise<void> {
@@ -104,7 +105,7 @@ async function checkOccupancy(space: SpaceLike, what: string, byHand: ByHand): P
 	// its object: only those are the fixture's; an object the game keeps a footprint for is checked even when the test
 	// touched it
 	const skip = (id: string) => (byHand.objects.has(id) && !plotted.has(id)) || (byHand.loose.has(id) && !objects.has(id));
-	const report = [...storeOccupancyReport(entries, { skip }), ...lockReport(entries, (room) => byHand.rooms.has(room))];
+	const report = [...storeOccupancyReport(entries, { skip }), ...lockReport(entries, (room) => byHand.rooms.has(room)), ...roadReport(entries)];
 	if (!report.length) return;
 	process.exitCode = 1;
 	console.error(`[occupancy] ${what}: objects, Footprint entries and locks differ (${report.length})\n  ${report.slice(0, 20).join("\n  ")}`);

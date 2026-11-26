@@ -9,7 +9,7 @@ import { buildSweep } from "../server/engine/commands/build.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { CartFields, CharacterFields, ExitFields, RoadFields, RouteFields } from "../server/model.ts";
-import { roadTick } from "../server/engine/commands/road.ts";
+import { roadCellsEntries, roadTick } from "../server/engine/commands/road.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { cellsOfObject, eventually, heldCells, lightFire, placeFootprint, Player, startServer } from "./stack.ts";
 
@@ -30,7 +30,7 @@ test("a way through the roads, or none", () => {
 });
 
 /** A finished road between two rooms, as road.ts writes it (the Route alone: what carts follow). */
-const builtRoad = (s: SpaceLike, a: string, b: string) => s.write({ type: "Route", fields: { routeId: `road-${a}`, pair: [a, b].sort().join("|"), island: w.rooms.find((r) => r.roomId === a)!.island!, rooms: [a, b], names: [a, b], cells: [], state: "built", planner: "o", plannerName: "O", accountId: "o", voters: [], yes: [], no: [], voteUntil: 0, needs: [], work: 0, workNeed: 0, by: {}, untilWorldMs: FOREVER, at: 0, points: 2 } satisfies RouteFields as never }, null, FOREVER);
+const builtRoad = async (s: SpaceLike, a: string, b: string) => { const r: RouteFields = { routeId: `road-${a}`, pair: [a, b].sort().join("|"), island: w.rooms.find((r) => r.roomId === a)!.island!, rooms: [a, b], names: [a, b], cells: [], state: "built", planner: "o", plannerName: "O", accountId: "o", voters: [], yes: [], no: [], voteUntil: 0, needs: [], work: 0, workNeed: 0, by: {}, untilWorldMs: FOREVER, at: 0, points: 2 }; await s.write({ type: "Route", fields: r as never }, null, FOREVER); for (const e of roadCellsEntries(r)) await s.write(e as never, null, FOREVER); };
 
 test("a road is planned from plaza to plaza, the settlers of both rooms vote, it is built together and then carts follow it; nothing is built on its cells", { timeout: 180_000 }, async () => {
 	const srv = await startServer({ worldEnv: { SPACES_MMO_EPOCH_FORCE: "2" } });
@@ -125,7 +125,9 @@ test("a vote that ends with as many no as yes drops the road; the single road ce
 	const srv = await startServer({ worldEnv: { SPACES_MMO_EPOCH_FORCE: "2" } });
 	try {
 		const s = srv.stack.space;
-		await s.write({ type: "Route", fields: { routeId: "road-x", pair: "a|b", island: "Graue Insel", rooms: ["graue-bucht", "klippenpfad"], names: ["Graue Bucht", "Klippenpfad"], cells: [], state: "vote", planner: "o", plannerName: "O", accountId: "o", voters: ["o", "p"], yes: ["o"], no: ["p"], voteUntil: 1, needs: [], work: 0, workNeed: 3, by: {}, untilWorldMs: 1, at: 0, points: 2 } satisfies RouteFields as never }, null, FOREVER);
+		const x: RouteFields = { routeId: "road-x", pair: "a|b", island: "Graue Insel", rooms: ["graue-bucht", "klippenpfad"], names: ["Graue Bucht", "Klippenpfad"], cells: [], state: "vote", planner: "o", plannerName: "O", accountId: "o", voters: ["o", "p"], yes: ["o"], no: ["p"], voteUntil: 1, needs: [], work: 0, workNeed: 3, by: {}, untilWorldMs: 1, at: 0, points: 2 };
+		await s.write({ type: "Route", fields: x as never }, null, FOREVER);
+		for (const e of roadCellsEntries(x)) await s.write(e as never, null, FOREVER);
 		await roadTick(s, w, 60_000);
 		assert.equal(await s.count({ type: "Route" }), 0);
 		await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 5 } as never }, null, FOREVER, { unique: ["beaconId"] });

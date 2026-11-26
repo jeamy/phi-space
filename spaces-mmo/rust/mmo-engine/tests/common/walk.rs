@@ -190,6 +190,8 @@ impl Walk {
 		// one lock per room and island (room_lock.rs), but for rooms the walk wrote by hand
 		let rooms = &self.by_hand.2;
 		report.extend(mmo_engine::room_lock::lock_report(&all, &|r| rooms.contains(r)));
+		// every road its RoadCells entries (road.rs road_report)
+		report.extend(mmo_engine::commands::road::road_report(&all));
 		assert!(report.is_empty(), "{step}: objects, Footprint entries and locks differ\n  {}", report.iter().take(20).cloned().collect::<Vec<_>>().join("\n  "));
 	}
 	pub fn load(&mut self, replace: bool) {

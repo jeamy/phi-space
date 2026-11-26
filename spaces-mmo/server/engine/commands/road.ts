@@ -10,7 +10,7 @@
 // The terms run on the decay clock; roadTick resolves votes and lets roads lapse.
 import { holdIsland, holdIslandOrRefuse } from "../room-lock.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type AccountFields, type CharacterFields, type ExitFields, type RoadFields, type RoomFields, type RouteFields } from "../../model.ts";
+import { fieldsOf, type AccountFields, type CharacterFields, type ExitFields, type RoadCellsFields, type RoadFields, type RoomFields, type RouteFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, roomOf, toPlayer, type CommandCtx } from "../context.ts";
 import { decayNowOf } from "../clock.ts";
@@ -104,31 +104,70 @@ const votesOf = (r: RouteFields) => `${r.yes.length} ja, ${r.no.length} nein von
 const pavedOf = (r: RouteFields) => (r.state === "built" ? r.cells.length : r.state === "vote" ? 0 : Math.floor((r.cells.length * Math.min(r.work, r.workNeed)) / Math.max(1, r.workNeed)));
 const nameOfRoute = (r: RouteFields, from: string) => `Straße nach ${r.names[r.rooms[0] === from ? 1 : 0]}`;
 
-/** Writes the road back with its two parts (the old ones taken in the transaction). `fresh`: a road just planned, the
- *  only one between its two rooms (two planning the same at once: the second write fails, "unique entry already exists"). */
-async function roadSave(space: SpaceLike, txn: string, r: RouteFields, fresh = false): Promise<void> {
-	await space.write({ type: "Route", fields: r as never }, txn, FOREVER, fresh ? { unique: ["pair"] } : {});
-	for (const e of await space.readAll({ type: "Road", fields: { routeId: r.routeId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
+/** The entries a road is written as: its Route and its part in each of its two rooms (what a page draws). */
+export function roadEntries(r: RouteFields): Array<{ type: string; fields: unknown }> {
+	const out: Array<{ type: string; fields: unknown }> = [{ type: "Route", fields: r }];
 	const paved = pavedOf(r), missing = missingOf(r).join(", "), votes = votesOf(r);
 	let before = 0;
 	for (const room of r.rooms) {
 		const cells = r.cells.filter((c) => c.room === room).map((c) => ({ x: c.x, y: c.y }));
 		const part: RoadFields = { roadId: `${r.routeId}:${room}`, routeId: r.routeId, room, to: r.rooms[0] === room ? r.rooms[1] : r.rooms[0], name: nameOfRoute(r, room), cells, paved: Math.max(0, Math.min(cells.length, paved - before)), state: r.state, missing, votes, ...(r.state === "vote" && r.votedBy?.length ? { votedBy: r.votedBy } : {}), ...(r.state === "vote" ? { voters: r.voters } : {}), ...(r.state === "built" ? { untilWorldMs: r.untilWorldMs } : {}) };
-		await space.write({ type: "Road", fields: part as never }, txn, FOREVER);
+		out.push({ type: "Road", fields: part });
 		before += cells.length;
 	}
+	return out;
 }
-/** Takes the road and its parts away. */
+/** The road's cells in each of its rooms as builders read them (RoadCellsFields): written with a road just planned and
+ *  taken when it goes, by a holder of the island's and both rooms' locks (room-lock.ts); a delivery, a vote or a mend
+ *  rewrites the Route and its Road parts, never these. */
+export function roadCellsEntries(r: RouteFields): Array<{ type: string; fields: RoadCellsFields }> {
+	return [...new Set(r.rooms)].map((room) => ({ type: "RoadCells", fields: { routeId: r.routeId, room, cells: r.cells.filter((c) => c.room === room).map((c) => ({ x: c.x, y: c.y })) } }));
+}
+/** Writes the road back with its two parts (the old ones taken in the transaction). `fresh`: a road just planned, the
+ *  only one between its two rooms (two planning the same at once: the second write fails, "unique entry already exists"),
+ *  with its cells (only then: its cells never change, and its caller holds the rooms' locks). */
+async function roadSave(space: SpaceLike, txn: string, r: RouteFields, fresh = false): Promise<void> {
+	const [route, ...parts] = roadEntries(r);
+	await space.write(route as never, txn, FOREVER, fresh ? { unique: ["pair"] } : {});
+	for (const e of await space.readAll({ type: "Road", fields: { routeId: r.routeId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
+	for (const part of parts) await space.write(part as never, txn, FOREVER);
+	if (fresh) for (const e of roadCellsEntries(r)) await space.write(e as never, txn, FOREVER, { unique: ["routeId", "room"] });
+}
+/** Takes the road, its parts and its cells away (its caller holds the island's and both rooms' locks). */
 async function roadGone(space: SpaceLike, txn: string, routeId: string): Promise<void> {
 	await space.takeIfExists({ type: "Route", fields: { routeId } }, NO_WAIT, { txn });
 	for (const e of await space.readAll({ type: "Road", fields: { routeId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
+	for (const e of await space.readAll({ type: "RoadCells", fields: { routeId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
+}
+
+type Entry = { type: string; types?: readonly string[]; fields: Record<string, unknown> };
+/** What differs between the roads and their cells (the stack's and the walks' check, the migration's): per road and room
+ *  one RoadCells entry with the Route's cells of that room, the Road part's the same where there is one; RoadCells of no
+ *  road. */
+export function roadReport(entries: readonly Entry[]): string[] {
+	const is = (e: Entry, t: string) => e.type === t || !!e.types?.includes(t);
+	const out: string[] = [], seen = new Set<string>();
+	const cellsOf = (list: unknown) => JSON.stringify((list as Array<{ x: number; y: number }>).map((c) => [c.x, c.y]));
+	const kept = entries.filter((e) => is(e, "RoadCells")).map((e) => e.fields as unknown as RoadCellsFields);
+	const parts = entries.filter((e) => is(e, "Road")).map((e) => e.fields as unknown as RoadFields);
+	for (const r of entries.filter((e) => is(e, "Route")).map((e) => e.fields as unknown as RouteFields)) for (const room of new Set(r.rooms)) {
+		seen.add(`${r.routeId} ${room}`);
+		const want = cellsOf(r.cells.filter((c) => c.room === room)), mine = kept.filter((k) => k.routeId === r.routeId && k.room === room);
+		if (mine.length !== 1) out.push(`${r.routeId} ${room}: ${mine.length} RoadCells entries`);
+		else if (cellsOf(mine[0]!.cells) !== want) out.push(`${r.routeId} ${room}: RoadCells differ from the Route's cells`);
+		const part = parts.find((p) => p.routeId === r.routeId && p.room === room);
+		if (part && cellsOf(part.cells) !== want) out.push(`${r.routeId} ${room}: the Road part differs from the Route's cells`);
+	}
+	for (const k of kept) if (!seen.has(`${k.routeId} ${k.room}`)) out.push(`${k.routeId} ${k.room}: RoadCells of no road`);
+	return out;
 }
 
 const routesOf = async (space: SpaceLike, txn: string | null = null) => (await space.readAll({ type: "Route" }, txn ? { txn } : {})).map((e) => fieldsOf<RouteFields>(e));
 /** The cells of roads in a room (nothing is built there; build.ts refusal). */
 export async function roadCellsIn(space: SpaceLike, room: string, txn: string | null = null): Promise<Set<string>> {
 	const out = new Set<string>();
-	for (const e of await space.readAll({ type: "Road", fields: { room } }, txn ? { txn } : {})) for (const c of fieldsOf<RoadFields>(e).cells) out.add(cellKey(c));
+	// RoadCells, not the Road parts: a delivery holds those taken while it runs (RoadCellsFields)
+	for (const e of await space.readAll({ type: "RoadCells", fields: { room } }, txn ? { txn } : {})) for (const c of fieldsOf<RoadCellsFields>(e).cells) out.add(cellKey(c));
 	return out;
 }
 /** Room to rooms the finished roads join, both ways (the cart's search, the overview's). */
