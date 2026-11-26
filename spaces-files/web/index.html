@@ -15,7 +15,7 @@
 	<a class="brand" href="/">PHI-<b>SPACES</b> <span class="sub">Files</span></a>
 	<span id="who" data-tip-k="tip.who"></span>
 	<span class="spacer"></span>
-	<nav id="account" hidden><button id="admin-open" type="button" hidden data-t="admin" data-tip-k="tip.admin">Administration</button> <a href="/auth/login" data-t="switch" data-tip-k="tip.switch">Switch tenant</a> <button id="logout" type="button" data-t="logout" data-tip-k="tip.logout">Sign out</button></nav>
+	<nav id="account" hidden><button id="admin-open" type="button" hidden data-t="admin" data-tip-k="tip.admin">Administration</button> <a class="btn" href="/auth/login" data-t="switch" data-tip-k="tip.switch">Switch tenant</a> <button id="logout" type="button" data-t="logout" data-tip-k="tip.logout">Sign out</button></nav>
 	<div class="lang-switch" role="group" data-tip-k="tip.lang"><button type="button" data-lang="de">DE</button><button type="button" data-lang="en">EN</button></div>
 	<div class="theme-controls"></div>
 	<button id="help-open" class="help-open" type="button" aria-haspopup="dialog" aria-label="Help" data-aria="help" data-tip-k="tip.help">?</button>
@@ -39,7 +39,7 @@
 		<ul id="entries"></ul>
 		<form id="create" hidden>
 			<input id="create-name" placeholder="name" required data-ph="name" data-tip-k="tip.createName">
-			<button name="kind" value="file" data-t="newFile" data-tip-k="tip.newFile">New file</button>
+			<button name="kind" value="file" class="primary" data-t="newFile" data-tip-k="tip.newFile">New file</button>
 			<button name="kind" value="dir" data-t="newDir" data-tip-k="tip.newDir">New directory</button>
 		</form>
 		<details id="grants-box" hidden>
@@ -49,8 +49,8 @@
 				<select id="grant-relation" data-tip-k="tip.relation"><option>viewer</option><option>editor</option><option>owner</option></select>
 				<select id="grant-kind" data-tip-k="tip.grantKind"><option>user</option><option>agent</option><option value="group">group</option></select>
 				<input id="grant-id" placeholder="actor ID / group" required autocomplete="off" list="dl-user" data-ph="subjectId" data-tip-k="tip.grantId">
-				<button name="action" value="grant" data-t="grant" data-tip-k="tip.grant">Grant</button>
-				<button name="action" value="revoke" data-t="revoke" data-tip-k="tip.revoke">Revoke</button>
+				<button name="action" value="grant" class="primary" data-t="grant" data-tip-k="tip.grant">Grant</button>
+				<button name="action" value="revoke" class="danger" data-t="revoke" data-tip-k="tip.revoke">Revoke</button>
 			</form>
 			<form id="restrict-form" hidden>
 				<button name="action" value="restrict" data-t="restrict" data-tip-k="tip.restrict">Restrict</button>
@@ -81,22 +81,22 @@
 			<input id="reg-id" placeholder="actor ID" required autocomplete="off" data-ph="actorId" data-tip-k="tip.regId">
 			<button id="gen-id" type="button" class="gen" data-t="generate" data-tip-k="tip.genId">Generate</button>
 			<input id="reg-home" placeholder="home name" required autocomplete="off" data-ph="homeName" data-tip-k="tip.regHome">
-			<button data-t="registerBtn" data-tip-k="tip.registerBtn">Register</button>
+			<button class="primary" data-t="registerBtn" data-tip-k="tip.registerBtn">Register</button>
 		</form>
 		<form id="member">
 			<h3 data-t="member">Group membership</h3>
 			<input id="mem-group" placeholder="group" required autocomplete="off" list="dl-group" data-ph="group" data-tip-k="tip.memGroup">
 			<select id="mem-kind" data-tip-k="tip.memKind"><option>user</option><option>agent</option><option>group</option></select>
 			<input id="mem-id" placeholder="actor ID / group" required autocomplete="off" list="dl-user" data-ph="subjectId" data-tip-k="tip.memId">
-			<button name="action" value="addMember" data-t="add" data-tip-k="tip.add">Add</button>
-			<button name="action" value="removeMember" data-t="remove" data-tip-k="tip.remove">Remove</button>
+			<button name="action" value="addMember" class="primary" data-t="add" data-tip-k="tip.add">Add</button>
+			<button name="action" value="removeMember" class="danger" data-t="remove" data-tip-k="tip.remove">Remove</button>
 		</form>
 		<form id="workspace">
 			<h3 data-t="workspace">Create a workspace</h3>
 			<input id="ws-name" placeholder="name" required autocomplete="off" data-ph="name" data-tip-k="tip.wsName">
 			<select id="ws-kind" data-tip-k="tip.wsKind"><option>user</option><option>agent</option></select>
 			<input id="ws-owner" placeholder="owner's actor ID" required autocomplete="off" list="dl-user" data-ph="ownerId" data-tip-k="tip.wsOwner">
-			<button data-t="create" data-tip-k="tip.create">Create</button>
+			<button class="primary" data-t="create" data-tip-k="tip.create">Create</button>
 		</form>
 		<h3 data-t="actors" data-tip-k="tip.actors">Actors</h3>
 		<ul id="actors"></ul>
