@@ -15,6 +15,25 @@ let draft: Draft | null = null;
 
 class Lost extends Error {}
 
+// Messages and questions stay in the page: no alert or confirm, which block the whole tab (and any tool driving it).
+function notify(message: string): void { const n = $("notice"); n.textContent = message; n.hidden = false; }
+$("notice").onclick = () => { $("notice").hidden = true; };
+let answer: ((yes: boolean) => void) | null = null;
+/** Asks in the page and resolves with the answer; a newer question answers an open one with no. */
+function ask(question: string, yes: string, detail?: string): Promise<boolean> {
+	answer?.(false);
+	$("ask-text").textContent = question;
+	$("ask-detail").hidden = detail === undefined;
+	$("ask-detail").textContent = detail ?? "";
+	$("ask-yes").textContent = yes;
+	$("ask").hidden = false;
+	$("ask-yes").focus();
+	return new Promise((resolve) => { answer = (v) => { answer = null; $("ask").hidden = true; resolve(v); }; });
+}
+$("ask-yes").onclick = () => answer?.(true);
+$("ask-no").onclick = () => answer?.(false);
+const discardOk = async () => !(draft && dirty(draft)) || await ask("Discard your unsaved draft?", "Discard");
+
 /** The session's CSRF token; the adapter derives it anew after a restart, so a refusal (HTTP 403) fetches it again. */
 async function refreshCsrf(): Promise<boolean> {
 	const r = await fetch("/api/session");
@@ -117,10 +136,10 @@ function renderDraft() {
 }
 
 async function openFile(segs: string[]) {
-	if (draft && dirty(draft) && !confirm("Discard your unsaved draft?")) return;
+	if (!(await discardOk())) return;
 	const path = segs.join("/");
 	const r = await call<{ contents: string; version: number }>("read", { workspace, path });
-	if (!r.ok) { alert(r.error.message); return; }
+	if (!r.ok) { notify(r.error.message); return; }
 	const bytes = unb64(r.value.contents);
 	let t: string;
 	try { t = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
@@ -161,7 +180,8 @@ async function loadTheirs() {
 	const r = await call<{ contents: string; version: number }>("read", { workspace: draft.workspace, path: draft.path });
 	if (!r.ok) { draft = { ...draft, status: r.error.message }; return renderDraft(); }
 	const theirs = new TextDecoder().decode(unb64(r.value.contents));
-	if (!confirm(`Version ${r.value.version}:\n\n${theirs.slice(0, 2000)}\n\nKeep your text and save over this version?`)) return;
+	if (!(await ask(`Version ${r.value.version} is saved. Keep your text and save over this version?`, "Keep my text", theirs.slice(0, 2000)))) return;
+	if (draft === null) return;
 	draft = rebase(draft, theirs, r.value.version);
 	renderDraft();
 }
@@ -173,7 +193,7 @@ async function create(kind: string) {
 	const r = kind === "dir"
 		? await call("mkdir", { workspace, path, operationId: await freshId() })
 		: await call("write", { workspace, path, contents: "", expectedVersion: 0, operationId: await freshId() });
-	if (!r.ok) alert(r.error.message);
+	if (!r.ok) { notify(r.error.message); return; }
 	$<HTMLInputElement>("create-name").value = "";
 	await showDir();
 }
@@ -199,7 +219,7 @@ const submitter = (e: SubmitEvent) => (e.submitter as HTMLButtonElement | null)?
 $<HTMLTextAreaElement>("text").addEventListener("input", (e) => { if (draft) { draft = edit(draft, (e.target as HTMLTextAreaElement).value); renderDraft(); } });
 $("save").onclick = () => void save();
 $("theirs").onclick = () => void loadTheirs();
-$("close").onclick = () => { if (draft && dirty(draft) && !confirm("Discard your unsaved draft?")) return; draft = null; renderDraft(); };
+$("close").onclick = async () => { if (!(await discardOk())) return; draft = null; renderDraft(); };
 $("logout").onclick = async () => {
 	const out = () => fetch("/auth/logout", { method: "POST", headers: { "x-files-csrf": csrf } });
 	if ((await out()).status === 403 && await refreshCsrf()) await out();
@@ -213,7 +233,7 @@ $("grant-form").addEventListener("submit", (e) => {
 	const subject = kind === "group" ? { kind: "group", id: val("grant-id"), relation: "member" } : { kind, id: val("grant-id") };
 	void (async () => {
 		const r = await call(submitter(e as SubmitEvent), { workspace, path: pathOf(dir), relation: val("grant-relation"), subject, operationId: await freshId() });
-		if (!r.ok) alert(r.error.message);
+		if (!r.ok) notify(r.error.message);
 		await showGrants();
 	})();
 });

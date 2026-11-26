@@ -13,6 +13,12 @@
 	<span id="who"></span>
 	<nav id="account" hidden><button id="admin-open" type="button" hidden>Administration</button> <a href="/auth/login">Switch tenant</a> <button id="logout" type="button">Sign out</button></nav>
 </header>
+<p id="notice" role="alert" title="Dismiss" hidden></p>
+<section id="ask" role="alertdialog" aria-labelledby="ask-text" hidden>
+	<p id="ask-text"></p>
+	<pre id="ask-detail" hidden></pre>
+	<p><button id="ask-yes" type="button"></button> <button id="ask-no" type="button">Cancel</button></p>
+</section>
 <main id="signin" class="note" hidden>
 	<h1>Sign in</h1>
 	<p><a href="/auth/login">Sign in with your identity provider</a></p>

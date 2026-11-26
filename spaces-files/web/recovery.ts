@@ -20,6 +20,7 @@ function show(signedIn: boolean): void {
 	$("signin").hidden = signedIn;
 	$("app").hidden = !signedIn;
 	$("account").hidden = !signedIn;
+	if (!signedIn) { $("who").textContent = ""; $("status").textContent = ""; }
 }
 
 function say(text: string): void { $("status").textContent = text; }

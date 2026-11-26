@@ -17,3 +17,7 @@ textarea { width: 100%; min-height: 50vh; box-sizing: border-box; font: 14px/1.4
 form { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; margin: .4rem 0; }
 form h3 { flex-basis: 100%; }
 #status, #admin-status { min-height: 1.4em; }
+#notice { margin: 0; padding: .5rem 1rem; background: #f4b42a33; border-bottom: 1px solid var(--line); cursor: pointer; }
+#ask { margin: .6rem 1rem; padding: .6rem 1rem; border: 1px solid var(--accent); border-radius: 4px; }
+#ask p { margin: .3rem 0; }
+#ask-detail { max-height: 40vh; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); padding: .5rem; margin: .4rem 0; }
