@@ -33,8 +33,8 @@ export interface PolicyData {
 	/** The nodes named `name` under `parentId`, at most `limit` (2 reveals a duplicate). */
 	children(parentId: string, name: string, limit: number): Promise<NodeRow[]>;
 	relationsOn(objectKind: string, objectId: string, limit: number): Promise<RelRow[]>;
-	/** The groups whose member the subject is, at most `limit`. */
-	groupsOf(kind: ActorKind, id: string, limit: number): Promise<string[]>;
+	/** The groups whose member the subject (an actor, or a group's members) is, at most `limit`. */
+	groupsOf(kind: ActorKind | "group", id: string, limit: number): Promise<string[]>;
 	actor(kind: string, id: string): Promise<ActorRow | null>;
 }
 
@@ -77,12 +77,33 @@ async function bounded<R>(read: (limit: number) => Promise<R[]>, bound: number, 
 	return rows;
 }
 
-/** The subject keys an actor acts as: itself and, while enabled, each group it belongs to. Empty when not enabled. */
+/**
+ * The subject keys an actor acts as: itself and, while enabled, each group it belongs to, directly or through groups
+ * that are members of other groups (section 4, nested groups). A group met again on its own chain is a cycle the
+ * writes never create: `inconsistentState`, checked before the depth bound; a chain longer than `maxGroupDepth`, or
+ * more than `maxGroups` groups in all, is `capacityExceeded`. Empty when the actor is not enabled.
+ */
 async function subjectsOf(d: PolicyData, a: ActorRef, o: Options): Promise<Set<string>> {
 	const row = await d.actor(a.actorKind, a.actorId);
 	if (row === null || row.state !== "enabled") return new Set();
 	const keys = new Set([`${a.actorKind}:${a.actorId}`]);
-	for (const g of await bounded((l) => d.groupsOf(a.actorKind, a.actorId, l), lim(o).maxGroups, "groups of one actor")) keys.add(`group:${g}#member`);
+	const done = new Set<string>(), onPath = new Set<string>();
+	const { maxGroups, maxGroupDepth } = lim(o);
+	let deepest = 0;
+	// the walk goes on past the depth bound (charged, and bounded by maxGroups) so that a cycle is found first
+	const visit = async (g: string, depth: number): Promise<void> => {
+		if (onPath.has(g)) throw new InconsistentState(`group ${g} is its own member`);
+		if (done.has(g)) return;
+		deepest = Math.max(deepest, depth);
+		onPath.add(g);
+		for (const up of await bounded((l) => d.groupsOf("group", g, l), maxGroups, "groups of one group")) await visit(up, depth + 1);
+		onPath.delete(g);
+		done.add(g);
+		if (done.size > maxGroups) throw new CapacityExceeded(`an actor belongs to more than ${maxGroups} groups`);
+		keys.add(`group:${g}#member`);
+	};
+	for (const g of await bounded((l) => d.groupsOf(a.actorKind, a.actorId, l), maxGroups, "groups of one actor")) await visit(g, 1);
+	if (deepest > maxGroupDepth) throw new CapacityExceeded(`groups nest deeper than ${maxGroupDepth} levels`);
 	return keys;
 }
 
@@ -174,7 +195,7 @@ export function checkShape(r: RelRow): void {
 	const direct = (r.subjectKind === "user" || r.subjectKind === "agent") && r.subjectRelation === DIRECT;
 	const groupMembers = r.subjectKind === "group" && r.subjectRelation === "member";
 	if (r.objectKind === "tenant") { if (r.relation === "admin" && r.subjectKind === "user" && r.subjectRelation === DIRECT) return; }
-	else if (r.objectKind === "group") { if (r.relation === "member" && direct) { groupId(r.objectId); return; } }
+	else if (r.objectKind === "group") { if (r.relation === "member" && (direct || groupMembers)) { groupId(r.objectId); if (groupMembers) groupId(r.subjectId); return; } }
 	else if (r.objectKind === "node") { if (r.relation in RANK && (direct || groupMembers)) { if (groupMembers) groupId(r.subjectId); return; } }
 	throw new InvalidInput(`invalid relation ${r.objectKind}#${r.relation}@${r.subjectKind}${r.subjectRelation ? "#" + r.subjectRelation : ""}`);
 }
@@ -198,11 +219,40 @@ export async function checkGrant(data: PolicyData, target: NodeRow, relation: st
 	return r;
 }
 
-/** A group membership: a user or agent instance (no nested groups), existing and not deleted. */
-export async function checkMembership(data: PolicyData, group: string, subject: Subject): Promise<RelRow> {
+/**
+ * A group membership: a user or agent instance, existing and not deleted, or the members of another group (nested
+ * groups, section 4). A group subject must not close a cycle (the group itself, or a group the new member already
+ * contains, `invalidInput`), and the longest chain through the new edge must stay within `maxGroupDepth`
+ * (`capacityExceeded`). Both walks are charged to one decision's work.
+ */
+export async function checkMembership(data: PolicyData, group: string, subject: Subject, o: Options = {}): Promise<RelRow> {
 	const r: RelRow = { objectKind: "group", objectId: groupId(group), relation: "member", ...subjectRow(subject) };
 	checkShape(r);
 	await checkSubject(data, r);
+	if (r.subjectKind !== "group") return r;
+	if (r.subjectId === r.objectId) throw new InvalidInput("a group cannot be its own member");
+	const d = charged(data, workOf(o));
+	const { maxGroups, maxGroupDepth } = lim(o);
+	// the chain above the edge: the group and the groups it belongs to; meeting the new member there is a cycle
+	const up = async (g: string, depth: number, seen: Set<string>): Promise<number> => {
+		if (g === r.subjectId) throw new InvalidInput(`group ${r.subjectId} already contains group ${r.objectId}`);
+		if (seen.has(g)) throw new InconsistentState(`group ${g} is its own member`);
+		if (depth > maxGroupDepth) throw new CapacityExceeded(`groups would nest deeper than ${maxGroupDepth} levels`);
+		let most = depth;
+		for (const p of await bounded((l) => d.groupsOf("group", g, l), maxGroups, "groups of one group")) most = Math.max(most, await up(p, depth + 1, new Set([...seen, g])));
+		return most;
+	};
+	// the chain below the edge: the new member and the groups among its members
+	const down = async (g: string, depth: number, seen: Set<string>): Promise<number> => {
+		if (seen.has(g)) throw new InconsistentState(`group ${g} is its own member`);
+		if (depth > maxGroupDepth) throw new CapacityExceeded(`groups would nest deeper than ${maxGroupDepth} levels`);
+		let most = depth;
+		for (const m of await bounded((l) => d.relationsOn("group", g, l), lim(o).maxActors, "members of one group"))
+			if (m.subjectKind === "group") most = Math.max(most, await down(m.subjectId, depth + 1, new Set([...seen, g])));
+		return most;
+	};
+	const above = await up(r.objectId, 1, new Set()), below = await down(r.subjectId, 1, new Set());
+	if (above + below > maxGroupDepth) throw new CapacityExceeded(`groups would nest deeper than ${maxGroupDepth} levels`);
 	return r;
 }
 
@@ -259,7 +309,7 @@ export function groupsIn(relations: Iterable<RelRow>): string[] {
 export async function membersOf(data: PolicyData, group: string, o: Options = {}): Promise<Subject[]> {
 	const d = charged(data, workOf(o));
 	const rows = await bounded((l) => d.relationsOn("group", groupId(group), l), lim(o).maxActors, "members of one group");
-	return rows.map((r) => ({ kind: r.subjectKind as ActorKind, id: r.subjectId }))
+	return rows.map((r): Subject => r.subjectKind === "group" ? { kind: "group", id: r.subjectId, relation: "member" } : { kind: r.subjectKind as ActorKind, id: r.subjectId })
 		.sort((a, b) => a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 

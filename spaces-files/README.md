@@ -256,6 +256,14 @@ Checked by hand on each machine, as the operator guide says (section 1), because
 encrypted volume under the three directories, encrypted or no swap, no core dumps, and backup keys kept apart from
 their archives.
 
+## After the pilot: the plan's subsequent decisions
+
+Section 8 of the plan, item by item, each decided in the plan and built after the five phases:
+
+| Item | Decision in the plan | Test |
+|---|---|---|
+| Nested groups: group members may be another group's members, bounded by `maxGroupDepth`, cycles refused on write and `inconsistentState` when stored | section 4, *Nested groups* | `tests/nested-groups.test.ts` |
+
 ## Commands
 
 From this directory (or with `npm --prefix spaces-files` from the repository root):

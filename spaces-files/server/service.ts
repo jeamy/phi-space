@@ -902,7 +902,8 @@ export class FilesService {
 
 	/**
 	 * Adds or removes one group membership (an admin operation: an enabled `tenant#admin` user, section 5). Both are
-	 * idempotent; adding validates the subject (an existing non-deleted user or agent, no nested groups). Removing a
+	 * idempotent; adding validates the subject (an existing non-deleted user or agent, or another group without a cycle
+	 * and within the nesting depth). Removing a
 	 * present membership is a security action on the security reserve. A caller without `tenant#admin` is refused with
 	 * `permissionDenied`, and the refusal is audited in a transaction of its own (section 3).
 	 */
@@ -917,20 +918,19 @@ export class FilesService {
 		return this.#session("admin", handle, async (s, space) => {
 			const g = schema.groupId(group, this.limits.maxNameBytes);
 			const subj = parseSubject(subject, this.limits.maxNameBytes);
-			if (subj.kind === "group") throw new schema.InvalidInput("groups have no nested groups in the pilot");
 			const id = verifyOperationId(this.state, s, operationId, this.limits);
 			await this.#requireAdmin(s, space, op, id);
 			const d = spaceData(space);
 			const digest = requestDigest(op, { group: g, subject: subjectRow(subj) });
 			const done = await lookupReceipt(space, s, id.operationId, digest);
 			if (done) return { status: done.status as string };
-			const tuple: RelRow = op === "addMember" ? await checkMembership(d, g, subj) : { objectKind: "group", objectId: g, relation: "member", ...subjectRow(subj) };
-			const row = schema.relation("group", g, "member", tuple.subjectKind, tuple.subjectId);
+			const tuple: RelRow = op === "addMember" ? await checkMembership(d, g, subj, { limits: this.limits }) : { objectKind: "group", objectId: g, relation: "member", ...subjectRow(subj) };
+			const row = schema.relation("group", g, "member", tuple.subjectKind, tuple.subjectId, tuple.subjectRelation);
 			const present = await this.#has(space, row);
 			if (op === "addMember") {
 				const status = present ? "unchanged" : "added";
 				const rows = [...(present ? [] : [row]), receiptRow(s, id, digest, { status })];
-				await this.#admitRows(s, space, { id, operation: op, targets: [], rows, demand: present ? {} : { relations: 1, groups: [g] } });
+				await this.#admitRows(s, space, { id, operation: op, targets: [], rows, demand: present ? {} : { relations: 1, groups: subj.kind === "group" ? [g, subj.id] : [g] } });
 				await this.#commitMutation(s, space, id, op, [], rows, null);
 				return { status };
 			}

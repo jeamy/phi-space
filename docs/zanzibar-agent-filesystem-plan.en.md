@@ -99,7 +99,7 @@ Everything else in a tenant goes through the authenticated admin operations of s
 | Object | Relations | Allowed subjects |
 |---|---|---|
 | tenant | admin | user |
-| group | member | user, agent (no nested groups in the pilot) |
+| group | member | user, agent, group#member (nested groups, below) |
 | directory, file | owner, editor, viewer | user, agent, group#member |
 
 The three roles on files and directories are ordered:
@@ -139,6 +139,7 @@ In the journey, removing Lea from North ends all her rights on `dispatch`. `disp
 - Groups have no separate `FsGroup` entry: a group is identified implicitly by its NFC-normalized, case-sensitive canonical group ID in `FsRelation`, validated for syntax and byte limits like names. A group exists for administration while at least one relation either names it as the membership object or uses it as a grant subject. `listGroups` returns that union. Removing the last member does not remove grants on the group and therefore does not necessarily make it disappear; with no referencing relation, an empty group has no persistent row and is no longer listed.
 - Reject unknown relations, invalid subject/object combinations, and unknown or deleted `user`/`agent` subjects before persistence (`invalidInput`). Existing relations of a disabled actor remain stored but inert. Reject paths that leave their workspace.
 - Bound path depth and relationship work per decision. Exceeding them returns `capacityExceeded`. The stored quotas are in section 3.
+- **Nested groups (decided 2026-11-26).** A group's members may include the members of another group (`group:north#member@group:south#member`). An actor acts as each group it belongs to directly and as every group reachable from those through such rows. The levels are counted from the actor's own groups (1: no nesting) and bounded by `maxGroupDepth` (default 4); all groups an actor reaches count against `maxGroups`, and every lookup against the decision's work. A group met again on its own chain is a cycle: `addMember` refuses it with `invalidInput` (a group as its own member, or a group the new member already contains), and the evaluator treats one found in stored rows as `inconsistentState`. The evaluator walks on past the depth bound, charged and bounded by `maxGroups`, so a cycle is reported before `capacityExceeded`. `addMember` also refuses with `capacityExceeded` when the longest chain through the new edge (the levels below the new member plus the levels above the group) would exceed the bound. Removing a nested group is a membership removal like any other: a security action on the reserve, effective for every actor below it at once.
 - Detect repeated parent IDs and missing parents.
 - Corrupt graphs produce `inconsistentState`, suspend admission for that tenant pending operator repair, and emit a diagnostic without private paths or contents.
 - No decision cache in the pilot.
@@ -342,7 +343,7 @@ Several facts must survive a restore of the data store unchanged, so they cannot
 - **Virtual files.** Start with one read-only provider under a reserved mount. Bind each provider call to the same tenant and actor, enforce the source application's permissions, and define timeout and freshness behavior before exposing data. A mounted file must never gain the service account's broader visibility.
 - **Move and delete.** Define source and destination rights, the inheritance changes of a moved subtree, cycles, the behavior of grants on stable IDs, and the deletion of workspaces. Test the loss of access immediately after moving a subtree.
 - **Restricted children.** If a visible directory must hide some children, add a traversal-only relation or a different inheritance rule. Rework section 4's visibility rule and the `list` contract before allowing it.
-- **Nested groups.** Allow group subjects in group membership only with a depth bound and cycle detection in the evaluator.
+- **Nested groups.** Allow group subjects in group membership only with a depth bound and cycle detection in the evaluator. *Done 2026-11-26, section 4.*
 - **Network agent hosts.** Authenticate agent hosts on other machines with the exported key proof (`ProvingService` with a key directory, enrollment by `createEnroll`) over TLS, and define how the enrolled peer ID becomes `enrolledHostPeerId`.
 - **Separate Space process, Rust and servers.** Move the Space into a process of its own like the other applications, port it to a Rust space server, and only then consider big or nano (R-D12).
 - **Multiple authorities or replicas.** Specify fencing, promotion, causal revision tokens, minimum-revision reads and recovery before relaxing single-owner admission. Use the revocation and retry scenarios against a real handover as the acceptance gate. [Federation plan](federation-plan-v3.en.md)

@@ -27,6 +27,8 @@ export type FsLimits = {
 	/** Per tenant. */
 	maxActors: number;
 	maxGroups: number;
+	/** Levels of groups nested in groups, counted from an actor's own groups (1: no nesting). */
+	maxGroupDepth: number;
 	maxWorkspaces: number;
 	maxNodes: number;
 	maxRelations: number;
@@ -91,6 +93,7 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxReplyBytes: 1024 * 1024,
 	maxActors: 1000,
 	maxGroups: 200,
+	maxGroupDepth: 4,
 	maxWorkspaces: 500,
 	maxNodes: 20_000,
 	maxRelations: 20_000,

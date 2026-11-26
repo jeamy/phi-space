@@ -120,7 +120,7 @@ test("the validator: relation shapes, redundant viewers, unknown and deleted sub
 		["an unknown subject", checkGrant(d, root, "editor", { kind: "user", id: "nobody" })],
 		["a deleted subject", checkGrant(d, root, "editor", { kind: "user", id: "gone" })],
 		["an agent that is a user", checkGrant(d, root, "editor", { kind: "agent", id: "lea" })],
-		["a nested group", checkMembership(d, "north", { kind: "group", id: "south", relation: "member" })],
+		["a group as its own member", checkMembership(d, "north", { kind: "group", id: "north", relation: "member" })],
 		["a deleted member", checkMembership(d, "north", { kind: "user", id: "gone" })],
 		["a malformed group ID", checkMembership(d, "a/b", { kind: "user", id: "max" })],
 		["an agent as tenant admin", Promise.resolve().then(() => checkShape(tuple("tenant:acme#admin@agent:planner-17")))],
