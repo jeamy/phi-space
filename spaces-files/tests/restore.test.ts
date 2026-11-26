@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { extractArchive, newBackupKey, readBackupKey, verifyArchive, writeArchive } from "../server/archive.ts";
-import { backupData, backupState, restoreData, type RestoreStep } from "../server/backup.ts";
+import { backupData, backupState, restoreData, restoreState, type RestoreStep } from "../server/backup.ts";
 import { FilesService } from "../server/service.ts";
 
 const DRIVER = fileURLToPath(new URL("./support/restore-driver.ts", import.meta.url));
@@ -139,3 +139,33 @@ for (const step of ["intent", "verified", "installed", "rekeyed", "checked"] as 
 		} finally { await svc.close().catch(() => {}); rmSync(d.dir, { recursive: true, force: true }); }
 	});
 }
+
+test("the loss of the whole host: the state restored first, then the data, and every file reads again", async () => {
+	const d = await deployment();
+	try {
+		const lea = await d.login("acme", LEA);
+		await d.put(lea, "lea", "brief.md", "v1", 0);
+		await d.put(lea, "lea", "brief.md", "v2", 1);
+		// as the daily backup takes them: the data first, then the state
+		await backupData(d.svc, join(d.dir, "data.bk"), d.key);
+		backupState(d.svc, join(d.dir, "state.bk"), d.stateKey);
+		await d.svc.close();
+		for (const p of [d.o.dataDir, d.o.stateDir, d.o.blobDir]) rmSync(p, { recursive: true, force: true });
+
+		await restoreState(join(d.dir, "state.bk"), d.stateKey, d.o);
+		const r = await restoreData(join(d.dir, "data.bk"), d.key, d.o);
+		assert.deepEqual(r.tenants.map((t) => [t.tenantId, t.missing]), [["acme", 0], ["globex", 0]]);
+		const svc = await FilesService.open(d.o);
+		try {
+			assert.equal(svc.state.mode(), "maintenance");
+			await assert.rejects(svc.setMode("normal"), /waits for the reconciliation of acme, globex/, "the data restore's reconciliation holds");
+			svc.state.markReconciled("acme");
+			svc.state.markReconciled("globex");
+			await svc.setMode("normal");
+			assert.equal(svc.state.lookupSession(lea), null, "the old session is gone");
+			const fresh = (await svc.login("acme", "user", LEA)).handle;
+			const f = await svc.read(fresh, "lea", "brief.md");
+			assert.deepEqual([f.version, f.bytes.toString()], [2, "v2"]);
+		} finally { await svc.close(); }
+	} finally { rmSync(d.dir, { recursive: true, force: true }); }
+});

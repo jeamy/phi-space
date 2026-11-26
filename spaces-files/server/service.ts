@@ -145,6 +145,9 @@ export type ListEntry = { name: string; kind: "dir" | "file"; restricted?: true 
  *  names the blobs the content row then decides between. */
 type Unresolved = { tenantId: string; txn: string; save: { nodeId: string; newBlobId: string; oldBlobId: string | null } | null };
 
+/** The archive name of the restore journal a state restore opens (operator restore-state). */
+export const STATE_RESTORE = "deployment state";
+
 export class FilesService {
 	/** Where the tenant Spaces run when an open names none (null: in this process; the tests set it). */
 	static defaultSpaceProcess: readonly string[] | null = null;
@@ -1679,7 +1682,7 @@ export class FilesService {
 		this.state.beginModeTransition("maintenance");
 		this.state.completeModeTransition();
 		// the state's loss opens a restore like a data restore: every tenant is reconciled before normal admission
-		this.state.journalRestore("checked", { archive: "deployment state", epoch: this.state.epoch(), tenants: [] });
+		this.state.journalRestore("checked", { archive: STATE_RESTORE, epoch: this.state.epoch(), tenants: [] });
 	}
 
 	/**

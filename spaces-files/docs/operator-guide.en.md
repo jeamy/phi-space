@@ -424,5 +424,10 @@ rsync. The two backup keys are in the volume (`/srv/files/keys/data.key`, `state
 `docker:operator -- new-backup-key`); a copy of them is kept off big, since without them no archive can be read. On
 nano the account `files-backup` takes the runs with `rrsync -wo -no-del -no-overwrite`: its `authorized_keys` names
 big's addresses and the key `~/.ssh/files-backup-nano` of `mux` on big, which can neither read, delete nor overwrite
-anything there. nano deletes runs older than 60 days itself (`files-backup-prune.timer`, root). Restoring from such a
-run: sections 4 and 5, with the archive and its key.
+anything there. nano deletes runs older than 60 days itself (`files-backup-prune.timer`, root). Copies of both keys are also kept
+on the operator's own machine (`~/phi-backup/spaces-files-keys/`).
+
+**Restoring after the loss of big.** On the new host, with the service stopped and the three directories empty: copy a
+run from nano (as root there: `/home/files-backup/spaces-files/<UTC time>/`) and the two keys, then
+`restore-state state-….files-backup` first and `restore data-….files-backup` second (the data restore takes the place
+of the state's own restore journal), start the service, and continue with steps 4 to 9 of section 4.

@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { extractArchive, readEntry, verifyArchive, writeArchive } from "./archive.ts";
 import { CONTENT_KEYS_FILE, DeploymentState, KEYS_FILE, STATE_FILE } from "./deployment.ts";
 import { prepareDataDir } from "./dirs.ts";
-import { FilesService, STORE_FILE, type FilesServiceOptions } from "./service.ts";
+import { FilesService, STATE_RESTORE, STORE_FILE, type FilesServiceOptions } from "./service.ts";
 
 const META = "backup.json";
 type BackupMeta = { kind: "state" | "data"; stateId: string; seq: number; time: number };
@@ -107,8 +107,11 @@ export async function restoreData(archive: string, key: Buffer, o: Pick<FilesSer
 	let state = await DeploymentState.open({ dir: o.stateDir, clock: o.now });
 	try {
 		let j = state.restoreJournal();
-		if (j !== null && j.info.archive !== archive) throw new Error(`another restore is open (${String(j.info.archive)}); complete it first`);
-		if (j === null) {
+		// after the loss of the whole host the state is restored first (restore-state), then the data: this restore takes
+		// the place of the state's own, which has checked nothing yet, and the admission stays in maintenance meanwhile
+		const afterState = j !== null && j.info.archive === STATE_RESTORE && j.step === "checked";
+		if (j !== null && j.info.archive !== archive && !afterState) throw new Error(`another restore is open (${String(j.info.archive)}); complete it first`);
+		if (j === null || afterState) {
 			state.journalRestore("intent", { archive });
 			state.beginModeTransition("maintenance");
 			state.completeModeTransition();
