@@ -18,8 +18,10 @@ export type FsLimits = {
 	maxPathBytes: number;
 	/** One file's contents, in bytes. A read holds them in memory inside the tenant queue (section 6.1). */
 	maxFileBytes: number;
-	/** Children of one directory, and so entries of one `list` reply. */
+	/** Children of one directory; `listPage` lists more than one reply holds. */
 	maxDirEntries: number;
+	/** Entries of one `list` or `listPage` reply: `list` refuses a larger directory, `listPage` pages it. */
+	maxListPage: number;
 	/** Direct grants on one target, and so tuples of one `listGrants` reply. */
 	maxGrantsPerTarget: number;
 	/** Bytes of one listing reply (`list`, `listGrants`, the admin lists); a read's contents are bounded by maxFileBytes. */
@@ -91,6 +93,7 @@ export const DEFAULT_FS_LIMITS: FsLimits = {
 	maxPathBytes: 4096,
 	maxFileBytes: 16 * 1024 * 1024,
 	maxDirEntries: 256,
+	maxListPage: 256,
 	maxGrantsPerTarget: 64,
 	maxReplyBytes: 1024 * 1024,
 	maxActors: 1000,
@@ -132,7 +135,7 @@ export function assertLimitsFit(fs: FsLimits, space: Pick<Limits, "maxEntryBytes
 	// a creating save adds a node, a content row, a receipt and an audit row in one commit (an audit row names IDs only)
 	const save = node + 4 * ROW_OVERHEAD;
 	if (save > space.maxCommitBytes) fail("a save", save, space.maxCommitBytes);
-	const list = fs.maxDirEntries * (worstJsonString(fs.maxNameBytes) + ID_JSON + 64);
+	const list = fs.maxListPage * (worstJsonString(fs.maxNameBytes) + ID_JSON + 64);
 	if (list > fs.maxReplyBytes) fail("a full directory listing", list, fs.maxReplyBytes);
 	const workspaces = fs.maxWorkspaces * (worstJsonString(fs.maxNameBytes) + 8);
 	if (workspaces > fs.maxReplyBytes) fail("a full workspace listing", workspaces, fs.maxReplyBytes);

@@ -52,6 +52,7 @@ export const FILE_OPS: Record<string, Op> = {
 	workspaces: (s, h) => s.workspaces(h),
 	issueOperationIds: (s, h, a) => s.issueOperationIds(h, a.count),
 	list: (s, h, a) => s.list(h, a.workspace, a.path),
+	listPage: (s, h, a) => s.listPage(h, a.workspace, a.path, a.cursor ?? null, a.limit ?? null) as Promise<Json>,
 	read: async (s, h, a) => {
 		const { bytes, version } = await s.read(h, a.workspace, a.path);
 		return { contents: bytes.toString("base64"), version };

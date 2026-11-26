@@ -171,6 +171,7 @@ Every tenant file or admin mutation carries an operation ID that the service has
 | listGrants(workspace, path) | Owner on the target | Return the direct relation tuples on that target in deterministic order. Bounded like `list`. |
 | move(workspace, path, toWorkspace, toPath, operationId) | Owner on the node, editor on its parent and on the destination's parent | Move or rename a file or directory, within its workspace or into another of the tenant (below, *Move and delete*). |
 | remove(workspace, path, expectedVersion, operationId) | Editor on the node and its parent; owner on the root for "." | Remove a file or an empty directory, or with "." an empty workspace that is no live actor's home (below). |
+| listPage(workspace, path, cursor, limit) | Viewer on the directory | One page of `list` in name order, at most `maxListPage` entries, with the cursor of the next page or null (below, *Scale*). |
 | restrict(workspace, path, operationId) / unrestrict(…) | Owner on the target | Set or lift the restriction of a node below its workspace root (section 4, restricted children). Idempotent with a receipt and audit row; a workspace root gives `invalidInput`. |
 
 **Move and delete (decided 2026-11-26).**
@@ -181,6 +182,11 @@ Every tenant file or admin mutation carries an operation ID that the service has
 - *Workspaces.* A workspace is removed with "." when it is empty and is no enabled or disabled actor's home: a home goes with its actor's deletion. Its root's grants go with it; the name is free again.
 - *Retries.* Both authorize a retry by the parents, which stay in place, and then answer from the receipt, so a lost reply is recovered after the node has moved or gone. A removed workspace has no parent: its remover's receipt answers the retry.
 - No new error code: the refusals use `invalidInput`, `alreadyExists`, `versionConflict`, `capacityExceeded`, `notFound` and `permissionDenied`.
+
+**Scale (decided 2026-11-26).** Measured first with the workload fixture (operator guide, section 8): traversal costs about 3.5 lookups per directory level (85 at depth 24, against a budget of 512); queue wait follows the callers per tenant, and many busy tenants lengthen each other's run time through the shared store.
+- *No decision cache.* The traversal is cheap at the measured depths, and a cache would need an invalidation that sees every revocation, membership removal, restriction and move before the next admitted operation. Section 4's "no decision cache" stays.
+- *Paginated listings.* `list` stays one reply and refuses a directory larger than `maxListPage` with `capacityExceeded`. `listPage` returns at most `maxListPage` entries in name order and a cursor. Every page is an operation of its own: it resolves the path and the caller's access afresh in the tenant queue, so after a revocation, a restriction or a move away the next page answers `notFound` like a first call. The cursor is the last name returned with a MAC over the tenant, the actor, the directory's node ID and that name, keyed per process: another actor's or another directory's cursor, a changed one and one from before a restart are `invalidInput` ("list from the start"). A page holds the names after the cursor as they are when it is read. `maxDirEntries` may then exceed one reply; each page still reads the whole directory, so it stays in the thousands.
+- *A store per tenant* is not introduced: the measurements show the shared store lengthening run times only with many busy tenants at once, below the latencies the pilot accepts. The operator guide says which counter shows when that changes.
 
 **Admin operations** (admin adapter; they require `tenant#admin` and pass through the tenant queue; mutations carry operation IDs like file mutations):
 
@@ -367,6 +373,6 @@ Several facts must survive a restore of the data store unchanged, so they cannot
 - **Network agent hosts.** Authenticate agent hosts on other machines with the exported key proof (`ProvingService` with a key directory, enrollment by `createEnroll`) over TLS, and define how the enrolled peer ID becomes `enrolledHostPeerId`.
 - **Separate Space process, Rust and servers.** Move the Space into a process of its own like the other applications, port it to a Rust space server, and only then consider big or nano (R-D12).
 - **Multiple authorities or replicas.** Specify fencing, promotion, causal revision tokens, minimum-revision reads and recovery before relaxing single-owner admission. Use the revocation and retry scenarios against a real handover as the acceptance gate. [Federation plan](federation-plan-v3.en.md)
-- **Scale.** Measure tenant queue wait and relationship traversal first. Introduce caching or paginated listings only with a defined invalidation and cursor policy that rechecks access after a revocation. Consider a store per tenant if store-wide suspension (section 6.1) proves too coarse.
+- **Scale.** Measure tenant queue wait and relationship traversal first. Introduce caching or paginated listings only with a defined invalidation and cursor policy that rechecks access after a revocation. Consider a store per tenant if store-wide suspension (section 6.1) proves too coarse. *Done 2026-11-26, section 5 (Scale): measured, paginated listings, no cache, no store per tenant yet.*
 
 The diagrams are rendered from the Graphviz sources in `docs/img/src/` (see `style.inc` there).

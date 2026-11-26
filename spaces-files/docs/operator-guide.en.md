@@ -263,3 +263,32 @@ run time and the per-operation latencies are bucket bounds: the true value lies 
 | Outcomes | 1022 reads, 546 saves, 62 version conflicts among concurrent saves of one file, 228 listings, 47 directories |
 
 These figures describe this machine and this mix. They are not limits and not a promise.
+
+**Scale measurements (2026-11-26).** The same fixture with 1500 operations and seed 1, varying one parameter at a
+time, on the same machine (plan section 8, scale). Queue wait and run time are bucket bounds or the measured maximum;
+"lookups" are the evaluator's lookups per decision, mean / max.
+
+| Tenants | Users | Depth | Files | Concurrency | Ops/s | Queue wait p50 / p99 (ms) | Run time p50 / p99 / max (ms) | Lookups mean / max |
+|---|---|---|---|---|---|---|---|---|
+| 4 | 4 | 4 | 8 | 8 | 315 | ≤ 5 / 75 | ≤ 5 / 46 / 46 | 24 / 25 |
+| 4 | 4 | 24 | 8 | 8 | 226 | ≤ 5 / 100 | ≤ 5 / 50 / 55 | 84 / 85 |
+| 4 | 4 | 4 | 200 | 8 | 303 | ≤ 5 / 100 | ≤ 5 / 50 / 82 | 23 / 25 |
+| 16 | 4 | 4 | 8 | 32 | 443 | ≤ 1 / 287 | ≤ 10 / 100 / 112 | 24 / 25 |
+| 1 | 16 | 4 | 8 | 32 | 344 | ≤ 100 / 130 | ≤ 2 / 20 / 21 | 36 / 37 |
+
+What they show:
+
+- Relationship traversal grows by about 3.5 lookups per directory level and stays far inside the decision budget
+  (512) at depth 24; a decision's run time does not rise with depth beyond the extra lookups. A decision cache would
+  save little and needs an invalidation that sees every revocation, so there is none.
+- Queue wait follows the number of callers per tenant: one tenant with 32 callers waits about 100 ms while each
+  operation runs about 2 ms, because one tenant runs one operation at a time by design (plan section 6.1).
+- Many tenants side by side do not wait in their queues but run longer (p99 100 ms with 16 tenants and 32 callers):
+  they share one store and its writer. This is where a store per tenant would help; it is not needed at these figures.
+  Watch `queueRun` in `metrics` across tenants: when its p99 stays above a few hundred milliseconds while each tenant's
+  queue is short, the shared store is the limit.
+
+**Large directories.** `maxDirEntries` bounds a directory, `maxListPage` (default 256) one listing reply. `list`
+refuses a directory larger than one reply; `listPage` lists it page by page, and the page and the agent tool do so
+always. Raising `maxDirEntries` above `maxListPage` makes larger directories possible; each page reads the whole
+directory inside the tenant queue, so keep it at a few thousand.

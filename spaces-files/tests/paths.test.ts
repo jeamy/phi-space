@@ -62,7 +62,8 @@ test("the request digest: canonical arguments, operation name included, contents
 
 test("the limits fit the Space's limits in their worst case, and rows are measured exactly", async () => {
 	assertLimitsFit(L, DEFAULT_LIMITS);
-	assert.throws(() => assertLimitsFit({ ...L, maxDirEntries: 100_000 }, DEFAULT_LIMITS), /directory listing/);
+	assert.throws(() => assertLimitsFit({ ...L, maxListPage: 100_000 }, DEFAULT_LIMITS), /directory listing/);
+	assertLimitsFit({ ...L, maxDirEntries: 4096 }, DEFAULT_LIMITS); // a directory larger than one reply is listed by pages
 	assert.throws(() => assertLimitsFit(L, { ...DEFAULT_LIMITS, maxCommitBytes: 3 * 1024 }), /a save/);
 	assert.throws(() => assertLimitsFit({ ...L, maxTenantBytes: 62 * 1024 * 1024 }, DEFAULT_LIMITS), /audit reserve/);
 	assert.throws(() => assertLimitsFit({ ...L, maxFileBytes: L.maxContentBytes + 1 }, DEFAULT_LIMITS), /content quota/);

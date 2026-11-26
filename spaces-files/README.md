@@ -264,6 +264,7 @@ Section 8 of the plan, item by item, each decided in the plan and built after th
 |---|---|---|
 | Nested groups: group members may be another group's members, bounded by `maxGroupDepth`, cycles refused on write and `inconsistentState` when stored | section 4, *Nested groups* | `tests/nested-groups.test.ts` |
 | Move and delete: `move` keeps the node ID with versions, blobs, grants and restriction, inheritors of the old place lose it at once; `remove` takes files, empty directories and empty workspaces with their content, grants and blob, through crashes at the commit | section 5, *Move and delete* | `tests/move-remove.test.ts`, `tests/agent-socket.test.ts` |
+| Scale: measured (operator guide, section 8); `listPage` pages a directory in name order, every page rechecks access, the cursor is bound to tenant, actor and directory; no decision cache, no store per tenant yet | section 5, *Scale* | `tests/scale.test.ts`, `tests/agent-socket.test.ts` |
 | Restricted children: an owner restricts a node below the root; viewers and editors above lose it at once unless they hold a grant on it, owners above keep it; `list` leaves hidden children out | section 4, *Restricted children*; section 5 | `tests/restricted.test.ts` |
 
 ## Commands

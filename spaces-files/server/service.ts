@@ -2,6 +2,7 @@
 // process opens phi-spaces' own SQLite store, which holds an exclusive owner lock beside the file (a second process is
 // refused, a crash releases it), runs the reaper and gives each tenant a private named Space reached only through its
 // queue. Nothing here serves a Space to anyone: the tenant Spaces are never exposed.
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, statSync, writeSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
@@ -143,6 +144,8 @@ export class FilesService {
 	readonly #settled = new Set<string>();
 	readonly #saveLeaseMs: number;
 	readonly #fault: (point: FaultPoint) => void | Promise<void>;
+	/** Signs listing cursors; a new one per process, so a cursor does not outlive a restart. */
+	readonly #cursorKey = randomBytes(32);
 	#closed = false;
 
 	private constructor(host: OwnStoreHost, state: DeploymentState, blobs: BlobStore, stopService: () => Promise<void>, storePath: string | null, o: FilesServiceOptions) {
@@ -421,8 +424,8 @@ export class FilesService {
 		return this.#session("maintenance", handle, async (s, space) => {
 			const node = await this.#maintenanceTarget(s, space, "maintenanceList", workspace, path);
 			if (node.kind !== "dir") throw new schema.InvalidInput("maintenanceList needs a directory");
-			const kids = await space.readAll({ type: schema.T.node, fields: { parentId: node.nodeId } }, { limit: this.limits.maxDirEntries + 1 });
-			if (kids.length > this.limits.maxDirEntries) throw new schema.CapacityExceeded(`a directory holds more than ${this.limits.maxDirEntries} entries`);
+			const kids = await space.readAll({ type: schema.T.node, fields: { parentId: node.nodeId } }, { limit: this.limits.maxListPage + 1 });
+			if (kids.length > this.limits.maxListPage) throw new schema.CapacityExceeded(`a directory holds more than ${this.limits.maxListPage} entries`);
 			return kids.map((k) => ({ name: k.fields.name as string, kind: k.fields.kind as "dir" | "file" })).sort((a, b) => byName(a.name, b.name));
 		});
 	}
@@ -720,22 +723,61 @@ export class FilesService {
 		});
 	}
 
-	/** The immediate children of a visible directory, in name order (viewer on it). No partial listing. */
+	/** The immediate children of a visible directory, in name order (viewer on it). No partial listing: a directory with
+	 *  more than `maxListPage` children is `capacityExceeded` here and is listed by `listPage`. */
 	list(handle: unknown, workspace: unknown, path: unknown): Promise<ListEntry[]> {
 		return this.withSession(handle, async (s, space) => {
-			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
-			const segs = parsePath(path, "list", this.limits);
-			const d = spaceData(space);
-			const r = await resolve(d, s, ws, segs, { limits: this.limits });
-			if (r.node.kind !== "dir") throw new schema.InvalidInput("list needs a directory");
-			const kids = await space.readAll({ type: schema.T.node, fields: { parentId: r.node.nodeId } }, { limit: this.limits.maxDirEntries + 1 });
-			if (kids.length > this.limits.maxDirEntries) throw new schema.CapacityExceeded(`a directory holds more than ${this.limits.maxDirEntries} entries`);
-			const restricted = await this.#restrictedChildren(space, r.node.nodeId);
-			const hidden = await hiddenChildren(d, s, r, restricted, { limits: this.limits });
-			return kids.filter((k) => !hidden.has(k.fields.nodeId as string))
-				.map((k): ListEntry => ({ name: k.fields.name as string, kind: k.fields.kind as "dir" | "file", ...(restricted.includes(k.fields.nodeId as string) ? { restricted: true as const } : {}) }))
-				.sort((a, b) => byName(a.name, b.name));
+			const { entries } = await this.#listing(s, space, workspace, path);
+			if (entries.length > this.limits.maxListPage) throw new schema.CapacityExceeded(`a directory with more than ${this.limits.maxListPage} entries is listed by pages (listPage)`);
+			return entries.map((e) => e.entry);
 		});
+	}
+
+	/**
+	 * One page of a directory's children in name order (viewer on it; section 5, scale). Each page resolves the path and
+	 * the caller's access afresh inside the tenant queue, so a page after a revocation, a restriction or a move away
+	 * answers like the first call would (`notFound`). The cursor is the last name returned, bound by a MAC to the
+	 * tenant, the actor and the directory's node ID: another actor's cursor, another directory's or one from before a
+	 * restart is `invalidInput`. A page holds the names after the cursor as they are when it is read, so an entry
+	 * created or moved in between appears on a later page exactly when its name sorts after the cursor.
+	 */
+	listPage(handle: unknown, workspace: unknown, path: unknown, cursor: unknown, limit: unknown): Promise<{ entries: ListEntry[]; next: string | null }> {
+		return this.withSession(handle, async (s, space) => {
+			const n = limit === undefined || limit === null ? this.limits.maxListPage : limit;
+			if (!Number.isSafeInteger(n) || (n as number) < 1 || (n as number) > this.limits.maxListPage) throw new schema.InvalidInput(`limit is 1 to ${this.limits.maxListPage}`);
+			const { dirId, entries } = await this.#listing(s, space, workspace, path);
+			let after: string | null = null;
+			if (cursor !== undefined && cursor !== null) {
+				const c = typeof cursor === "string" ? /^([A-Za-z0-9_-]{43})\.(.*)$/su.exec(cursor) : null;
+				if (c === null || !timingSafeEqual(Buffer.from(c[1]), Buffer.from(this.#cursorMac(s, dirId, c[2])))) throw new schema.InvalidInput("a stale or foreign cursor: list from the start");
+				after = c[2];
+			}
+			const rest = after === null ? entries : entries.filter((e) => byName(e.entry.name, after!) > 0);
+			const page = rest.slice(0, n as number).map((e) => e.entry);
+			const last = page.at(-1)?.name;
+			return { entries: page, next: rest.length > page.length && last !== undefined ? `${this.#cursorMac(s, dirId, last)}.${last}` : null };
+		});
+	}
+
+	#cursorMac(s: Session, dirId: string, name: string): string {
+		return createHmac("sha256", this.#cursorKey).update(JSON.stringify([s.tenantId, s.actorKind, s.actorId, dirId, name])).digest("base64url");
+	}
+
+	/** A visible directory's children the caller reaches, in name order, bounded by `maxDirEntries`. */
+	async #listing(s: Session, space: PhiSpaces, workspace: unknown, path: unknown): Promise<{ dirId: string; entries: Array<{ entry: ListEntry }> }> {
+		const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+		const segs = parsePath(path, "list", this.limits);
+		const d = spaceData(space);
+		const r = await resolve(d, s, ws, segs, { limits: this.limits });
+		if (r.node.kind !== "dir") throw new schema.InvalidInput("list needs a directory");
+		const kids = await space.readAll({ type: schema.T.node, fields: { parentId: r.node.nodeId } }, { limit: this.limits.maxDirEntries + 1 });
+		if (kids.length > this.limits.maxDirEntries) throw new schema.CapacityExceeded(`a directory holds more than ${this.limits.maxDirEntries} entries`);
+		const restricted = await this.#restrictedChildren(space, r.node.nodeId);
+		const hidden = await hiddenChildren(d, s, r, restricted, { limits: this.limits });
+		const entries = kids.filter((k) => !hidden.has(k.fields.nodeId as string))
+			.map((k): ListEntry => ({ name: k.fields.name as string, kind: k.fields.kind as "dir" | "file", ...(restricted.includes(k.fields.nodeId as string) ? { restricted: true as const } : {}) }))
+			.sort((a, b) => byName(a.name, b.name)).map((entry) => ({ entry }));
+		return { dirId: r.node.nodeId, entries };
 	}
 
 	/** A file's bytes and version, from the same ordered operation (viewer on the file). The whole blob is read and

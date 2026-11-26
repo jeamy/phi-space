@@ -65,6 +65,10 @@ export class FilesAgentClient {
 
 	workspaces(): Promise<string[]> { return this.call("workspaces"); }
 	list(workspace: string, path: string): Promise<Array<{ name: string; kind: "dir" | "file" }>> { return this.call("list", { workspace, path }); }
+	/** One page of a directory in name order; pass `next` back as `cursor` until it is null. */
+	listPage(workspace: string, path: string, cursor: string | null = null, limit?: number): Promise<{ entries: Array<{ name: string; kind: "dir" | "file"; restricted?: true }>; next: string | null }> {
+		return this.call("listPage", { workspace, path, cursor, ...(limit === undefined ? {} : { limit }) });
+	}
 	async read(workspace: string, path: string): Promise<{ bytes: Buffer; version: number }> {
 		const r = await this.call<{ contents: string; version: number }>("read", { workspace, path });
 		return { bytes: Buffer.from(r.contents, "base64"), version: r.version };
@@ -122,9 +126,12 @@ export function filesTools(client: FilesAgentClient): FilesTool[] {
 		},
 		{
 			name: "fs_list",
-			description: "List the entries of a directory.",
-			parameters: { type: "object", properties: { workspace: WS, path: PATH }, required: ["workspace", "path"], additionalProperties: false },
-			execute: safe(async (a) => ({ entries: await client.list(a.workspace as string, a.path as string) })),
+			description: "List the entries of a directory. A large directory comes in pages: when the result has next, call again with cursor set to it.",
+			parameters: { type: "object", properties: { workspace: WS, path: PATH, cursor: str("the next of the previous page") }, required: ["workspace", "path"], additionalProperties: false },
+			execute: safe(async (a) => {
+				const p = await client.listPage(a.workspace as string, a.path as string, (a.cursor as string | undefined) ?? null);
+				return p.next === null ? { entries: p.entries } : { entries: p.entries, next: p.next };
+			}),
 		},
 		{
 			name: "fs_read",

@@ -110,10 +110,17 @@ async function showDir() {
 	$("grants-box").hidden = workspace === null;
 	if (workspace === null) { $("where").textContent = ""; return; }
 	$("where").textContent = `${workspace}/${dir.join("/")}`;
-	const r = await call<Entry[]>("list", { workspace, path: pathOf(dir) });
-	if (!r.ok) { entries.append(text(r.error.code === "notFound" ? "Not found." : r.error.message)); return; }
+	// page by page: each page rechecks access, so a revocation in between ends the listing with notFound
+	const all: Entry[] = [];
+	let cursor: string | null = null;
+	do {
+		const r: Reply<{ entries: Entry[]; next: string | null }> = await call("listPage", { workspace, path: pathOf(dir), cursor });
+		if (!r.ok) { entries.append(text(r.error.code === "notFound" ? "Not found." : r.error.message)); return; }
+		all.push(...r.value.entries);
+		cursor = r.value.next;
+	} while (cursor !== null);
 	if (dir.length) entries.append(li("..", () => { dir = dir.slice(0, -1); void showDir(); }));
-	for (const e of r.value) entries.append(li(`${e.kind === "dir" ? `${e.name}/` : e.name}${e.restricted ? " (restricted)" : ""}`, () => {
+	for (const e of all) entries.append(li(`${e.kind === "dir" ? `${e.name}/` : e.name}${e.restricted ? " (restricted)" : ""}`, () => {
 		if (e.kind === "dir") { dir = [...dir, e.name]; void showDir(); } else void openFile([...dir, e.name]);
 	}));
 	await showGrants();
