@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-spaces-files is a filesystem on phi-spaces for **people and individual agent instances**. Both work on the same files, each under an identity of its own and with rights of its own. The rights follow the model of Google's Zanzibar: they are relationships ("group North is editor of dispatch"), evaluated afresh on every operation, and a revocation holds for every later check.
+spaces-files is a filesystem on phi-spaces for **people and individual agent instances**. Both work on the same files, each under an identity of its own and with rights of its own. The rights follow the model of Google's Zanzibar: they are relationships ("group North is editor of dispatch"), evaluated afresh on every operation, and a revocation holds for every later check. What is adopted from Zanzibar and what is solved differently is under [Zanzibar: starting point and implementation](help.topic.spaces_files#zanzibar).
 
 | Question | In short |
 |---|---|
@@ -81,6 +81,38 @@ The tenant's space holds actors, nodes (directories, files), relations, receipts
 
 The service and its space process are separate processes; the space process exists in TypeScript and in Rust (`files-space`). Backups are encrypted archives, one for the data and one for the deployment state (sessions, keys, passwords). A restore advances the session epoch, so no old session survives. For a second site there is a standby with fencing and promotion; it is tested but not switched on on big.
 
+## Zanzibar: starting point and implementation {#zanzibar}
+
+### Starting point {#zanzibar-origin}
+
+**Zanzibar** is Google's authorization system, described in 2019 in the paper *Zanzibar: Google's Consistent, Global Authorization System* (USENIX ATC). It decides who may do what for services such as Drive, Calendar, Photos and YouTube. Its core ideas:
+
+- **Rights are relation tuples** of the form `object#relation@subject`, e.g. `doc:brief#editor@user:lea`. The subject can itself be a set (`group:north#member`); that gives groups and nested groups.
+- **Rules derive rights** ("userset rewrites"): an editor is also a viewer; whoever has rights on a folder has them on its contents.
+- **Every request is checked afresh** (Check) instead of copying rights into sessions or tokens.
+- **Consistency against the "new enemy problem":** if someone loses a right and new content is added afterwards, they must never see the new content. Zanzibar orders changes and checks by Spanner timestamps and hands clients "zookies" that fix a minimum freshness for later checks.
+
+The second starting point is **Zontally's agent filesystem** (the blog post "Why we built a Zanzibar agent filesystem"): every authenticated session gets a home of its own, every operation evaluates the relationships afresh, and directory rights are inherited. From there come the automatically provisioned home per actor, the inherited directory rights and the separate identity of each agent instance.
+
+### What is adopted {#zanzibar-adopted}
+
+| Zanzibar | spaces-files |
+|---|---|
+| Relation tuples `object#relation@subject` | The same form, stored as entries in the tenant's space: objects tenant, group, directory, file; relations admin, member, owner, editor, viewer |
+| Usersets as subjects | `group:north#member` as the subject of a grant and as a member of another group |
+| Rewrite rules | Fixed in code: owner includes editor, editor includes viewer; rights are inherited through each node's parent reference up to the workspace root |
+| Check on every request | Every operation checks in its tenant's queue, in the same transaction as the change; no decision cache |
+| A revocation holds for every later check | A revocation takes effect with its commit; the next operation, even from an editor already open, sees it |
+
+### What is different {#zanzibar-different}
+
+- **Ordering without zookies.** Zanzibar is globally distributed and therefore needs timestamps and zookies. spaces-files has exactly one instance per tenant that admits operations, and one queue: every check comes after every earlier commit, so the new enemy problem cannot arise. For replicas, causal revision tokens are specified ("read nothing older than revision n"); they would only be needed if replicas served reads, and they do not.
+- **No freely configurable schema.** Zanzibar lets every service define its own namespaces and rules. Here the relations and their derivation are fixed; unknown relations and wrong subject-object pairs are refused when written.
+- **Bounded evaluation instead of a Leopard index.** Zanzibar speeds up deeply nested groups with an index of its own (Leopard). Here nesting is bounded (`maxGroupDepth`, default 4), cycles are refused when entered, and every decision has a work budget (otherwise `capacityExceeded`). Measured, one directory level costs about 3.5 lookups.
+- **Visibility per workspace.** Whoever has viewer on a workspace's root sees it; whoever does not gets the same answer for every path in it as for a path that does not exist (`notFound`). So a refusal does not reveal that something exists.
+- **Additional rules for a file service:** every workspace root keeps at least one direct owner, every tenant at least one administrator (`lastOwner`, `lastAdmin`); the tenant administrator role gives no file rights; an agent is bound to its agent host and its agent ID.
+- **Scale.** Zanzibar manages trillions of tuples for many services; spaces-files keeps each tenant's tuples in that tenant's own space on one host. Several hosts with tenants of their own are noted as a possible extension.
+
 ## Where it runs {#where}
 
 - **big:** one container (the service and the Rust space process) behind nginx at https://spaces-files.eibrain.org. Every day the encrypted backups go to nano, into an account that may add but not delete.
@@ -94,6 +126,7 @@ The service and its space process are separate processes; the space process exis
 
 ## Further reading {#further}
 
+- Sources: [the Zanzibar paper](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/), [Zontally's rationale](https://www.zontally.com/blogs/technical/why-we-built-a-zanzibar-agent-filesystem).
 - In the repository: `spaces-files/README.md` (state and evidence), `docs/zanzibar-agent-filesystem-plan.en.md` (plan and decisions), `spaces-files/docs/operator-guide.en.md` (operations).
 - [Apps on phi-spaces](help.topic.apps#files) puts the app beside the others.
 - [Leases and transactions](help.topic.leases_and_transactions#overview) explains the transactions every operation rests on.
