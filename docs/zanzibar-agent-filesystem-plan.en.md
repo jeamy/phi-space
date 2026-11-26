@@ -124,10 +124,18 @@ Read the arrows from actor to file. Lea can edit through North. The planning age
 **Visibility is decided per workspace.** To reach a node, an actor needs viewer on every directory along its path, starting at the workspace root. Viewer is inherited downward, so viewer on the root already gives viewer on every descendant. It follows that:
 
 - An actor sees either a whole workspace or none of it. A workspace is visible exactly when the actor has an effective viewer role on its root, through a direct or a group grant.
-- `list` never filters children: every child of a visible directory is visible.
+- `list` filters no children except restricted ones the actor does not reach (below): every other child of a visible directory is visible.
 - Grants below a workspace root can only raise rights to editor or owner. A viewer grant below the root would be redundant, because anyone who can reach the node already inherits viewer, so the validator rejects it with `invalidInput`.
 - An editor or owner grant below the root has no effect while its subject cannot see the workspace. It takes effect if the subject gains access later.
-- Private material belongs in a separate workspace, for example the actor's home. Hiding individual children of a visible directory would need a traversal-only relation or a different inheritance rule (section 8).
+- Private material belongs in a separate workspace, for example the actor's home, or in a restricted child (below).
+
+**Restricted children (decided 2026-11-26).** An owner of a node below a workspace root may restrict it (`restrict`, `unrestrict`; owner on the node, idempotent with a receipt; a workspace root is refused with `invalidInput`, it is a boundary already). The restriction is a marker relation `node:X#restricted@node:P`, P being X's parent, so a single lookup finds every restricted child of a directory; it confers nothing and `listGrants` does not show it. At a restricted node inheritance stops, except for owner:
+- The role on a restricted node is the role from grants on it, together with owner if owner was inherited from above. Viewer and editor from above do not pass. Below it, roles inherit again from that role.
+- An actor with no role there does not reach the node or anything below it: such a node answers like an absent path for every operation, and `list` leaves it out. The owners of the directories above always reach it, so no restriction can leave a node that nobody reaches as long as its workspace has an owner (the final-owner rule); restricted nodes need no direct owner of their own and `disableActor`/`deleteActor` are unchanged.
+- A viewer grant on a restricted node is allowed. A viewer grant below a restricted node is redundant like one below a workspace root (`invalidInput`). Editor and owner grants below a restricted node are inert while the actor does not reach it.
+- `list` marks a restricted child the caller reaches (`restricted: true`). The visibility rule above becomes: an actor sees a node when it reaches every boundary on its path (the workspace root and each restricted node), which per boundary means a role on it.
+- Names stay unique per directory, so a hidden child's name stays taken. A creation under that name answers `alreadyExists` with the same message whatever the hidden child is (no kind, no version); that a name is taken is all an editor of the directory learns, as with workspace names.
+- Restricting narrows access at once: it is ordered in the tenant queue like a revocation, and an operation admitted after it no longer reaches the node. Unlike a revocation it adds a row and is admitted on the ordinary budget, not on the security reserve: with the ordinary budget full, revoke grants instead.
 
 ![Lea owns her home lea; planner-17 owns its home and the shared workspace dispatch; North is editor on dispatch. Lea's workspace list contains dispatch only while she is in North.](img/zanzibar-workspaces.svg)
 
@@ -154,13 +162,14 @@ Every tenant file or admin mutation carries an operation ID that the service has
 |---|---|---|
 | workspaces() | Valid session | Return the names of the workspaces whose root the actor can view, in deterministic name order. Bound the number of workspaces per actor and the response like `list`; no partial success. |
 | issueOperationIds(count) | Valid session | Return exactly `count` signed operation IDs for this actor. Writes nothing. A count outside the published inclusive range gives `invalidInput`. Tenant administrators may also use this in maintenance mode. |
-| list(workspace, path) | Viewer on the directory | Return the immediate children in deterministic name order. Bound the response and directory cardinality in the pilot. No partial success when a limit is exceeded. |
+| list(workspace, path) | Viewer on the directory | Return the immediate children in deterministic name order, leaving out restricted children the actor does not reach and marking the others `restricted` (section 4). Bound the response and directory cardinality in the pilot. No partial success when a limit is exceeded. |
 | read(workspace, path) | Viewer on the file | Return the file's bytes and version from the same ordered operation. |
 | write(workspace, path, bytes, expectedVersion, operationId) | Editor on parent for version 0, editor on existing file for positive versions | Version 0 means create only. A positive expected version must match. Return the committed version. No implicit parent creation. |
 | mkdir(workspace, path, operationId) | Editor on the parent | Create exactly one directory. An existing child of either kind gives `alreadyExists`. |
 | grant(workspace, path, relation, subject, operationId) | Owner on the target | Add one validated tuple for an existing non-deleted user, agent or canonical group#member subject. An identical existing grant succeeds idempotently and records a receipt and audit row. |
 | revoke(workspace, path, relation, subject, operationId) | Owner on the target | Remove that exact tuple. A tuple that is not present succeeds idempotently and records a receipt and audit row. Preserve the final owner (section 4). |
 | listGrants(workspace, path) | Owner on the target | Return the direct relation tuples on that target in deterministic order. Bounded like `list`. |
+| restrict(workspace, path, operationId) / unrestrict(…) | Owner on the target | Set or lift the restriction of a node below its workspace root (section 4, restricted children). Idempotent with a receipt and audit row; a workspace root gives `invalidInput`. |
 
 **Admin operations** (admin adapter; they require `tenant#admin` and pass through the tenant queue; mutations carry operation IDs like file mutations):
 
@@ -342,7 +351,7 @@ Several facts must survive a restore of the data store unchanged, so they cannot
 
 - **Virtual files.** Start with one read-only provider under a reserved mount. Bind each provider call to the same tenant and actor, enforce the source application's permissions, and define timeout and freshness behavior before exposing data. A mounted file must never gain the service account's broader visibility.
 - **Move and delete.** Define source and destination rights, the inheritance changes of a moved subtree, cycles, the behavior of grants on stable IDs, and the deletion of workspaces. Test the loss of access immediately after moving a subtree.
-- **Restricted children.** If a visible directory must hide some children, add a traversal-only relation or a different inheritance rule. Rework section 4's visibility rule and the `list` contract before allowing it.
+- **Restricted children.** If a visible directory must hide some children, add a traversal-only relation or a different inheritance rule. Rework section 4's visibility rule and the `list` contract before allowing it. *Done 2026-11-26 as a different inheritance rule, section 4.*
 - **Nested groups.** Allow group subjects in group membership only with a depth bound and cycle detection in the evaluator. *Done 2026-11-26, section 4.*
 - **Network agent hosts.** Authenticate agent hosts on other machines with the exported key proof (`ProvingService` with a key directory, enrollment by `createEnroll`) over TLS, and define how the enrolled peer ID becomes `enrolledHostPeerId`.
 - **Separate Space process, Rust and servers.** Move the Space into a process of its own like the other applications, port it to a Rust space server, and only then consider big or nano (R-D12).

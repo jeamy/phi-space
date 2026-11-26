@@ -5,7 +5,7 @@
 import { afterLostReply, afterSave, dirty, edit, openDraft, operationIdFor, rebase, type Draft, type SaveOutcome } from "../client/draft.ts";
 
 type Reply<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string; currentVersion?: number } };
-type Entry = { name: string; kind: "dir" | "file" };
+type Entry = { name: string; kind: "dir" | "file"; restricted?: true };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 let csrf = "";
@@ -113,7 +113,7 @@ async function showDir() {
 	const r = await call<Entry[]>("list", { workspace, path: pathOf(dir) });
 	if (!r.ok) { entries.append(text(r.error.code === "notFound" ? "Not found." : r.error.message)); return; }
 	if (dir.length) entries.append(li("..", () => { dir = dir.slice(0, -1); void showDir(); }));
-	for (const e of r.value) entries.append(li(e.kind === "dir" ? `${e.name}/` : e.name, () => {
+	for (const e of r.value) entries.append(li(`${e.kind === "dir" ? `${e.name}/` : e.name}${e.restricted ? " (restricted)" : ""}`, () => {
 		if (e.kind === "dir") { dir = [...dir, e.name]; void showDir(); } else void openFile([...dir, e.name]);
 	}));
 	await showGrants();
@@ -122,6 +122,7 @@ async function showDir() {
 async function showGrants() {
 	const list = $("grants");
 	list.replaceChildren();
+	$("restrict-form").hidden = dir.length === 0;
 	const r = await call<Array<{ relation: string; subject: { kind: string; id: string; relation?: string } }>>("listGrants", { workspace, path: pathOf(dir) });
 	if (!r.ok) { list.append(text(r.error.code === "permissionDenied" ? "Only an owner sees the grants." : r.error.message)); return; }
 	for (const g of r.value) list.append(text(`${g.relation}: ${g.subject.kind}:${g.subject.id}${g.subject.relation ? "#" + g.subject.relation : ""}`));
@@ -235,6 +236,13 @@ $("grant-form").addEventListener("submit", (e) => {
 		const r = await call(submitter(e as SubmitEvent), { workspace, path: pathOf(dir), relation: val("grant-relation"), subject, operationId: await freshId() });
 		if (!r.ok) notify(r.error.message);
 		await showGrants();
+	})();
+});
+$("restrict-form").addEventListener("submit", (e) => {
+	e.preventDefault();
+	void (async () => {
+		const r = await call<{ status: string }>(submitter(e as SubmitEvent), { workspace, path: pathOf(dir), operationId: await freshId() });
+		notify(r.ok ? `${pathOf(dir)}: ${r.value.status}` : r.error.message);
 	})();
 });
 $("register").addEventListener("submit", (e) => {

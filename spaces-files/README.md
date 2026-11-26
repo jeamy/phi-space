@@ -263,6 +263,7 @@ Section 8 of the plan, item by item, each decided in the plan and built after th
 | Item | Decision in the plan | Test |
 |---|---|---|
 | Nested groups: group members may be another group's members, bounded by `maxGroupDepth`, cycles refused on write and `inconsistentState` when stored | section 4, *Nested groups* | `tests/nested-groups.test.ts` |
+| Restricted children: an owner restricts a node below the root; viewers and editors above lose it at once unless they hold a grant on it, owners above keep it; `list` leaves hidden children out | section 4, *Restricted children*; section 5 | `tests/restricted.test.ts` |
 
 ## Commands
 

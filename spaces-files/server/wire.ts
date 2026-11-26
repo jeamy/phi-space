@@ -61,6 +61,8 @@ export const FILE_OPS: Record<string, Op> = {
 	listGrants: (s, h, a) => s.listGrants(h, a.workspace, a.path) as Promise<Json>,
 	grant: (s, h, a) => s.grant(h, a.workspace, a.path, a.relation, a.subject, a.operationId),
 	revoke: (s, h, a) => s.revoke(h, a.workspace, a.path, a.relation, a.subject, a.operationId),
+	restrict: (s, h, a) => s.restrict(h, a.workspace, a.path, a.operationId),
+	unrestrict: (s, h, a) => s.unrestrict(h, a.workspace, a.path, a.operationId),
 };
 
 /** The admin operations of section 5 (an enabled tenant administrator; the service checks it): the browser only. */

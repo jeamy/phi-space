@@ -21,7 +21,7 @@ import { issueOperationIds, verifyOperationId, type VerifiedOpId } from "./opids
 import { lookupReceipt, PRUNE_BATCH, pruneReceipts, receiptRow, reserveReceipt, type Outcome } from "./receipts.ts";
 import { checkContents, parsePath, pathString } from "./paths.ts";
 import { contentDigest, requestDigest } from "./digest.ts";
-import { atLeast, checkGrant, checkLastAdmin, checkLastOwner, checkMembership, checkTenantAdmin, childNamed, listGroups, membersOf, resolve, spaceData, subjectRow, type NodeRow, type RelRow, type Subject } from "./policy.ts";
+import { atLeast, hiddenChildren, isRestricted, RESTRICTED, checkGrant, checkLastAdmin, checkLastOwner, checkMembership, checkTenantAdmin, childNamed, listGroups, membersOf, resolve, spaceData, subjectRow, type NodeRow, type RelRow, type Subject } from "./policy.ts";
 import type { BlobRef } from "./blobs.ts";
 import { assertSeparateDirs, prepareDataDir } from "./dirs.ts";
 import * as schema from "./schema.ts";
@@ -115,7 +115,7 @@ type OpClass = "file" | "admin" | "maintenance" | "issue";
 type AdmitSpec = { id: VerifiedOpId | null; operation: string; targets: string[]; rows: ReturnType<typeof schema.meta>[]; demand?: Demand; replaced?: ReturnType<typeof schema.meta>[]; pool?: "ordinary" | "security" };
 
 /** A directory entry as `list` returns it. */
-export type ListEntry = { name: string; kind: "dir" | "file" };
+export type ListEntry = { name: string; kind: "dir" | "file"; restricted?: true };
 
 /** A mutation whose commit outcome is unknown, until `resolveOutcomes` aborts its transaction (section 6.1); a save also
  *  names the blobs the content row then decides between. */
@@ -725,11 +725,16 @@ export class FilesService {
 		return this.withSession(handle, async (s, space) => {
 			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
 			const segs = parsePath(path, "list", this.limits);
-			const r = await resolve(spaceData(space), s, ws, segs, { limits: this.limits });
+			const d = spaceData(space);
+			const r = await resolve(d, s, ws, segs, { limits: this.limits });
 			if (r.node.kind !== "dir") throw new schema.InvalidInput("list needs a directory");
 			const kids = await space.readAll({ type: schema.T.node, fields: { parentId: r.node.nodeId } }, { limit: this.limits.maxDirEntries + 1 });
 			if (kids.length > this.limits.maxDirEntries) throw new schema.CapacityExceeded(`a directory holds more than ${this.limits.maxDirEntries} entries`);
-			return kids.map((k) => ({ name: k.fields.name as string, kind: k.fields.kind as "dir" | "file" })).sort((a, b) => byName(a.name, b.name));
+			const restricted = await this.#restrictedChildren(space, r.node.nodeId);
+			const hidden = await hiddenChildren(d, s, r, restricted, { limits: this.limits });
+			return kids.filter((k) => !hidden.has(k.fields.nodeId as string))
+				.map((k): ListEntry => ({ name: k.fields.name as string, kind: k.fields.kind as "dir" | "file", ...(restricted.includes(k.fields.nodeId as string) ? { restricted: true as const } : {}) }))
+				.sort((a, b) => byName(a.name, b.name));
 		});
 	}
 
@@ -793,6 +798,11 @@ export class FilesService {
 				if (done) return replay(done);
 				const name = segs[segs.length - 1];
 				const existing = await childNamed(d, parent.nodeId, name);
+				// a restricted child out of the caller's reach: the name is taken, and nothing more is said (not its kind)
+				if (existing && await isRestricted(d, existing.nodeId)) {
+					const parentR = await resolve(d, s, ws, segs.slice(0, -1), { limits: this.limits });
+					if ((await hiddenChildren(d, s, parentR, [existing.nodeId], { limits: this.limits })).size) throw new schema.AlreadyExists("a child of that name exists");
+				}
 				if (existing?.kind === "dir") throw new schema.AlreadyExists("a directory of that name exists");
 				// editor on the parent is inherited by the file: the caller may learn its version
 				if (existing) throw new schema.VersionConflict((await this.#contentRow(s.tenantId, space, existing)).version);
@@ -835,10 +845,17 @@ export class FilesService {
 		});
 	}
 
+	/** The restricted children of a directory: their markers name it as subject (one lookup, bounded). */
+	async #restrictedChildren(space: PhiSpaces, dirId: string): Promise<string[]> {
+		const rows = await space.readAll({ type: schema.T.relation, fields: { objectKind: "node", relation: RESTRICTED, subjectKind: "node", subjectId: dirId } }, { limit: this.limits.maxDirEntries + 1 });
+		if (rows.length > this.limits.maxDirEntries) throw new schema.CapacityExceeded(`a directory holds more than ${this.limits.maxDirEntries} entries`);
+		return rows.map((e) => e.fields.objectId as string);
+	}
+
 	async #grantsOn(space: PhiSpaces, nodeId: string): Promise<Array<{ relation: string; subject: Subject }>> {
 		const rels = await space.readAll({ type: schema.T.relation, fields: { objectKind: "node", objectId: nodeId } }, { limit: this.limits.maxGrantsPerTarget + 1 });
 		if (rels.length > this.limits.maxGrantsPerTarget) throw new schema.CapacityExceeded(`more than ${this.limits.maxGrantsPerTarget} grants on one target`);
-		return rels.map((e) => e.fields as unknown as RelRow).map((x) => ({ relation: x.relation, subject: subjectOf(x) }))
+		return rels.map((e) => e.fields as unknown as RelRow).filter((x) => x.relation !== RESTRICTED).map((x) => ({ relation: x.relation, subject: subjectOf(x) }))
 			.sort((a, b) => byName(a.relation, b.relation) || byName(a.subject.kind, b.subject.kind) || byName(a.subject.id, b.subject.id));
 	}
 
@@ -898,6 +915,53 @@ export class FilesService {
 			await this.#commitMutation(s, space, id, op, [target], rows, null, [{ type: schema.T.relation, fields: { ...tuple } }]);
 			return { status: "revoked" };
 		}
+	}
+
+	/**
+	 * Restricts a node below its workspace root (section 4, restricted children; owner on it): inheritance stops there
+	 * except for owner, so the node and everything below it leave the view of every viewer and editor of the directories
+	 * above who holds no grant on it, at once. `unrestrict` lifts it (owner on it). Both are idempotent with a receipt;
+	 * a workspace root is a boundary already (`invalidInput`).
+	 */
+	restrict(handle: unknown, workspace: unknown, path: unknown, operationId: unknown): Promise<{ status: "restricted" | "unchanged" }> {
+		return this.#putRestriction("restrict", handle, workspace, path, operationId) as Promise<{ status: "restricted" | "unchanged" }>;
+	}
+	unrestrict(handle: unknown, workspace: unknown, path: unknown, operationId: unknown): Promise<{ status: "unrestricted" | "unchanged" }> {
+		return this.#putRestriction("unrestrict", handle, workspace, path, operationId) as Promise<{ status: "unrestricted" | "unchanged" }>;
+	}
+
+	#putRestriction(op: "restrict" | "unrestrict", handle: unknown, workspace: unknown, path: unknown, operationId: unknown): Promise<{ status: string }> {
+		return this.withSession(handle, async (s, space) => {
+			const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
+			const segs = parsePath(path, op, this.limits);
+			const id = verifyOperationId(this.state, s, operationId, this.limits);
+			const d = spaceData(space);
+			const r = await resolve(d, s, ws, segs, { limits: this.limits });
+			if (!atLeast(r.role, "owner")) throw new schema.PermissionDenied(`${op} needs owner on the target`);
+			if (r.parent === null) throw new schema.InvalidInput("a workspace root is not restricted: it is a boundary already");
+			const digest = requestDigest(op, { workspace: ws, path: pathString(segs) });
+			const done = await lookupReceipt(space, s, id.operationId, digest);
+			if (done) return { status: done.status as string };
+			const marker = schema.relation("node", r.node.nodeId, RESTRICTED, "node", r.parent.nodeId);
+			const present = await isRestricted(d, r.node.nodeId);
+			const target = r.node.nodeId;
+			if (op === "restrict" && !present) {
+				const rows = [marker, receiptRow(s, id, digest, { status: "restricted" })];
+				await this.#admitRows(s, space, { id, operation: op, targets: [target], rows, demand: { relations: 1, grantsOn: { nodeId: target, n: 1 } } });
+				await this.#commitMutation(s, space, id, op, [target], rows, null);
+				return { status: "restricted" };
+			}
+			if (op === "unrestrict" && present) {
+				const rows = [receiptRow(s, id, digest, { status: "unrestricted" })];
+				await this.#admitRows(s, space, { id, operation: op, targets: [target], rows });
+				await this.#commitMutation(s, space, id, op, [target], rows, null, [{ type: schema.T.relation, fields: { ...(marker.fields as Record<string, string>) } }]);
+				return { status: "unrestricted" };
+			}
+			const rows = [receiptRow(s, id, digest, { status: "unchanged" })];
+			await this.#admitRows(s, space, { id, operation: op, targets: [target], rows });
+			await this.#commitMutation(s, space, id, op, [target], rows, null);
+			return { status: "unchanged" };
+		});
 	}
 
 	/**

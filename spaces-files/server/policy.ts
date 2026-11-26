@@ -111,12 +111,30 @@ const subjectKey = (r: RelRow): string => r.subjectKind === "group" ? `group:${r
 
 const grantsOn = (d: PolicyData, nodeId: string, o: Options) => bounded((l) => d.relationsOn("node", nodeId, l), lim(o).maxGrantsPerTarget, "grants on one target");
 
-/** The highest role the subjects hold by grants directly on one node. */
+/** The marker relation of a restricted node (section 4, restricted children): `node:X#restricted@node:P`, P the
+ *  parent of X, so that one lookup finds every restricted child of a directory. It is no grant and confers nothing. */
+export const RESTRICTED = "restricted";
+
+/** The highest role the subjects hold by grants directly on one node, and whether the node is restricted. */
+async function onNode(d: PolicyData, nodeId: string, subjects: Set<string>, o: Options): Promise<{ role: Role | null; restricted: boolean }> {
+	let role: Role | null = null, restricted = false;
+	for (const r of await grantsOn(d, nodeId, o)) {
+		if (r.relation === RESTRICTED) restricted = true;
+		else if (r.relation in RANK && subjects.has(subjectKey(r))) role = max(role, r.relation as Role);
+	}
+	return { role, restricted };
+}
 async function directRole(d: PolicyData, nodeId: string, subjects: Set<string>, o: Options): Promise<Role | null> {
-	let role: Role | null = null;
-	for (const r of await grantsOn(d, nodeId, o))
-		if (r.relation in RANK && subjects.has(subjectKey(r))) role = max(role, r.relation as Role);
-	return role;
+	return (await onNode(d, nodeId, subjects, o)).role;
+}
+
+/**
+ * The role on a node from the role inherited from its parent: at a restricted node inheritance stops except for
+ * owner, so the node is reached only by its owners above and by whoever holds a grant on it or (through it) below.
+ */
+async function step(d: PolicyData, inherited: Role | null, nodeId: string, subjects: Set<string>, o: Options): Promise<Role | null> {
+	const here = await onNode(d, nodeId, subjects, o);
+	return max(here.restricted ? (inherited === "owner" ? "owner" : null) : inherited, here.role);
 }
 
 export type Resolved = { root: NodeRow; node: NodeRow; parent: NodeRow | null; role: Role };
@@ -152,7 +170,9 @@ export async function resolve(data: PolicyData, actor: ActorRef, workspace: stri
 		const next = await only(d, node.nodeId, seg);
 		if (next === null) throw new NotFound();
 		parent = node; node = next;
-		role = max(role, await directRole(d, node.nodeId, subjects, o))!;
+		const r = await step(d, role, node.nodeId, subjects, o);
+		if (r === null) throw new NotFound();             // a restricted node the actor does not reach
+		role = r;
 	}
 	return { root, node, parent, role };
 }
@@ -184,8 +204,22 @@ export async function roleOn(data: PolicyData, actor: ActorRef, nodeId: string, 
 	const root = chain.at(-1)!;
 	let role = await directRole(d, root.nodeId, subjects, o);
 	if (role === null) return { role: null, chain };
-	for (const n of chain.slice(0, -1)) role = max(role, await directRole(d, n.nodeId, subjects, o));
+	for (const n of chain.slice(0, -1).reverse()) { role = await step(d, role, n.nodeId, subjects, o); if (role === null) return { role: null, chain }; }
 	return { role, chain };
+}
+
+/**
+ * The children of a resolved directory the actor does not reach: the restricted ones on which it holds no role
+ * (owners of the directory reach them all). `list` leaves them out, so a hidden child reads like an absent one.
+ * `restricted` lists the directory's restricted children (one lookup, bounded by `maxDirEntries`).
+ */
+export async function hiddenChildren(data: PolicyData, actor: ActorRef, dir: Resolved, restricted: string[], o: Options = {}): Promise<Set<string>> {
+	const hidden = new Set<string>();
+	if (restricted.length === 0 || dir.role === "owner") return hidden;
+	const d = charged(data, workOf(o));
+	const subjects = await subjectsOf(d, actor, o);
+	for (const id of restricted) if ((await directRole(d, id, subjects, o)) === null) hidden.add(id);
+	return hidden;
 }
 
 // --- validation -------------------------------------------------------------------------------------------------
@@ -203,6 +237,11 @@ export function checkShape(r: RelRow): void {
 export const subjectRow = (s: Subject): Pick<RelRow, "subjectKind" | "subjectId" | "subjectRelation"> =>
 	s.kind === "group" ? { subjectKind: "group", subjectId: groupId(s.id), subjectRelation: "member" } : { subjectKind: s.kind, subjectId: s.id, subjectRelation: DIRECT };
 
+/** Whether a node carries the restriction marker. */
+export async function isRestricted(d: PolicyData, nodeId: string): Promise<boolean> {
+	return (await d.relationsOn("node", nodeId, DEFAULT_FS_LIMITS.maxGrantsPerTarget + 1)).some((r) => r.relation === RESTRICTED);
+}
+
 /** A user or agent subject must exist and not be deleted; disabled is allowed (its grants stay inert). */
 async function checkSubject(d: PolicyData, r: Pick<RelRow, "subjectKind" | "subjectId">): Promise<void> {
 	if (r.subjectKind === "group") return;
@@ -214,7 +253,8 @@ async function checkSubject(d: PolicyData, r: Pick<RelRow, "subjectKind" | "subj
 export async function checkGrant(data: PolicyData, target: NodeRow, relation: string, subject: Subject): Promise<RelRow> {
 	const r: RelRow = { objectKind: "node", objectId: target.nodeId, relation, ...subjectRow(subject) };
 	checkShape(r);
-	if (relation === "viewer" && target.parentId !== WORKSPACES) throw new InvalidInput("a viewer grant below the workspace root is redundant");
+	if (relation === "viewer" && target.parentId !== WORKSPACES && !(await isRestricted(data, target.nodeId)))
+		throw new InvalidInput("a viewer grant below the workspace root or a restricted node is redundant");
 	await checkSubject(data, r);
 	return r;
 }
