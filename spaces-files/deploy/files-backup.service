@@ -1,0 +1,15 @@
+# User unit on big (~/.config/systemd/user/files-backup.service), started daily by files-backup.timer: the encrypted
+# backups of spaces-files, copied here and to nano (files-backup.sh, spaces-files/docs/operator-guide.en.md section 11).
+#
+#   cp spaces-files/deploy/files-backup.{service,timer} ~/.config/systemd/user/ && systemctl --user daemon-reload
+#   systemctl --user enable --now files-backup.timer
+[Unit]
+Description=Encrypted backup of spaces-files, sent to nano
+
+[Service]
+Type=oneshot
+Environment=FILES_BACKUP_HOME=/media/docker/spaces
+EnvironmentFile=-%h/.config/files-backup.env
+ExecStart=/usr/bin/env bash -c 'exec "$FILES_BACKUP_HOME/spaces-files/deploy/files-backup.sh"'
+Nice=10
+IOSchedulingClass=idle

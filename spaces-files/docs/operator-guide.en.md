@@ -415,5 +415,14 @@ take the certificate with `certbot certonly --webroot -w /var/www/acme -d spaces
 whole template and reload again. The service checks every mutation's Origin against `FILES_PUBLIC_ORIGIN`, so the
 proxy passes Host and Origin unchanged.
 
-A later deploy is `git pull --ff-only` and `docker:big:rust:up` again; the volume stays. Backups (section 3) are not
-scheduled on big yet.
+A later deploy is `git pull --ff-only` and `docker:big:rust:up` again; the volume stays.
+
+**Backups to nano.** Once a day the user unit `files-backup.timer` on big runs `spaces-files/deploy/files-backup.sh`:
+the service writes an encrypted data backup and an encrypted state backup (section 3) into `/srv/files/outbox`, the
+script copies them to `~/phi-backup/spaces-files/<UTC time>/` (the newest 14 runs stay) and sends the run to nano with
+rsync. The two backup keys are in the volume (`/srv/files/keys/data.key`, `state.key`, made once with
+`docker:operator -- new-backup-key`); a copy of them is kept off big, since without them no archive can be read. On
+nano the account `files-backup` takes the runs with `rrsync -wo -no-del -no-overwrite`: its `authorized_keys` names
+big's addresses and the key `~/.ssh/files-backup-nano` of `mux` on big, which can neither read, delete nor overwrite
+anything there. nano deletes runs older than 60 days itself (`files-backup-prune.timer`, root). Restoring from such a
+run: sections 4 and 5, with the archive and its key.

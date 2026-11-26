@@ -1,0 +1,11 @@
+# User unit on big (~/.config/systemd/user/files-backup.timer): files-backup.service once a day.
+[Unit]
+Description=Daily encrypted backup of spaces-files
+
+[Timer]
+OnCalendar=*-*-* 03:40
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target
