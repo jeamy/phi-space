@@ -39,8 +39,8 @@ test("a restricted directory leaves the view of the editors above, at once and w
 
 		// max: the child is gone from the listing and answers like an absent path, for every operation
 		assert.deepEqual(await s.list(h.max, "team", "."), [{ name: "open.md", kind: "file" }]);
-		for (const p of [s.read(h.max, "team", "secret/plan.md"), s.list(h.max, "team", "secret"), s.read(h.max, "team", "nothing/x.md"),
-			s.write(h.max, "team", "secret/new.md", bytes("x"), 0, await id("max"))])
+		for (const p of [() => s.read(h.max, "team", "secret/plan.md"), () => s.list(h.max, "team", "secret"), () => s.read(h.max, "team", "nothing/x.md"),
+			async () => s.write(h.max, "team", "secret/new.md", bytes("x"), 0, await id("max"))])
 			await assert.rejects(p, code("notFound"));
 		// its name stays taken, and nothing more is said about it (not its kind, not a version)
 		await assert.rejects(s.write(h.max, "team", "secret", bytes("x"), 0, await id("max")), (e: Error & { code?: string }) => e.code === "alreadyExists" && /a child of that name/.test(e.message));

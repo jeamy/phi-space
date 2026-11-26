@@ -9,6 +9,10 @@
 //   FILES_LIMITS=…/limits.json  overrides of the filesystem limits (server/limits.ts), checked on start
 //   FILES_UPKEEP_MS         how often each tenant's upkeep runs (default 600000; 0 turns it off)
 //   FILES_MOUNTS=…/mounts.json  read-only directory mounts, each the workspace @<name> (server/mounts.ts)
+//   FILES_SPACE_SERVER      the Space process (server/store.ts): unset or `ts` runs server/space-host.ts, a path names a
+//                           binary with its command line (the Rust one), `inprocess` keeps the store in this process;
+//                           its socket is space.sock in the data directory. When it ends, this process ends too (exit
+//                           1), so the supervisor restarts both.
 //
 //   FILES_PUBLIC_ORIGIN     the browser's origin (default https://localhost:4200); FILES_HTTP_HOST (default 127.0.0.1)
 //                           and FILES_HTTP_PORT (default: the origin's port) where it listens
@@ -32,6 +36,7 @@ import { serveOperator } from "./operator.ts";
 import { parseMounts } from "./mounts.ts";
 import { parseLimits } from "./limits.ts";
 import { FilesService } from "./service.ts";
+import { fileURLToPath } from "node:url";
 
 loadDotEnv();
 const env = process.env;
@@ -44,13 +49,13 @@ const blobDir = mem ? null : env.FILES_BLOB_DIR || join(ROOT, ".local", "blobs")
 let service: FilesService | undefined;
 const servers: Array<SpaceServer | HttpServer | AgentNetServer> = [];
 let stopping = false;
-const shutdown = async () => {
+const shutdown = async (code = 0) => {
 	if (stopping) return;
 	stopping = true;
-	setTimeout(() => process.exit(0), 3000).unref();
+	setTimeout(() => process.exit(code), 3000).unref();
 	for (const s of servers) await s.close().catch(() => {});
-	await service?.close();
-	process.exit(0);
+	await service?.close().catch(() => {});
+	process.exit(code);
 };
 process.on("SIGINT", () => void shutdown());
 process.on("SIGTERM", () => void shutdown());
@@ -59,7 +64,12 @@ const notes: string[] = [];
 try {
 	const limits = env.FILES_LIMITS ? parseLimits(readFileSync(env.FILES_LIMITS, "utf8"), env.FILES_LIMITS) : undefined;
 	const mounts = env.FILES_MOUNTS ? parseMounts(readFileSync(env.FILES_MOUNTS, "utf8"), env.FILES_MOUNTS) : undefined;
-	service = await FilesService.open({ dataDir, stateDir, blobDir, limits, mounts });
+	const space = env.FILES_SPACE_SERVER || "";
+	const spaceProcess = space === "inprocess" ? null
+		: space && space !== "ts" ? [space]
+		: [process.execPath, "--no-warnings", "--experimental-strip-types", fileURLToPath(new URL("./space-host.ts", import.meta.url))];
+	service = await FilesService.open({ dataDir, stateDir, blobDir, limits, mounts, spaceProcess, onSpaceLost: () => void shutdown(1) });
+	notes.push(`tenant Spaces ${service.store.where === "in-process" ? "in this process" : `in the Space process ${service.store.pid} at ${service.store.where}`}`);
 	for (const name of mounts?.keys() ?? []) notes.push(`mount @${name}`);
 	if (stateDir) { servers.push(await serveOperator(service, stateDir)); notes.push(`operator ${join(stateDir, "operator.sock")}`); }
 	for (const a of parseAgentSockets(env.FILES_AGENT_SOCKETS ?? "")) { servers.push(await serveAgentSocket(service, a)); notes.push(`agents of ${a.hostPeerId} in ${a.tenantId} at ${a.path}`); }

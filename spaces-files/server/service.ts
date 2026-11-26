@@ -1,7 +1,8 @@
 // The filesystem service's store and admission (docs/zanzibar-agent-filesystem-plan.en.md, sections 2 and 6.1): one
-// process opens phi-spaces' own SQLite store, which holds an exclusive owner lock beside the file (a second process is
+// process owns phi-spaces' own SQLite store, which holds an exclusive owner lock beside the file (a second process is
 // refused, a crash releases it), runs the reaper and gives each tenant a private named Space reached only through its
-// queue. Nothing here serves a Space to anyone: the tenant Spaces are never exposed.
+// queue: this process, or the Space process this service alone talks to over a private socket (server/store.ts,
+// section 8). Nothing here serves a Space to anyone else: the tenant Spaces are never exposed.
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, statSync, writeSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -9,7 +10,8 @@ import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost, type OwnStoreHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
-import { CONTROL_SPACE, createEnroll, createSpace, listSpaces, PhiSpaces, revokePeerKey, startService } from "phi-spaces";
+import { CONTROL_SPACE, createEnroll, listSpaces, PhiSpaces, revokePeerKey, startService } from "phi-spaces";
+import { inProcessStore, spaceProcessStore, type SpaceStore, type TenantSpace } from "./store.ts";
 import { HOST_ROLE, PEER_ID, tenantScope } from "./agent-net.ts";
 import type { EntryDraft } from "phi-spaces/core";
 import { DEFAULT_LIMITS, FOREVER, UniqueConflict } from "phi-spaces/core";
@@ -107,7 +109,16 @@ export type FilesServiceOptions = AdmissionOptions & {
 	faultHook?: (point: FaultPoint) => void | Promise<void>;
 	/** Read-only providers, each mounted as the workspace `@<name>` (section 8, virtual files). */
 	mounts?: ReadonlyMap<string, MountProvider>;
+	/** The Space process's command (server/space-host.ts or a binary with its arguments); null: the store in this
+	 *  process. Default `FilesService.defaultSpaceProcess`. */
+	spaceProcess?: readonly string[] | null;
+	/** The Space process ended on its own: admission is closed by then (default: only that). The launcher exits, so
+	 *  its supervisor restarts both and the crash path of section 6.1 applies. */
+	onSpaceLost?: (code: number | null, signal: string | null) => void;
 };
+
+/** The control Space's store (agent host keys, section 8): in the deployment-state directory, never in a data backup. */
+export const CONTROL_FILE = "control.sqlite";
 
 /** Where a save can be interrupted: before the blob write, between it and the commit, around the commit call (its
  *  outcome then is unknown), and after the commit before the old blob's deletion. */
@@ -127,7 +138,12 @@ export type ListEntry = { name: string; kind: "dir" | "file"; restricted?: true 
 type Unresolved = { tenantId: string; txn: string; save: { nodeId: string; newBlobId: string; oldBlobId: string | null } | null };
 
 export class FilesService {
+	/** Where the tenant Spaces run when an open names none (null: in this process; the tests set it). */
+	static defaultSpaceProcess: readonly string[] | null = null;
 	readonly admission: Admission;
+	/** The tenant Spaces' store, in this process or in the Space process. */
+	readonly store: SpaceStore;
+	/** The control Space with the agent hosts' keys: always in this process (phi-spaces' pairing commits on it). */
 	readonly host: OwnStoreHost;
 	readonly storePath: string | null;
 	readonly state: DeploymentState;
@@ -136,7 +152,7 @@ export class FilesService {
 	readonly mounts: ReadonlyMap<string, MountProvider>;
 	/** Process-wide counters: queue wait and run time, adapter calls, evaluator work (server/metrics.ts). */
 	readonly metrics = new Metrics();
-	readonly #stopService: () => Promise<void>;
+	readonly #stopControl: () => Promise<void>;
 	readonly #now: () => number;
 	/** Tenants whose FsMeta this process has seen committed; FsMeta is never removed while the store is open. */
 	readonly #ready = new Set<string>();
@@ -153,12 +169,13 @@ export class FilesService {
 	readonly #cursorKey = randomBytes(32);
 	#closed = false;
 
-	private constructor(host: OwnStoreHost, state: DeploymentState, blobs: BlobStore, stopService: () => Promise<void>, storePath: string | null, o: FilesServiceOptions) {
-		this.host = host;
+	private constructor(store: SpaceStore, control: OwnStoreHost, stopControl: () => Promise<void>, state: DeploymentState, blobs: BlobStore, o: FilesServiceOptions) {
+		this.store = store;
+		this.host = control;
 		this.state = state;
 		this.blobs = blobs;
-		this.storePath = storePath;
-		this.#stopService = stopService;
+		this.storePath = store.path;
+		this.#stopControl = stopControl;
 		this.admission = new Admission({ ...o, observe: (w, r) => { this.metrics.queueWait.add(w); this.metrics.queueRun.add(r); } });
 		this.#now = o.now ?? Date.now;
 		this.limits = { ...DEFAULT_FS_LIMITS, ...o.limits };
@@ -184,19 +201,23 @@ export class FilesService {
 			if (marker !== null && marker.stateId !== state.stateId()) throw new StateLost(`the deployment state in ${o.stateDir} belongs to another deployment than the data in ${o.dataDir}`);
 			if (marker !== null && state.seq() < marker.seq && !o.stateRestore) throw new StateLost(`the deployment state in ${o.stateDir} is older than the data has seen (sequence ${state.seq()} < ${marker.seq}): restore it from its newest backup (operator restore-state)`);
 		} catch (e) { state.close(); throw e; }
-		let host: OwnStoreHost | undefined, storePath: string | null = null, service: FilesService;
+		let store: SpaceStore | undefined, control: OwnStoreHost | undefined, service: FilesService | undefined;
 		try {
 			const blobs = await BlobStore.open(blobDir, state);
-			if (o.dataDir === null) host = openOwnMemoryHost();
-			else {
-				await prepareDataDir(o.dataDir);
-				storePath = join(o.dataDir, STORE_FILE);
-				host = await openSqliteHost(storePath);
-			}
-			// the reaper clears reservations of transactions abandoned by a crash (section 6.1)
-			const stop = await startService(host, ctx, { now: o.now, watchDebounceMs: 50 });
-			service = new FilesService(host, state, blobs, stop, storePath, o);
-		} catch (e) { await host?.close(ctx); state.close(); throw e; }
+			if (o.dataDir !== null) await prepareDataDir(o.dataDir);
+			const storePath = o.dataDir === null ? null : join(o.dataDir, STORE_FILE);
+			// the store's owner runs the reaper, which clears reservations of transactions abandoned by a crash (section 6.1)
+			const spaceProcess = o.spaceProcess === undefined ? FilesService.defaultSpaceProcess : o.spaceProcess;
+			const lost = (code: number | null, signal: string | null) => {
+				console.error(`[files] the Space process ended (${signal ?? code}); admission is closed`);
+				void service?.admission.close();
+				o.onSpaceLost?.(code, signal);
+			};
+			store = spaceProcess === null ? await inProcessStore(storePath, o.now) : await spaceProcessStore({ command: spaceProcess, file: storePath, dir: o.dataDir, onLost: lost });
+			control = o.stateDir === null ? openOwnMemoryHost() : await openSqliteHost(join(o.stateDir, CONTROL_FILE));
+			const stopControl = await startService(control, ctx, { now: o.now, watchDebounceMs: 50 });
+			service = new FilesService(store, control, stopControl, state, blobs, o);
+		} catch (e) { await control?.close(ctx); await store?.close(); state.close(); throw e; }
 		try {
 			if (o.stateRestore) await service.#bringStateForward(marker?.seq ?? 0);
 			if (markerPath !== null && (marker === null || state.seq() > marker.seq)) writeMarker(markerPath, { stateId: state.stateId(), seq: state.seq() });
@@ -215,7 +236,7 @@ export class FilesService {
 	 * Runs `op` in the tenant's queue with that tenant's private Space, once its initialization has committed (section 2).
 	 * An `inconsistentState` suspends the tenant until operator repair (section 4); the other tenants keep running.
 	 */
-	inTenant<T>(tenantId: string, op: (space: PhiSpaces) => Promise<T>): Promise<T> {
+	inTenant<T>(tenantId: string, op: (space: TenantSpace) => Promise<T>): Promise<T> {
 		return this.#inSpace(tenantId, async (space) => {
 			try {
 				if (!this.#ready.has(tenantId)) {
@@ -242,13 +263,13 @@ export class FilesService {
 	}
 
 	/** The queue without the provisioning gate: only for provisioning and startup. */
-	#inSpace<T>(tenantId: string, op: (space: PhiSpaces) => Promise<T>): Promise<T> {
+	#inSpace<T>(tenantId: string, op: (space: TenantSpace) => Promise<T>): Promise<T> {
 		const alias = tenantAlias(tenantId);
-		return this.admission.run(tenantId, () => op(new PhiSpaces(this.host, ctx, this.#now, undefined, undefined, { space: alias })));
+		return this.admission.run(tenantId, () => op(this.store.space(alias)));
 	}
 
 	/** Whether the tenant's FsMeta has committed; refuses a version this service does not know. */
-	async #checkMeta(tenantId: string, space: PhiSpaces): Promise<boolean> {
+	async #checkMeta(tenantId: string, space: TenantSpace): Promise<boolean> {
 		const m = await space.readIfExists({ type: schema.T.meta }, 0);
 		if (m === null) return false;
 		const f = m.fields;
@@ -261,8 +282,7 @@ export class FilesService {
 	reserveTenantSpace(tenantId: string): Promise<{ spaceId: string; alias: string }> {
 		const alias = tenantAlias(tenantId);
 		return this.admission.run(tenantId, async () => {
-			const info = await this.host.commit((tx) => createSpace(tx, alias, this.#now()), ctx);
-			return { spaceId: info.spaceId, alias: info.alias };
+			return this.store.createSpace(alias);
 		});
 	}
 
@@ -366,7 +386,7 @@ export class FilesService {
 	 * `unavailable`), and inside it the actor's current FsActor state is checked (unknown, disabled or deleted ->
 	 * `unauthenticated`). A request without a valid handle never reaches a tenant queue.
 	 */
-	withSession<T>(handle: unknown, op: (session: Session, space: PhiSpaces) => Promise<T>): Promise<T> {
+	withSession<T>(handle: unknown, op: (session: Session, space: TenantSpace) => Promise<T>): Promise<T> {
 		return this.#session("file", handle, op);
 	}
 
@@ -375,7 +395,7 @@ export class FilesService {
 	 * maintenance metadata operations are `unavailable`; in maintenance mode only an enabled tenant administrator's admin
 	 * operations, the maintenance metadata operations and `issueOperationIds` continue, everything else is `unavailable`.
 	 */
-	async #session<T>(cls: OpClass, handle: unknown, op: (session: Session, space: PhiSpaces) => Promise<T>): Promise<T> {
+	async #session<T>(cls: OpClass, handle: unknown, op: (session: Session, space: TenantSpace) => Promise<T>): Promise<T> {
 		const found = typeof handle === "string" ? this.state.lookupSession(handle) : null;
 		// a recoverer's session opens the recovery interface alone: no file, version or ordinary session access
 		if (found === null || found.actorKind === "recoverer") throw new schema.Unauthenticated();
@@ -464,7 +484,7 @@ export class FilesService {
 
 	/** The target of a maintenance metadata operation: the caller is an administrator (an audited refusal otherwise), the
 	 *  path is walked by names alone, absence is `notFound`. */
-	async #maintenanceTarget(s: Session, space: PhiSpaces, op: string, workspace: unknown, path: unknown, id: VerifiedOpId | null = null): Promise<NodeRow> {
+	async #maintenanceTarget(s: Session, space: TenantSpace, op: string, workspace: unknown, path: unknown, id: VerifiedOpId | null = null): Promise<NodeRow> {
 		const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
 		const segs = parsePath(path, op, this.limits);
 		await this.#requireAdmin(s, space, op, id);
@@ -501,7 +521,7 @@ export class FilesService {
 
 	/** Runs a recovery operation: the session is a recoverer's of the open restore, still on the roster, in its tenant's
 	 *  queue. Anything else is `unauthenticated`. */
-	async #recovery<T>(handle: unknown, op: (s: Session, space: PhiSpaces, who: { issuer: string; subject: string; epoch: number }) => Promise<T>): Promise<T> {
+	async #recovery<T>(handle: unknown, op: (s: Session, space: TenantSpace, who: { issuer: string; subject: string; epoch: number }) => Promise<T>): Promise<T> {
 		const view = typeof handle === "string" ? this.state.lookupSession(handle) : null;
 		if (view === null || view.actorKind !== "recoverer") throw new schema.Unauthenticated();
 		const who = this.state.recovererOf(view.actorId);
@@ -742,7 +762,7 @@ export class FilesService {
 	async compact(): Promise<{ freedPages: number; converted: boolean; error?: string } | null> {
 		if (this.#unresolved.length) throw new Unavailable("a commit outcome is unknown: resolve it first");
 		await this.admission.close();
-		try { return await this.host.compact(); }
+		try { return await this.store.compact(); }
 		finally { this.admission.reopen(); }
 	}
 
@@ -794,7 +814,7 @@ export class FilesService {
 	}
 
 	/** The caller's verified binding, read inside the tenant queue from its FsActor row. */
-	async #callerOf(s: Session, space: PhiSpaces): Promise<Omit<MountCaller, "signal">> {
+	async #callerOf(s: Session, space: TenantSpace): Promise<Omit<MountCaller, "signal">> {
 		const a = await space.readIfExists({ type: schema.T.actor, fields: { actorKind: s.actorKind, actorId: s.actorId } }, 0);
 		if (a === null) throw new schema.Unauthenticated();
 		const f = a.fields as Record<string, string>;
@@ -900,7 +920,7 @@ export class FilesService {
 	}
 
 	/** A visible directory's children the caller reaches, in name order, bounded by `maxDirEntries`. */
-	async #listing(s: Session, space: PhiSpaces, workspace: unknown, path: unknown): Promise<{ dirId: string; entries: Array<{ entry: ListEntry }> }> {
+	async #listing(s: Session, space: TenantSpace, workspace: unknown, path: unknown): Promise<{ dirId: string; entries: Array<{ entry: ListEntry }> }> {
 		const ws = schema.canonicalName(workspace, this.limits.maxNameBytes);
 		const segs = parsePath(path, "list", this.limits);
 		const d = spaceData(space);
@@ -1070,7 +1090,7 @@ export class FilesService {
 	}
 
 	/** Levels below a directory (0 for an empty one), walking at most `maxMoveDirs` directories. */
-	async #subtreeHeight(space: PhiSpaces, dirId: string): Promise<number> {
+	async #subtreeHeight(space: TenantSpace, dirId: string): Promise<number> {
 		let level = [dirId], height = 0, walked = 0;
 		for (;;) {
 			const next: string[] = [];
@@ -1150,13 +1170,13 @@ export class FilesService {
 	}
 
 	/** The restricted children of a directory: their markers name it as subject (one lookup, bounded). */
-	async #restrictedChildren(space: PhiSpaces, dirId: string): Promise<string[]> {
+	async #restrictedChildren(space: TenantSpace, dirId: string): Promise<string[]> {
 		const rows = await space.readAll({ type: schema.T.relation, fields: { objectKind: "node", relation: RESTRICTED, subjectKind: "node", subjectId: dirId } }, { limit: this.limits.maxDirEntries + 1 });
 		if (rows.length > this.limits.maxDirEntries) throw new schema.CapacityExceeded(`a directory holds more than ${this.limits.maxDirEntries} entries`);
 		return rows.map((e) => e.fields.objectId as string);
 	}
 
-	async #grantsOn(space: PhiSpaces, nodeId: string): Promise<Array<{ relation: string; subject: Subject }>> {
+	async #grantsOn(space: TenantSpace, nodeId: string): Promise<Array<{ relation: string; subject: Subject }>> {
 		const rels = await space.readAll({ type: schema.T.relation, fields: { objectKind: "node", objectId: nodeId } }, { limit: this.limits.maxGrantsPerTarget + 1 });
 		if (rels.length > this.limits.maxGrantsPerTarget) throw new schema.CapacityExceeded(`more than ${this.limits.maxGrantsPerTarget} grants on one target`);
 		return rels.map((e) => e.fields as unknown as RelRow).filter((x) => x.relation !== RESTRICTED).map((x) => ({ relation: x.relation, subject: subjectOf(x) }))
@@ -1192,7 +1212,7 @@ export class FilesService {
 	}
 
 	/** One grant or revocation after its authorization: receipt, validation, idempotence, final owner, budgets, commit. */
-	async #applyGrant(s: Session, space: PhiSpaces, id: VerifiedOpId, digest: string, op: string, action: "grant" | "revoke", node: NodeRow, relation: string, subj: Subject): Promise<{ status: string }> {
+	async #applyGrant(s: Session, space: TenantSpace, id: VerifiedOpId, digest: string, op: string, action: "grant" | "revoke", node: NodeRow, relation: string, subj: Subject): Promise<{ status: string }> {
 		{
 			const d = spaceData(space);
 			const done = await lookupReceipt(space, s, id.operationId, digest);
@@ -1527,12 +1547,12 @@ export class FilesService {
 		return this.#adminRead(handle, "listGroupMembers", (space) => membersOf(spaceData(space), schema.groupId(group, this.limits.maxNameBytes), { limits: this.limits }));
 	}
 
-	#adminRead<T>(handle: unknown, op: string, read: (space: PhiSpaces) => Promise<T>): Promise<T> {
+	#adminRead<T>(handle: unknown, op: string, read: (space: TenantSpace) => Promise<T>): Promise<T> {
 		return this.#session("admin", handle, async (s, space) => { await this.#requireAdmin(s, space, op, null); return read(space); });
 	}
 
 	/** The budgets of a security action; one that does not fit even the security reserve closes the tenant. */
-	async #securityAdmit(s: Session, space: PhiSpaces, m: AdmitSpec, action: Record<string, unknown>): Promise<void> {
+	async #securityAdmit(s: Session, space: TenantSpace, m: AdmitSpec, action: Record<string, unknown>): Promise<void> {
 		try { await this.#admitRows(s, space, { ...m, pool: "security" }); }
 		catch (e) {
 			if (e instanceof schema.CapacityExceeded) this.#closeForSecurity(s.tenantId, { ...action, actorKind: s.actorKind, actorId: s.actorId }, e);
@@ -1544,11 +1564,11 @@ export class FilesService {
 	 * An admin operation needs an enabled user with `tenant#admin`. A refusal after authentication writes its audit row
 	 * in a transaction of its own, with no receipt and no other change (section 3), then answers `permissionDenied`.
 	 */
-	#isAdmin(s: Session, space: PhiSpaces): Promise<boolean> {
+	#isAdmin(s: Session, space: TenantSpace): Promise<boolean> {
 		return s.actorKind === "user" ? this.#has(space, schema.relation("tenant", s.tenantId, "admin", "user", s.actorId)) : Promise.resolve(false);
 	}
 
-	async #requireAdmin(s: Session, space: PhiSpaces, operation: string, id: VerifiedOpId | null): Promise<void> {
+	async #requireAdmin(s: Session, space: TenantSpace, operation: string, id: VerifiedOpId | null): Promise<void> {
 		if (await this.#isAdmin(s, space)) return;
 		// refusals of one actor and operation within the window share one row: its count and last time grow, the
 		// audit does not (a caller asking again and again cannot fill it)
@@ -1575,7 +1595,7 @@ export class FilesService {
 
 	/** The parent of a node to create: visible (else `notFound`), a directory (else `invalidInput`), editor (else
 	 *  `permissionDenied`); section 5, creation branch. */
-	async #creationParent(s: Session, space: PhiSpaces, ws: string, segs: string[]): Promise<NodeRow> {
+	async #creationParent(s: Session, space: TenantSpace, ws: string, segs: string[]): Promise<NodeRow> {
 		const p = await resolve(spaceData(space), s, ws, segs.slice(0, -1), { limits: this.limits });
 		if (p.node.kind !== "dir") throw new schema.InvalidInput("the parent is not a directory");
 		if (!atLeast(p.role, "editor")) throw new schema.PermissionDenied("creating needs editor on the parent");
@@ -1585,7 +1605,7 @@ export class FilesService {
 	/** A blob reference of the size the real one will have, to measure rows before the blob is written. */
 	#sizing(size: number): BlobRef { return { blobId: "x".repeat(22), size, keyGeneration: this.state.currentContentKey().generation }; }
 
-	async #contentRow(tenantId: string, space: PhiSpaces, n: NodeRow): Promise<{ version: number; ref: BlobRef }> {
+	async #contentRow(tenantId: string, space: TenantSpace, n: NodeRow): Promise<{ version: number; ref: BlobRef }> {
 		const rows = await space.readAll({ type: schema.T.content, fields: { nodeId: n.nodeId } }, { limit: 2 });
 		if (rows.length !== 1) throw new InconsistentState(`tenant ${tenantId}: file ${n.nodeId} has ${rows.length} content rows`);
 		const f = rows[0].fields;
@@ -1598,7 +1618,7 @@ export class FilesService {
 	 * everything must fit the tenant's rows plus the audit reserve, less the security reserve, which only security
 	 * actions may use. A refusal is `capacityExceeded` and leaves admission open.
 	 */
-	async #admitRows(s: Session, space: PhiSpaces, m: AdmitSpec): Promise<void> {
+	async #admitRows(s: Session, space: TenantSpace, m: AdmitSpec): Promise<void> {
 		const pool = m.pool ?? "ordinary";
 		for (const e of m.rows) assertRowFits(e.fields, DEFAULT_LIMITS);
 		const stored = m.rows.reduce((n, r) => n + encodedBytes(r.fields), 0) - (m.replaced ?? []).reduce((n, r) => n + encodedBytes(r.fields), 0);
@@ -1678,7 +1698,7 @@ export class FilesService {
 		this.admission.resume(tenantId);
 	}
 
-	async #tenantContentBytes(tenantId: string, space: PhiSpaces): Promise<number> {
+	async #tenantContentBytes(tenantId: string, space: TenantSpace): Promise<number> {
 		let n = this.#contentBytes.get(tenantId);
 		if (n === undefined) { n = await sumContentBytes(space); this.#contentBytes.set(tenantId, n); }
 		return n;
@@ -1691,7 +1711,7 @@ export class FilesService {
 	 * blob. A commit whose outcome is unknown closes admission for every tenant and keeps both blobs until
 	 * `resolveOutcomes`. After a durable commit the old blob is deleted.
 	 */
-	async #commitMutation(s: Session, space: PhiSpaces, id: VerifiedOpId, operation: string, targets: string[], rows: ReturnType<typeof schema.meta>[],
+	async #commitMutation(s: Session, space: TenantSpace, id: VerifiedOpId, operation: string, targets: string[], rows: ReturnType<typeof schema.meta>[],
 		save: { nodeId: string; newBlobId: string; oldBlobId: string | null; contentDelta: number; replace?: { version: number; blobId: string } } | null,
 		takes: Array<{ type: string; fields: Record<string, string> }> = [], drop?: { blobId: string; size: number }): Promise<void> {
 		const seq = (await this.#lastSeq(s.tenantId, space)) + 1;
@@ -1760,7 +1780,7 @@ export class FilesService {
 		await this.admission.close();
 		const n = this.#unresolved.length;
 		for (const u of this.#unresolved.splice(0)) {
-			const space = new PhiSpaces(this.host, ctx, this.#now, undefined, undefined, { space: tenantAlias(u.tenantId) });
+			const space = this.store.space(tenantAlias(u.tenantId));
 			// an open transaction holds its uncommitted rows and their creation keys: a retry would collide with them
 			await space.abort(u.txn).catch(() => {});
 			if (u.save === null) continue;
@@ -1775,25 +1795,25 @@ export class FilesService {
 	/** Ends a session (logout); an unknown handle is no error. */
 	logout(handle: string): void { this.state.endSession(handle); }
 
-	async #enabledActor(space: PhiSpaces, kind: string, id: string) {
+	async #enabledActor(space: TenantSpace, kind: string, id: string) {
 		const a = await space.readIfExists({ type: schema.T.actor, fields: { actorKind: kind, actorId: id } }, 0);
 		if (a === null || a.fields.state !== "enabled") throw new schema.Unauthenticated();
 		return a;
 	}
 
-	async #has(space: PhiSpaces, rel: ReturnType<typeof schema.relation>): Promise<boolean> {
+	async #has(space: TenantSpace, rel: ReturnType<typeof schema.relation>): Promise<boolean> {
 		return (await space.readIfExists({ type: rel.type, fields: rel.fields }, 0)) !== null;
 	}
 
 	/** A node ID no node of the tenant carries yet, checked inside the queue (section 3). */
-	async #freshNodeId(space: PhiSpaces): Promise<string> {
+	async #freshNodeId(space: TenantSpace): Promise<string> {
 		for (;;) {
 			const id = schema.newNodeId();
 			if ((await space.readIfExists({ type: schema.T.node, fields: { nodeId: id } }, 0)) === null) return id;
 		}
 	}
 
-	async #lastSeq(tenantId: string, space: PhiSpaces): Promise<number> {
+	async #lastSeq(tenantId: string, space: TenantSpace): Promise<number> {
 		let seq = this.#seq.get(tenantId);
 		if (seq === undefined) {
 			seq = 0;
@@ -1804,7 +1824,7 @@ export class FilesService {
 	}
 
 	/** Writes new rows in one commit, each with its type's creation key; a key collision is a corrupt state. */
-	async #writeAll(tenantId: string, space: PhiSpaces, entries: ReturnType<typeof schema.meta>[]): Promise<void> {
+	async #writeAll(tenantId: string, space: TenantSpace, entries: ReturnType<typeof schema.meta>[]): Promise<void> {
 		for (const e of entries) assertRowFits(e.fields, DEFAULT_LIMITS);
 		const ops = entries.map((entry) => ({ op: "write" as const, entry, lease: FOREVER, unique: schema.KEY[entry.type as keyof typeof schema.KEY] }));
 		try { await space.batch(ops); }
@@ -1854,7 +1874,7 @@ export class FilesService {
 
 	/** The tenant IDs whose Space is reserved. */
 	async tenants(): Promise<string[]> {
-		return (await listSpaces(this.host, ctx)).map((s) => s.alias).filter((a) => a.startsWith("t-")).map((a) => a.slice(2)).sort();
+		return (await this.store.aliases()).filter((a) => a.startsWith("t-")).map((a) => a.slice(2)).sort();
 	}
 
 	/** Closes admission, waits for every started operation, then stops the reaper and closes the store. */
@@ -1862,8 +1882,9 @@ export class FilesService {
 		if (this.#closed) return;
 		this.#closed = true;
 		await this.admission.close();
-		await this.#stopService();
+		await this.#stopControl();
 		await this.host.close(ctx);
+		await this.store.close();
 		this.state.close();
 	}
 }

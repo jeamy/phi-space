@@ -8,7 +8,6 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FOREVER } from "phi-spaces/core";
 import { FilesService, tenantAlias, type FaultPoint, type FilesServiceOptions } from "../server/service.ts";
@@ -17,7 +16,7 @@ import { relation, T } from "../server/schema.ts";
 type Code = string;
 const code = (c: Code) => (e: Error & { code?: string }) => { assert.equal(e.code, c, e.message); return true; };
 const bytes = (s: string) => Buffer.from(s);
-const raw = (s: FilesService, t = "acme") => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias(t) });
+const raw = (s: FilesService, t = "acme") => s.store.space(tenantAlias(t));
 
 /** acme with lea (admin, home "lea") and the agent planner (home "planner"), both logged in. */
 async function fixture(o: Partial<FilesServiceOptions> = {}, disk?: string) {

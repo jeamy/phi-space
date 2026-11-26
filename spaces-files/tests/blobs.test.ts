@@ -12,7 +12,6 @@ import { CONTENT_KEYS_FILE, DeploymentState, StateUnavailable } from "../server/
 import { FOREVER } from "phi-spaces/core";
 import { content, InconsistentState, T } from "../server/schema.ts";
 import { FilesService, tenantAlias } from "../server/service.ts";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "spaces-files-blobs-"));
@@ -188,7 +187,7 @@ test("the sweep waits while a save's take of the old content row is unresolved, 
 			await assert.rejects(s.sweepBlobs("acme"), (e: Error & { code?: string }) => e.code === "unavailable", "after the restart, before the reservation resolves");
 			assert.equal(await s.blobs.exists("acme", old.blobId), true);
 			// the save is abandoned: its take comes back, and only now may the sweep run
-			await new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias("acme") }).abort(txn);
+			await s.store.space(tenantAlias("acme")).abort(txn);
 			assert.equal(await s.sweepBlobs("acme"), 1);
 			assert.equal(await s.blobs.exists("acme", orphan.blobId), false);
 			const row = await s.inTenant("acme", (sp) => sp.readIfExists({ type: T.content, fields: { nodeId: NODE } }, 0));

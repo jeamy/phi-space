@@ -8,7 +8,7 @@
 // `maxReceipts`; security actions (revocations, membership removal, actor disablement) may also draw on
 // `securityReceiptReserve`. A live receipt is never evicted: at the bound, expired receipts are pruned first (the time
 // floor persisted before), and only then does the mutation fail with `capacityExceeded`.
-import type { PhiSpaces } from "phi-spaces";
+import type { TenantSpace } from "./store.ts";
 import type { EntryDraft } from "phi-spaces/core";
 import type { DeploymentState } from "./deployment.ts";
 import type { OpIdActor, VerifiedOpId } from "./opids.ts";
@@ -30,7 +30,7 @@ const key = (actor: OpIdActor, operationId: string) => ({ type: T.receipt, field
 
 /** The recorded outcome of an earlier success with this ID and digest, or null when the ID is unused (order of checks,
  *  step 7). Another digest is `requestMismatch`. */
-export async function lookupReceipt(space: PhiSpaces, actor: OpIdActor, operationId: string, digest: string): Promise<Outcome | null> {
+export async function lookupReceipt(space: TenantSpace, actor: OpIdActor, operationId: string, digest: string): Promise<Outcome | null> {
 	const r = await space.readIfExists(key(actor, operationId), 0);
 	if (r === null) return null;
 	if (r.fields.digest !== digest) throw new RequestMismatch();
@@ -45,7 +45,7 @@ export const receiptRow = (actor: OpIdActor, id: VerifiedOpId, digest: string, o
  * Makes room for one more receipt of `pool`, or throws `capacityExceeded` without removing a live one. Runs in the
  * tenant queue before the mutation's commit.
  */
-export async function reserveReceipt(space: PhiSpaces, state: DeploymentState, limits: ReceiptLimits, pool: Pool): Promise<void> {
+export async function reserveReceipt(space: TenantSpace, state: DeploymentState, limits: ReceiptLimits, pool: Pool): Promise<void> {
 	const bound = limits.maxReceipts + (pool === "security" ? limits.securityReceiptReserve : 0);
 	if ((await space.count({ type: T.receipt })) < bound) return;
 	await pruneReceipts(space, state, PRUNE_BATCH);
@@ -57,7 +57,7 @@ export async function reserveReceipt(space: PhiSpaces, state: DeploymentState, l
  * instant on before any lookup (opids.ts), so removing its receipt lets no duplicate through. The time floor is
  * persisted first: a clock that goes back after a restart cannot revive the IDs (section 6.2).
  */
-export async function pruneReceipts(space: PhiSpaces, state: DeploymentState, limit: number): Promise<number> {
+export async function pruneReceipts(space: TenantSpace, state: DeploymentState, limit: number): Promise<number> {
 	const now = state.now();
 	const expired = (await space.readAll({ type: T.receipt }))
 		.filter((r) => (r.fields.expiry as number) <= now)

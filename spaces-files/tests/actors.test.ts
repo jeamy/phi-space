@@ -4,14 +4,13 @@
 // nothing; only an enabled tenant administrator registers; lookups fail closed.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FilesService, tenantAlias } from "../server/service.ts";
 import { AlreadyExists, InvalidInput, PermissionDenied, T, Unauthenticated, WORKSPACES } from "../server/schema.ts";
 
 const ADMIN = { actorId: "lea", homeName: "lea", issuer: "https://id.example", subject: "sub-lea" };
 const LEA = { actorKind: "user" as const, actorId: "lea" };
-const raw = (s: FilesService, tenantId: string) => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias(tenantId) });
+const raw = (s: FilesService, tenantId: string) => s.store.space(tenantAlias(tenantId));
 
 async function tenant(...ids: string[]): Promise<FilesService> {
 	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });

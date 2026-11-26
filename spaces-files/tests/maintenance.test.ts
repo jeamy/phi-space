@@ -7,14 +7,13 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FilesService, tenantAlias, type FilesServiceOptions } from "../server/service.ts";
 import { T } from "../server/schema.ts";
 
 const code = (c: string) => (e: Error & { code?: string }) => { assert.equal(e.code, c, e.message); return true; };
 const bytes = (s: string) => Buffer.from(s);
-const raw = (s: FilesService) => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias("acme") });
+const raw = (s: FilesService) => s.store.space(tenantAlias("acme"));
 const LEA = { kind: "user", id: "lea" };
 const ADM = { kind: "user", id: "adm" };
 

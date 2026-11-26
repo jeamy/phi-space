@@ -3,7 +3,6 @@
 // by its handle outside every queue, then admitted into that tenant's queue, then the actor's current state is checked.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FOREVER } from "phi-spaces/core";
 import { FilesService, tenantAlias } from "../server/service.ts";
@@ -14,7 +13,7 @@ const MIN = 60_000;
 const ADMIN = { actorId: "lea", homeName: "lea", issuer: "https://id.example", subject: "sub-lea" };
 const LEA_ID = { issuer: ADMIN.issuer, subject: ADMIN.subject };
 const LEA = { actorKind: "user" as const, actorId: "lea" };
-const raw = (s: FilesService, tenantId: string) => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias(tenantId) });
+const raw = (s: FilesService, tenantId: string) => s.store.space(tenantAlias(tenantId));
 const whoami = (s: FilesService, handle: unknown) => s.withSession(handle, async (who) => `${who.tenantId}/${who.actorKind}:${who.actorId}`);
 
 /** Sets an actor's state the way the actor transitions of phase 3 will: take the row, write its successor. */

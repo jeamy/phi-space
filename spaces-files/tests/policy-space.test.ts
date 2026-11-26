@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces/core";
-import type { PhiSpaces } from "phi-spaces";
+import type { TenantSpace } from "../server/store.ts";
 import { FilesService } from "../server/service.ts";
 import { listGroups, resolve, roleOn, spaceData } from "../server/policy.ts";
 import { checkQuotas, sumContentBytes } from "../server/quotas.ts";
@@ -12,7 +12,7 @@ import { CapacityExceeded, NotFound, content, node, relation, WORKSPACES } from 
 
 const ADMIN = { actorId: "lea", homeName: "lea", issuer: "https://id.example", subject: "sub-lea" };
 const LEA = { actorKind: "user" as const, actorId: "lea" };
-const put = (sp: PhiSpaces, ...entries: ReturnType<typeof node>[]) => Promise.all(entries.map((e) => sp.write(e, null, FOREVER)));
+const put = (sp: TenantSpace, ...entries: ReturnType<typeof node>[]) => Promise.all(entries.map((e) => sp.write(e, null, FOREVER)));
 
 test("provisioned rows evaluate as the plan says, and tenants stay apart", async () => {
 	const s = await FilesService.open({ dataDir: null, stateDir: null, blobDir: null });

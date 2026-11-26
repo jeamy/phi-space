@@ -4,13 +4,12 @@
 // transaction's budget or not at all, tenant-administrator grants and the read-only admin listings.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FilesService, tenantAlias, type FilesServiceOptions } from "../server/service.ts";
 import { T } from "../server/schema.ts";
 
 const code = (c: string) => (e: Error & { code?: string }) => { assert.equal(e.code, c, e.message); return true; };
-const raw = (s: FilesService) => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias("acme") });
+const raw = (s: FilesService) => s.store.space(tenantAlias("acme"));
 const LEA = { kind: "user", id: "lea" };
 const PLANNER = { kind: "agent", id: "planner-17" };
 const ADM = { kind: "user", id: "adm" };

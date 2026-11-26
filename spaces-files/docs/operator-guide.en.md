@@ -12,13 +12,19 @@ service stopped; the owner locks refuse them otherwise.
 
 ## 1. Before the first start
 
+**Two processes.** `npm start` starts the service, which starts the Space process that owns the store
+(`server/space-host.ts`, or the binary `FILES_SPACE_SERVER` names) and stops it again. If the Space process ends on
+its own, the service ends with exit code 1: run the service under a supervisor that restarts it (systemd
+`Restart=on-failure`). A commit interrupted that way is resolved like any crash (section 6.1 of the plan): the
+tenant waits for the dead transactions to lapse, and a retry with its operation ID applies once.
+
 **Three directories.** Each directory is mode 700, owned by the service user, and none lies inside another. The
 service refuses to start otherwise.
 
 | Directory | Variable | Holds |
 |---|---|---|
-| Data | `FILES_DATA_DIR` | The store (`files.sqlite` and its WAL), the state marker |
-| Deployment state | `FILES_STATE_DIR` | Sessions, signing keys (`keys.json`), content keys (`content-keys.json`), epoch, roster, restore journal, operator audit, `operator.sock` |
+| Data | `FILES_DATA_DIR` | The store (`files.sqlite` and its WAL), the state marker, `space.sock` of the Space process |
+| Deployment state | `FILES_STATE_DIR` | Sessions, signing keys (`keys.json`), content keys (`content-keys.json`), epoch, roster, restore journal, operator audit, `operator.sock`, the agent hosts' keys (`control.sqlite`) |
 | Blobs | `FILES_BLOB_DIR` | The file contents, each sealed with AES-256-GCM under a content key |
 
 **Manual checks.** The service cannot verify these itself. Check them on every new machine and after every change to
@@ -138,7 +144,9 @@ administrator rows prove nothing. Only the operator's roster and the operator's 
      from before the restore is refused;
    - checks every content row against its blob and closes a tenant whose contents lack a blob
      (`inconsistentState`, that tenant alone).
-   - revokes every agent host key: each host on another machine enrolls again (section 9).
+   - revokes every agent host key: each host on another machine enrolls again (section 9). Host keys live in the
+     deployment state (`control.sqlite`), not in the data backup; after a restore of the deployment state every host
+     enrolls again as well.
 
    The steps are journaled in the deployment state. After a crash, run the same command again: it resumes at its
    step. `restore-status` shows the journal.
@@ -300,6 +308,19 @@ refuses a directory larger than one reply; `listPage` lists it page by page, and
 always. Raising `maxDirEntries` above `maxListPage` makes larger directories possible; each page reads the whole
 directory inside the tenant queue, so keep it at a few thousand.
 
+
+**In-process store and Space process (2026-11-26).** The default parameters once more, with the tenant Spaces in the
+service's process (`FILES_SPACE_SERVER=inprocess`) and in the Space process over its socket (the default), on the same
+machine:
+
+| Store | Ops/s | Queue wait p50 / p99 (ms) | Run time p50 / p99 (ms) | `read` p50 / p99 (ms) | `write` p50 / p99 (ms) |
+|---|---|---|---|---|---|
+| In this process | 316 | ≤ 5 / 84 | ≤ 5 / 50 | ≤ 20 / 76 | ≤ 50 / 85 |
+| Space process | 149 | ≤ 20 / 182 | ≤ 20 / 71 | ≤ 50 / 188 | ≤ 50 / 186 |
+
+Every Space call is a round trip over the socket now: a decision makes about 25 lookups, a save its transaction's calls
+one by one. Throughput halves and run times double; the queue serializes per tenant as before.
+
 ## 9. Agent hosts on other machines
 
 An agent host on another machine reaches the service over TLS instead of a local socket. Set `FILES_AGENT_NET` to the
@@ -325,4 +346,3 @@ and the host must trust its CA. Open the port to the agent hosts only.
 
 The enrollments, revocations and every enrollment attempt land in the operator audit (`agentHost.*`). A data restore
 revokes every host key.
-

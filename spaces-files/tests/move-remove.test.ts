@@ -7,14 +7,13 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FilesService, tenantAlias, type FaultPoint, type FilesServiceOptions } from "../server/service.ts";
 import { T } from "../server/schema.ts";
 
 const code = (c: string) => (e: Error & { code?: string }) => { assert.equal(e.code, c, e.message); return true; };
 const bytes = (s: string) => Buffer.from(s);
-const raw = (s: FilesService) => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias("acme") });
+const raw = (s: FilesService) => s.store.space(tenantAlias("acme"));
 const blobFiles = (dir: string): string[] =>
 	existsSync(join(dir, "acme")) ? readdirSync(join(dir, "acme")).flatMap((sh) => readdirSync(join(dir, "acme", sh))) : [];
 
@@ -50,8 +49,8 @@ test("a moved subtree takes its versions, blobs and grants along, and the old in
 		// into lea's home: max and bert see nothing of it right after the acknowledgement, the open save answers notFound
 		const mid = await id("lea");
 		assert.deepEqual(await s.move(h.lea, "team", "project", "lea", "project", mid), { status: "moved" });
-		for (const p of [s.read(h.max, "team", "project/a.md"), s.read(h.max, "lea", "project/a.md"), s.list(h.bert, "lea", "project"),
-			s.write(h.max, "team", "project/a.md", bytes("late"), open.version, await id("max"))])
+		for (const p of [() => s.read(h.max, "team", "project/a.md"), () => s.read(h.max, "lea", "project/a.md"), () => s.list(h.bert, "lea", "project"),
+			async () => s.write(h.max, "team", "project/a.md", bytes("late"), open.version, await id("max"))])
 			await assert.rejects(p, code("notFound"));
 		// the grant on its stable ID moved with it and stays inert while bert cannot see the workspace
 		assert.deepEqual((await s.listGrants(h.lea, "lea", "project")).map((g) => `${g.relation}@${g.subject.id}`), ["owner@bert"]);

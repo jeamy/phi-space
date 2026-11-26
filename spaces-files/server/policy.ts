@@ -8,7 +8,7 @@
 // below the root only raise viewer to editor or owner and are inert while the root is invisible. Disabled actors hold
 // no rights and their memberships count for nothing. `tenant#admin` gives no file rights.
 import { evaluator } from "./metrics.ts";
-import type { PhiSpaces } from "phi-spaces";
+import type { TenantSpace } from "./store.ts";
 import { DEFAULT_FS_LIMITS, type FsLimits } from "./limits.ts";
 import {
 	CapacityExceeded, DIRECT, InconsistentState, InvalidInput, LastAdmin, LastOwner, NotFound, T, WORKSPACES,
@@ -359,7 +359,7 @@ const asNode = (f: Record<string, unknown>): NodeRow => ({ nodeId: f.nodeId as s
 const asRel = (f: Record<string, unknown>): RelRow => ({ objectKind: f.objectKind as string, objectId: f.objectId as string, relation: f.relation as string, subjectKind: f.subjectKind as string, subjectId: f.subjectId as string, subjectRelation: f.subjectRelation as string });
 
 /** Reads a tenant Space as policy data. Use it only inside the tenant's queue. */
-export function spaceData(space: PhiSpaces): PolicyData {
+export function spaceData(space: TenantSpace): PolicyData {
 	return {
 		node: async (nodeId) => { const e = await space.readIfExists({ type: T.node, fields: { nodeId } }, 0); return e && asNode(e.fields); },
 		children: async (parentId, name, limit) => (await space.readAll({ type: T.node, fields: { parentId, name } }, { limit })).map((e) => asNode(e.fields)),
@@ -370,7 +370,7 @@ export function spaceData(space: PhiSpaces): PolicyData {
 }
 
 /** All groups of a tenant, bounded by `maxGroups`. */
-export async function listGroups(space: PhiSpaces, o: Options = {}): Promise<string[]> {
+export async function listGroups(space: TenantSpace, o: Options = {}): Promise<string[]> {
 	const rows = [...await space.readAll({ type: T.relation, fields: { objectKind: "group" } }), ...await space.readAll({ type: T.relation, fields: { subjectKind: "group" } })];
 	const groups = groupsIn(rows.map((e) => asRel(e.fields)));
 	if (groups.length > lim(o).maxGroups) throw new CapacityExceeded(`more than ${lim(o).maxGroups} groups`);

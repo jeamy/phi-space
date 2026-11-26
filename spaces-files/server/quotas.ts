@@ -2,7 +2,7 @@
 // checks what it would add against the tenant's limits. Ordinary quota failures are `capacityExceeded` and leave
 // admission open. Counts come from the tenant Space; the content bytes are the sum of the content rows' `size`, summed
 // once per tenant and then kept by the single writer (like the audit seq).
-import type { PhiSpaces } from "phi-spaces";
+import type { TenantSpace } from "./store.ts";
 import type { FsLimits } from "./limits.ts";
 import { listGroups } from "./policy.ts";
 import { CapacityExceeded, T, WORKSPACES } from "./schema.ts";
@@ -25,13 +25,13 @@ export type Demand = {
 };
 
 /** The bytes of a tenant's current file versions, for the first check after opening. */
-export async function sumContentBytes(space: PhiSpaces): Promise<number> {
+export async function sumContentBytes(space: TenantSpace): Promise<number> {
 	let n = 0;
 	for (const e of await space.readAll({ type: T.content })) n += e.fields.size as number;
 	return n;
 }
 
-export async function checkQuotas(space: PhiSpaces, limits: FsLimits, d: Demand, contentBytesNow: number): Promise<void> {
+export async function checkQuotas(space: TenantSpace, limits: FsLimits, d: Demand, contentBytesNow: number): Promise<void> {
 	const over = (what: string, have: number, add: number, limit: number) => {
 		if (add > 0 && have + add > limit) throw new CapacityExceeded(`${what}: ${have} + ${add} exceeds ${limit}`);
 	};

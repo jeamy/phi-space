@@ -6,7 +6,6 @@
 // and the remaining grants in maintenancePutGrant batches; the deletion then fits. No step reads or writes a file.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { T } from "../server/schema.ts";
 import { FilesService, tenantAlias } from "../server/service.ts";
@@ -27,7 +26,7 @@ test("the runbook: replacement owners and relation removal in bounded batches, t
 		for (const n of names) await s.createWorkspace(adm, n, X, await id());
 		for (let g = 0; g < GROUPS; g++) await s.addMember(adm, `g${g}`, X, await id());
 		await s.write(xena, names[0], "plan.md", Buffer.from("x"), 0, await id(xena));
-		const relations = () => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias("acme") })
+		const relations = () => s.store.space(tenantAlias("acme"))
 			.count({ type: T.relation, fields: { subjectKind: "user", subjectId: "xena" } });
 		const before = await relations();
 		assert.equal(before, N + 1 + GROUPS, "the owned workspaces, the home and the memberships");

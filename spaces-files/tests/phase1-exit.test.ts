@@ -3,7 +3,6 @@
 // identity runs the whole chain: registration, login with the verified identity, a request on the handle.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FOREVER } from "phi-spaces/core";
 import { FilesService, tenantAlias } from "../server/service.ts";
@@ -29,12 +28,12 @@ test("phase 1 exit: identities, homes, isolation and fail-closed sessions", asyn
 		const seen = await Promise.all(ids.map(async (id) => me(s, (await s.login("acme", "agent", id)).handle)));
 		assert.deepEqual(seen.map((x) => x.actor), ["agent:agent-0", "agent:agent-1", "agent:agent-2"]);
 		assert.equal(new Set(seen.map((x) => x.home)).size, 3);
-		const owners = (await new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias("acme") }).readAll({ type: T.relation, fields: { relation: "owner" } }))
+		const owners = (await s.store.space(tenantAlias("acme")).readAll({ type: T.relation, fields: { relation: "owner" } }))
 			.filter((r) => seen.some((x) => x.home === r.fields.objectId)).map((r) => `${r.fields.objectId}@${r.fields.subjectId}`).sort();
 		assert.deepEqual(owners, seen.map((x, i) => `${x.home}@agent-${i}`).sort(), "each home is owned by its own actor only");
 
 		// duplicate identity pairs fail without creating an actor or a home
-		const count = async () => (await new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias("acme") }).readAll()).length;
+		const count = async () => (await s.store.space(tenantAlias("acme")).readAll()).length;
 		const before = await count();
 		await assert.rejects(s.provisionActor("acme", LEA, "agent", "agent-x", "home-x", conv("host-a", "conversation-1")), AlreadyExists);
 		await assert.rejects(s.provisionActor("acme", LEA, "user", "lea-x", "home-y", { issuer: ADMIN.issuer, subject: ADMIN.subject }), AlreadyExists);
@@ -49,7 +48,7 @@ test("phase 1 exit: identities, homes, isolation and fail-closed sessions", asyn
 
 		// unknown and disabled actors and old session epochs fail closed
 		await assert.rejects(s.login("acme", "agent", conv("host-c", "conversation-1")), Unauthenticated);
-		const sp = new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias("acme") });
+		const sp = s.store.space(tenantAlias("acme"));
 		const h0 = (await s.login("acme", "agent", ids[0]!)).handle;
 		const row = await sp.take({ type: T.actor, fields: { actorKind: "agent", actorId: "agent-0" } }, 0);
 		await sp.write({ type: T.actor, fields: { ...row!.fields, state: "disabled" } }, null, FOREVER);

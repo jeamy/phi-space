@@ -268,6 +268,7 @@ Section 8 of the plan, item by item, each decided in the plan and built after th
 | Virtual files: read-only providers as `@<name>` workspaces, called outside the queue with the caller's verified binding only, a deadline and no cache; mutations refused, `@` names reserved; a directory provider with a per-identity access table (`FILES_MOUNTS`) | section 5, *Virtual files* | `tests/mounts.test.ts` |
 | Restricted children: an owner restricts a node below the root; viewers and editors above lose it at once unless they hold a grant on it, owners above keep it; `list` leaves hidden children out | section 4, *Restricted children*; section 5 | `tests/restricted.test.ts` |
 | Network agent hosts: a TLS listener (`FILES_AGENT_NET`) where a host enrolls an Ed25519 key with the operator's one-time token (`operator enroll-host`), proves it on every connection and acts for its agents in the tenants its key names; the key is looked up on every call, `revoke-host` refuses the next one, a restore revokes every host key; `client/agent-net-client.ts` is the host's side | section 2, *Network agent hosts* | `tests/agent-net.test.ts` |
+| Separate Space process: the tenant Spaces in `server/space-host.ts` on a socket in the data directory, started and stopped by the service; a lost reply is `unavailable` or an unknown outcome, the retry after a restart applies once; host keys in `control.sqlite` of the state directory; `npm run test:space` runs every suite against it | section 2, *The Space in a process of its own* | `tests/space-process.test.ts`, `npm run test:space` |
 
 ## Commands
 
@@ -304,6 +305,8 @@ Variables, read from `spaces-files/.env` (values already in the environment win)
 - `FILES_OIDC_ISSUER`, `FILES_OIDC_CLIENT_ID`, `FILES_OIDC_CLIENT_SECRET`, `FILES_OIDC_CA`: the identity provider
   (default: the development IdP, client `spaces-files-dev`)
 - `FILES_AGENT_SOCKETS`: `hostPeer@tenant=/absolute/path.sock;…`, one socket per enrolled agent host and tenant
+- `FILES_SPACE_SERVER`: the Space process; unset or `ts` runs `server/space-host.ts`, a path names a binary with the
+  same command line, `inprocess` keeps the store in the service's process
 - `FILES_AGENT_NET`: `host:port` of the TLS listener for agent hosts on other machines (the certificate of
   `FILES_TLS_CERT`/`FILES_TLS_KEY`); `FILES_AGENT_NET_ID` the service ID in each challenge (default `spaces-files`)
 - `FILES_LIMITS`: a JSON file of limit overrides (`server/limits.ts`), checked on start

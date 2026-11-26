@@ -7,7 +7,6 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PhiSpaces } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FOREVER } from "phi-spaces/core";
 import { FilesService, InconsistentState, TenantProvisioning, tenantAlias } from "../server/service.ts";
@@ -15,7 +14,7 @@ import { InvalidInput, T, WORKSPACES } from "../server/schema.ts";
 
 const ADMIN = { actorId: "lea", homeName: "Lea’s home", issuer: "https://id.example", subject: "sub-lea" };
 const mem = () => FilesService.open({ dataDir: null, stateDir: null, blobDir: null });
-const raw = (s: FilesService, tenantId: string) => new PhiSpaces(s.host, ctx, Date.now, undefined, undefined, { space: tenantAlias(tenantId) });
+const raw = (s: FilesService, tenantId: string) => s.store.space(tenantAlias(tenantId));
 
 test("a reserved Space admits nothing until its initialization commits", async () => {
 	const s = await mem();
