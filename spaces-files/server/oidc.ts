@@ -1,7 +1,9 @@
 // The relying party of the browser login (docs/zanzibar-agent-filesystem-plan.en.md, section 2, *Identity*): OpenID
 // Connect discovery, the authorization-code flow with PKCE (S256), state and nonce, the code exchanged at the token
 // endpoint, and the ID token verified on the server: signature by the issuer's JWKS (RS256, ES256 or EdDSA), issuer,
-// audience and authorized party, expiry, issue time within the clock skew, and the nonce of this login. Only node:http,
+// audience and authorized party, expiry, issue time within the clock skew, and the nonce of this login. A login may
+// demand a fresh authentication (`max_age`, checked against the token's `auth_time`), and a sign-out can be carried
+// on to the provider (`end_session_endpoint`, RP-initiated logout). Only node:http,
 // node:https and node:crypto; an issuer must be https, except on a loopback address (the development IdP).
 import { createHash, createPublicKey, randomBytes, verify as verifySig, type KeyObject } from "node:crypto";
 import http from "node:http";
@@ -61,11 +63,12 @@ export function fetchJson(url: string, o: { form?: Record<string, string>; ca?: 
 	});
 }
 
-export type Pending = { state: string; nonce: string; verifier: string; authorizeUrl: string };
+/** `authAfter` (ms): the provider must have authenticated the person at or after it; set by a login with `maxAgeS`. */
+export type Pending = { state: string; nonce: string; verifier: string; authorizeUrl: string; authAfter?: number };
 
 export class OidcClient {
 	readonly #c: Required<Pick<OidcConfig, "issuer" | "clientId" | "redirectUri" | "clockSkewMs">> & OidcConfig;
-	#meta?: { authorization_endpoint: string; token_endpoint: string; jwks_uri: string };
+	#meta?: { authorization_endpoint: string; token_endpoint: string; jwks_uri: string; end_session_endpoint?: unknown };
 	#keys = new Map<string, { key: KeyObject; alg?: string; kty: string; crv?: string }>();
 	#keysAt = 0;
 
@@ -86,16 +89,21 @@ export class OidcClient {
 		return this.#meta!;
 	}
 
-	/** A new login: fresh state, nonce and PKCE verifier, and the URL to send the browser to. */
-	async begin(): Promise<Pending> {
+	/** A new login: fresh state, nonce and PKCE verifier, and the URL to send the browser to. With `maxAgeS` the
+	 *  provider is asked for an authentication no older than that (0: now), and the ID token must prove it: its
+	 *  `auth_time` may lie before this login by `maxAgeS` and the clock skew, no more. */
+	async begin(o: { maxAgeS?: number } = {}): Promise<Pending> {
 		const m = await this.#discover();
 		const state = b64u(randomBytes(32)), nonce = b64u(randomBytes(32)), verifier = b64u(randomBytes(32));
 		const u = new URL(m.authorization_endpoint);
 		u.search = new URLSearchParams({
 			response_type: "code", client_id: this.#c.clientId, redirect_uri: this.#c.redirectUri, scope: "openid",
 			state, nonce, code_challenge: b64u(createHash("sha256").update(verifier).digest()), code_challenge_method: "S256",
+			// max_age gives the claim that is checked (auth_time); with 0, prompt=login also makes the provider ask in the
+			// very second it last did (a provider compares whole seconds)
+			...(o.maxAgeS !== undefined ? { max_age: String(o.maxAgeS) } : {}), ...(o.maxAgeS === 0 ? { prompt: "login" } : {}),
 		}).toString();
-		return { state, nonce, verifier, authorizeUrl: u.toString() };
+		return { state, nonce, verifier, authorizeUrl: u.toString(), ...(o.maxAgeS !== undefined ? { authAfter: this.#now() - o.maxAgeS * 1000 } : {}) };
 	}
 
 	/** Exchanges the code of a returning browser and verifies its ID token against the pending login. */
@@ -105,10 +113,21 @@ export class OidcClient {
 		if (this.#c.clientSecret !== undefined) form.client_secret = this.#c.clientSecret;
 		const tok = await fetchJson(m.token_endpoint, { form, ca: this.#c.ca });
 		if (typeof tok.id_token !== "string") throw new OidcError("the token endpoint returned no ID token");
-		return this.verifyIdToken(tok.id_token, p.nonce);
+		return this.verifyIdToken(tok.id_token, p.nonce, p.authAfter);
 	}
 
-	async verifyIdToken(jwt: string, nonce: string): Promise<Verified> {
+	/** Where to send the browser after the local sign-out so that the provider's session ends too, or null when the
+	 *  provider names no end-session endpoint. No ID token is kept for a hint: the client ID names the party. */
+	async endSessionUrl(postLogoutRedirectUri: string): Promise<string | null> {
+		const m = await this.#discover();
+		if (typeof m.end_session_endpoint !== "string") return null;
+		const u = checkIssuerUrl(m.end_session_endpoint);
+		u.searchParams.set("client_id", this.#c.clientId);
+		u.searchParams.set("post_logout_redirect_uri", postLogoutRedirectUri);
+		return u.toString();
+	}
+
+	async verifyIdToken(jwt: string, nonce: string, authAfter?: number): Promise<Verified> {
 		const parts = jwt.split(".");
 		if (parts.length !== 3) throw new OidcError("the ID token is no JWS");
 		let header: Record<string, unknown>, claims: Record<string, unknown>;
@@ -133,6 +152,7 @@ export class OidcClient {
 		if (typeof claims.iat !== "number" || claims.iat * 1000 > now + skew) throw new OidcError("the ID token is issued in the future");
 		if (claims.nonce !== nonce) throw new OidcError("the ID token's nonce is not this login's");
 		if (typeof claims.sub !== "string" || claims.sub.length === 0 || claims.sub.length > 255) throw new OidcError("the ID token has no subject");
+		if (authAfter !== undefined && (typeof claims.auth_time !== "number" || claims.auth_time * 1000 < authAfter - skew)) throw new OidcError("the ID token proves no fresh authentication");
 		return { issuer: this.#c.issuer, subject: claims.sub };
 	}
 

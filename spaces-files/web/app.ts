@@ -310,8 +310,11 @@ $("remove").onclick = async () => {
 };
 $("logout").onclick = async () => {
 	const out = () => fetch("/auth/logout", { method: "POST", headers: { "x-files-csrf": csrf } });
-	if ((await out()).status === 403 && await refreshCsrf()) await out();
-	location.reload();
+	let r = await out();
+	if (r.status === 403 && await refreshCsrf()) r = await out();
+	// with an identity provider the sign-out goes on there, so that the next sign-in asks again
+	const next = r.ok ? (await r.json().catch(() => null))?.value?.next : null;
+	if (typeof next === "string") location.href = next; else location.reload();
 };
 $("admin-open").onclick = () => void showAdmin();
 $("create").addEventListener("submit", (e) => { e.preventDefault(); void create(submitter(e as SubmitEvent)); });

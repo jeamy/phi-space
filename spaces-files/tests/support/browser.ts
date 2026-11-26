@@ -105,10 +105,10 @@ export class Browser {
 	}
 
 	/** Signs in for recovery (/recovery/login?tenant=) and takes the recovery session's CSRF token. */
-	async recoverySignIn(idp: DevIdp, subject: string, tenant: string): Promise<Res> {
+	async recoverySignIn(idp: DevIdp, subject: string, tenant: string, o: { authTime?: number } = {}): Promise<Res> {
 		const start = await this.request("GET", `/recovery/login?tenant=${encodeURIComponent(tenant)}`);
 		if (start.status !== 302) throw new Error(`recovery login answered ${start.status}`);
-		const to = new URL(await idp.authorize(new URL(String(start.headers.location)).searchParams, subject));
+		const to = new URL(await idp.authorize(new URL(String(start.headers.location)).searchParams, subject, o));
 		const cb = await this.request("GET", to.pathname + to.search);
 		const r = await this.request("GET", "/api/recovery/session");
 		if (r.json?.ok) this.csrf = r.json.value.csrf;

@@ -308,7 +308,10 @@ Variables, read from `spaces-files/.env` (values already in the environment win;
 - `FILES_TLS_CERT`, `FILES_TLS_KEY`: PEM files (default `.local/tls/cert.pem`, `key.pem`); without them the browser
   adapter stays off
 - `FILES_OIDC_ISSUER`, `FILES_OIDC_CLIENT_ID`, `FILES_OIDC_CLIENT_SECRET`, `FILES_OIDC_CA`: the identity provider
-  (default: the development IdP, client `spaces-files-dev`)
+  (default: the development IdP, client `spaces-files-dev`). Signing out ends the session here and sends the browser on
+  to the provider's `end_session_endpoint`, where it has one, with `<origin>/` as the place to come back to (register it
+  there as a post-logout redirect URI); the recovery sign-in asks the provider for a fresh authentication (`max_age=0`)
+  and refuses an ID token whose `auth_time` is older than that login
 - `FILES_AGENT_SOCKETS`: `hostPeer@tenant=/absolute/path.sock;…`, one socket per enrolled agent host and tenant
 - `FILES_SPACE_SERVER`: the Space process; unset or `ts` runs `server/space-host.ts`, a path names a binary with the
   same command line, `inprocess` keeps the store in the service's process

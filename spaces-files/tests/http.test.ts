@@ -187,7 +187,47 @@ test("the ID token: signature, issuer, audience, authorized party, expiry, issue
 		for (const [jwt, why] of bad) await assert.rejects(c.verifyIdToken(jwt, "n"), new RegExp(why), why);
 		assert.deepEqual(await c.verifyIdToken(idp.signIdToken({ ...good, aud: ["files", "other"], azp: "files" }), "n"), { issuer: idp.issuer, subject: "lea" });
 		assert.throws(() => new OidcClient({ issuer: "http://idp.example", clientId: "x", redirectUri: "https://localhost/cb" }), /https/);
+		// a login that demanded a fresh authentication: the token must carry an auth_time at or after it (within the skew)
+		const after = Date.now();
+		await assert.rejects(c.verifyIdToken(idp.signIdToken(good), "n", after), /fresh authentication/, "no auth_time");
+		await assert.rejects(c.verifyIdToken(idp.signIdToken({ ...good, auth_time: t - 3600 }), "n", after), /fresh authentication/, "an hour old");
+		await assert.rejects(c.verifyIdToken(idp.signIdToken({ ...good, auth_time: String(t) }), "n", after), /fresh authentication/, "no number");
+		assert.deepEqual(await c.verifyIdToken(idp.signIdToken({ ...good, auth_time: t }), "n", after), { issuer: idp.issuer, subject: "lea" });
+		assert.deepEqual(await c.verifyIdToken(idp.signIdToken({ ...good, auth_time: t - 3600 }), "n"), { issuer: idp.issuer, subject: "lea" }, "an ordinary login asks for none");
 	} finally { await idp.close(); }
+});
+
+test("sign-out ends the session here and goes on to the provider's end-session endpoint", async () => {
+	const { svc, web, done } = await setup();
+	try {
+		const adm = web.browser();
+		await adm.signIn(web.idp, "adm");
+		const handle = adm.jar.get("__Host-files")!;
+		// an ordinary sign-in asks the provider for no fresh authentication
+		const start = await web.browser().request("GET", "/auth/login");
+		assert.equal(new URL(String(start.headers.location)).searchParams.has("max_age"), false);
+		const out = await adm.request("POST", "/auth/logout", { headers: { "x-files-csrf": adm.csrf } });
+		assert.equal(out.status, 200);
+		assert.equal(svc.state.lookupSession(handle), null, "the session ended here");
+		const next = new URL(out.json!.value.next);
+		assert.equal(next.origin + next.pathname, `${web.idp.issuer}/logout`);
+		assert.equal(next.searchParams.get("client_id"), "files-test");
+		assert.equal(next.searchParams.get("post_logout_redirect_uri"), `${web.origin}/`);
+		// the provider sends the browser back to the registered place and to no other
+		const back = await fetch(next, { redirect: "manual" });
+		assert.equal(back.status, 302);
+		assert.equal(back.headers.get("location"), `${web.origin}/`);
+		next.searchParams.set("post_logout_redirect_uri", "https://evil.example/");
+		assert.equal((await fetch(next, { redirect: "manual" })).status, 400);
+		// a provider that is gone does not keep the session alive
+		const lea = web.browser();
+		await lea.signIn(web.idp, "lea", "acme");
+		const h2 = lea.jar.get("__Host-files")!;
+		await web.idp.close();
+		const gone = await lea.request("POST", "/auth/logout", { headers: { "x-files-csrf": lea.csrf } });
+		assert.equal(gone.status, 200);
+		assert.equal(svc.state.lookupSession(h2), null);
+	} finally { await done(); }
 });
 
 test("Browser helper sanity: a browser without a session is refused at the API", async () => {

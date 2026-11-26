@@ -138,6 +138,13 @@ test("the recovery path of the browser adapter: the roster admits, its cookie re
 		assert.equal((await ops.recoverySignIn(web.idp, "ops", "acme")).status, 403);
 		assert.equal(ops.jar.has(RECOVERY_COOKIE), false);
 		svc.state.rosterAdd("acme", now, "ops");
+		// the recovery sign-in demands a fresh authentication: max_age=0 goes to the provider, and a token whose
+		// auth_time lies before this login is refused even for a rostered identity
+		const asked = await web.browser().request("GET", "/recovery/login?tenant=acme");
+		assert.equal(new URL(String(asked.headers.location)).searchParams.get("max_age"), "0");
+		assert.equal(new URL(String(asked.headers.location)).searchParams.get("prompt"), "login");
+		assert.equal((await ops.recoverySignIn(web.idp, "ops", "acme", { authTime: Math.floor(Date.now() / 1000) - 3600 })).status, 400);
+		assert.equal(ops.jar.has(RECOVERY_COOKIE), false, "an old session at the provider opens no recovery");
 		assert.equal((await ops.recoverySignIn(web.idp, "ops", "acme")).status, 200);
 		assert.ok(ops.jar.has(RECOVERY_COOKIE) && !ops.jar.has(SESSION_COOKIE), "a cookie of its own, no ordinary session");
 		assert.deepEqual((await ops.recover("inspect")).json?.value.admins, ["anna"]);

@@ -1,6 +1,6 @@
 # FORUM: people and models turn a folder into a plan and its documents, on one page (plan, 2026-11-26)
 
-Status: proposed on 2026-11-26, nothing built; second version of the same day, after the person's word on the name,
+Status: phase 0 done on 2026-11-26 (`idp/`, the two changes in spaces-files); phases 1 to 13 open. Proposed on 2026-11-26; second version of the same day, after the person's word on the name,
 binary files, the servers, the example brief, sources and scripts (section 2). The decisions of section 2 are open until confirmed.
 Starting point: `codemode-forum/` (phases 0 to 11 of `docs/gemeinsame-planung-plan-2026-11-22.en.md`) and
 `spaces-files/` (phases 1 to 5 of `docs/zanzibar-agent-filesystem-plan.en.md` and what followed) as of commit
@@ -63,25 +63,26 @@ the page, and the help is part of every phase, written for people who know neith
 | Sources are discussed at the table | section 6, *The register of sources* |
 | Scripts are allowed (codemode, as codemode-chat runs them); the app's source code is not written | section 6, *Scripts* |
 | Running scripts can be moved out to external sandboxes, as files are kept outside | section 6, *Scripts*; decision 2 |
-| `id.eibrain.org` is set up for the identity provider | section 13 |
+| `id.eibrain.org` is the identity provider's name; so far only the name exists. It and `codeforum.eibrain.org` go behind the proxy like the other sites | section 13 |
 
-**To be decided, with a recommendation each.** Nothing is built before decisions 1, 3, 4 and 6 are taken; phase 10 needs decisions 2 and 11.
+**Decisions, with a recommendation each.** Those the person has taken are marked. Open are 5 to 10, 13 and 14; none of them holds up phases 0 to 3.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | Where does the page live: inside `codemode-forum/` or in a sixth application? | Inside `codemode-forum/`. The page's server must follow the forum's Space (`server/hub.ts`) anyway; a separate application would build that hub a second time. The present page stays reachable as the expert view (`/expert`). |
-| 2 | Where does the sandbox for scripts run? | As a role of its own, `sandbox`, that talks only through the forum's Space like every other role, in a container without network, with a read-only file system and bounded memory and time, on nano beside the checker. Because it is only a client of the Space it can run on any machine, and a sandbox someone else operates can take the same requests later. Not inside web, agents, model or sources. |
-| 3 | Which identity provider | Keycloak in Docker, one realm for both applications, issuer on a host name of its own, fixed before the first account. NetBird's built-in provider cannot register a further client and is not used. |
-| 4 | "Sign-in of the providers": this plan reads it as the credentials of the **model** providers (API keys, OAuth logins). | As read. The identity provider itself is the root of trust and stays in the operator's environment; the page shows it and cannot change it. |
+| 1 | Where does the page live: inside `codemode-forum/` or in a sixth application? | Inside `codemode-forum/`. The page's server must follow the forum's Space (`server/hub.ts`) anyway; a separate application would build that hub a second time. The present page stays reachable as the expert view (`/expert`). **Decided: yes (2026-11-26).** |
+| 2 | Where does the sandbox for scripts (and for taking the text out of PDFs) run? | As a role of its own, `sandbox`, that talks only through the forum's Space like every other role, in a container without network, with a read-only file system and bounded memory and time, on nano beside the checker. Because it is only a client of the Space it can run on any machine, and a sandbox someone else operates can take the same requests later. Not inside web, agents, model or sources. **Decided: yes (2026-11-26).** |
+| 3 | Which identity provider | Keycloak in Docker, one realm for both applications, issuer on a host name of its own, fixed before the first account. NetBird's built-in provider cannot register a further client and is not used. **Decided: Keycloak (2026-11-26).** |
+| 4 | "Sign-in of the providers": this plan reads it as the credentials of the **model** providers (API keys, OAuth logins). | As read. The identity provider itself is the root of trust and stays in the operator's environment; the page shows it and cannot change it. **Decided: as read (2026-11-26).** |
 | 5 | OAuth logins of personal subscriptions (a chat subscription used as a model account) on a deployment several people use | Off unless the operator sets `FORUM_SUBSCRIPTION_LOGIN=1`. Such subscriptions are sold for their holder's own use; whether a provider's terms allow more is for the operator to check. API keys are always offered. |
-| 6 | Who creates the room's agent in spaces-files (only a tenant administrator may register an actor today) | First the tenant administrator, on the spaces-files page, with no change there (phases 5 to 8). A consent page in spaces-files with a narrow new operation follows as phase 11 and is decided then. |
+| 6 | Who creates the room's agent in spaces-files (only a tenant administrator may register an actor today) | First the tenant administrator, on the spaces-files page, with no change there (phases 5 to 8). A consent page in spaces-files with a narrow new operation follows as phase 11 and is decided then. Asked back by the person ("what makes sense?", 2026-11-26): this, because today the person who links rooms is the tenant's administrator; the consent page pays off with the first person who is not, and it changes the application that guards the files, so it should not be built on a guess. |
 | 7 | Is workspace material read live during a run, or copied when a task is created? | Copied. spaces-files keeps no old versions, and the forum's checks quote lines that must not move under them. |
 | 8 | Is the plan saved by a person's click or by itself? | By a click. Saving on acceptance becomes a room setting in phase 7, off by default. |
 | 9 | The accounts on big when spaces-files changes from password sign-in to the provider | An operator command that rebinds an actor to a new issuer and subject, audited. Decided before phase 12, not needed locally. |
 | 10 | Does the forum get the durable agent (pi-durable) with this work? | No. Nothing here needs it; the forum plan's own condition (its section 14) stays. |
-| 11 | The sandbox needs pi-codemode (the QuickJS sandbox codemode-chat's judge uses). It is in the repository at 1.5.2 (`spaces/`, `codemode-chat/`) but would be new in `codemode-forum/package.json`. | Add it there at the same version, loaded by the sandbox process alone. |
-| 12 | How do models read a PDF or an office file? | Not in the first version: such files are kept, shown and named to the models with a note a person writes. Reading them needs a text extractor, which is a new package to decide; pi-ai 1.5.2 hands models text and images only. |
+| 11 | The sandbox needs pi-codemode (the QuickJS sandbox codemode-chat's judge uses). It is in the repository at 1.5.2 (`spaces/`, `codemode-chat/`) but would be new in `codemode-forum/package.json`. | Add it there at the same version, loaded by the sandbox process alone. **Decided: yes where it is needed (2026-11-26). The registry has 1.6.1 since 2026-11-25; decision 14 says when the repository moves.** |
+| 12 | How do models read a PDF or an office file? | PDF: read (section 6, *Files that are not text*), with pdfjs-dist as a new package of `codemode-forum/` (6.5.438 today, Apache-2.0, no dependency of its own that it needs; its optional canvas package is for drawing pages and is left out). **Decided: PDFs are read, the package may be added (2026-11-26).** Office files stay as before: kept, shown and named with a person's note. |
 | 13 | May the models search the web for sources? | Yes, switched on by an administrator, as codemode-chat's research agents do (`server/search.ts`: result lists only, no page is fetched). The sky brief cannot be answered well without it. |
+| 14 | Pi 1.6.1 is out (2026-11-25); the repository pins 1.5.2 in `spaces/agent/`, `spaces/` and `codemode-chat/` (`AGENTS.md`). When does it move? | As a step of its own before phase 4, for all packages at once and with every suite that loads them: phase 4 builds on pi-ai's login interface and phase 10 on pi-codemode, and both should be written against the version that stays. Not mixed: no application on 1.6 while the agent package is on 1.5. |
 
 ## 3. Where both applications stand
 
@@ -255,9 +256,16 @@ today. What changes:
   the text in it, what it may mean for the brief. Every model gets the description; those that accept pictures get
   the picture as well. A run on a task with pictures needs at least one such model at the table and is refused with
   that reason otherwise. A person can correct a description, and the corrected one counts.
-- **Other files** (PDF, office files, archives, sound, video): the models learn their name, kind and size and the
-  note a person writes about them ("the tender, 40 pages, the deadlines are in chapter 3"). Reading them is decision
-  12.
+- **PDF** (decision 12). A PDF's text is taken out when a task is created and copied into the Space like a text
+  file, with a mark at every page, so that `read` and `search` work on it and a section can cite "needs.pdf, page
+  12". The page shows the PDF in the browser's own viewer. A PDF is hostile input until proven otherwise, so it is
+  never opened by a process that holds a key: the sources process fetches the bytes, and the `sandbox` container
+  (no network, no files, bounded time and memory) runs the extraction and hands back text. Proposed limits: 300
+  pages and 2 MB of text a file; a file beyond them is refused with the number. A scanned PDF has no text to take:
+  the task says so, names the file like any other binary, and its pages can be added as pictures by a person.
+  Reading text out of pictures (OCR) is not part of this plan.
+- **Other files** (office files, archives, sound, video): the models learn their name, kind and size and the note a
+  person writes about them ("the tender as a spreadsheet, the deadlines are on the second sheet").
 - The page says, where a picture is added, that it goes to the model providers.
 
 **A room is a project.** A room already holds up to thirty tasks, each with a document of its own. That becomes the
@@ -331,7 +339,7 @@ Kept small, each with its own tests in `spaces-files/tests/`. None changes a sto
 | Change | Why | Phase |
 |---|---|---|
 | Signing out also ends the provider's session (`end_session_endpoint` from the discovery document) | "sign out, sign in" must ask again on a shared device | 0 |
-| The recovery sign-in demands a fresh login (`max_age=0`, `auth_time` checked) | the strongest authority should not ride on an old session | 0 |
+| The recovery sign-in demands a fresh login (`max_age=0` with `prompt=login`, `auth_time` checked) | the strongest authority should not ride on an old session | 0 |
 | `launch.ts` starts the TLS listener when `FILES_AGENT_NET` is set | documented, never started | 12 |
 | A consent page `/link` and an operation by which a person creates an agent that can never hold more than they grant it | linking without a tenant administrator; decision 6 | 11 |
 | An operator command that rebinds an actor to a new issuer and subject | big's accounts when it leaves password sign-in; decision 9 | 12 |
@@ -527,7 +535,7 @@ final name before the first account. So the forum goes to the servers in phase 3
 | DNS | the name already resolves through the proxy in front of the other sites | to be checked in phase 3: that its record points at the address above and that the address is on big's interface; if not, the record is the person's to set |
 | web, agents, model, sources | big | `npm --prefix codemode-forum run docker:big:up` (exists, never run there) |
 | space, checker | nano | `docker:nano:rust:up` with `forum-space` (big and nano run only the Rust space server, R-D12), published on loopback and reached from big through a user unit `forum-nano-tunnel`, as codemode-chat's is |
-| The identity provider | `https://id.eibrain.org`, set up by the person (2026-11-26; from outside the name answers 401 today, as `codeforum.eibrain.org` does) | Keycloak and its database in a compose project of their own, the database dump in the daily backup to nano. What stands behind the name today is looked at in phase 0, before the issuer is fixed |
+| The identity provider | `https://id.eibrain.org`: only the name exists (the person, 2026-11-26) | an nginx site on big like the page's (`codemode-forum/docker/nginx-id.conf`, certbot), proxy to Keycloak on a loopback port; only `/realms/` and `/resources/` are passed on, the admin console is reached through the overlay network alone. Keycloak and its database in a compose project of their own, the database dump in the daily backup to nano. Its origin address is the person's to name, as `…::1002` is for the page |
 | sandbox | nano, beside the checker | a container without network (phase 10) |
 | Model credentials | big, the model container | until phase 4 the mounted pi login as today; from phase 4 the credential file in a volume of its own |
 | Backups | nano | the forum's `backup` script on a timer, as spaces-files has |
@@ -557,13 +565,13 @@ codemode-chat's bot tasks start the arena of spaces-mmo. No application imports 
 
 | Phase | Content | Exit evidence |
 |---|---|---|
-| 0 | Keycloak in Docker on this machine (a compose project of its own, loopback): one realm, a client for each application. spaces-files runs against it. In spaces-files: sign-out at the provider, fresh login for recovery (section 7). A note in `docs/` of what Keycloak needed. | spaces-files' suite passes unchanged against its development provider, with new cases for both changes; by hand against Keycloak: sign in, the tenant choice, sign out and in again asks for the password |
+| 0 ✓ | Keycloak in Docker on this machine (a compose project of its own, loopback): one realm, a client for each application. spaces-files runs against it. In spaces-files: sign-out at the provider, fresh login for recovery (section 7). A note of what Keycloak needed: `idp/README.md` (the realm is `phi`; `prompt=login` beside `max_age=0`; Keycloak asks to confirm a sign-out). | spaces-files' suite passes unchanged against its development provider, with new cases for both changes; by hand against Keycloak: sign in, the tenant choice, sign out and in again asks for the password |
 | 1 | Sign-in, people and rooms in the forum (section 5): `oidc.ts`, sessions, `ForumUser`, `RoomAccess`, every route and the WebSocket checked, administrators by identity, limits per person. The help's base: tips, "Words used here", "Signing in", the sign-in diagram, the extended help test. The registrations (`checks/shared-copies.test.mjs`, `AGENTS.md`). | every route refused without a session and with too low a role; a session that expires; two people who do not see each other's rooms; a request from another origin; without `FORUM_LOGIN` the present suite passes unchanged |
 | 2 | The page (sections 4 and 10): the four places, three panes and their phone form, tokens, states, routes, the manifest; task, run, table and document moved in; `/expert` keeps the present page. Articles of *Start* and *Use* that need no workspace; the table diagram. | the task list at four widths, both languages and modes, with screenshots; names and tips on every control; the present suite passes |
 | 3 | On the servers (section 13): Keycloak under its final name, the forum on big and nano, the nginx site of `codeforum.eibrain.org`, the tunnel, the backup timer; models off. The operator's article. | sign-in from outside; nothing but the sign-in without a session; a room and a walk through the page on a phone; the space on nano survives a restart of big's containers; a backup restored on this machine |
 | 4 | Models and providers from the page (section 8): the credential store, `ProviderInfo`, logins through sealed entries, the test call, `ForumSetting` with the ceilings, room defaults. Articles "Models and providers", "Budgets and limits". | a fake provider with every kind of prompt; the key's bytes are nowhere in the store's file; a model process killed during a login; a refreshed token survives a restart; a value above a ceiling is refused; a member refused |
 | 5 | The files connection, reading text (section 6): the client copy, the sources process as agent host over the unix socket, `RoomLink`, check and link, the `files` source with every file in its index, the Files pane. Articles "Material", "Who sees what", "What leaves this system"; the access diagram in German. | a room reads granted folders and nothing beside them; an owner agent is refused; each limit at its edge; denied names not offered, other kinds listed; a revocation stops the next copy and leaves the taken one; a sources process killed with a request taken; a run whose writer reads the copy |
-| 6 | Pictures and other files (section 6, *Files that are not text*): upload through the room's agent, kinds by content, pictures in the pane, the reduced copy from the browser as byte pages, `ImageNote`, pictures in the model call, notes on other files. Article "Photos and other files". | an upload retried after a lost reply is one file; a file whose name lies about its kind; a picture over a limit; a run without a model that accepts pictures is refused; the description reaches every model and the picture only those that take it; a corrected description counts; a reduced copy holds no camera metadata |
+| 6 | Pictures and other files (section 6, *Files that are not text*): upload through the room's agent, kinds by content, pictures in the pane, the reduced copy from the browser as byte pages, `ImageNote`, pictures in the model call, PDF text with page marks through pdfjs-dist in the sandbox container (the `sandbox` role starts here with this one job; scripts follow in phase 10), notes on other files. Article "Photos and other files". | an upload retried after a lost reply is one file; a file whose name lies about its kind; a picture over a limit; a run without a model that accepts pictures is refused; the description reaches every model and the picture only those that take it; a corrected description counts; a reduced copy holds no camera metadata; a PDF's text is found by `search` with its page; a scanned PDF, a broken one, an encrypted one and one over a limit each say what they are; the extraction cannot reach the network or a file |
 | 7 | The room as a project, and saving (section 6): kinds of task, the room's documents as a source, sections written by people, `SourceRef` and the register, `PlanSave`, save one and save all, the operation ID in the request, the conflict view, save on acceptance as a room setting. Articles "The plan", "Documents of a project"; the conflict diagram. | a person's section and a model's on the same base: the second is told the newer text; a document written against another's accepted version; a lost reply and a retry give one file version; a conflict writes nothing and shows both; a revoked editor is refused and said so; a process killed between the ID and the write |
 | 8 | The way back: loading a saved document's file as a new version. | sections matched by heading; the appendix removed; an unchanged file loads nothing; a file too large is refused; a run goes on from the person's text |
 | 9 | Research (section 6, decision 13): the `web` call, its switch for administrator and room, the day's bound, results into the register. Article "Sources and research". | a search refused when switched off and when the day is used up; results marked as data in the prompt; a cited result is in the register with who found it; no request leaves for anything but the search address |
@@ -594,7 +602,7 @@ run on this machine; 3, 12 and 13 also on the servers.
   the product is not;
 - editing a workspace's text files on this page: the Files pane lists, previews and uploads, and links to spaces-files
   for the rest;
-- reading PDF and office files (decision 12), and fetching web pages;
+- reading office files, reading text out of pictures or scanned pages (OCR), and fetching web pages;
 - notifications to a closed page;
 - the two additions the forum's plan proposes and has not decided (its sections 15 and 16, the archive repository and
   the map of the decision process); the page leaves a place for the map in the Plan pane;

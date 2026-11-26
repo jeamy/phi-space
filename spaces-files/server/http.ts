@@ -208,7 +208,8 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 				const hidden = `${tenant ? `<input type="hidden" name="tenant" value="${esc(tenant)}">` : ""}${recovery ? `<input type="hidden" name="recovery" value="1">` : ""}`;
 				return page(res, 200, recovery ? "Recovery sign-in" : "Sign in", `<form method="post" action="/auth/password" class="login">${hidden}<label>Username <input name="username" autocomplete="username" required autofocus></label><label>Password <input name="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form>`);
 			}
-			const pending = await o.oidc.begin();
+			// the recovery interface holds the strongest authority: it never rides on an older session at the provider
+			const pending = await o.oidc.begin(recovery ? { maxAgeS: 0 } : {});
 			const binding = randomBytes(24).toString("base64url");
 			logins.set(pending.state, { pending, binding, tenant, recovery, exp: now() + ttl });
 			res.writeHead(302, { ...PAGE_HEADERS, ...hsts, location: pending.authorizeUrl, "cache-control": "no-store",
@@ -263,7 +264,11 @@ export async function serveHttp(svc: FilesService, o: HttpOptions): Promise<Http
 			const h = jar.get(name);
 			if (!sameOrigin(req) || !h || !same(csrfFor(h), String(req.headers[CSRF_HEADER] ?? ""))) return json(res, 403, { ok: false, error: { code: "permissionDenied", message: "origin or CSRF token refused" } });
 			svc.state.endSession(h);
-			return json(res, 200, { ok: true, value: null }, { "set-cookie": clear(name) });
+			// with a provider, the page goes on to its end-session endpoint: the next sign-in asks again. A provider that
+			// cannot be reached does not keep the local session alive.
+			let next: string | null = null;
+			if (o.oidc) try { next = await o.oidc.endSessionUrl(`${origin}/`); } catch { /* signed out here all the same */ }
+			return json(res, 200, { ok: true, value: { next } }, { "set-cookie": clear(name) });
 		}
 		if (route === "GET /api/recovery/session") {
 			const h = jar.get(RECOVERY_COOKIE);

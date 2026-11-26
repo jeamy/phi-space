@@ -1,0 +1,62 @@
+{
+  "realm": "phi",
+  "enabled": true,
+  "displayName": "phi-spaces",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "ssoSessionIdleTimeout": 3600,
+  "ssoSessionMaxLifespan": 43200,
+  "clients": [
+    {
+      "clientId": "spaces-files",
+      "name": "spaces-files",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${IDP_FILES_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${IDP_FILES_ORIGIN}/auth/callback"],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${IDP_FILES_ORIGIN}/"
+      }
+    },
+    {
+      "clientId": "codemode-forum",
+      "name": "FORUM",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${IDP_FORUM_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${IDP_FORUM_ORIGIN}/auth/callback"],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${IDP_FORUM_ORIGIN}/"
+      }
+    }
+  ],
+  "users": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "username": "dev",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Dev",
+      "lastName": "User",
+      "email": "dev@localhost.invalid",
+      "credentials": [{ "type": "password", "value": "${IDP_DEV_USER_PASSWORD}", "temporary": false }]
+    }
+  ]
+}

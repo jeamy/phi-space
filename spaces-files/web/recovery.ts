@@ -64,7 +64,8 @@ $("revoke").addEventListener("submit", (e) => {
 	void step("revokeAdmin", { user: ($("r-user") as HTMLInputElement).value.trim() });
 });
 $("logout").addEventListener("click", async () => {
-	await fetch("/recovery/logout", { method: "POST", headers: { "x-files-csrf": csrf } });
-	show(false);
+	const r = await fetch("/recovery/logout", { method: "POST", headers: { "x-files-csrf": csrf } });
+	const next = r.ok ? (await r.json().catch(() => null))?.value?.next : null;
+	if (typeof next === "string") location.href = next; else show(false);
 });
 void start();

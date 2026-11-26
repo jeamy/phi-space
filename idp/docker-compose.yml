@@ -1,0 +1,49 @@
+# The identity provider of spaces-files and codemode-forum on this machine: Keycloak with its database, a compose
+# project of its own (`phi-idp`), on a loopback port. docs/forum-seite-plan-2026-11-26.en.md, phase 0; idp/README.md.
+#   docker compose --env-file .env -p phi-idp up -d
+# The realm in realm/ is imported on the first start only; a realm that exists is left as it is.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${IDP_DB_PASSWORD:?set it in idp/.env}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    command: start --import-realm
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${IDP_DB_PASSWORD:?set it in idp/.env}
+      # The issuer is ${IDP_URL}/realms/<realm>, compared character by character by both applications.
+      KC_HOSTNAME: ${IDP_URL:-http://localhost:4300}
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${IDP_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${IDP_ADMIN_PASSWORD:?set it in idp/.env}
+      # read by the realm import (realm/phi.json)
+      IDP_FILES_ORIGIN: ${IDP_FILES_ORIGIN:-https://localhost:4200}
+      IDP_FILES_SECRET: ${IDP_FILES_SECRET:?set it in idp/.env}
+      IDP_FORUM_ORIGIN: ${IDP_FORUM_ORIGIN:-http://localhost:4100}
+      IDP_FORUM_SECRET: ${IDP_FORUM_SECRET:?set it in idp/.env}
+      IDP_DEV_USER_PASSWORD: ${IDP_DEV_USER_PASSWORD:?set it in idp/.env}
+    volumes:
+      - ./realm:/opt/keycloak/data/import:ro
+    ports:
+      - "127.0.0.1:${IDP_PORT:-4300}:8080"
+
+volumes:
+  db:
