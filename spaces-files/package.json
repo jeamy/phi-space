@@ -13,7 +13,8 @@
     "space": "node --no-warnings --experimental-strip-types server/space-host.ts",
     "dev-idp": "node --no-warnings --experimental-strip-types server/dev-idp.ts",
     "dev-cert": "mkdir -p .local/tls && chmod 700 .local/tls && openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout .local/tls/key.pem -out .local/tls/cert.pem -days 365 -subj /CN=localhost -addext subjectAltName=DNS:localhost,IP:127.0.0.1 && chmod 600 .local/tls/key.pem",
-    "operator": "node --no-warnings --experimental-strip-types server/operator.ts"
+    "operator": "node --no-warnings --experimental-strip-types server/operator.ts",
+    "testbed:replica": "node --no-warnings --experimental-strip-types testbed/replica/run.ts"
   },
   "dependencies": {
     "phi-spaces": "file:../spaces"

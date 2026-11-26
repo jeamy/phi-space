@@ -1,0 +1,27 @@
+# spaces-files' replica test bed on this machine, a compose project of its own: two sites, each a container with its
+# own directories under TB_DIR/<site>. run.ts drives a site with `docker exec` (tests/support/replica-site.ts), kills
+# the primary's container, and fences it through the container fencing adapter, which runs on this machine at the
+# network's gateway, outside both containers.
+name: phi-files-replica
+
+x-site: &site
+  image: phi-files-replica:local
+  pull_policy: never
+  init: true
+  user: "${TB_UID}:${TB_GID}"
+  volumes: ["${TB_DIR}:/tb"]
+  command: ["sleep", "infinity"]
+  restart: unless-stopped
+
+services:
+  site-a:
+    <<: *site
+    networks: {tb: {ipv4_address: 172.30.9.2}}
+  site-b:
+    <<: *site
+    networks: {tb: {ipv4_address: 172.30.9.3}}
+
+networks:
+  tb:
+    ipam:
+      config: [{subnet: 172.30.9.0/24, gateway: 172.30.9.1}]
