@@ -647,8 +647,17 @@ export class FilesService {
 		return { peerId, tenants: [...tenants], expiresAt: rec.expiresAt };
 	}
 
-	/** A request generation in the control Space for a host's enrollment request (its retry keeps the identity). */
-	hostEnrollGeneration(peerId: string): Promise<{ generation: string; admitUntil: number }> { return this.#control().issueGeneration({ peerId }); }
+	/**
+	 * A request generation in the control Space for a host's enrollment request (its retry keeps the identity), only
+	 * while an enrollment for exactly this peer is open: an unproven peer cannot fill the control Space's claims.
+	 */
+	async hostEnrollGeneration(peerId: string): Promise<{ generation: string; admitUntil: number }> {
+		const now = this.#now();
+		const open = (await listSpaces(this.host, ctx)).some((sp) => sp.alias === CONTROL_SPACE)
+			&& (await this.#control().readAll({ type: "Enroll", fields: { allowedPeerId: peerId, state: "open" } })).some((e) => (e.fields.expiresAt as number) > now);
+		if (!open) throw new schema.PermissionDenied("no enrollment is open for this peer");
+		return this.#control().issueGeneration({ peerId });
+	}
 
 	/** The enrolled host keys: peer, key ID, tenants, state. */
 	async listHosts(): Promise<Array<{ peerId: string; keyId: string; tenants: string[]; state: string }>> {

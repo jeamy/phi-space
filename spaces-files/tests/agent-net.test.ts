@@ -67,7 +67,7 @@ test("enrollment: the token is bound to its peer, used once, and a challenge for
 	const d = await setup();
 	try {
 		const token = await d.invite("host-1", ["acme"]);
-		// another peer with host-1's token: refused, and the token stays for host-1
+		// another peer with host-1's token: no enrollment is open for it, so it gets no generation; the token stays
 		await assert.rejects(enrollHost(d.target("host-2"), token, hostKey(join(d.dir, "h2.key"))), refused);
 		await assert.rejects(enrollHost(d.target("host-1"), "not-the-token", hostKey(join(d.dir, "h1.key"))), refused);
 		d.clock.t += 61_000;

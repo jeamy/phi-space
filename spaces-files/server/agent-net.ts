@@ -133,7 +133,8 @@ export async function serveAgentNet(svc: FilesService, o: AgentNetOptions): Prom
 		if (isObj(msg) && msg.method === "generation") {
 			if (conn.state.generationIssued) return JSON.stringify({ ok: false, error: { code: "ResourceExhausted", message: "one generation per connection" } });
 			conn.state.generationIssued = true;
-			return JSON.stringify({ ok: true, result: await svc.hostEnrollGeneration(conn.peerId) });
+			try { return JSON.stringify({ ok: true, result: await svc.hostEnrollGeneration(conn.peerId) }); }
+			catch { return JSON.stringify({ ok: false, error: { code: "PermissionDenied", message: "enrollment refused" } }); }
 		}
 		return chain.handleText(text, conn as never);
 	};
