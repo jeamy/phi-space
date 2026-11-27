@@ -779,3 +779,51 @@ It was the tests, not the engine. A new figure holds no cell until it comes onli
 `arrived` in `tests/stack.ts` waits for the Spot that `arrive` claims and for the figure on it. Every test that reads a newcomer's place to put things beside it now uses it (cart, festival, growth, harbour, planks, quarry, rule-gaps, scenery, townhall). A read after a walk keeps the plain read: on a door cell a figure holds no Spot.
 
 `tests/planks.test.ts` failed for a reason of its own. It put a workshop, two huts and the cell to walk to beside wherever the newcomer started, and from some cells around the spawn that cell fell on the bay's fire. It now walks the figure to 18,12 first. With these changes, six parallel runs of the railway tests and four of planks all pass.
+
+## 8. The grid migration (phase 2 step 7)
+
+`npm --prefix spaces-mmo run migrate:grid -- --space <address> [--check]` (`scripts/migrate-grid.ts`) takes a world or region store from gridScale 1 to 2 (plan section 5). It runs with the world stopped, on each region's space, on a copy of the backup, after the footprint migration (7.5).
+
+**Rules.** Each entry changes by the grid class of its fields (`GRID_CLASSES`, section 3). The script refuses to load if a class row has a `path`, `growth` or `text` field without a rule of its own.
+- An area: position and size × 2. A fire and an exit, cells at scale 1, become areas of 2 × 2; a tree becomes 2 × 2.
+- A cell point: × 2, once. A thing keeps the carried sentinel (-1, -1). A thing at a place that is no room of the store is refused with its ID.
+- A room: ground and decor are resampled with `scaleGround`/`scaleDecor`, as `world:json` does for the definition. Its growth history doubles: east, south, the base, each step's `at` and `size`, and each element of a step's `fill` twice, in order.
+- A room of the definition is also reconstructed: the scale-2 definition grown by the scaled history must equal the resampled terrain. Where the stored terrain already differs from the definition at scale 1, the script tells it and keeps it.
+- A road: each cell doubles, and the cell between two neighbours of one room is inserted. At a fire end the script adds one more cell, so the road still meets the fire's area. A road that began on the fire's west or north side would otherwise end one cell short of it after doubling.
+- A road's Road and RoadCells entries are written anew from its Route. Votes, deliveries, work and deadlines stay.
+- `paved` follows the work done, `floor(cells · work / workNeed)`, as the engine computes it at every write. So it is not the prefix through the last old paved point; it can differ from that by up to two cells (one cell of scale 1). *Decision:* the engine's rule, since the next delivery or work would write it so anyway.
+- A field's needs (sowing: seed and work; harvest: work) are computed anew from the scale-2 definition and must equal the stored ones.
+- NpcMemory is cleared. Msg and Notice keep their texts.
+
+**Refusals.** Nothing is written when the store has:
+- no footprints, or a footprint migration that has not finished;
+- Plot, Handover or unexecuted Intent entries;
+- an entry type without a grid class;
+- anything the check of the result finds.
+
+**Order.**
+1. The whole result is computed in memory and checked at scale 2: the occupancy, the locks and the roads as the engine checks them, plus the grid's own rules:
+   - trees, fires and exits 2 × 2;
+   - points inside their rooms, an exit's arrival inside its destination;
+   - a bed's plants inside it, one per cell, at most `bedCapacity`;
+   - a road's neighbours.
+2. Then the `GridFormat` entry is written with gridScale 2, derivedFrom 1, state "running".
+3. The entries are written in batches of at most 100 entries or 64 kB of new fields. A room goes on its own and a road with its parts. Each transaction holds `WORLD_LOCK`, taken without waiting, so a running world stops the migration.
+4. The store is read back and compared with the result, entry by entry.
+5. The `GridFormat` entry becomes "complete".
+
+A run cut off is not resumed, because a coordinate doubled twice has no repair. The store says "running" and is refused, by the script and by every binary, until it is restored from its backup. A migrated store is only checked ("already"). Trees are planted at `gridScale` × `gridScale` (`trees.ts`, `trees.rs`; `TreeFields.w`/`h` are numbers since), and `baum ansehen x y` and `fälle x y` take any cell of a tree. `tests/migrate-grid.test.ts` covers these rules and refusals on a loaded world. Its fixture adds a room grown by two steps, a bent half-built road from the west of a fire, a bed with plants, a field being sown and a ripe one, a tree, a passenger on board, a motion's zone and an NPC's memory.
+
+**Rehearsal on big's stores, 2026-11-27.** The copies of 7.5 (`~/phi-backup/2026-11-27-grid-check/big`) were used again, each on a further working copy in the scratchpad behind the Rust `mmo-space`. On each, `migrate:footprints`, then `migrate:grid --check`, then `migrate:grid`, then a second run:
+
+| Store | Entries changed | Taken | Transactions | Time |
+| --- | --- | --- | --- | --- |
+| sued | 172 | 16 | 13 | 1.3 s |
+| nord | 374 | 33 | 28 | 3.3 s |
+| ost | 604 | 49 | 44 | 3.5 s |
+| west | 741 | 38 | 46 | 5.3 s |
+
+- The check found nothing to refuse and no note: every room of the definition matched its reconstruction. No store held a Handover or an Intent entry at the time of the copy.
+- The second run answered "already", and the start check at scale 2 (`checkGridFormat`) passed on all four.
+- On west, the TS loader of the scale-2 region world ran twice and left every room as migrated.
+- The Rust `mmo-world` at scale 2 started on west, with the four migrated regions behind it, and ran 40 s without an error. The check of the store afterwards found nothing.

@@ -22,12 +22,14 @@ import { growFactor, protoName } from "./garden.ts";
 import { needRank } from "./settlement.ts";
 import { consume, move } from "./trade.ts";
 import { randomBytes, randomInt } from "../source.ts";
-import { SITE_REACH } from "../../../shared/rules.ts";
+import { gridScale, SITE_REACH } from "../../../shared/rules.ts";
 
 const STAGES = ["Setzling", "junger Baum", "ausgewachsen"] as const;
 export const sortOfTree = (d: TreesDef, key: string): TreeSortDef | undefined => d.sorts.find((s) => s.key === key);
 const sortName = (d: TreesDef, t: TreeFields) => sortOfTree(d, t.sort)?.name ?? t.sort;
 const mine = (c: CommandCtx, t: TreeFields) => !!c.account && t.accountId === c.account.accountId;
+/** Whether the cell `x y` a command names is one of the tree's (any of its gridScale × gridScale cells). */
+const onTree = (t: TreeFields, x: number, y: number) => x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h;
 /** A span as one says it: minutes, hours, from two days on days. */
 const span = (ms: number) => {
 	const h = Math.round(ms / 3600_000);
@@ -82,7 +84,9 @@ export async function plantTree(c: CommandCtx, arg: string): Promise<boolean> {
 	if (typeof light === "string") throw new CommandError(light.replace("gebaut wird", "gepflanzt wird").replace("Bau", "Baum"));
 	await noteBuilder(c, light.beaconId);
 	const room = await roomOf(c);
-	const tries: Rect[] = m[2] !== undefined ? [{ x: Number(m[2]), y: Number(m[3]), w: 1, h: 1 }] : besides(c, { w: 1, h: 1 });
+	// a tree stands on gridScale × gridScale cells, as a 1×1 one of scale 1 (plan section 2.1, "Single objects")
+	const size = gridScale();
+	const tries: Rect[] = m[2] !== undefined ? [{ x: Number(m[2]), y: Number(m[3]), w: size, h: size }] : besides(c, { w: size, h: size });
 	let rect: Rect | null = null, why = "";
 	for (const r of tries) { const no = await refusal(c, room, r, true, true); if (!no) { rect = r; break; } why ||= no; }
 	if (!rect) throw new CommandError(`Hier passt kein Baum hin: ${why}`);
@@ -94,7 +98,7 @@ export async function plantTree(c: CommandCtx, arg: string): Promise<boolean> {
 	const treeId = `tree-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
 	await writeFootprint(c.space, c.txn, footprint(room.roomId, treeId, rect));
 	await useLight(c, light.beaconId, d.points);
-	const t: TreeFields = { treeId, sort: sort.key, room: room.roomId, x: rect.x, y: rect.y, w: 1, h: 1, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId, beaconId: light.beaconId, points: d.points,
+	const t: TreeFields = { treeId, sort: sort.key, room: room.roomId, x: rect.x, y: rect.y, w: size, h: size, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId, beaconId: light.beaconId, points: d.points,
 		stage: 0, dueWorldMs: nextDate(sort, 0, now, await fogOf(c.space, room.roomId), await patienceOf(c.space, c.txn)), at: now };
 	await c.space.write({ type: "Tree", fields: t as never }, c.txn, FOREVER);
 	await msg(c, "*", "emote", `${c.actor.name} pflanzt ${hit.f.name} ein: Hier wächst bald ${sort.a}. „baum“ zeigt, wie weit er ist.`);
@@ -118,7 +122,7 @@ const baum: Command = {
 		const d = trees(c);
 		const [word = "", ...rest] = arg.trim().split(/\s+/);
 		const [x, y] = /^(?:ansehen|look)$/i.test(word) ? rest.map(Number) : [];
-		const here = (await c.space.readAll({ type: "Tree", fields: { room: c.actor.room } })).map((e) => fieldsOf<TreeFields>(e)).filter((t) => x === undefined || y === undefined || (t.x === x && t.y === y));
+		const here = (await c.space.readAll({ type: "Tree", fields: { room: c.actor.room } })).map((e) => fieldsOf<TreeFields>(e)).filter((t) => x === undefined || y === undefined || onTree(t, x, y));
 		if (!here.length) return msg(c, c.actor.charId, "info", `Hier steht kein gepflanzter Baum. Mit einem ${protoName(c, d.spade)} pflanzt „pflanze ${protoName(c, d.sorts[0]!.seed).toLowerCase()}“ einen (im Licht eines Feuers).`);
 		const now = await worldNowOf(c.space, c.txn);
 		await msg(c, c.actor.charId, "look", here.map((t) => describe(d, t, now)).join("\n"));
@@ -129,7 +133,7 @@ const baum: Command = {
  *  transaction. */
 async function treeHere(c: CommandCtx, arg: string, admin: boolean): Promise<TreeFields> {
 	const at = /^(\d+)\s+(\d+)$/.exec(arg.trim());
-	const where = (t: TreeFields) => !at || (t.x === Number(at[1]) && t.y === Number(at[2]));
+	const where = (t: TreeFields) => !at || onTree(t, Number(at[1]), Number(at[2]));
 	const r = await takeNear<TreeFields>(c, "Tree", "treeId", SITE_REACH, (t) => where(t) && (admin || mine(c, t)));
 	if ("f" in r) return r.f;
 	const other = (await c.space.readAll({ type: "Tree", fields: { room: c.actor.room } })).map((e) => fieldsOf<TreeFields>(e)).find((t) => where(t) && distTo(c.actor, t) <= SITE_REACH);

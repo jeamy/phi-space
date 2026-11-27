@@ -84,9 +84,11 @@ pub async fn plant_tree(c: &mut Ctx, arg: &str) -> Result<bool> {
 	let light = match light_for(c, points).await? { Ok(l) => l, Err(why) => return refuse(why.replacen("gebaut wird", "gepflanzt wird", 1).replacen("Bau", "Baum", 1)) };
 	super::build::note_builder(c, &light.beacon_id).await?;
 	let room = room_of(c, None).await?;
+	// a tree stands on grid_scale × grid_scale cells, as a 1×1 one of scale 1 (plan section 2.1, "Single objects")
+	let size = crate::rules::grid_scale();
 	let tries = match (&m[2], &m[3]) {
-		(Some(x), Some(y)) => vec![Rect { x: js::to_number(x), y: js::to_number(y), w: 1.0, h: 1.0 }],
-		_ => besides(c, 1.0, 1.0),
+		(Some(x), Some(y)) => vec![Rect { x: js::to_number(x), y: js::to_number(y), w: size, h: size }],
+		_ => besides(c, size, size),
 	};
 	let (mut rect, mut why) = (None, String::new());
 	for r in tries { match refusal(c, &room, r, true, true).await? { None => { rect = Some(r); break; } Some(n) => if why.is_empty() { why = n; } } }
@@ -103,7 +105,7 @@ pub async fn plant_tree(c: &mut Ctx, arg: &str) -> Result<bool> {
 	use_light(c, &light, points).await?;
 	let due = next_date(&sort, 0.0, now, fog_of(&c.space, &room_id).await?, patience_of(&c.space, c.txn()).await?);
 	let mut t = obj! {};
-	for (k, v) in [("treeId", Json::from(tree_id.as_str())), ("sort", j::at(&sort, "key").clone()), ("room", Json::from(room_id.as_str())), ("x", Json::from(rect.x)), ("y", Json::from(rect.y)), ("w", Json::from(1.0)), ("h", Json::from(1.0)),
+	for (k, v) in [("treeId", Json::from(tree_id.as_str())), ("sort", j::at(&sort, "key").clone()), ("room", Json::from(room_id.as_str())), ("x", Json::from(rect.x)), ("y", Json::from(rect.y)), ("w", Json::from(size)), ("h", Json::from(size)),
 		("owner", Json::from(me.as_str())), ("ownerName", j::at(&c.actor, "name").clone()), ("accountId", acc), ("beaconId", Json::from(light.beacon_id.as_str())), ("points", Json::from(points)), ("stage", Json::from(0.0)), ("dueWorldMs", Json::from(due)), ("at", Json::from(now))] { j::set(&mut t, k, v); }
 	c.space.write(&tmpl("Tree", t), c.txn(), FOREVER).await?;
 	msg(c, "*", "emote", &format!("{} pflanzt {} ein: Hier wächst bald {}. „baum“ zeigt, wie weit er ist.", txt(j::at(&c.actor, "name")), txt(j::at(&hf, "name")), txt(j::at(&sort, "a"))), MsgOpts::default()).await?;
@@ -132,7 +134,7 @@ async fn baum(c: &mut Ctx, arg: &str) -> Result<()> {
 	let parts: Vec<String> = js::re(r"\s+", "").split(js::trim(arg)).into_iter().map(|p| p.unwrap_or("").to_owned()).collect();
 	let word = parts.first().cloned().unwrap_or_default();
 	let at: Option<(f64, f64)> = if js::re(r"^(?:ansehen|look)$", "i").test(&word) { match (parts.get(1), parts.get(2)) { (Some(x), Some(y)) => Some((js::to_number(x), js::to_number(y))), _ => None } } else { None };
-	let here: Vec<Json> = c.space.read_all(&tmpl("Tree", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|t| at.is_none_or(|(x, y)| j::n(t, "x") == x && j::n(t, "y") == y)).collect();
+	let here: Vec<Json> = c.space.read_all(&tmpl("Tree", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|t| at.is_none_or(|(x, y)| on_tree(t, x, y))).collect();
 	let me = c.char_id().to_owned();
 	if here.is_empty() {
 		let first_seed = j::a(&d, "sorts").first().map_or_else(String::new, |s| j::s(s, "seed").to_owned());
@@ -143,10 +145,13 @@ async fn baum(c: &mut Ctx, arg: &str) -> Result<()> {
 	msg(c, &me, "look", &here.iter().map(|t| describe(&d, t, now)).collect::<Vec<_>>().join("\n"), MsgOpts::default()).await
 }
 
+/// Whether the cell `x y` a command names is one of the tree's (any of its grid_scale × grid_scale cells).
+fn on_tree(t: &Json, x: f64, y: f64) -> bool { x >= j::n(t, "x") && x < j::n(t, "x") + j::n(t, "w") && y >= j::n(t, "y") && y < j::n(t, "y") + j::n(t, "h") }
+
 /// `treeHere`: the tree within reach the actor may fell (its own; an admin's any; `x y`: the one on that cell), taken in the transaction.
 async fn tree_here(c: &Ctx, d: &Json, arg: &str, admin: bool) -> Result<Json> {
 	let at = js::caps(&js::re(r"^(\d+)\s+(\d+)$", ""), js::trim(arg)).map(|m| (js::to_number(m[1].as_deref().unwrap_or("")), js::to_number(m[2].as_deref().unwrap_or(""))));
-	let place = |t: &Json| at.is_none_or(|(x, y)| j::n(t, "x") == x && j::n(t, "y") == y);
+	let place = |t: &Json| at.is_none_or(|(x, y)| on_tree(t, x, y));
 	let r = take_near(c, "Tree", "treeId", site_reach(), &|t: &Json| place(t) && (admin || mine(c, t))).await?;
 	let far = match r { Ok(t) => return Ok(t), Err(far) => far };
 	let me = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));

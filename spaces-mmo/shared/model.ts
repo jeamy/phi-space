@@ -269,10 +269,11 @@ export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 
  *  `fenced`: a fence keeps the hares out (engine/commands/wild.ts). */
 export type BedFields = { kind?: "zier" | "gemein"; fenced?: boolean; /** The building whose inside it lies in (interior.ts): laid with it, goes with it. */ of?: string; bedId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
 	sponsors: Array<{ charId: string; name: string }>; plants: BedPlant[]; wateredWorldMs: number; weedy: boolean; dueWorldMs: number; untilWorldMs: number; at: number };
-/** A tree (docs/siedeln.en.md "Bäume", engine/commands/trees.ts): one cell (a Plot entry like a bed's) in the light of a
+/** A tree (docs/siedeln.en.md "Bäume", engine/commands/trees.ts): a footprint of `gridScale` × `gridScale` cells (one cell at
+ *  scale 1; `w` and `h` both equal the world's gridScale, which the planting and the grid migration hold) in the light of a
  *  fire. `stage`: seedling, young, grown; `dueWorldMs`: when it grows on, or when its crop is ripe (FOREVER: nothing comes);
  *  `ripe`: its crop hangs ready to be picked. */
-export type TreeFields = { treeId: string; sort: string; room: string; x: number; y: number; w: 1; h: 1; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
+export type TreeFields = { treeId: string; sort: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
 	stage: 0 | 1 | 2; dueWorldMs: number; ripe?: true; at: number };
 /** A field (docs/siedeln.en.md "Äcker und Getreide", engine/commands/field.ts): one entry over its cells (Plot entries like a
  *  building's), one crop at a time. `stage`: fallow, being sown (seed and work delivered so far), growing, ripe, late
