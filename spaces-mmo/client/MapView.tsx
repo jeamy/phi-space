@@ -12,7 +12,7 @@ import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { WALK_MS } from "./walk.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
-import { MENU_NEAR } from "../shared/rules.ts";
+import { gridScale, MENU_NEAR } from "../shared/rules.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 type Px = typeof import("pixi.js");
@@ -91,7 +91,9 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 		let dead = false;
 		let app: InstanceType<Px["Application"]> | null = null;
 		let observer: ResizeObserver | null = null;
-		const ts = world.tileSize, w = room.ground[0]!.length, h = room.ground.length;
+		// a cell is the tile's size over the grid scale (16 px at scale 2, docs/3d-welt-und-raster-plan-2026-11-21.en.md
+		// section 4, "2D"): the tiles' 32 source pixels are drawn into it, a figure keeps its size at the middle of its cell
+		const ts = world.tileSize / gridScale(), shrink = ts / world.tileSize, w = room.ground[0]!.length, h = room.ground.length;
 		void (async () => {
 			const pixi = await import("pixi.js");
 			const a = new pixi.Application();
@@ -141,7 +143,7 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 			const key = (x: number, y: number) => room.ground[y]?.[x];
 			for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 				const k = key(x, y)!, t = world.tiles[k]!;
-				if (!t.auto) { const s = new pixi.Sprite(tex(t.sheet, t.x, t.y, ts)); s.position.set(x * ts, y * ts); ground.addChild(s); continue; }
+				if (!t.auto) { const s = new pixi.Sprite(tex(t.sheet, t.x, t.y, world.tileSize)); s.scale.set(shrink); s.position.set(x * ts, y * ts); ground.addChild(s); continue; }
 				// a neighbour outside the room counts as the same (the sea goes on)
 				const same = (nx: number, ny: number) => nx < 0 || ny < 0 || nx >= w || ny >= h || key(nx, ny) === k;
 				for (const [corner, dx, dy] of [["TL", -1, -1], ["TR", 1, -1], ["BL", -1, 1], ["BR", 1, 1]] as const) {
@@ -150,22 +152,32 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 					water.forEach((layer, f) => {
 						const b = t.auto!.blocks[f % t.auto!.blocks.length]!;
 						const s = new pixi.Sprite(tex(t.sheet, b.x + qx * 16, b.y + qy * 16, 16));
-						s.position.set(x * ts + (dx > 0 ? 16 : 0), y * ts + (dy > 0 ? 16 : 0));
+						s.scale.set(shrink);
+						s.position.set(x * ts + (dx > 0 ? ts / 2 : 0), y * ts + (dy > 0 ? ts / 2 : 0));
 						layer.addChild(s);
 					});
 				}
 			}
 			// the sea goes on around the room: one plain cell per frame of the waves
-			const sea = fill ? Object.values(world.tiles).find((t) => t.auto) : undefined;
-			if (sea) for (let y = -SEA_MARGIN; y < h + SEA_MARGIN; y++) for (let x = -SEA_MARGIN; x < w + SEA_MARGIN; x++) {
+			const sea = fill ? Object.values(world.tiles).find((t) => t.auto) : undefined, margin = SEA_MARGIN * gridScale();
+			if (sea) for (let y = -margin; y < h + margin; y++) for (let x = -margin; x < w + margin; x++) {
 				if (x >= 0 && y >= 0 && x < w && y < h) continue;
 				water.forEach((layer, f) => {
 					const b = sea.auto!.blocks[f % sea.auto!.blocks.length]!;
-					const s = new pixi.Sprite(tex(sea.sheet, b.x + 16, b.y + 48, ts));
+					const s = new pixi.Sprite(tex(sea.sheet, b.x + 16, b.y + 48, world.tileSize));
+					s.scale.set(shrink);
 					s.position.set(x * ts, y * ts);
 					layer.addChild(s);
 				});
 			}
+			// the ground does not move: it and each frame of the waves are baked into textures of their own, so a room
+			// of four times the cells draws no more sprites (section 4); a texel per source pixel (gridScale per pixel of
+			// the room), drawn with the nearest texel as the tiles were, in pieces no larger than the GPU's textures
+			const res = world.tileSize / ts, maxTex = maxTextureSize(a);
+			const bakedGround = bake(pixi, a, ground, { x: 0, y: 0, w: w * ts, h: h * ts }, res, maxTex);
+			const m = sea ? margin * ts : 0;
+			const bakedWater = water.map((layer) => bake(pixi, a, layer, { x: -m, y: -m, w: w * ts + 2 * m, h: h * ts + 2 * m }, res, maxTex));
+			bakedWater.forEach((c, i) => { c.visible = i === 0; });
 			const objLayer = new pixi.Container();
 			const charLayer = new pixi.Container();
 			charLayer.sortableChildren = true;
@@ -182,10 +194,10 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 			}
 			const fogLayer = new pixi.Graphics();
 			const goalMark = new pixi.Graphics();
-			cam.addChild(ground, ...water, flat, goalMark, objLayer, charLayer, fogLayer);
+			cam.addChild(bakedGround, ...bakedWater, flat, goalMark, objLayer, charLayer, fogLayer);
 			a.stage.addChild(cam);
 			const s: Scene = {
-				pixi, app: a, cam, water, waterMs: Math.min(...Object.values(world.tiles).map((t) => t.auto?.frameMs ?? Infinity)),
+				pixi, app: a, cam, water: bakedWater, waterMs: Math.min(...Object.values(world.tiles).map((t) => t.auto?.frameMs ?? Infinity)),
 				objs: objLayer, chars: charLayer, fog: fogLayer, flames: [], skins, frames: new Map(), sprites: new Map(), icons,
 				size: { w: w * ts, h: h * ts }, ts, view: { zoom: latest.current.zoom, panX: 0, panY: 0 }, fogLevel: latest.current.fog, fogDirty: true,
 				fill, vp: { w: a.screen.width, h: a.screen.height }, inset: latest.current.insetBottom, insetGoal: latest.current.insetBottom, zooms: fill ? fillZooms(window.devicePixelRatio || 1) : ZOOMS, goal: goalMark, scenery: new Map(), dust: [],
@@ -251,7 +263,7 @@ function offscreenExits(s: Scene, roomId: string, objs: Map<string, ObjView>): E
 	const z = s.view.zoom, free = s.vp.h - s.insetGoal, out: Edge[] = [];
 	for (const o of objs.values()) {
 		if (o.kind !== "exit" || o.location !== roomId) continue;
-		const x = (o.x + 0.5) * s.ts * z + s.cam.position.x, y = (o.y + 0.5) * s.ts * z + s.cam.position.y;
+		const x = (o.x + (o.w ?? 1) / 2) * s.ts * z + s.cam.position.x, y = (o.y + (o.h ?? 1) / 2) * s.ts * z + s.cam.position.y;
 		if (x >= 0 && y >= 0 && x <= s.vp.w && y <= free) continue;
 		const side = x < 0 ? "left" : x > s.vp.w ? "right" : y < 0 ? "top" : "bottom";
 		const pos = side === "left" || side === "right" ? Math.max(120, Math.min(free - 60, y)) : Math.max(70, Math.min(s.vp.w - 70, x));
@@ -327,6 +339,28 @@ function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: num
 	stage.on("rightclick", (e) => { const at = cell(e); if (at) latest.current.onMenu(at.x, at.y, e.client.x, e.client.y); });
 }
 
+/** The GPU's largest texture side (WebGL's MAX_TEXTURE_SIZE; 4096 where it cannot be asked). */
+function maxTextureSize(a: InstanceType<Px["Application"]>): number {
+	const gl = (a.renderer as unknown as { gl?: WebGLRenderingContext }).gl;
+	return Math.max(1024, Math.min(8192, gl?.getParameter(gl.MAX_TEXTURE_SIZE) ?? 4096));
+}
+
+/** `layer` (sprites that never move) as textures of `res` texels per pixel over `box`, each piece at most `maxTex` texels
+ *  wide and high; the sprites themselves are let go (their textures are cut from the sheets, which stay). */
+function bake(pixi: Px, a: InstanceType<Px["Application"]>, layer: InstanceType<Px["Container"]>, box: { x: number; y: number; w: number; h: number }, res: number, maxTex: number): InstanceType<Px["Container"]> {
+	const out = new pixi.Container(), step = Math.floor(maxTex / res);
+	layer.visible = true; // a hidden layer renders nothing (the waves' frames are shown one at a time, below)
+	if (layer.children.length) for (let y = box.y; y < box.y + box.h; y += step) for (let x = box.x; x < box.x + box.w; x += step) {
+		const frame = new pixi.Rectangle(x, y, Math.min(step, box.x + box.w - x), Math.min(step, box.y + box.h - y));
+		const t = a.renderer.generateTexture({ target: layer, frame, resolution: res, antialias: false, textureSourceOptions: { scaleMode: "nearest" } });
+		const sp = new pixi.Sprite(t);
+		sp.position.set(x, y);
+		out.addChild(sp);
+	}
+	layer.destroy({ children: true });
+	return out;
+}
+
 /** One frame: glide and animate the characters, move the waves, let the fire flicker, follow the own character with
  *  the camera, redraw the fog's clearings when something moved. */
 function frame(s: Scene, world: Hello["world"], me: string, roomId: string, objs: Map<string, ObjView>, t: number, dt: number): void {
@@ -336,7 +370,7 @@ function frame(s: Scene, world: Hello["world"], me: string, roomId: string, objs
 		const gx = sp.tx * ts, gy = sp.ty * ts;
 		const dx = gx - sp.px, dy = gy - sp.py, dist = Math.hypot(dx, dy);
 		const moving = dist > 0.5;
-		if (dist > ts * 3) { sp.px = gx; sp.py = gy; } // a jump (another room, a long walk): no slow slide across the map
+		if (dist > ts * gridScale() * 3) { sp.px = gx; sp.py = gy; } // a jump (another room, a long walk): no slow slide across the map
 		else if (moving) { const k = Math.min(1, (SPEED * dt) / 1000 / dist); sp.px += dx * k; sp.py += dy * k; if (id === me) s.fogDirty = true; }
 		if (moving) sp.movedAt = t;
 		const col = moving || t - (sp.movedAt ?? -Infinity) < WALK_GRACE_MS ? Math.floor(t / STEP_MS) % 4 : 0;
@@ -361,7 +395,7 @@ function frame(s: Scene, world: Hello["world"], me: string, roomId: string, objs
 		// the own character in the middle of what the sheet leaves free; a step brings a dragged view back to it
 		s.inset += (s.insetGoal - s.inset) * Math.min(1, dt / 120);
 		if (own.px !== own.tx * ts || own.py !== own.ty * ts) { s.view.panX *= 0.85; s.view.panY *= 0.85; }
-		const edge = SEA_MARGIN * ts * z;
+		const edge = SEA_MARGIN * gridScale() * ts * z;
 		const cx = s.vp.w / 2 - (own.px + ts / 2) * z + s.view.panX, cy = (s.vp.h - s.inset) / 2 - (own.py + ts / 2) * z + s.view.panY;
 		s.cam.position.set(Math.round(Math.min(edge, Math.max(s.vp.w - s.size.w * z - edge, cx))), Math.round(Math.min(edge, Math.max(s.vp.h - s.size.h * z - edge, cy))));
 	}
@@ -382,14 +416,15 @@ function drawFog(s: Scene, roomId: string, objs: Map<string, ObjView>, own: Sp |
 	g.clear();
 	const alpha = [0, 0.22, 0.42, 0.62][Math.max(0, Math.min(3, s.fogLevel))]!;
 	if (!alpha) return;
-	const m = s.fill ? SEA_MARGIN * ts : 0;
+	const m = s.fill ? SEA_MARGIN * gridScale() * ts : 0;
 	g.rect(-m, -m, s.size.w + 2 * m, s.size.h + 2 * m).fill({ color: "#c9d2da", alpha });
-	if (own) g.circle(own.px + ts / 2, own.py + ts / 2, ts * 2.2).cut();
-	for (const o of objs.values()) if (o.kind === "beacon" && o.location === roomId && (o.until ?? 0) > Date.now()) g.circle(o.x * ts + ts / 2, o.y * ts + ts / 2, ts * 4).cut();
+	const u = ts * gridScale();
+	if (own) g.circle(own.px + ts / 2, own.py + ts / 2, u * 2.2).cut();
+	for (const o of objs.values()) if (o.kind === "beacon" && o.location === roomId && (o.until ?? 0) > Date.now()) g.circle((o.x + (o.w ?? 1) / 2) * ts, (o.y + (o.h ?? 1) / 2) * ts, u * 4).cut();
 }
 
 /** Scenery drawn from plain shapes, weathered: the room's huts, nets, boats, barrels and jetties. */
-function sceneryView(p: Px, o: ObjView, ts: number): InstanceType<Px["Graphics"]> {
+function sceneryView(p: Px, o: ObjView, ts: number, u: number): InstanceType<Px["Graphics"]> {
 	const x = o.x * ts, y = o.y * ts, w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, g = new p.Graphics();
 	if (o.model === "huette") {
 		g.poly([x + 4, y + h * 0.45, x + w - 2, y + h * 0.4, x + w - 4, y + h - 2, x + 6, y + h - 3]).fill({ color: "#6d6256" }).stroke({ width: 2, color: "#2a241d" });
@@ -404,10 +439,10 @@ function sceneryView(p: Px, o: ObjView, ts: number): InstanceType<Px["Graphics"]
 		g.poly([x + 2, y + 8, x + w - 2, y + 8, x + w - 12, y + h - 3, x + 12, y + h - 3]).fill({ color: "#6b4a2e" }).stroke({ width: 2, color: "#2a1d10" });
 		for (const dx of [0.33, 0.66]) g.rect(x + w * dx, y + 9, 3, h - 13).fill({ color: "#3e2a18" });
 	} else if (o.model === "felsen" || o.model === "mauer" || o.model === "turm") {
-		const n = Math.max(1, Math.round(w / ts)) * (o.model === "mauer" ? 2 : 1);
+		const n = Math.max(1, Math.round(w / u)) * (o.model === "mauer" ? 2 : 1);
 		for (let i = 0; i < n; i++) g.roundRect(x + 2 + (i * w) / n, y + (o.model === "turm" ? 2 : h * 0.35) + (i % 2) * 3, w / n + 2, h * (o.model === "turm" ? 0.9 : 0.55), 5).fill({ color: i % 2 ? "#7c8086" : "#6b6f75" }).stroke({ width: 2, color: "#34373b" });
 	} else if (o.model === "kisten") {
-		for (const dx of [0, 1]) { g.rect(x + dx * ts + 4, y + 6, ts - 8, ts - 9).fill({ color: "#8a6a44" }).stroke({ width: 2, color: "#3e2a18" }); g.moveTo(x + dx * ts + 4, y + 6).lineTo(x + dx * ts + ts - 4, y + ts - 3).stroke({ width: 1.5, color: "#3e2a18" }); }
+		for (const dx of [0, 1]) { g.rect(x + dx * u + 4, y + 6, u - 8, u - 9).fill({ color: "#8a6a44" }).stroke({ width: 2, color: "#3e2a18" }); g.moveTo(x + dx * u + 4, y + 6).lineTo(x + dx * u + u - 4, y + u - 3).stroke({ width: 1.5, color: "#3e2a18" }); }
 	} else if (o.model === "stand") {
 		g.rect(x + 3, y + 14, w - 6, h - 16).fill({ color: "#6b4a2e" }).stroke({ width: 2, color: "#2a1d10" });
 		for (let i = 0; i < 6; i++) g.rect(x + 2 + (i * (w - 4)) / 6, y + 2, (w - 4) / 6, 12).fill({ color: i % 2 ? "#e8e0cc" : "#b5533c" });
@@ -485,7 +520,7 @@ function sceneryView(p: Px, o: ObjView, ts: number): InstanceType<Px["Graphics"]
 		g.rect(x + w * 0.2, y + h * 0.4, w * 0.6, 3).fill({ color: "#5a3e26" }); g.rect(x + w * 0.2, y + h * 0.54, w * 0.6, 3).fill({ color: "#5a3e26" });
 		g.ellipse(x + w / 2, y + h * 0.49, 4, 3).fill({ color: "#6f6b66" });
 	} else if (o.model === "faesser") {
-		for (const dx of [0, 1]) { g.roundRect(x + dx * ts + 5, y + 5, ts - 10, ts - 8, 6).fill({ color: "#4b3626" }).stroke({ width: 2, color: "#1f160e" }); g.rect(x + dx * ts + 5, y + 13, ts - 10, 2).fill({ color: "#8a8f94" }); }
+		for (const dx of [0, 1]) { g.roundRect(x + dx * u + 5, y + 5, u - 10, u - 8, 6).fill({ color: "#4b3626" }).stroke({ width: 2, color: "#1f160e" }); g.rect(x + dx * u + 5, y + 13, u - 10, 2).fill({ color: "#8a8f94" }); }
 	} else {
 		g.rect(x, y, w, h).fill({ color: "#7a5c3e" });
 		const across = w >= h;
@@ -504,7 +539,8 @@ function fence2d(g: InstanceType<Px["Graphics"]>, x: number, y: number, w: numbe
 }
 
 function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: string): void {
-	const ts = s.ts, p = s.pixi;
+	// `u`: a cell of scale 1 (the tile's size), what a thing of one cell, a tree or a figure is drawn as at any scale
+	const ts = s.ts, u = ts * gridScale(), p = s.pixi;
 	for (const child of s.objs.removeChildren()) child.destroy({ children: true });
 	s.flames = [];
 	s.fogDirty = true;
@@ -517,8 +553,10 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 	s.scenery = new Map([...objs].filter(([, o]) => o.kind === "scenery"));
 	for (const o of objs.values()) {
 		if (o.location !== roomId) continue;
-		const x = o.x * ts, y = o.y * ts, cx = x + ts / 2, cy = y + ts / 2;
-		if (o.kind === "scenery") { s.objs.addChild(sceneryView(p, o, ts)); continue; }
+		// the middle of what it covers: one cell, or the area of a fire or an exit (two by two at scale 2)
+		const x = o.x * ts, y = o.y * ts, cx = x + ((o.kind === "beacon" || o.kind === "exit" || o.kind === "tree" ? o.w : undefined) ?? 1) * ts / 2, cy = y + ((o.kind === "beacon" || o.kind === "exit" || o.kind === "tree" ? o.h : undefined) ?? 1) * ts / 2;
+		const bottom = y + (o.h ?? 1) * ts;
+		if (o.kind === "scenery") { s.objs.addChild(sceneryView(p, o, ts, u)); continue; }
 		if (o.kind === "road") {
 			// a road (engine/commands/road.ts): the paved cells as slabs with a kerb, the rest of a road being built as pegs and
 			// a string, a planned one as a dotted line; under the people, over the ground
@@ -564,19 +602,19 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 		}
 		if (o.kind === "train") {
 			// the train at the platform (App, engine/rail.ts): an engine and a carriage on the station's front row
-			const w = (o.w ?? 1) * ts, ry = (o.y + (o.h ?? 1) - 1) * ts + ts * 0.3, len = w * 0.9, x0 = x + (w - len) / 2;
-			const g = new p.Graphics().roundRect(x0, ry, len * 0.45, ts * 0.4, 3).fill({ color: "#2f5a3a" }).stroke({ width: 1, color: "#16241a" });
-			g.roundRect(x0 + len * 0.48, ry, len * 0.52, ts * 0.4, 3).fill({ color: "#e8e0c8" }).stroke({ width: 1, color: "#8a2a22" });
-			g.circle(x0 + len * 0.08, ry + ts * 0.2, ts * 0.08).fill({ color: "#222428" });
+			const w = (o.w ?? 1) * ts, ry = bottom - u + u * 0.3, len = w * 0.9, x0 = x + (w - len) / 2;
+			const g = new p.Graphics().roundRect(x0, ry, len * 0.45, u * 0.4, 3).fill({ color: "#2f5a3a" }).stroke({ width: 1, color: "#16241a" });
+			g.roundRect(x0 + len * 0.48, ry, len * 0.52, u * 0.4, 3).fill({ color: "#e8e0c8" }).stroke({ width: 1, color: "#8a2a22" });
+			g.circle(x0 + len * 0.08, ry + u * 0.2, u * 0.08).fill({ color: "#222428" });
 			s.objs.addChild(g);
 			continue;
 		}
 		if (o.kind === "liner") {
 			// the large ship in the bay (App, engine/liner.ts): a dark hull with a white deckhouse and a funnel
-			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, along = w > h, inset = ts * 0.15;
-			const g = new p.Graphics().roundRect(x + inset, y + inset, w - 2 * inset, h - 2 * inset, ts * 0.35).fill({ color: "#2a2f38" }).stroke({ width: 2, color: "#9a2a22" });
-			g.rect(along ? x + w * 0.35 : x + ts * 0.3, along ? y + ts * 0.3 : y + h * 0.35, along ? w * 0.25 : ts * 0.4, along ? ts * 0.4 : h * 0.25).fill({ color: "#ece6d6" });
-			g.circle(along ? x + w * 0.55 : cx, along ? cy : y + h * 0.55, ts * 0.12).fill({ color: "#3a3d44" }).stroke({ width: 2, color: "#9a2a22" });
+			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, along = w > h, inset = u * 0.15;
+			const g = new p.Graphics().roundRect(x + inset, y + inset, w - 2 * inset, h - 2 * inset, u * 0.35).fill({ color: "#2a2f38" }).stroke({ width: 2, color: "#9a2a22" });
+			g.rect(along ? x + w * 0.35 : x + u * 0.3, along ? y + u * 0.3 : y + h * 0.35, along ? w * 0.25 : u * 0.4, along ? u * 0.4 : h * 0.25).fill({ color: "#ece6d6" });
+			g.circle(along ? x + w * 0.55 : x + u / 2, along ? y + u / 2 : y + h * 0.55, u * 0.12).fill({ color: "#3a3d44" }).stroke({ width: 2, color: "#9a2a22" });
 			const label = new p.Text({ text: tr(o.name), resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 0);
 			label.position.set(x + w / 2, y + h);
@@ -595,7 +633,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 			}
 			const label = new p.Text({ text: o.name, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: lit ? "#ffd84a" : "#c0c6cc", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 0);
-			label.position.set(cx, y + ts);
+			label.position.set(cx, bottom);
 			s.objs.addChild(label);
 			continue;
 		}
@@ -633,7 +671,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 		if (o.kind === "tree") {
 			// a planted tree (engine/commands/trees.ts): a trunk and a crown by its stage, a conifer as a cone; its crop in
 			// the fruit's colour when ripe; the owner's name under it
-			const stage = o.treeStage ?? 2, k = [0.35, 0.65, 1][stage]!, cx = x + ts / 2, base = y + ts - 3;
+			const stage = o.treeStage ?? 2, k = [0.35, 0.65, 1][stage]!, base = bottom - 3, ts = u; // the tree's own drawing in cells of scale 1
 			const g = new p.Graphics();
 			g.rect(cx - 1.5 * k, base - ts * 0.45 * k, 3 * k + 0.5, ts * 0.45 * k).fill({ color: "#6b4a2e" });
 			if (o.model === "conifer") g.poly([cx, base - ts * 1.25 * k, cx - ts * 0.42 * k, base - ts * 0.3 * k, cx + ts * 0.42 * k, base - ts * 0.3 * k]).fill({ color: "#2f6b3a" }).stroke({ width: 1, color: "#1a1410", alpha: 0.5 });
@@ -644,7 +682,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 			if (o.owner) {
 				const label = new p.Text({ text: o.owner, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 9, fill: "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
 				label.anchor.set(0.5, 0);
-				label.position.set(cx, y + ts);
+				label.position.set(cx, bottom);
 				s.objs.addChild(label);
 			}
 			continue;
@@ -686,7 +724,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, color = o.color ?? "#8a6a44";
 			const g = new p.Graphics();
 			if (o.kind === "building") {
-				building2d(g, o.plan, x, y, w, h, ts, color);
+				building2d(g, o.plan, x, y, w, h, u, color);
 				if (o.fenced) fence2d(g, x, y, o.w ?? 1, o.h ?? 1, ts);
 			} else {
 				// one's own site stands out at once: a bright border, and its label says so
@@ -702,10 +740,10 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 			continue;
 		}
 		if (o.kind === "exit") {
-			const g = new p.Graphics().rect(x + 2, y + 2, ts - 4, ts - 4).fill({ color: "#AED83C", alpha: 0.22 }).stroke({ width: 2, color: "#AED83C" });
+			const g = new p.Graphics().rect(x + 2, y + 2, (o.w ?? 1) * ts - 4, (o.h ?? 1) * ts - 4).fill({ color: "#AED83C", alpha: 0.22 }).stroke({ width: 2, color: "#AED83C" });
 			const label = new p.Text({ text: tr(o.to ?? o.name), resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#AED83C", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 0);
-			label.position.set(cx, y + ts);
+			label.position.set(cx, bottom);
 			s.objs.addChild(g, label);
 			continue;
 		}
@@ -714,16 +752,17 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 			// a little smaller than the cell, standing on its lower edge, with a soft shadow under it
 			const shadow = new p.Graphics().ellipse(cx, y + ts - 4, 9, 3).fill({ color: "#000000", alpha: 0.28 });
 			const sp = new p.Sprite(icon);
-			sp.width = sp.height = ts - 6;
-			sp.position.set(x + 3, y + 1);
+			sp.width = sp.height = u - 6;
+			sp.position.set(cx - (u - 6) / 2, y + ts - u + 1);
 			s.objs.addChild(shadow, sp);
 			continue;
 		}
 		const color = o.glyph?.color ?? "#9aa3ad", shape = o.glyph?.shape ?? "square";
 		const g = new p.Graphics();
-		if (shape === "circle") g.circle(cx, cy + 4, 6);
-		else if (shape === "diamond") g.poly([cx, cy - 4, cx + 7, cy + 4, cx, cy + 12, cx - 7, cy + 4]);
-		else g.rect(cx - 8, cy, 16, 9);
+		const gy = y + ts - u / 2; // the glyph's middle as at scale 1, from the cell's lower edge
+		if (shape === "circle") g.circle(cx, gy + 4, 6);
+		else if (shape === "diamond") g.poly([cx, gy - 4, cx + 7, gy + 4, cx, gy + 12, cx - 7, gy + 4]);
+		else g.rect(cx - 8, gy, 16, 9);
 		g.fill({ color }).stroke({ width: 1.5, color: "#1b1b1b" });
 		s.objs.addChild(g);
 	}
