@@ -11,6 +11,8 @@
 # stop keycloak`, then `gunzip -c idp-….sql.gz | docker exec -i phi-idp-db-1 psql -U keycloak -d keycloak` into an
 # emptied database (dropdb/createdb), start keycloak again.
 set -euo pipefail
+# the dump holds the clients' secrets and the accounts' password hashes: readable by this user alone
+umask 077
 ROLE="${FORUM_BACKUP_ROLE:?big or nano, in ~/.config/forum-backup.env}"
 DIR="${FORUM_BACKUP_DIR:-$HOME/phi-backup/forum}"
 DAYS="${FORUM_BACKUP_DAYS:-30}"
