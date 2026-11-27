@@ -655,6 +655,21 @@ Again on 2026-11-26, after step 10 and with the master of then (new-world merged
 
 Whether the stores on big and nano hold such objects is shown by a `--check` on a copy of each. Master is not deployed there before the cut, and a local store with data from before step 6, or with roads but no RoadCells, is refused until it is migrated.
 
+**big and nano, 2026-11-27 (the owner's word).** Copies taken at 12:35 UTC from the running servers, each database with its WAL and no checkpoint between (the copy loop of 2026-11-16; nothing on the servers was stopped or changed): big's four region stores and nano's accounts store, kept on this machine in `~/phi-backup/2026-11-27-grid-check/`. Every run below was on a further working copy in the scratchpad, behind the Rust `mmo-space` of master.
+- `--check`: in all four region stores the plots and the objects agree on every cell, no plot belongs to no object, and no object overlaps another or reaches outside its room. Missing are only the locks of every room and island and the RoadCells of every road, which the migration writes. The accounts store holds no world ("nothing to migrate").
+- The migration without `--follow-objects` or `--drop-orphans`:
+
+  | Store | Objects | Locks written | RoadCells written | Time |
+  | --- | --- | --- | --- | --- |
+  | west | 238 | 32 | 18 | 5.8 s |
+  | nord | 101 | 18 | 16 | 3.0 s |
+  | ost | 156 | 29 | 24 | 3.8 s |
+  | sued | 44 | 8 | 8 | 1.2 s |
+
+- A second run answered "already", a `--check` after it listed nothing, and the start check (`checkGridFormat`) passed on all four; on an unmigrated copy it refused and named the migration.
+
+So the cut needs no hand work on these stores: the plain migration takes them as they stand (as of this copy; it is run again on the day of the cut).
+
 ### 7.6 Contention at the room lock (step 8)
 
 `tests/contention.test.ts` runs two world workers with one lane each (`SPACES_MMO_WORLD_LANES=1`), so two characters' commands sent at once run in two processes; with `SPACES_MMO_WORLD_CMD` one or both are the Rust worker (`SPACES_MMO_WORLD_MIXED=1`: one of each).
