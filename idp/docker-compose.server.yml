@@ -1,0 +1,15 @@
+# Keycloak on big behind nginx (docs/forum-seite-plan-2026-11-26.en.md, section 13; idp/README.md "On big"): laid over
+# docker-compose.yml by idp/server.sh. The public address is IDP_URL (https://id.eibrain.org), whose nginx site passes on
+# /realms/ and /resources/ only; the admin console is reached through an ssh tunnel to the loopback port
+# (http://localhost:4300/admin/). The realm is imported from realm-server/, the realm without the development user.
+services:
+  keycloak:
+    environment:
+      KC_HOSTNAME: ${IDP_URL:?the public address, https://id.eibrain.org}
+      KC_HOSTNAME_ADMIN: http://localhost:${IDP_PORT:-4300}
+      KC_PROXY_HEADERS: xforwarded
+    volumes: !override
+      - ./realm-server:/opt/keycloak/data/import:ro
+    restart: unless-stopped
+  db:
+    restart: unless-stopped

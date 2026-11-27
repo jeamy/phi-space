@@ -1,0 +1,16 @@
+# User unit for big and nano (~/.config/systemd/user/forum-backup.service), started daily by forum-backup.timer:
+# forum-backup.sh. ~/.config/forum-backup.env names the host's part (FORUM_BACKUP_ROLE=big or nano) and the checkout
+# (FORUM_BACKUP_HOME, default /media/docker/spaces as on big; /home/mux/spaces on nano).
+#
+#   cp codemode-forum/deploy/forum-backup.{service,timer} ~/.config/systemd/user/ && systemctl --user daemon-reload
+#   systemctl --user enable --now forum-backup.timer
+[Unit]
+Description=Backup of FORUM (the space's store on nano, Keycloak's database on big), each host holding both
+
+[Service]
+Type=oneshot
+Environment=FORUM_BACKUP_HOME=/media/docker/spaces
+EnvironmentFile=-%h/.config/forum-backup.env
+ExecStart=/usr/bin/env bash -c 'exec "$FORUM_BACKUP_HOME/codemode-forum/deploy/forum-backup.sh"'
+Nice=10
+IOSchedulingClass=idle

@@ -1,0 +1,14 @@
+# User unit on big (~/.config/systemd/user/forum-nano-tunnel.service): the forum's space on nano, published there on
+# 127.0.0.1:4180, reached by the roles on big at 127.0.0.1:4180 (docker-compose.hostnet.yml). As codemode-nano-tunnel.
+#   systemctl --user daemon-reload && systemctl --user enable --now forum-nano-tunnel
+[Unit]
+Description=SSH tunnel to the nano FORUM space (127.0.0.1:4180 -> nano:4180)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/ssh -N -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o BatchMode=yes -L 127.0.0.1:4180:127.0.0.1:4180 nano
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

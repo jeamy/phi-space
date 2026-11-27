@@ -8,3 +8,4 @@ spaces/test/testbed/testbed.env
 __pycache__/
 **/rust/target/
 .local/
+idp/realm-server/

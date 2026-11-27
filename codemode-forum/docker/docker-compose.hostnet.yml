@@ -1,0 +1,21 @@
+# Override for the `big` host (docker compose -f docker-compose.yml -f docker-compose.hostnet.yml --profile big ...), as
+# codemode-chat's: the roles share the host network, so they reach the space on nano through the SSH tunnel on the
+# host's loopback (FORUM_DOCKER_SPACE=tcp:127.0.0.1:4180 in .env, the user unit forum-nano-tunnel,
+# docker/forum-nano-tunnel.service). The web process listens on the loopback only, for nginx in front
+# (docker/nginx-codeforum.conf).
+services:
+  web:
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    environment:
+      FORUM_BIND: 127.0.0.1
+  agents:
+    network_mode: host
+    networks: !reset []
+  model:
+    network_mode: host
+    networks: !reset []
+  sources:
+    network_mode: host
+    networks: !reset []

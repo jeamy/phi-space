@@ -1,0 +1,11 @@
+# Daily FORUM backup (forum-backup.service) on big and nano. Both run at the same hour; big fetches the newest copy nano
+# has, which is that night's when nano was quicker and the night before's otherwise.
+[Unit]
+Description=Daily FORUM backup
+
+[Timer]
+OnCalendar=*-*-* 03:25:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

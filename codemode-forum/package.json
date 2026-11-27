@@ -32,9 +32,9 @@
     "docker:nano:rust:up": "npm run docker:image:rust && docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano up -d --no-build",
     "docker:nano:rust:down": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano down",
     "docker:nano:rust:logs": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano logs -f",
-    "docker:big:up": "npm run docker:image && docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml --profile big up -d --no-build",
-    "docker:big:down": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml --profile big down",
-    "docker:big:logs": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml --profile big logs -f"
+    "docker:big:up": "npm run docker:image && docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml --profile big up -d --no-build",
+    "docker:big:down": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml --profile big down",
+    "docker:big:logs": "docker compose $([ -f .env ] && echo --env-file .env) -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml --profile big logs -f"
   },
   "dependencies": {
     "next": "16.4.6",

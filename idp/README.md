@@ -70,3 +70,25 @@ The browser warns about the certificate once for each of the two ports. While th
 `https://<ip>:4301/realms/phi`; `docker compose --env-file idp/.env -f idp/docker-compose.yml -p phi-idp up -d`
 returns to the loopback issuer. Both services listen on the LAN address: anyone on that network reaches them, so it
 runs for the test and is stopped afterwards.
+
+## On big
+
+The provider of the servers is `https://id.eibrain.org`, issuer `https://id.eibrain.org/realms/phi`
+(`docs/forum-seite-plan-2026-11-26.en.md`, section 13): the same compose project `phi-idp` with
+`docker-compose.server.yml` laid over it, on `127.0.0.1:4300` behind nginx (`idp/nginx-id.conf`, certbot).
+
+```bash
+idp/server.sh      # on big, in the checkout: idp/.env with new secrets if there is none (mode 600), the realm
+                   # without the development user into idp/realm-server/, up, and wait for the issuer
+```
+
+- Only `/realms/` and `/resources/` pass nginx (and not the `master` realm). The admin console is reached through an
+  ssh tunnel: `ssh -L 4300:127.0.0.1:4300 big`, then `http://localhost:4300/admin/` (`KC_HOSTNAME_ADMIN`).
+- The first sign-in to the console is the bootstrap account of `idp/.env` on big. The person then creates their own
+  administrator in the `master` realm with a second factor, removes the bootstrap account, and creates their own
+  account in the realm `phi`; nobody else types these passwords.
+- The forum's client secret is `IDP_FORUM_SECRET` of `idp/.env` on big, given to the forum as
+  `FORUM_OIDC_CLIENT_SECRET` in `codemode-forum/.env` there. The realm has the clients' origins
+  `https://codeforum.eibrain.org` and `https://spaces-files.eibrain.org` (spaces-files keeps its passwords until
+  phase 12 of the plan).
+- Its database is dumped daily by `codemode-forum/deploy/forum-backup.sh` (role `big`) and kept on big and nano.
