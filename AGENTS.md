@@ -129,7 +129,7 @@ Run typecheck and tests after every change (root: `npm run typecheck`, `npm test
 - No new dependencies without asking; nothing is installed locally.
 - Projects built on phi-spaces depend on it as `"phi-spaces": "file:../spaces"` and import `phi-spaces`, `phi-spaces/context`,
   `phi-spaces/core`, `phi-spaces/store/*` (root `exports`, pointing at the `.ts` sources); `agent/` keeps relative imports.
-- Agent packages use Pi 1.5.2; schema builders come from `@earendil-works/pi-schema`, not `Type` from `pi-ai`.
+- Agent packages use Pi 1.6.1 (since 2026-11-27); schema builders come from `@earendil-works/pi-schema`, not `Type` from `pi-ai`.
   Pi 1.5 counts an in-flight model request interrupted by a crash against the retry policy; the durable worker allows
   one retry to preserve crash recovery, still bounded by the persisted per-job model admission budget.
 - Scripted model tests: filter out system messages before checking the last message (see `docs/examples.en.md`, „Testumfang").

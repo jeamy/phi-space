@@ -44,7 +44,7 @@
     "docker:dev:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev logs -f codemode-chat-dev"
   },
   "dependencies": {
-    "@earendil-works/pi-codemode": "1.5.2",
+    "@earendil-works/pi-codemode": "1.6.1",
     "next": "16.4.6",
     "phi-spaces": "file:../spaces",
     "react": "19.3.0",

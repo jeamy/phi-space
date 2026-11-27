@@ -47,7 +47,7 @@
     "build:operations": "node scripts/build-operations.mjs"
   },
   "devDependencies": {
-    "@earendil-works/pi-codemode": "1.5.2",
+    "@earendil-works/pi-codemode": "1.6.1",
     "@types/node": "^26.6.4",
     "typescript": "^7.0.2",
     "esbuild": "^0.25.0"
