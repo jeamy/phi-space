@@ -34,7 +34,7 @@ type System = { hosts: Array<{ name: string; roles: string[]; host: { cpu: strin
 
 const T = {
 	de: {
-		signIn: "Anmelden", signOut: "Abmelden", signInTitle: "Bitte anmelden", signInText: "Dieses Forum zeigt Räume, Pläne und Material nur angemeldeten Personen. Ein Konto gilt für das Forum und für spaces-files.", yourName: "Dein Name am Tisch", saveName: "Speichern",
+		signIn: "Anmelden", signOut: "Abmelden", signInTitle: "Bitte anmelden", signInText: "Dieses Forum zeigt Räume, Pläne und Material nur angemeldeten Personen. Ein Konto gilt für das Forum und für die Dateien.", yourName: "Dein Name am Tisch", saveName: "Speichern",
 		room: "Raum", live: "live", offline: "getrennt", off: "Modelle aus", models: "Modelle",
 		task: "Planaufgabe", brief: "Auftrag: wofür ist der Plan, was muss er leisten?", docLang: "Sprache des Dokuments", outline: "Gliederung vorgeben (optional, eine Überschrift je Zeile)", criteria: "Eigene Kriterien (optional, eines je Zeile)", create: "Aufgabe anlegen",
 		sources: "Quellen (optional, nur lesend)", docs: "Dokumente (.md, .txt, .csv, .json, .yaml; bis 10, zusammen 800 kB)", repo: "Repository", remote: (h: string) => `Entferntes Repository (https-Adresse; erlaubte Hosts: ${h})`, noRepo: "kein Repository", ref: "Branch, Tag oder Commit (leer: HEAD)", sourceNote: "Die Modelle lesen in diesen Quellen. Auszüge daraus gehen an die Anbieter der gewählten Modelle.", drop: "entfernen",
@@ -62,7 +62,7 @@ const T = {
 		tasks: "Aufgaben", log: "Protokoll", empty: "Noch keine Planaufgabe in diesem Raum.", hosts: "Prozesse", today: (c: number, t: number) => `heute ${c} Modellaufrufe, ${t} Tokens`,
 	},
 	en: {
-		signIn: "Sign in", signOut: "Sign out", signInTitle: "Please sign in", signInText: "This forum shows rooms, plans and material to signed-in people only. One account serves the forum and spaces-files.", yourName: "Your name at the table", saveName: "Save",
+		signIn: "Sign in", signOut: "Sign out", signInTitle: "Please sign in", signInText: "This forum shows rooms, plans and material to signed-in people only. One account serves the forum and Files.", yourName: "Your name at the table", saveName: "Save",
 		room: "room", live: "live", offline: "offline", off: "models off", models: "models",
 		task: "Plan task", brief: "Brief: what is the plan for, what must it achieve?", docLang: "Language of the document", outline: "Fix the outline (optional, one heading a line)", criteria: "Criteria of your own (optional, one a line)", create: "Create task",
 		sources: "Sources (optional, read-only)", docs: "Documents (.md, .txt, .csv, .json, .yaml; up to 10, 800 kB together)", repo: "Repository", remote: (h: string) => `Remote repository (https address; allowed hosts: ${h})`, noRepo: "no repository", ref: "Branch, tag or commit (empty: HEAD)", sourceNote: "The models read in these sources. Excerpts of them go to the providers of the chosen models.", drop: "remove",
@@ -246,8 +246,17 @@ export function CodemodeForum() {
 	const name = (model: string) => (model === "table" ? t.theTable : model === "human" ? t.you : runHere?.aliases[model] ? `${runHere.aliases[model]} · ${model}` : model);
 
 	const controls = <ThemeControls lang={theme.lang} setLang={theme.setLang} mode={theme.mode} changeMode={theme.changeMode} palette={theme.palette} changePalette={theme.changePalette} />;
+	// until the page knows whether a sign-in is needed: the bar alone, so the forum never flashes before the sign-in
+	if (me === null) return (
+		<header className="top">
+			<span className="brand">PHI-SPACES / <b>FORUM</b></span>
+			<span className="spacer" />
+			<a className="toplink" href={`/help?lang=${lang}`}>{t.helpLink}</a>
+			{controls}
+		</header>
+	);
 	// with a sign-in and nobody signed in: the way in, and nothing else
-	if (me?.login && !me.user) return (
+	if (me.login && !me.user) return (
 		<>
 			<header className="top">
 				<span className="brand">PHI-SPACES / <b>FORUM</b></span>
