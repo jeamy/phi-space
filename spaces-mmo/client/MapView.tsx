@@ -13,6 +13,7 @@ import { tr } from "./i18n/index.ts";
 import { WALK_MS } from "./walk.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { gridScale, MENU_NEAR } from "../shared/rules.ts";
+import { liftLabels, touchPick, touchTargets, type LabelBox } from "./touch.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 type Px = typeof import("pixi.js");
@@ -212,7 +213,7 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 			pointer(s, (cx, cy) => {
 				const x = Math.floor(cx / ts), y = Math.floor(cy / ts);
 				return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
-			}, latest);
+			}, latest, room.roomId);
 			draw(s, latest.current.chars, latest.current.me);
 			drawObjs(s, room.roomId, latest.current.objs, latest.current.me);
 			let t = 0;
@@ -274,8 +275,15 @@ function offscreenExits(s: Scene, roomId: string, objs: Map<string, ObjView>): E
 
 /** Taps, long presses, right clicks, drags and pinches on the canvas. A drag (zoomed in) moves the view and is no tap; a
  *  pinch steps the zoom and is neither. */
-function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: number } | null, latest: { current: { me: string; onCell: (x: number, y: number) => void; onMenu: (x: number, y: number, cx: number, cy: number) => void; zoom: number; setZoom: (z: number) => void } }) {
+function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: number } | null, latest: { current: { me: string; chars: Map<string, CharView>; objs: Map<string, ObjView>; onCell: (x: number, y: number) => void; onMenu: (x: number, y: number, cx: number, cy: number) => void; zoom: number; setZoom: (z: number) => void } }, roomId: string) {
 	const stage = s.app.stage;
+	// a finger names a figure, a thing or an exit within TOUCH_PX of it on the screen (touch.ts); a mouse names the cell.
+	// A figure's body stands a cell of scale 1 high above the bottom of its cell.
+	const picked = (e: { pointerType?: string; global: { x: number; y: number } }, at: { x: number; y: number } | null) => {
+		if (e.pointerType !== "touch") return at;
+		const ts = s.ts, l = latest.current;
+		return touchPick(at, e.global, touchTargets(l.chars, l.objs, roomId, l.me), (x, y, body) => s.cam.toGlobal({ x: (x + 0.5) * ts, y: body ? (y + 1) * ts - (ts * gridScale()) / 2 : (y + 0.5) * ts }));
+	};
 	stage.eventMode = "static";
 	stage.hitArea = s.app.screen;
 	const fingers = pinch();
@@ -293,7 +301,7 @@ function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: num
 		if (e.button === 2) return; // the right click opens the menu below
 		if (fingers.down(e.pointerId, e.global.x, e.global.y)) { if (down) clearTimeout(down.timer); down = null; return; }
 		if (fingers.active) return;
-		const at = cell(e), client = { x: e.client.x, y: e.client.y };
+		const at = picked(e, cell(e)), client = { x: e.client.x, y: e.client.y };
 		down = { x: e.global.x, y: e.global.y, panX: s.view.panX, panY: s.view.panY, dragged: false, pressed: false, timer: setTimeout(() => {
 			if (!down || down.dragged || !at) return;
 			down.pressed = true;
@@ -325,13 +333,13 @@ function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: num
 		if (!down.dragged && Math.hypot(dx, dy) > DRAG_PX) { down.dragged = true; clearTimeout(down.timer); }
 		if (down.dragged && (s.fill || s.view.zoom > 1)) { s.view.panX = down.panX + dx; s.view.panY = down.panY + dy; s.fogDirty = true; }
 	});
-	const up = (e: { pointerId: number; getLocalPosition: (c: InstanceType<Px["Container"]>) => { x: number; y: number } }, inside: boolean) => {
+	const up = (e: { pointerId: number; pointerType?: string; global: { x: number; y: number }; getLocalPosition: (c: InstanceType<Px["Container"]>) => { x: number; y: number } }, inside: boolean) => {
 		fingers.up(e.pointerId); mid = null;
 		if (!down) return;
 		clearTimeout(down.timer);
 		const tap = !down.dragged && !down.pressed;
 		down = null;
-		const at = inside ? cell(e) : null;
+		const at = inside ? picked(e, cell(e)) : null;
 		if (tap && at) latest.current.onCell(at.x, at.y);
 	};
 	stage.on("pointerup", (e) => up(e, true));
@@ -386,6 +394,11 @@ function frame(s: Scene, world: Hello["world"], me: string, roomId: string, objs
 		const near = !!ownAt && Math.max(Math.abs(sp.tx - ownAt.tx), Math.abs(sp.ty - ownAt.ty)) <= MENU_NEAR;
 		sp.label.visible = id === me || s.sprites.size <= CROWD || near;
 	}
+	// names side by side lifted until none covers another (touch.ts liftLabels; in the camera's units, which the zoom
+	// scales alike for all)
+	const boxes: LabelBox[] = [];
+	for (const [id, sp] of s.sprites) if (sp.label.visible) boxes.push({ id, x: sp.label.x - sp.label.width / 2, y: sp.label.y - sp.label.height, w: sp.label.width, h: sp.label.height, first: id === me });
+	if (boxes.length > 1) for (const [id, lift] of liftLabels(boxes)) if (lift) s.sprites.get(id)!.label.y -= lift;
 	if (s.water.length > 1 && Number.isFinite(s.waterMs)) { const f = Math.floor(t / s.waterMs) % s.water.length; s.water.forEach((c, i) => { c.visible = i === f; }); }
 	s.flames.forEach((g, i) => { const k = 1 + 0.12 * Math.sin(t / 85 + i * 2) + 0.06 * Math.sin(t / 37 + i); g.scale.set(k, 2 - k); g.alpha = 0.85 + 0.15 * Math.sin(t / 60 + i); });
 	// camera: zoomed in, the own character in the middle (plus how far the player dragged), never past the map's edge

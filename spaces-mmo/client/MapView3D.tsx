@@ -35,6 +35,7 @@ import { blockUnder, fishFor, fishSchool, islandBlock, nameCard, swimFish, type 
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 import { cellEdge, toCell, toWorld } from "./cell3d.ts";
 import { gridScale } from "../shared/rules.ts";
+import { liftLabels, touchPick, touchTargets, type LabelBox } from "./touch.ts";
 
 type T = typeof import("three");
 type O3 = import("three").Object3D;
@@ -121,6 +122,8 @@ type Scene3D = {
 	dist: number;
 	level: number;
 	size: { w: number; h: number };
+	/** the marked end of a walk (MapRendererProps goal): a cell's square on its ground */
+	goalMark?: import("three").Mesh | null;
 	frame: number;
 	resize: ResizeObserver;
 };
@@ -197,7 +200,7 @@ export function MapView3D(props: MapRendererProps) {
 
 				const s: Scene3D = { t, renderer, post, measurement: null, parts: null, detailAt: -Infinity, ao: createAoBaker(t, renderer), aoHide: () => {}, aoDue: false, aoAt: -Infinity, shadows: splitShadows(t, renderer, sun), shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], school: null, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", objsFor: null, chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				// figures and the island's other rooms stay out of the room's heights
-				s.aoHide = aoHider(scene, () => [s.island, ...[...s.chars.values()].map((e) => e.obj)]);
+				s.aoHide = aoHider(scene, () => [s.island, s.goalMark ?? null, ...[...s.chars.values()].map((e) => e.obj)]);
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -219,6 +222,7 @@ export function MapView3D(props: MapRendererProps) {
 					const began = s.measurement || s.parts ? performance.now() : 0;
 					const rowing = rowTick(s, now, latest.current), moved = step(s, dt, now / 1000, latest.current.me) || rowing;
 					bubbleTick(s);
+					if (s.named) liftNames(s, latest.current.me);
 					// on the island level the fish are too small to see: neither moved nor drawn
 					if (s.school) { s.school.group.visible = s.zoom > 0.3; if (s.school.group.visible) { swimFish(s.fish, now / 1000); s.school.draw(); } }
 					if (now - s.lightAt > 500) { s.lightAt = now; daylight(s, latest.current.worldTime ?? null); }
@@ -317,6 +321,18 @@ export function MapView3D(props: MapRendererProps) {
 		s.rowKey = key; s.rowWant = { kind, from: r.from, since: performance.now(), boat: r.boat ?? "row", mode: r.mode ?? "arbeit" };
 	}, [ready, props.rowing]);
 	useEffect(() => { if (state.current) applyFog(state.current, props.fog); }, [props.fog, ready]);
+	// the marked end of a walk (App: walkGoal), as in 2D: the cell a tap chose, shown before the figure gets there
+	useEffect(() => {
+		const s = state.current;
+		if (!s || !ready) return;
+		if (!s.goalMark) {
+			const mark = new s.t.Mesh(new s.t.PlaneGeometry(1, 1), new s.t.MeshBasicMaterial({ color: 0xaed83c, transparent: true, opacity: 0.45, depthWrite: false }));
+			mark.rotation.x = -Math.PI / 2; mark.renderOrder = 4; mark.userData.unshaded = true; s.goalMark = mark; s.scene.add(mark);
+		}
+		const g = props.goal;
+		s.goalMark.visible = !!g && !!s.ground;
+		if (g) { s.goalMark.position.copy(at(s, g.x, g.y, 0.03)); s.goalMark.scale.setScalar(cellEdge() * 0.85); }
+	}, [props.goal, ready, props.room]);
 	// what was said: a bubble over the speaker for a few seconds, shown up close (zoom ≥ 1.6)
 	useEffect(() => { if (state.current && ready) speak(state.current, props.said ?? []); }, [props.said, props.chars, ready]);
 	// the island round the room: rebuilt when the room, the map, the fog or the people on it change
@@ -1006,6 +1022,29 @@ function object(t: T, obj: ObjView, me: string): Entry {
 	return e;
 }
 
+/** How high the middle of a figure's body stands over its cell (world units). */
+const FIGURE_MIDDLE = 0.6;
+const nameAt = { v: null as import("three").Vector3 | null };
+/** The figures' names lifted on the screen until none covers another (touch.ts liftLabels): a name is drawn the same size
+ *  at every distance, so four figures side by side would carry four names in one place. */
+function liftNames(s: Scene3D, me: string): void {
+	const v = (nameAt.v ??= new s.t.Vector3()), boxes: LabelBox[] = [], labels = new Map<string, import("three").Sprite>();
+	const w = s.size.w || 1, h = s.size.h || 1;
+	for (const [id, e] of s.chars) {
+		const label = e.obj.children.find((o) => o.userData.label) as import("three").Sprite | undefined;
+		if (!label || !label.visible || !e.obj.visible) continue;
+		v.copy(e.obj.position); v.y += label.position.y; v.project(s.camera);
+		if (v.z > 1) continue;
+		const [, rowPx] = label.userData.px as [number, number], textPx = (label.userData.textPx as number | undefined) ?? 120;
+		// the text's own height is about half the sprite's (its canvas leaves room round it)
+		const tall = rowPx * 0.55, cx = ((v.x + 1) / 2) * w, cy = ((1 - v.y) / 2) * h;
+		boxes.push({ id, x: cx - textPx / 2, y: cy - tall / 2, w: textPx, h: tall, first: id === me });
+		labels.set(id, label);
+	}
+	const lifts = boxes.length > 1 ? liftLabels(boxes) : new Map<string, number>();
+	for (const [id, label] of labels) label.center.y = 0.5 - (lifts.get(id) ?? 0) / (label.userData.px as [number, number])[1];
+}
+
 /** A thing's picture as a texture, loaded once per URL and kept sharp (pixel art). */
 const iconTextures = new Map<string, import("three").Texture>();
 function iconTexture(t: T, url: string): import("three").Texture {
@@ -1023,10 +1062,12 @@ function label(t: T, text: string, color: string): import("three").Sprite {
 	const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d")!;
 	canvas.width = 256; canvas.height = 48; ctx.font = "600 22px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
 	ctx.lineWidth = 5; ctx.strokeStyle = "rgba(0,0,0,.8)"; ctx.strokeText(text.slice(0, 24), 128, 24); ctx.fillStyle = color; ctx.fillText(text.slice(0, 24), 128, 24);
+	// how wide the name is on the screen (the canvas's 256 px are drawn 180 px wide): liftNames keeps them apart
+	const textPx = (Math.min(256, ctx.measureText(text.slice(0, 24)).width + 10) * 180) / 256;
 	const texture = new t.CanvasTexture(canvas); texture.colorSpace = t.SRGBColorSpace;
 	// the same size on the screen at every zoom (v2): close up a name no longer covers the figure
 	const sprite = new t.Sprite(new t.SpriteMaterial({ map: texture, transparent: true, depthTest: false, sizeAttenuation: false }));
-	sprite.position.y = 1.4; sprite.userData.px = [180, 34]; sprite.renderOrder = 10; sprite.userData.label = true; return sprite;
+	sprite.position.y = 1.4; sprite.userData.px = [180, 34]; sprite.userData.textPx = textPx; sprite.renderOrder = 10; sprite.userData.label = true; return sprite;
 }
 
 /** The visual height of a cell: the tile's own height. (terrain3d's small per-cell variation is left out here: even a
@@ -1378,6 +1419,17 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		const x = toCell(hit.x, w), y = toCell(hit.z, h);
 		return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 	};
+	/** A finger names a figure, a thing or an exit within TOUCH_PX of it on the screen (touch.ts), a figure by its feet or
+	 *  the middle of its body; a mouse names the cell. */
+	const picked = (e: PointerEvent, at: { x: number; y: number } | null) => {
+		if (e.pointerType !== "touch") return at;
+		const l = latest.current, r = s.canvas.getBoundingClientRect();
+		return touchPick(at, { x: e.clientX, y: e.clientY }, touchTargets(l.chars, l.objs, s.room.roomId, l.me), (x, y, body) => {
+			const p = at3(x, y, body ? FIGURE_MIDDLE : 0).project(s.camera);
+			return p.z > 1 ? null : { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height };
+		});
+	};
+	const at3 = (x: number, y: number, above: number) => at(s, x, y, above);
 	/** The cell of the figure whose speech bubble is under the pointer (a tap there opens that figure's menu: accept an
 	 *  offer it made, look at it, chat), or none. */
 	// sprites live on layer 1 (fitSprites): a ray of its own sees them
@@ -1432,7 +1484,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		// the wheel held down turns the view (no tap, no menu)
 		if (e.button === 1) { e.preventDefault(); down = { x: e.clientX, y: e.clientY, at: null, long: false, turn: true, timer: setTimeout(() => {}, 0) }; return; }
 		// a speech bubble stands over its speaker (also over the sea): a tap on it is a tap on the speaker's menu
-		const talk = bubbleAt(e.clientX, e.clientY), at = talk ?? cell(e); down = { x: e.clientX, y: e.clientY, at, talk: !!talk, long: false, turn: false, timer: setTimeout(() => { if (down?.at) { down.long = true; latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); } }, LONG_PRESS_MS) };
+		const talk = bubbleAt(e.clientX, e.clientY), at = talk ?? picked(e, cell(e)); down = { x: e.clientX, y: e.clientY, at, talk: !!talk, long: false, turn: false, timer: setTimeout(() => { if (down?.at) { down.long = true; latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); } }, LONG_PRESS_MS) };
 	};
 	// dragging moves the view over the ground as in 2D, the ground stays under the pointer; with the wheel held down or
 	// with Shift it turns the view
