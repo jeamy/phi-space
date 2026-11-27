@@ -7,7 +7,9 @@
 import { useEffect, useState } from "react";
 import { HelpTip } from "../HelpTip.tsx";
 import { api, firstLine } from "../lib/api.ts";
-import type { RoomDefaults, Table } from "../lib/forum-types.ts";
+import type { RoomDefaults, Table, TaskPicture } from "../lib/forum-types.ts";
+import { reducePicture, sendPicture } from "../lib/pictures.ts";
+import { authHeaders } from "../lib/me.ts";
 import type { Text } from "../lib/texts.ts";
 import type { Lang } from "../lib/theme.ts";
 import { useRoom } from "../lib/use-room.ts";
@@ -52,7 +54,7 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 	const files = (
 		<section className="fp-pane fp-pane--files" aria-label={p.files}>
 			<h2>{p.files} <HelpTip id="files" lang={lang} label={p.files} /></h2>
-			{!snap ? <Skeleton label={p.loading} /> : !block ? <p className="fp-empty">{p.noTaskFiles}</p> : block.sources.length ? (
+			{!snap ? <Skeleton label={p.loading} /> : !block ? <p className="fp-empty">{p.noTaskFiles}</p> : <>{block.sources.length ? (
 				<>
 					<ul className="fp-files">
 						{block.sources.map((x) => (
@@ -62,9 +64,12 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 							</li>
 						))}
 					</ul>
-					{block.sources.some((x) => x.kind === "files") ? <WorkspaceFiles key={block.blockId} lang={lang} p={p} locale={locale} rid={rid} blockId={block.blockId} /> : null}
+					{block.sources.some((x) => x.kind === "files") ? <WorkspaceFiles key={block.blockId} lang={lang} p={p} locale={locale} rid={rid} blockId={block.blockId} canWrite={canWrite} act={act} /> : null}
 				</>
 			) : <p className="fp-empty">{p.noSources}</p>}
+			{snap.link && canWrite ? <UploadFiles lang={lang} p={p} rid={rid} act={act} /> : null}
+			<TaskPictures key={`${block.blockId}-${block.images ?? 0}`} lang={lang} p={p} rid={rid} blockId={block.blockId} count={block.images ?? 0} canWrite={canWrite} act={act} />
+			</>}
 		</section>
 	);
 
@@ -182,6 +187,7 @@ function NewTask({ lang, p, t, rid, open, linked, act, onMade }: { lang: Lang; p
 	const [outline, setOutline] = useState("");
 	const [criteria, setCriteria] = useState("");
 	const [docs, setDocs] = useState<Array<{ name: string; text: string }>>([]);
+	const [pics, setPics] = useState<File[]>([]);
 	const addDocs = async (files: FileList | null) => {
 		const read = await Promise.all([...(files ?? [])].map(async (f) => ({ name: f.name, text: await f.text() })));
 		setDocs((cur) => [...cur.filter((d) => !read.some((x) => x.name === d.name)), ...read]);
@@ -189,6 +195,11 @@ function NewTask({ lang, p, t, rid, open, linked, act, onMade }: { lang: Lang; p
 	const create = () => act(async () => {
 		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang, outline, criteria, ...(docs.length ? { docs } : {}), ...(linked && fromWs ? { files: true } : {}) });
 		setBrief(""); setOutline(""); setCriteria(""); setDocs([]); onMade(r.blockId);
+		// the pictures go after the task is there, each as its reduced copy; one that fails is named, the others go on
+		const failed: string[] = [];
+		for (const f of pics) { try { await sendPicture(rid, r.blockId, f.name, await reducePicture(f)); } catch (e) { failed.push(`${f.name}: ${(e as Error).message}`); } }
+		setPics([]);
+		if (failed.length) throw new Error(`${p.pictureFailed} ${failed.join("; ")}`);
 	});
 	return (
 		<details className="fp-fold" open={open}>
@@ -203,6 +214,13 @@ function NewTask({ lang, p, t, rid, open, linked, act, onMade }: { lang: Lang; p
 					{docs.map((d) => <li key={d.name}><b>{d.name}</b> <span className="fp-meta">{(new Blob([d.text]).size / 1000).toFixed(1)} kB</span> <Act kind="danger" label={`${p.drop}: ${d.name}`} tip="docs" lang={lang} onClick={() => setDocs((cur) => cur.filter((x) => x.name !== d.name))}>{p.drop}</Act></li>)}
 				</ul>
 			) : null}
+			<Field label={p.addPictures} tip="pictures" lang={lang} type="file" multiple accept="image/*" onChange={(e) => { const got = [...(e.target.files ?? [])]; setPics((cur) => [...cur, ...got].slice(0, 12)); e.target.value = ""; }} />
+			{pics.length ? (
+				<ul className="fp-files">
+					{pics.map((f, i) => <li key={`${f.name}-${i}`}><b>{f.name}</b> <Act kind="danger" label={`${p.drop}: ${f.name}`} tip="pictures" lang={lang} onClick={() => setPics((cur) => cur.filter((_x, j) => j !== i))}>{p.drop}</Act></li>)}
+				</ul>
+			) : null}
+			{pics.length ? <p className="fp-meta">{p.picturesGo}</p> : null}
 			{linked ? <Tick label={p.fromWorkspace} tip="fromworkspace" lang={lang} checked={fromWs} onChange={(e) => setFromWs(e.target.checked)} /> : null}
 			{docs.length || (linked && fromWs) ? <p className="fp-meta">{t.sourceNote}</p> : null}
 			{brief.trim() && brief.trim().length < 20 ? <p className="fp-meta">{p.briefShort}</p> : null}
@@ -292,24 +310,134 @@ function RoomDefaultsForm({ lang, p, t, rid, available, defaults, act }: { lang:
 }
 
 /** The files of a task's copy of the workspace (server/files.ts): every file with its size, the ones not copied as
- *  text with their kind. */
-function WorkspaceFiles({ lang, p, locale, rid, blockId }: { lang: Lang; p: PageText; locale: string; rid: string; blockId: string }) {
-	const [files, setFiles] = useState<Array<{ path: string; size: number; kind: string }> | null>(null);
-	useEffect(() => { api<{ files: Array<{ path: string; size: number; kind: string }> }>(`/rooms/${rid}/files/${blockId}`).then((x) => setFiles(x.files)).catch(() => setFiles([])); }, [rid, blockId]);
+ *  text with their kind; a picture shown as it is in the workspace now, a file without text with the note a member
+ *  writes for the models. */
+function WorkspaceFiles({ lang, p, locale, rid, blockId, canWrite, act }: { lang: Lang; p: PageText; locale: string; rid: string; blockId: string; canWrite: boolean; act: (fn: () => Promise<unknown>) => Promise<boolean> }) {
+	type F = { path: string; size: number; kind: string; readable: boolean; note?: string };
+	const [files, setFiles] = useState<F[] | null>(null);
+	const load = () => api<{ files: F[] }>(`/rooms/${rid}/files/${blockId}`).then((x) => setFiles(x.files)).catch(() => setFiles([]));
+	useEffect(() => { void load(); }, [rid, blockId]);
+	const picture = (f: F) => ["png", "jpeg", "gif", "webp"].includes(f.kind) || (f.kind === "text" && /\.svg$/i.test(f.path));
 	return (
 		<details className="fp-fold" open>
 			<summary>{p.filesOf} <HelpTip id="workspacefiles" lang={lang} label={p.filesOf} /></summary>
 			{files === null ? <Skeleton label={p.loading} /> : (
 				<ul className="fp-files fp-wsfiles">
-					{files.map((f) => (
+					{files.map((f, i) => (
 						<li key={f.path}>
 							<span className="fp-path">{f.path}</span>
-							<span className="fp-meta">{f.size < 1000 ? `${f.size} B` : `${(f.size / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB`}{f.kind === "text" ? "" : ` · ${f.kind} · ${p.notText}`}</span>
+							<span className="fp-meta">{f.size < 1000 ? `${f.size} B` : `${(f.size / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB`}{f.kind === "text" ? "" : ` · ${f.kind}${f.readable ? "" : ` · ${p.notText}`}`}</span>
+							{picture(f) && i < 400 ? <img className="fp-wspic" src={`/api/rooms/${rid}/preview?path=${encodeURIComponent(f.path)}`} alt={f.path} loading="lazy" /> : null}
+							{!f.readable ? <FileNoteForm key={f.note ?? ""} lang={lang} p={p} rid={rid} f={f} canWrite={canWrite} act={act} reload={load} /> : null}
 						</li>
 					))}
 				</ul>
 			)}
 		</details>
+	);
+}
+
+/** The note on a file the models cannot read, by a member: they get it with the file's name, kind and size. */
+function FileNoteForm({ lang, p, rid, f, canWrite, act, reload }: { lang: Lang; p: PageText; rid: string; f: { path: string; note?: string }; canWrite: boolean; act: (fn: () => Promise<unknown>) => Promise<boolean>; reload: () => Promise<unknown> }) {
+	const [text, setText] = useState(f.note ?? "");
+	if (!canWrite) return f.note ? <p className="fp-meta">{p.fileNote}: {f.note}</p> : null;
+	return (
+		<div className="fp-filenote">
+			<Field label={`${p.fileNote}: ${f.path}`} tip="filenote" lang={lang} maxLength={1000} value={text} placeholder={p.fileNoteHint} onChange={(e) => setText(e.target.value)} />
+			<Act label={p.saveNote} tip="filenote" lang={lang} disabled={text === (f.note ?? "")} onClick={() => void act(async () => { await api(`/rooms/${rid}/filenote`, { path: f.path, text }); await reload(); })} />
+		</div>
+	);
+}
+
+/** Files of a member into `material/` of the room's project folder (server/files.ts): chosen, or dropped onto the
+ *  part on a desk. A later task's copy has them. */
+function UploadFiles({ lang, p, rid, act }: { lang: Lang; p: PageText; rid: string; act: (fn: () => Promise<unknown>) => Promise<boolean> }) {
+	const [busy, setBusy] = useState(false);
+	const [done, setDone] = useState<string[]>([]);
+	const send = (files: File[]) => act(async () => {
+		setBusy(true);
+		try { for (const f of files.slice(0, 20)) { const r = await sendFile(rid, f); setDone((cur) => [...cur, r]); } }
+		finally { setBusy(false); }
+	});
+	return (
+		<details className="fp-fold">
+			<summary>{p.upload} <HelpTip id="upload" lang={lang} label={p.upload} /></summary>
+			<div className="fp-drop" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void send([...e.dataTransfer.files]); }}>
+				<Field label={p.uploadPick} tip="upload" lang={lang} type="file" multiple disabled={busy} onChange={(e) => { const got = [...(e.target.files ?? [])]; e.target.value = ""; void send(got); }} />
+				<p className="fp-meta">{busy ? p.uploading : p.uploadNote}</p>
+			</div>
+			{done.length ? <ul className="fp-files">{done.map((x) => <li key={x}><span className="fp-path">{x}</span></li>)}</ul> : null}
+		</details>
+	);
+}
+
+/** Sends one file to the project folder; the ID is drawn once, so a second try after a lost reply is one file. */
+async function sendFile(rid: string, f: File): Promise<string> {
+	const id = `u${crypto.getRandomValues(new Uint32Array(3)).reduce((s, n) => s + n.toString(36), "")}`.slice(0, 24).padEnd(12, "0");
+	for (let attempt = 0; ; attempt++) {
+		try {
+			const r = await fetch(`/api/rooms/${rid}/upload?id=${id}&name=${encodeURIComponent(f.name)}`, { method: "POST", headers: { "content-type": "application/octet-stream", "x-forum-admin": "1", ...authHeaders() }, body: f });
+			const data = (await r.json().catch(() => ({}))) as { error?: string; upload?: { workspace: string; path: string; kind: string } };
+			if (!r.ok) throw Object.assign(new Error(`${f.name}: ${data.error || r.statusText}`), { final: true });
+			return `${data.upload!.workspace}/${data.upload!.path} (${data.upload!.kind})`;
+		} catch (e) {
+			if ((e as { final?: boolean }).final || attempt >= 2) throw e;
+			await new Promise((ok) => setTimeout(ok, 1000 * (attempt + 1)));
+		}
+	}
+}
+
+/** The task's pictures for the models (server/images.ts): each shown with its description, which a member corrects;
+ *  a member adds more (reduced in the browser first) or removes one. */
+function TaskPictures({ lang, p, rid, blockId, count, canWrite, act }: { lang: Lang; p: PageText; rid: string; blockId: string; count: number; canWrite: boolean; act: (fn: () => Promise<unknown>) => Promise<boolean> }) {
+	const [pics, setPics] = useState<TaskPicture[] | null>(count ? null : []);
+	const [busy, setBusy] = useState(false);
+	const load = () => api<{ images: TaskPicture[] }>(`/rooms/${rid}/images/${blockId}`).then((x) => setPics(x.images)).catch(() => setPics([]));
+	useEffect(() => { if (count) void load(); }, [rid, blockId, count]);
+	const add = (files: File[]) => act(async () => {
+		setBusy(true);
+		try { for (const f of files.slice(0, 12)) await sendPicture(rid, blockId, f.name, await reducePicture(f)); }
+		finally { setBusy(false); await load(); }
+	});
+	return (
+		<details className="fp-fold" open={count > 0}>
+			<summary>{p.pictures}{count ? ` (${count})` : ""} <HelpTip id="pictures" lang={lang} label={p.pictures} /></summary>
+			{pics === null ? <Skeleton label={p.loading} /> : pics.length ? (
+				<ul className="fp-pics">
+					{pics.map((x) => <Picture key={x.imageId + (x.note?.ts ?? 0)} lang={lang} p={p} rid={rid} x={x} canWrite={canWrite} act={act} reload={load} />)}
+				</ul>
+			) : <p className="fp-empty">{p.noPictures}</p>}
+			{canWrite ? (
+				<>
+					<Field label={p.addPictures} tip="pictures" lang={lang} type="file" multiple accept="image/*" disabled={busy} onChange={(e) => { const got = [...(e.target.files ?? [])]; e.target.value = ""; void add(got); }} />
+					<p className="fp-meta">{busy ? p.reducing : p.picturesGo}</p>
+				</>
+			) : null}
+		</details>
+	);
+}
+
+/** One picture: the reduced copy, its size, the description that counts (by which model or person) and its correction. */
+function Picture({ lang, p, rid, x, canWrite, act, reload }: { lang: Lang; p: PageText; rid: string; x: TaskPicture; canWrite: boolean; act: (fn: () => Promise<unknown>) => Promise<boolean>; reload: () => Promise<unknown> }) {
+	const [text, setText] = useState(x.note?.text ?? "");
+	const base = `/rooms/${rid}/images/${x.blockId}/${x.imageId}`;
+	return (
+		<li className="fp-pic">
+			<img src={`/api${base}`} alt={x.note?.text ?? x.name} width={x.width} height={x.height} loading="lazy" />
+			<div>
+				<b>{x.name}</b> <span className="fp-meta">{x.width} × {x.height} · {Math.ceil(x.bytes / 1000)} kB</span>
+				<p className="fp-meta">{x.note ? p.describedBy(x.note.by) : p.notDescribed}</p>
+				{canWrite ? (
+					<>
+						<Area label={p.pictureNote} tip="picturenote" lang={lang} rows={3} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
+						<div className="fp-row">
+							<Act label={p.saveNote} tip="picturenote" lang={lang} disabled={!text.trim() || text === (x.note?.text ?? "")} onClick={() => void act(async () => { await api(`${base}/note`, { text }); await reload(); })} />
+							<Act kind="danger" label={`${p.removePicture}: ${x.name}`} tip="pictures" lang={lang} onClick={() => void act(async () => { await api(`${base}/remove`, {}); await reload(); })}>{p.removePicture}</Act>
+						</div>
+					</>
+				) : x.note ? <p>{x.note.text}</p> : null}
+			</div>
+		</li>
 	);
 }
 

@@ -39,6 +39,13 @@ export const P = {
 		excerpts: "Was die Aufgaben aus diesen Ordnern lesen, geht in Auszügen an die Modellanbieter.",
 		fromWorkspace: "Material aus dem Workspace mitnehmen (eine Kopie, jetzt genommen)",
 		filesOf: "Dateien der Kopie", notText: "nur Name und Größe",
+		pictures: "Bilder für die Modelle", addPictures: "Bilder hinzufügen (Kamera oder Fotos)", noPictures: "Diese Aufgabe hat keine Bilder.",
+		picturesGo: "Eine verkleinerte Kopie ohne Ort und Kameradaten geht an die Modellanbieter.", reducing: "Bilder werden verkleinert und gesendet …",
+		pictureFailed: "Nicht alle Bilder kamen an:", notDescribed: "Noch nicht beschrieben: Das erste Modell am Tisch, das Bilder nimmt, beschreibt es zu Beginn des nächsten Laufs.",
+		describedBy: (who: string) => `Beschreibung von ${who}; alle Modelle bekommen sie`, pictureNote: "Beschreibung", saveNote: "Beschreibung speichern", removePicture: "Bild entfernen",
+		fileNote: "Notiz für die Modelle", fileNoteHint: "z. B.: die Fristen stehen im zweiten Blatt",
+		upload: "Dateien in den Projektordner", uploadPick: "Dateien wählen oder hierher ziehen", uploading: "Wird gesendet …",
+		uploadNote: "Sie kommen nach material/ des Projektordners; nichts wird überschrieben. Die nächste Aufgabe nimmt sie in ihre Kopie.",
 	},
 	en: {
 		rooms: "Rooms", settings: "Settings", help: "Help", expert: "Expert view", back: "To the rooms",
@@ -78,6 +85,13 @@ export const P = {
 		excerpts: "What the tasks read from these folders goes to the model providers in excerpts.",
 		fromWorkspace: "Take material from the workspace (a copy, taken now)",
 		filesOf: "Files of the copy", notText: "name and size only",
+		pictures: "Pictures for the models", addPictures: "Add pictures (camera or photos)", noPictures: "This task has no pictures.",
+		picturesGo: "A reduced copy without the place and camera data goes to the model providers.", reducing: "Reducing and sending the pictures …",
+		pictureFailed: "Not every picture arrived:", notDescribed: "Not described yet: the first model at the table that takes pictures describes it when the next run begins.",
+		describedBy: (who: string) => `Described by ${who}; every model gets this`, pictureNote: "Description", saveNote: "Save the description", removePicture: "Remove the picture",
+		fileNote: "Note for the models", fileNoteHint: "e.g.: the deadlines are on the second sheet",
+		upload: "Files into the project folder", uploadPick: "Choose files or drop them here", uploading: "Sending …",
+		uploadNote: "They go to material/ of the project folder; nothing is overwritten. The next task takes them into its copy.",
 	},
 } as const;
 

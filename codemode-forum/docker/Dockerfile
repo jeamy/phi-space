@@ -1,11 +1,11 @@
 # Multi-stage Dockerfile for PHI-SPACES / CODEMODE FORUM (Next.js 16 + React 19 + phi-spaces), taken over from
-# codemode-chat/docker/Dockerfile and cut down: no sandbox (plan:
-# docs/gemeinsame-planung-plan-2026-11-22.en.md, phases 10 and 11).
+# codemode-chat/docker/Dockerfile and cut down (plan: docs/gemeinsame-planung-plan-2026-11-22.en.md, phases 10 and 11);
+# the sandbox and the pdf worker read PDFs (docs/forum-seite-plan-2026-11-26.en.md, phase 6).
 # Build context: repository root.
 # Targets:
 #   - dev-test:   the test runner in Docker
 #   - production-rust: the same with the Rust space server (rust/forum-space), which docker-compose.rust.yml runs
-#   - production: every role of the forum (space, sources, checker, agents, model, web) from one image: by default all
+#   - production: every role of the forum (space, sources, sandbox, pdf worker, checker, agents, model, web) from one image: by default all
 #                 of them in one container (server/launch.ts); docker/docker-compose.yml runs one container per role
 
 ARG NODE_IMAGE=node:22-bookworm-slim
@@ -18,7 +18,9 @@ WORKDIR /opt/phi-spaces
 COPY spaces/package.json spaces/package-lock.json ./spaces/
 RUN --mount=type=cache,target=/root/.npm npm --prefix spaces ci --no-audit --no-fund
 COPY codemode-forum/package.json codemode-forum/package-lock.json ./codemode-forum/
-RUN --mount=type=cache,target=/root/.npm npm --prefix codemode-forum ci --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm npm --prefix codemode-forum ci --no-audit --no-fund \
+    && rm -rf codemode-forum/node_modules/@napi-rs
+# (pdfjs-dist names @napi-rs/canvas as optional, for rendering pages; the forum only reads text, so it is not shipped)
 # spaces/agent/src/live-models.ts (model access of the model process) needs the agent package's pi-ai
 COPY spaces/agent/package.json spaces/agent/package-lock.json ./spaces/agent/
 RUN --mount=type=cache,target=/root/.npm npm --prefix spaces/agent ci --no-audit --no-fund
@@ -68,7 +70,8 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/app ./codem
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/client ./codemode-forum/client
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/server ./codemode-forum/server
 # /auth: the model process's credential file (FORUM_AUTH_FILE), a volume of its own; mode 700, the node user's alone
-RUN mkdir -p /data /repos /cache /auth && chown -R node:node /data /cache /auth && chmod 700 /auth
+# /run/pdf: the pdf worker's socket, a volume the sandbox and the pdf container share (server/pdf-worker.ts)
+RUN mkdir -p /data /repos /cache /auth /run/pdf && chown -R node:node /data /cache /auth /run/pdf && chmod 700 /auth /run/pdf
 USER node
 EXPOSE 4100 4180
 WORKDIR /opt/phi-spaces/codemode-forum

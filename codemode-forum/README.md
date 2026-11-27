@@ -291,7 +291,16 @@ A task may bring sources (`server/sources.ts`), fixed when it is created:
   only what an owner granted it. The copy holds every file with its path, size, kind (by content, not by name) and
   version, the text files up to 200 kB as text under `reference/` and `project/`; at most 400 files, 4 MB of text and
   eight levels (`FORUM_FILES_MAX_*`), refused with the number beyond. A revocation stops the next copy; a copy taken
-  stays with its task.
+  stays with its task. A PDF's text is taken out by the sandbox (below) with a mark at every page, so `search` names
+  the page; a scanned, encrypted or broken PDF and one over 300 pages (`FORUM_PDF_MAX_PAGES`) are named as such. A
+  file without text is listed with its kind and the note a person wrote about it (`FileNote`). A person uploads into
+  the project folder's `material/` through the same agent (`upload` in `FilesRequest`, with an operation ID that
+  makes a retry one file).
+- **pictures of the task** (`server/images.ts`): photos the browser reduced to a JPEG of at most 1568 px and 400 kB,
+  with nothing of the camera in it (the server refuses Exif, XMP and comments). The first model at the table that
+  takes pictures describes each before the first round (`ImageNote`, which a person can correct); every prompt names
+  the descriptions, and the pictures go only to models that take them. A run with pictures and no such model is
+  refused.
 
 A repository is never copied or unpacked. Every read goes to the objects of the commit (`git ls-tree`,
 `git cat-file`, `git grep`), so only tracked files exist for a reader, no path leads out of the tree, and a symbolic
@@ -330,17 +339,20 @@ transactions lapse, and its work comes back for another process of the same role
 |---|---|---|
 | space | `server/space-host.ts` | owns the space (phi-spaces' own SQLite store) and serves it on `FORUM_LISTEN` (default `unix:/tmp/codemode-forum-space.sock`) |
 | sources | `server/source-host.ts`, `server/sources.ts` | the only process that sees repositories (`FORUM_REPOS`). Answers the reading calls (`SourceRequest`, `SourceResult`), opens a repository pack when a task is created, publishes the repositories' names (`SourceInfo`) |
+| sandbox | `server/sandbox-host.ts`, `server/pdf-extract.ts`, `server/pdf-worker.ts` | takes a PDF's text out (`PdfRequest`, `PdfResult`) and announces itself (`SandboxInfo`); it reaches the Space and opens no PDF itself: each is read by a child with pdfjs-dist under Node's permission model, bounded in heap and time, in user namespaces of its own (no network, the Space's socket covered), or in Docker by the pdf worker, a container without a network that shares only its socket's volume with the sandbox. Without either it reads nothing |
 | checker | `server/check-host.ts`, `server/checks.ts` | runs the mechanical checks on a version (`CheckRequest`, `CheckResult`) and writes the result (`PlanCheck`); asks the sources process about quoted lines |
 | agents | `server/agent-host.ts`, `server/run.ts` | takes the agent slots of runs and works off their work items, each in its own transaction |
 | model | `server/model-host.ts`, `server/llm.ts`, `server/calls.ts` | the only process that calls models. Takes an `LlmCall`, builds the prompt from the space (the task, the document), writes the `LlmResult` and a `Spend` entry in the same transaction; publishes the models (`ModelInfo`), follows the admin's choices (`ForumAdmin`) |
 | web | `server/index.ts`, `server/hub.ts` | Next.js page, REST API, WebSocket. Follows the space's change stream and pushes a fresh snapshot when a room changes; creates tasks, serves the document, starts and stops runs |
 
-There is no judge and no sandbox: nothing here runs code from an entry.
+There is no judge, and nothing here runs code from an entry; the sandbox only reads PDFs (scripts are phase 10 of docs/forum-seite-plan-2026-11-26.en.md).
 
 Entries in the space so far: `ForumRoom`, `RoomLock`, `PlanTask`, `PlanSource`, `SourceFile`, `SourceIndex`, `SourceInfo`, `SourceRequest`, `SourceResult`, `ReadStep`,
 `PlanMessage`, `PlanDecision`, `PlanOutline`, `OutlinePick`, `PlanObjection`, `PlanBallot`, `PlanAccept`, `PlanDoc`, `PlanSection`, `PlanCheck`, `CheckRequest`, `CheckResult`, `ForumRun` (the run and its
 lock, one per room), `AgentSlot`, `WorkItem`, `ItemStart`, `RollCall`, `ForumRunDone`, `ForumLine`, `LlmCall`, `LlmResult`, `Spend`, `ModelInfo`,
-`ForumAdmin`, `AdminSession`, `QuotaLock`, `QuotaUse`, `Process`.
+`ForumAdmin`, `AdminSession`, `QuotaLock`, `QuotaUse`, `Process`, `RoomLink`, `FilesRequest`, `FilesResult`, `FileNote`,
+`UploadPart`, `UploadDone`, `PreviewPart`, `TaskImage`, `ImagePart`, `ImageNote`, `PdfRequest`, `PdfPart`, `PdfResult`,
+`SandboxInfo`.
 
 ## Runs
 
@@ -487,7 +499,11 @@ cancelled one, and the ceilings; `tests/auth.test.ts` refuses providers, limits 
 not set them. `tests/files.test.ts` runs the join with spaces-files against a real one
 (`spaces-files/tests/support/agent-host-fixture.ts` as a process): the link and its refusals, a copy of the granted
 folders and nothing beside them, a run that reads it, a revocation, a sources process killed during a copy, and each
-limit of the walk at its edge.
+limit of the walk at its edge. `tests/workspace-files.test.ts` (the same spaces-files) covers uploads (sent again, a
+sources process killed after the write, a taken name, a lying name, a revoked editor), every kind of PDF with and
+without a sandbox, previews, file notes, and the isolation of the reader (a probe that reaches no file, no Space socket
+and no network; the pdf worker over its socket). `tests/images.test.ts` covers the pictures of a task: the JPEG checks,
+the description by a model that takes pictures, a corrected one, a run refused without such a model.
 
 ## Sign-in
 

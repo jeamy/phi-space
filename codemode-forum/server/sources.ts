@@ -22,8 +22,13 @@ export type SourceId = "docs" | "repo" | "files";
 /** A file of a pack: its path and size in bytes; a file of a workspace that was not copied (files.ts) also its kind
  *  and version: it is listed, but has no text to read. */
 export type IndexEntry = [path: string, size: number, kind?: string, version?: number];
+/** Whether a file of a pack has text to read: every file without a kind, and a PDF whose text was taken out (its kind
+ *  then says "pdf, text of N pages"). */
+export const readable = (e: IndexEntry) => !e[2] || e[2].startsWith("pdf, text");
 /** A pack as the calls see it: what files there are, and how one is read. */
 export type Pack = { index: IndexEntry[]; read: (path: string) => Promise<Buffer>;
+	/** What people wrote about files that have no text to read (FileNote, files.ts), by path. */
+	notes?: Map<string, string>;
 	/** Lines that contain `query` (fixed text, any case): [path, line number, line]; without it the files are read. */
 	grep?: (query: string, glob?: string) => Promise<Array<[string, number, string]>> };
 /** One reading call. */
@@ -60,7 +65,7 @@ export function listDir(pack: Pack, dir = ""): string {
 	}
 	if (!dirs.size && !files.length) return `No such directory: ${at || "/"}`;
 	const byName = ([a]: [string, ...unknown[]], [b]: [string, ...unknown[]]) => (a < b ? -1 : a > b ? 1 : 0); // the same order on every host
-	const rows = [...[...dirs].sort(byName).map(([d, n]) => `${d}/  (${n} files)`), ...files.sort(byName).map(([f, n, kind]) => `${f}  (${n} bytes${kind ? `, ${kind}, not readable here` : ""})`)];
+	const rows = [...[...dirs].sort(byName).map(([d, n]) => `${d}/  (${n} files)`), ...files.sort(byName).map((e) => `${e[0]}  (${e[1]} bytes${e[2] ? `, ${e[2]}${readable(e) ? "" : ", not readable here"}` : ""}${pack.notes?.get(prefix + e[0]) ? `; the person's note: ${pack.notes.get(prefix + e[0])}` : ""})`)];
 	const more = rows.length - SOURCE_LIMITS.list;
 	return [`${at || "/"}: ${dirs.size} directories, ${files.length} files`, ...rows.slice(0, SOURCE_LIMITS.list), ...(more > 0 ? [`… and ${more} more`] : [])].join("\n");
 }
@@ -70,7 +75,7 @@ export async function readLines(pack: Pack, raw: string, from = 1, lines: number
 	const path = safePath(raw);
 	const entry = path ? pack.index.find(([p]) => p === path) : undefined;
 	if (!path || !entry) return `No such file in the source: ${raw.trim().slice(0, 200)} (list a directory to see what is there)`;
-	if (entry[2]) return `${path} is a file of kind ${entry[2]} with ${entry[1]} bytes; only its name, kind and size are known here`;
+	if (!readable(entry)) return `${path} is a file of kind ${entry[2]} with ${entry[1]} bytes; only its name, kind and size are known here${pack.notes?.get(path) ? `. The person's note on it: ${pack.notes.get(path)}` : ""}`;
 	const buf = await pack.read(path);
 	if (buf.subarray(0, 8000).includes(0)) return `${path} is not a text file`;
 	const all = buf.toString("utf8").replace(/\r\n/g, "\n").split("\n");
@@ -88,21 +93,28 @@ export async function search(pack: Pack, rawQuery: string, rawGlob?: string): Pr
 	const query = rawQuery.trim().slice(0, SOURCE_LIMITS.query), g = safeGlob(rawGlob?.trim());
 	if (query.length < 2) return "A search needs at least two characters";
 	if (rawGlob?.trim() && !g) return `Not a file pattern: ${rawGlob.trim().slice(0, 120)} (letters, digits, . _ - / and *)`;
-	const allowed = new Set(pack.index.filter((e) => !e[2]).map(([p]) => p)), match = g ? glob(g.includes("/") ? g : `**${g}`) : null;
-	let hits: Array<[string, number, string]>;
+	const allowed = new Set(pack.index.filter(readable).map(([p]) => p)), match = g ? glob(g.includes("/") ? g : `**${g}`) : null;
+	let hits: Array<[string, number, string, number?]>;
 	if (pack.grep) hits = (await pack.grep(query, g)).filter(([p]) => allowed.has(p) && (!match || match.test(p)));
 	else {
 		hits = [];
 		const needle = query.toLowerCase();
-		for (const [path, , kind] of pack.index) {
-			if (kind || (match && !match.test(path))) continue;
-			const text = (await pack.read(path)).toString("utf8");
-			text.split("\n").forEach((line, i) => { if (line.toLowerCase().includes(needle)) hits.push([path, i + 1, line]); });
+		for (const e of pack.index) {
+			const path = e[0];
+			if (!readable(e) || (match && !match.test(path))) continue;
+			const text = (await pack.read(path)).toString("utf8"), pdf = e[2]?.startsWith("pdf, text");
+			// a PDF's text has a mark before each page (pdf-extract.ts): a hit there names its page
+			let page = 0;
+			text.split("\n").forEach((line, i) => {
+				const mark = pdf ? /^--- page (\d+) ---$/.exec(line) : null;
+				if (mark) { page = Number(mark[1]); return; }
+				if (line.toLowerCase().includes(needle)) hits.push(pdf ? [path, i + 1, line, page] : [path, i + 1, line]);
+			});
 			if (hits.length > SOURCE_LIMITS.hits) break;
 		}
 	}
 	if (!hits.length) return `No line contains "${query}"${g ? ` in ${g}` : ""}`;
-	const shown = hits.slice(0, SOURCE_LIMITS.hits).map(([p, n, l]) => `${p}:${n}: ${l.trim().slice(0, SOURCE_LIMITS.hitChars)}`);
+	const shown = hits.slice(0, SOURCE_LIMITS.hits).map(([p, n, l, page]) => `${p}:${n}${page ? ` (page ${page})` : ""}: ${l.trim().slice(0, SOURCE_LIMITS.hitChars)}`);
 	return [`"${query}"${g ? ` in ${g}` : ""}: ${hits.length > SOURCE_LIMITS.hits ? `the first ${SOURCE_LIMITS.hits} lines` : `${hits.length} lines`}`, ...shown].join("\n");
 }
 

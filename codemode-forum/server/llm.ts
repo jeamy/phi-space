@@ -32,12 +32,15 @@ let withProviders: Promise<any | null> | null = null;
 let on = true, inFlight = 0, windowStart = 0, calls = 0;
 const slotWaiters: Array<() => void> = [];
 
-export type LlmInfo = { enabled: boolean; on: boolean; models: { id: string; label: string }[] };
+/** `images`: the model takes pictures (pi-ai: its `input` includes "image"). */
+export type LlmInfo = { enabled: boolean; on: boolean; models: { id: string; label: string; images?: boolean }[] };
 export type AdminModels = { enabled: boolean; on: boolean; models: Array<{ label: string; provider: string; id: string; name: string }>; allowed: string[]; custom: boolean };
 
 /** The models an admin allowed (labels `provider/id`); null: the choice of FORUM_MODELS. */
 let allowedLabels: Set<string> | null = null;
 const labelOf = (m: any) => `${m.provider}/${m.id}`;
+/** Whether a model of pi-ai takes pictures. */
+const takesImages = (m: any) => Array.isArray(m?.input) && m.input.includes("image");
 /** FORUM_MODELS: parts of model ids, comma-separated; a model whose id contains one of them may take part. */
 const named = () => (process.env.FORUM_MODELS ?? "").split(",").map((p) => p.trim().toLowerCase()).filter(Boolean);
 
@@ -115,7 +118,7 @@ export async function adminModels(): Promise<AdminModels> {
 export async function llmInfo(): Promise<LlmInfo> {
 	const s = await sharedModel();
 	if (!s) return { enabled: false, on: false, models: [] };
-	return { enabled: true, on, models: whitelist(await s.models.getAvailable()).map((m) => ({ id: String(m.id), label: labelOf(m) })) };
+	return { enabled: true, on, models: whitelist(await s.models.getAvailable()).map((m) => ({ id: String(m.id), label: labelOf(m), ...(takesImages(m) ? { images: true } : {}) })) };
 }
 
 /** Labels (`provider/id`) of the models that may take part in a run. */
@@ -156,7 +159,8 @@ export async function metered<T>(fn: () => Promise<T>, signal?: AbortSignal): Pr
 const THINKING_ROOM = 4_000;
 
 /** What one call asks of a model. */
-export type TextCall = { model: string; system: string; user: string; maxTokens: number };
+/** `images`: pictures sent with the message (base64), only to a model that takes them; any other gets the text alone. */
+export type TextCall = { model: string; system: string; user: string; maxTokens: number; images?: Array<{ data: string; mimeType: string }> };
 export type TextAnswer = { text: string; model: string; usage?: Usage };
 
 /** One guarded model call (allowed models, day budget, minute window, two in flight): the answer text and the model
@@ -186,7 +190,7 @@ export async function llmText(c: TextCall): Promise<TextAnswer> {
 	try {
 		const res: any = await s.models.completeSimple(model, {
 			systemPrompt: c.system,
-			messages: [{ role: "user", content: c.user, timestamp: Date.now() }],
+			messages: [{ role: "user", content: c.images?.length && takesImages(model) ? [{ type: "text", text: c.user }, ...c.images.map((x) => ({ type: "image", data: x.data, mimeType: x.mimeType }))] : c.user, timestamp: Date.now() }],
 		}, { ...(mustThink ? { reasoning: "low", maxTokens: c.maxTokens + THINKING_ROOM } : { maxTokens: c.maxTokens }), signal: stopSignal ? AbortSignal.any([timeout, stopSignal]) : timeout });
 		const m = meter.getStore();
 		if (m) m.usage = addUsage(m.usage, usageOf(res)); // paid, whatever happens with the answer

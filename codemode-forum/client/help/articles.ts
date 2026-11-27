@@ -691,6 +691,7 @@ Beschreibe, wofür der Plan ist und was er leisten muss, in mindestens 20 und h�
 | Git-Repository auf dem Rechner | nur ein Admin | eines der Repositories, die der Betreiber freigegeben hat; ein Branch, Tag oder Commit |
 | Entferntes Git-Repository | nur ein Admin | eine https-Adresse auf einem Host, den der Betreiber erlaubt hat; ein Commit, höchstens 200 MB und 60 Sekunden |
 | Material aus dem Workspace | wer im Raum schreibt, sobald der Raum verbunden ist | eine Kopie beim Anlegen, bis 400 Dateien und 4 MB Text; siehe [Material aus den Dateien](help.topic.material#task) |
+| Bilder für die Modelle | wer im Raum schreibt | eine verkleinerte Kopie ohne Ort und Kameradaten, bis zwölf je Aufgabe; siehe [Fotos und andere Dateien](help.topic.pictures#add) |
 
 Ein Repository wird beim Anlegen auf einen **Commit** festgelegt. Die Modelle lesen aus den Objekten dieses Commits, nicht aus dem Arbeitsverzeichnis: Was später im Repository geschieht, ändert die Aufgabe nicht. Den Commit nennt der Anhang des Ergebnisses.
 
@@ -722,6 +723,7 @@ Describe what the plan is for and what it must achieve, in at least 20 and at mo
 | Git repository on the machine | an admin only | one of the repositories the operator offers; a branch, tag or commit |
 | Remote git repository | an admin only | an https address on a host the operator allowed; one commit, at most 200 MB and 60 seconds |
 | Material from the workspace | whoever writes in the room, once the room is linked | a copy when the task is created, up to 400 files and 4 MB of text; see [Material from the files](help.topic.material#task) |
+| Pictures for the models | whoever writes in the room | a reduced copy without the place and camera data, up to twelve a task; see [Photos and other files](help.topic.pictures#add) |
 
 A repository is fixed to a **commit** when the task is created. The models read from the objects of that commit, not from the working directory: what happens in the repository later does not change the task. The appendix of the result names the commit.
 
@@ -805,6 +807,76 @@ When somebody revokes the access in spaces-files, the next copy fails with the r
 		},
 	},
 	{
+		id: "help.topic.pictures",
+		section: "use",
+		plain: true,
+		title: { de: "Fotos und andere Dateien", en: "Photos and other files" },
+		short: {
+			de: "Bilder für die Modelle, ihre Beschreibung, Dateien in den Projektordner hochladen, PDFs und was mit anderen Dateien geschieht.",
+			en: "Pictures for the models, their description, uploading files to the project folder, PDFs, and what becomes of other files.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Zu einer Aufgabe gehören oft Fotos, Skizzen, PDFs oder Tabellen. FORUM nimmt sie auf zwei Wegen: als **Bilder für die [Modelle](help.topic.words#model)**, die bei der Aufgabe bleiben, und als Dateien im Projektordner eines verbundenen [Workspace](help.topic.words#workspace). Was davon an die Modellanbieter geht, steht in [Was dieses System verlässt](help.topic.what_leaves#providers).
+
+## Bilder hinzufügen {#add}
+
+Beim Anlegen einer Aufgabe oder später im Bereich **Dateien** wählst du **Bilder hinzufügen**. Auf dem Telefon bietet das die Kamera und die Fotos an, am Schreibtisch die Dateiauswahl. Die Seite macht von jedem Bild eine verkleinerte Kopie: die längere Seite höchstens 1568 Pixel, als JPEG neu geschrieben. Dabei fällt alles weg, was die Datei sonst trägt: Kamera, Zeit und der Ort der Aufnahme. FORUM nimmt eine Kopie, die doch solche Daten trägt, nicht an.
+
+Grenzen: zwölf Bilder je Aufgabe, 400 kB je Bild. Ein Bild, das zweimal ankommt (etwa weil die Antwort verloren ging), zählt einmal.
+
+## Die Beschreibung {#describe}
+
+Nicht jedes Modell kann Bilder sehen. Darum beschreibt zu Beginn eines Laufs das erste Modell am [Tisch](help.topic.words#table), das Bilder nimmt, jedes noch nicht beschriebene Bild einmal: was es zeigt, jeden Text darin, was es für den [Auftrag](help.topic.words#brief) bedeuten kann. Diese Beschreibung bekommen alle Modelle; die Modelle, die Bilder nehmen, bekommen die Bilder dazu.
+
+Ein Lauf auf einer Aufgabe mit Bildern braucht deshalb mindestens ein solches Modell am Tisch und wird sonst mit diesem Grund abgelehnt. Stimmt eine Beschreibung nicht, schreibst du sie neu und speicherst sie: Dein Text zählt, auch in späteren Läufen.
+
+## Dateien hochladen {#upload}
+
+Ist der [Raum](help.topic.words#room) mit einem Workspace verbunden, nimmt der Bereich **Dateien** auch Dateien an, auf dem Schreibtisch auch durch Hineinziehen. Der Agent des Raums legt sie in \`material/\` des Projektordners ab; das Protokoll des Raums nennt, wer sie geschickt hat. Gibt es den Namen dort schon, bekommt die neue Datei einen Namen mit Zahl: Nichts wird überschrieben. Eine Datei bis 16 MB; ihre Art erkennt FORUM am Inhalt, nicht am Namen.
+
+## Bilder und PDFs aus dem Workspace {#workspace}
+
+Die Kopie einer Aufgabe zeigt Bilder (JPEG, PNG, WebP, GIF) im Bereich **Dateien** als Bild. Ein SVG wird nur als Bild gezeigt, nie in die Seite gesetzt.
+
+Aus einem PDF nimmt FORUM beim Anlegen der Aufgabe den Text, mit einer Marke an jeder Seite, so dass die Modelle darin suchen und eine Stelle als „Seite 12“ nennen können. Das geschieht in einem abgeschotteten Prozess ohne Netz, ohne Dateien und ohne Schlüssel. Grenzen: 300 Seiten und 2 MB Text je PDF. Ein gescanntes PDF hat keinen Text; die Aufgabe sagt das und nennt die Datei mit ihrer Art. Ein verschlüsseltes oder kaputtes PDF wird ebenso benannt.
+
+## Andere Dateien {#other}
+
+Tabellen, Office-Dateien, Archive, Ton und Video lesen die Modelle nicht. Sie kennen ihren Namen, ihre Art und ihre Größe und die Notiz, die eine Person dazu schreibt, zum Beispiel: „die Ausschreibung als Tabelle, die Fristen stehen im zweiten Blatt“. Die Notiz schreibst du im Bereich **Dateien** neben der Datei.`,
+			en: `## Overview {#overview}
+
+A task often comes with photos, sketches, PDFs or spreadsheets. FORUM takes them in two ways: as **pictures for the [models](help.topic.words#model)**, which stay with the task, and as files in the project [folder](help.topic.words#folder) of a linked [workspace](help.topic.words#workspace). What of them goes to the model providers is in [What leaves this system](help.topic.what_leaves#providers).
+
+## Adding pictures {#add}
+
+When you create a task, or later in the part **Files**, choose **Add pictures**. On a phone this offers the camera and the photos, on a desk the file chooser. The page makes a reduced copy of each picture: the longer side at most 1568 pixels, written anew as JPEG. That drops everything else the file carries: the camera, the time and the place it was taken. FORUM does not take a copy that still carries such data.
+
+Limits: twelve pictures a task, 400 kB a picture. A picture that arrives twice (because the reply was lost, say) counts once.
+
+## The description {#describe}
+
+Not every model can see pictures. So when a run begins, the first model at the [table](help.topic.words#table) that takes pictures describes each picture not yet described, once: what it shows, every text in it, what it may mean for the [brief](help.topic.words#brief). Every model gets that description; the models that take pictures get the pictures as well.
+
+A run on a task with pictures therefore needs at least one such model at the table, and is refused with that reason otherwise. If a description is wrong, write it anew and save it: your text counts, in later runs too.
+
+## Uploading files {#upload}
+
+When the [room](help.topic.words#room) is linked to a workspace, the part **Files** also takes files, on a desk by dropping them as well. The room's agent puts them into \`material/\` of the project folder; the room's log names who sent them. If the name is taken there, the new file gets a name with a number: nothing is overwritten. A file up to 16 MB; FORUM tells its kind by the contents, not by the name.
+
+## Pictures and PDFs from the workspace {#workspace}
+
+A task's copy shows pictures (JPEG, PNG, WebP, GIF) in the part **Files** as pictures. An SVG is shown as a picture only, never placed into the page.
+
+From a PDF FORUM takes the text when the task is created, with a mark at every page, so that the models can search it and name a place as "page 12". That happens in a sealed-off process without network, without files and without keys. Limits: 300 pages and 2 MB of text a PDF. A scanned PDF has no text; the task says so and names the file with its kind. An encrypted or broken PDF is named the same way.
+
+## Other files {#other}
+
+Spreadsheets, office files, archives, sound and video the models do not read. They know their name, kind and size, and the note a person writes about them, for example: "the tender as a spreadsheet, the deadlines are on the second sheet". You write the note in the part **Files** beside the file.`,
+		},
+	},
+	{
 		id: "help.topic.who_sees_what",
 		section: "use",
 		plain: true,
@@ -866,11 +938,11 @@ FORUM läuft auf eigenen Rechnern. Hinaus gehen nur die Aufrufe an die [Modelle]
 
 ## An die Modellanbieter {#providers}
 
-Jeder Aufruf an ein Modell geht an dessen Anbieter. Darin stehen der [Auftrag](help.topic.words#brief), was am [Tisch](help.topic.words#table) gesagt wurde, der Plan und die Auszüge aus den Quellen, die das Modell gelesen hat: aus hochgeladenen Dokumenten, aus Repositories und aus der Kopie der [Ordner](help.topic.words#folder). Gib keine Quellen an, die das nicht dürfen. Welche Anbieter es gibt, legt die Verwaltung fest ([Modelle und Anbieter](help.topic.models_and_providers#overview)).
+Jeder Aufruf an ein Modell geht an dessen Anbieter. Darin stehen der [Auftrag](help.topic.words#brief), was am [Tisch](help.topic.words#table) gesagt wurde, der Plan und die Auszüge aus den Quellen, die das Modell gelesen hat: aus hochgeladenen Dokumenten, aus Repositories und aus der Kopie der [Ordner](help.topic.words#folder), auch der Text aus PDFs. Die Bilder einer Aufgabe gehen nur an Modelle, die Bilder nehmen; ihre Beschreibungen an alle ([Fotos und andere Dateien](help.topic.pictures#describe)). Gib keine Quellen an, die das nicht dürfen. Welche Anbieter es gibt, legt die Verwaltung fest ([Modelle und Anbieter](help.topic.models_and_providers#overview)).
 
 ## In spaces-files {#files}
 
-Die Dateien selbst bleiben in spaces-files. FORUM nimmt beim Anlegen einer Aufgabe eine Kopie der Texte in seinen eigenen Speicher; Bilder und andere Dateien kennt es nur mit Name, Art und Größe. Zurückgeschrieben wird in dieser Stufe nichts.
+Die Dateien selbst bleiben in spaces-files. FORUM nimmt beim Anlegen einer Aufgabe eine Kopie der Texte (und des Texts aus PDFs) in seinen eigenen Speicher; Bilder und andere Dateien kennt es nur mit Name, Art, Größe und deiner Notiz. Hinein schreibt FORUM nur, was du hochlädst, in den Ordner \`material/\` des Projektordners ([Fotos und andere Dateien](help.topic.pictures#upload)).
 
 ## Was nie hinausgeht {#never}
 
@@ -881,11 +953,11 @@ FORUM runs on machines of its own. Only the calls to the [models](help.topic.wor
 
 ## To the model providers {#providers}
 
-Every call to a model goes to its provider. It holds the [brief](help.topic.words#brief), what was said at the [table](help.topic.words#table), the plan and the excerpts of the sources the model read: from uploaded documents, from repositories and from the copy of the folders. Do not name sources that must not go there. Which providers there are is set by the administrators ([Models and providers](help.topic.models_and_providers#overview)).
+Every call to a model goes to its provider. It holds the [brief](help.topic.words#brief), what was said at the [table](help.topic.words#table), the plan and the excerpts of the sources the model read: from uploaded documents, from repositories and from the copy of the folders, the text of PDFs too. The pictures of a task go only to models that take pictures; their descriptions to all ([Photos and other files](help.topic.pictures#describe)). Do not name sources that must not go there. Which providers there are is set by the administrators ([Models and providers](help.topic.models_and_providers#overview)).
 
 ## In spaces-files {#files}
 
-The files themselves stay in spaces-files. When a task is created, FORUM takes a copy of the text into its own store; pictures and other files it knows only by name, kind and size. Nothing is written back at this stage.
+The files themselves stay in spaces-files. When a task is created, FORUM takes a copy of the text (and of the text of PDFs) into its own store; pictures and other files it knows only by name, kind, size and your note. It writes only what you upload, into the project folder's \`material/\` ([Photos and other files](help.topic.pictures#upload)).
 
 ## What never leaves {#never}
 

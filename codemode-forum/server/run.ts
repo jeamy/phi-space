@@ -7,7 +7,8 @@
 //   AgentSlot    one per agent: an agents process takes it under a long transaction and works as that agent until the
 //                run is over (a process that dies lets the transaction lapse, and another takes the slot).
 //   WorkItem     work of the run. So far: `rollcall`, one per model, in which the model says that it is there (the
-//                opening every run has); `kickoff`, one per model at the table, in which it says how it understands
+//                opening every run has); `describe`, on a task with pictures that are not described yet, one per
+//                picture, by the first model at the table that takes pictures (images.ts ImageNote); `kickoff`, one per model at the table, in which it says how it understands
 //                the brief and may ask and propose (talk.ts); `reply`, one per model that owes the table an answer or
 //                a vote; `person`, which waits for the person's answers until its deadline; `outline`, in which one model proposes the document's sections; `draft`, one
 //                per section, in which that model writes it. The kinds of the joint work follow with their phases.
@@ -64,6 +65,8 @@ import { decide, decisionsOf, keep, messagesOf, owed, parseKickoff, parseMessage
 import { DocRefused, headOf, writeVersion, type PlanDoc } from "./plandoc.ts";
 import type { PlanTask } from "./plantask.ts";
 import { keepAlive, readExisting, StillHeld, takeAll, takeExisting } from "./space.ts";
+import { cleanNote, imagesOf, notesOf, type ImageNote } from "./images.ts";
+import { modelInfoOf } from "./models.ts";
 
 export const rid = () => randomBytes(4).toString("hex");
 /** The entry type of a run: a table of a run with both tables (its id ends in the table) is a TableRun. */
@@ -77,7 +80,7 @@ export type RunInfo = { active: boolean; runId: string; blockId: string;
 	 *  review each other. At B: the review round the run is in, of how many, and the objections so far. */
 	table: "A" | "B"; round?: number; rounds?: number; objections?: { raised: number; open: number }; models: string[]; perModel: number; aliases: Record<string, string>;
 	/** Where the run is: the roll call, the outline, the drafts of the sections, or through with them. */
-	phase: "rollcall" | "kickoff" | "discuss" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise" | "stalled" | "accepted" | "done" | "tables" | "compare" | "final";
+	phase: "rollcall" | "describe" | "kickoff" | "discuss" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise" | "stalled" | "accepted" | "done" | "tables" | "compare" | "final";
 	/** A run with both tables: how each table stands, the versions compared, the base and why (how many models prefer
 	 *  which document), the final round, and the result. */
 	both?: boolean; tables?: Partial<Record<TableId, TableInfo>>; compare?: Record<TableId, number>;
@@ -100,7 +103,7 @@ export type RunInfo = { active: boolean; runId: string; blockId: string;
 	budget: { tokens?: number; usd?: number }; note?: string;
 	/** Why the run ended, when it was not stopped and did not finish its work: the budget, or fewer than three models
 	 *  answered the roll call. */
-	ended?: "budget" | "models" | "checks" | "rounds" | "stalled" | "other" };
+	ended?: "budget" | "models" | "pictures" | "checks" | "rounds" | "stalled" | "other" };
 /** What the page shows of one table of a run with both. */
 export type TableInfo = Pick<RunInfo, "phase" | "round" | "rounds" | "accepted" | "ended" | "usage" | "doc" | "ballots" | "objections" | "turn" | "present" | "note" | "check" | "items"> & { active: boolean };
 const TABLE_KEYS = ["phase", "round", "rounds", "accepted", "ended", "usage", "doc", "ballots", "objections", "turn", "present", "note", "check", "items"] as const;
@@ -127,10 +130,12 @@ export type RunEntry = { session: string; runId: string; params: RunParams; info
 	/** The budget held by model calls in flight, per item (released when the item books its call), and the calls
 	 *  booked so far (their average is what the next call is expected to cost). */
 	reserved?: Record<string, { tokens: number; usd: number }>; booked?: number; ts: number };
-export type WorkKind = "rollcall" | "kickoff" | "reply" | "person" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise" | "compare";
+export type WorkKind = "rollcall" | "describe" | "kickoff" | "reply" | "person" | "outline" | "pick" | "draft" | "check" | "turn" | "review" | "revise" | "compare";
 /** `onlyModel`: only an agent of that model may take it, until its `deadline` has passed: then any agent takes it to
  *  close it. `table`, `sectionId`: the document and section it works on. `threads`: what a reply is owed to. */
 export type WorkItem = { session: string; runId: string; itemId: string; kind: WorkKind; ts: number; onlyModel?: string; notBefore?: number; tries?: number; table?: string; sectionId?: string; threads?: string[]; deadline?: number;
+	/** describe: the picture. */
+	imageId?: string;
 	/** revise: the objections it is to take up, and the models that raised them, whose agents do not take it. */
 	objections?: string[]; notModels?: string[] };
 export type Slot = { session: string; runId: string; agent: number; model: string };
@@ -240,7 +245,7 @@ async function closingLine(space: SpaceLike, r: RunEntry, how: "finished" | "sto
 		return `Run ${how}${r.info.ended === "budget" ? " (budget used up)" : ""}: ${one("A")}, ${one("B")}${base}${fin}${r.info.result ? `; result: table ${r.info.result.table}, version ${r.info.result.version}` : "; no result"} (${cost})`;
 	}
 	const present = await space.count({ type: "RollCall", fields: { session: r.session, runId: r.runId } });
-	const why = r.info.ended === "budget" ? " (budget used up)" : r.info.ended === "models" ? ` (fewer than ${MIN_MODELS} models answered)` : r.info.ended === "checks" ? " (the document does not pass the checks: no ballots on it)" : r.info.ended === "rounds" ? ` (no majority within ${r.params.rounds} round${r.params.rounds === 1 ? "" : "s"})` : r.info.ended === "stalled" ? " (the table is stuck and the person did not answer)" : r.info.ended === "other" ? " (the other table agreed first)" : "";
+	const why = r.info.ended === "budget" ? " (budget used up)" : r.info.ended === "models" ? ` (fewer than ${MIN_MODELS} models answered)` : r.info.ended === "pictures" ? " (the task has pictures and no model that answered the roll call takes them)" : r.info.ended === "checks" ? " (the document does not pass the checks: no ballots on it)" : r.info.ended === "rounds" ? ` (no majority within ${r.params.rounds} round${r.params.rounds === 1 ? "" : "s"})` : r.info.ended === "stalled" ? " (the table is stuck and the person did not answer)" : r.info.ended === "other" ? " (the other table agreed first)" : "";
 	const cost = `${r.info.usage.tokens} tokens${r.info.usage.costUsd ? `, $${r.info.usage.costUsd.toFixed(4)}` : ""}`;
 	const doc = r.info.doc, writer = r.params.aliases[r.info.writer ?? ""];
 	const talk = r.info.talk ? `; ${r.info.talk.messages} messages, ${r.info.talk.decisions} decision${r.info.talk.decisions === 1 ? "" : "s"}` : "";
@@ -506,7 +511,7 @@ async function failed(d: AgentDeps, it: WorkItem, txn: string, why: string, usag
 		book(r, usage, it.itemId);
 		if (FATAL_LLM.test(why)) r.info.ended ??= "budget";
 		const who = r.params.aliases[it.onlyModel ?? ""] ?? "a model", reason = why.slice(0, 120);
-		r.info.note = it.kind === "rollcall" ? `${who} did not answer the roll call (${reason})` : it.kind === "kickoff" ? `${who} said nothing at the kickoff (${reason})` : it.kind === "reply" ? `${who} did not reply to the table (${reason}); the run goes on without its reply` : it.kind === "outline" ? `${who} wrote no outline (${reason}); the run ends without a document` : it.kind === "check" ? `the document could not be checked (${reason})` : it.kind === "turn" ? `${who} did not take its turn (${reason}); the turn passes on` : it.kind === "compare" ? `${who} did not compare the documents (${reason})` : `${who} did not write a section (${reason}); it keeps what it is to say`;
+		r.info.note = it.kind === "rollcall" ? `${who} did not answer the roll call (${reason})` : it.kind === "describe" ? `${who} did not describe a picture (${reason}); the table knows it by its name only` : it.kind === "kickoff" ? `${who} said nothing at the kickoff (${reason})` : it.kind === "reply" ? `${who} did not reply to the table (${reason}); the run goes on without its reply` : it.kind === "outline" ? `${who} wrote no outline (${reason}); the run ends without a document` : it.kind === "check" ? `the document could not be checked (${reason})` : it.kind === "turn" ? `${who} did not take its turn (${reason}); the turn passes on` : it.kind === "compare" ? `${who} did not compare the documents (${reason})` : `${who} did not write a section (${reason}); it keeps what it is to say`;
 		await finish(d, txn, r, it);
 	});
 }
@@ -581,6 +586,15 @@ async function writing(d: AgentDeps, r: RunEntry): Promise<WorkItem[]> {
 	// every section is written: the document is checked (again)
 	r.info.phase = open.length ? "draft" : "check";
 	return open.length ? draftsFor(r, open.map((x) => x.sectionId)) : [newItem(r, "check", { table })];
+}
+
+/** What follows the roll call (and the descriptions of the pictures), in the run's update: a block without a document
+ *  begins with the kickoff, every model at the table says how it understands the brief; a block that has one goes on
+ *  writing it. */
+async function opening(d: AgentDeps, r: RunEntry): Promise<WorkItem[]> {
+	if (await headOf(d.space, docOf(r))) return writing(d, r);
+	r.info.phase = "kickoff";
+	return (r.info.present ?? []).map((model) => newItem(r, "kickoff", { onlyModel: model, table: r.params.table }));
 }
 
 /** The proposals with a majority become decisions, in the run's update. A decided proposal to take over a section of
@@ -759,12 +773,17 @@ async function finish(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spaw
 			if (present.length < MIN_MODELS) r.info.ended = "models";
 			else {
 				r.info.present = present; r.info.writer = present[0]!;
-				// a block without a document begins with the kickoff: every model at the table says how it understands the
-				// brief; a block that has one goes on writing it
-				if (await headOf(d.space, docOf(r))) items.push(...(await writing(d, r)));
-				else { r.info.phase = "kickoff"; items.push(...present.map((model) => newItem(r, "kickoff", { onlyModel: model, table }))); }
+				// pictures nobody described yet are described first, once, by a model at the table that takes them
+				const pictures = await imagesOf(d.space, r.session, r.params.blockId, txn), notes = pictures.length ? await notesOf(d.space, r.session, r.params.blockId, txn) : new Map();
+				const open = pictures.filter((x) => !notes.has(x.imageId));
+				if (open.length) {
+					const sees = new Set((await modelInfoOf(d.space)).info.models.filter((m) => m.images).map((m) => m.label)), by = present.find((m) => sees.has(m));
+					if (!by) r.info.ended = "pictures";
+					else { r.info.phase = "describe"; items.push(...open.map((x) => newItem(r, "describe", { onlyModel: by, table, imageId: x.imageId }))); }
+				} else items.push(...(await opening(d, r)));
 			}
-		} else if (it.kind === "kickoff") {
+		} else if (it.kind === "describe") items.push(...(await opening(d, r)));
+		else if (it.kind === "kickoff") {
 			// what the table owes itself now: answers to the questions, a vote of every other model on each proposal, and
 			// the person's answers, each with its deadline
 			const messages = (await messagesOf(d.space, docOf(r), txn)).filter((m) => m.runId === r.runId);
@@ -817,6 +836,13 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 		usage = v.usage;
 		const answer: RollCall = { session: it.session, runId: it.runId, model: slot.model, alias: run.params.aliases[slot.model] ?? "?", agent: slot.agent, text: String(v.text).trim().slice(0, ROLLCALL_CHARS), ...(usage ? { usage } : {}), ts: Date.now() };
 		await space.write({ type: "RollCall", fields: answer as never }, txn, d.ttl);
+	} else if (it.kind === "describe") {
+		const v = await ask(d, txn, it, slot, run, 0, "describe", { imageId: it.imageId ?? "" }) as { text: string; usage?: Usage };
+		usage = v.usage;
+		const text = usable(() => { const t = cleanNote(v.text); if (!t) throw new Error("the description is empty"); return t; });
+		// a person's description written meanwhile counts: the model's is not written over it
+		const note: ImageNote = { session: it.session, blockId: run.params.blockId, imageId: it.imageId ?? "", text, by: run.params.aliases[slot.model] ?? "a model", model: slot.model, ts: Date.now() };
+		if (!(await notesOf(space, it.session, run.params.blockId, txn)).has(note.imageId)) await space.write({ type: "ImageNote", fields: note as never }, txn, d.ttl);
 	} else if (it.kind === "kickoff") {
 		const v = await work(d, txn, it, slot, run, "kickoff", { table: doc.table });
 		usage = v.usage;

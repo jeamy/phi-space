@@ -13,6 +13,8 @@
 //   {op:"grant"|"revoke", ws, path, relation, agent?, user?}   lea (the owner) grants or revokes
 //   {op:"remove", ws, path}                     lea removes a file
 //   {op:"restrict"|"unrestrict", ws, path}      lea restricts a folder (a viewer grant needs a workspace root or one)
+//   {op:"list", ws, path}                       what lea sees in a folder: [{name, kind, version?}]
+//   {op:"read", ws, path}                       a file as lea reads it: {base64, version}
 import { createInterface } from "node:readline";
 import { FilesService } from "../../server/service.ts";
 import { serveAgentSocket } from "../../server/agent-socket.ts";
@@ -52,6 +54,8 @@ async function run(c: Cmd): Promise<unknown> {
 		}
 		case "remove": return svc.remove(lea, c.ws!, c.path!, null, await id(lea));
 		case "restrict": case "unrestrict": return svc[c.op](lea, c.ws!, c.path!, await id(lea));
+		case "list": return (await svc.list(lea, c.ws!, c.path!)).map((e: { name: string; kind: string }) => ({ name: e.name, kind: e.kind }));
+		case "read": { const r = await svc.read(lea, c.ws!, c.path!); return { base64: Buffer.from(r.bytes).toString("base64"), version: r.version }; }
 		default: throw new Error(`no such command: ${c.op}`);
 	}
 }

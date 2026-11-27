@@ -1,7 +1,7 @@
 # Docker Compose for PHI-SPACES / CODEMODE FORUM: one container per role, all from the one `production` image, talking
 # only through the space over TCP. Taken over from codemode-chat/docker/docker-compose.yml.
 #
-#   profile nano:  space (SQLite in a volume) and the checker          — the host that keeps the state
+#   profile nano:  space (SQLite in a volume), the checker, the sandbox and the pdf worker — the host that keeps the state
 #   profile big:   web, agents, the model process and the sources      — the host that does most of the work
 #   both at once:  the pair on one machine (the local test bed, `npm run docker:local:up`): the same TCP connections
 #                  as between two hosts, host names "nano" and "big" in the system bar
@@ -90,6 +90,56 @@ services:
     depends_on:
       space:
         condition: service_healthy
+
+  # the sandbox: takes a PDF's text out for the sources process (server/sandbox-host.ts). It reaches the Space, so it
+  # opens no PDF itself: each goes over the socket in forum-pdf to the pdf worker beside it
+  sandbox:
+    <<: *role
+    profiles: [nano]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/sandbox-host.ts"]
+    # it needs nothing of the .env
+    env_file: !reset []
+    environment:
+      NODE_ENV: production
+      FORUM_SPACE: tcp:space:4180
+      FORUM_HOST_NAME: "${NANO_HOST_NAME:-nano}"
+      FORUM_PDF_WORKER: /run/pdf/pdf.sock
+      FORUM_PDF_TIMEOUT_S: "${FORUM_PDF_TIMEOUT_S:-30}"
+    cpus: "${NANO_CPUS:-0}"
+    read_only: true
+    volumes:
+      - forum-pdf:/run/pdf
+    depends_on:
+      space:
+        condition: service_healthy
+
+  # the pdf worker (server/pdf-worker.ts): the one container that opens a PDF. No network, no Space, no .env, nothing
+  # but its socket's directory; it refuses to start where it sees a network interface besides loopback
+  pdf:
+    image: phi-spaces-forum:prod
+    profiles: [nano]
+    init: true
+    restart: unless-stopped
+    user: "node"
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m
+    pids_limit: 64
+    mem_limit: 768m
+    cpus: "${NANO_CPUS:-0}"
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/pdf-worker.ts"]
+    environment:
+      NODE_ENV: production
+      FORUM_PDF_WORKER: /run/pdf/pdf.sock
+      FORUM_PDF_TIMEOUT_S: "${FORUM_PDF_TIMEOUT_S:-30}"
+      FORUM_PDF_MEMORY_MB: "${FORUM_PDF_MEMORY_MB:-256}"
+    volumes:
+      - forum-pdf:/run/pdf
 
   # ---- big: web, agents, the model process, the sources ----
   web:
@@ -193,3 +243,4 @@ volumes:
   forum-space-data: {}
   forum-git-cache: {}
   forum-auth: {}
+  forum-pdf: {}

@@ -96,7 +96,13 @@ test("table A: a turn nobody takes in time passes on to the next model", async (
 	assert.equal(s.run!.note, `M2 did not take its turn (the reply came too late); the turn passes on`);
 	assert.deepEqual([s.run!.phase, s.run!.accepted?.version, s.run!.ballots], ["accepted", 4, { round: 1, approve: 3, of: 3 }]);
 	assert.equal(s.run!.usage.tokens, 300 + 450 + 400 + 3000 + 500 + 1800); // the turn that never came was not paid
-	for (const type of ["WorkItem", "LlmCall", "LlmResult"]) assert.equal(await stack.space.count({ type, fields: { session: id } }), 0, type);
+	// the call held at the gate ends once the model process sees the run gone (within 2 s): its answer, "the run is
+	// over", is the one thing left, and it carries no cost
+	await new Promise((r) => setTimeout(r, 3000));
+	for (const type of ["WorkItem", "LlmCall"]) assert.equal(await stack.space.count({ type, fields: { session: id } }), 0, type);
+	const late = (await stack.space.readAll({ type: "LlmResult", fields: { session: id } }, { limit: 5 })).map((e) => e.fields as { ok: boolean; error?: string; usage?: unknown });
+	assert.deepEqual(late, late.length ? [{ ...late[0], ok: false, error: "the run is over" }] : []);
+	assert.ok(late.every((x) => !x.usage));
 });
 
 test("table A: the agents process is killed in the middle of a turn, and another goes on with it: one revision, paid once", async (t) => {

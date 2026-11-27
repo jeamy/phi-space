@@ -6,44 +6,22 @@
 // leaves nothing a reader sees.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
-import { fileURLToPath } from "node:url";
 import type { Snapshot } from "../server/hub.ts";
 import { filesLimits, kindOf, walkFolders, type FilesReader } from "../server/files.ts";
 import type { PlanSource } from "../server/sources.ts";
 import { startServer } from "./stack.ts";
+import { filesService, type FilesService } from "./support/files-service.ts";
 
 const THREE = ["fake/alpha", "fake/beta", "fake/gamma"];
 const BRIEF = "Plan an app that shows the starry sky at a time and place.";
-const FIXTURE = fileURLToPath(new URL("../../spaces-files/tests/support/agent-host-fixture.ts", import.meta.url));
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1]);
 const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 let seq = 0;
 const room = (scenario: string) => `${scenario}-f${process.pid}-${seq++}`;
-
-/** spaces-files in memory with one agent socket; `cmd` sends one fixture command and returns its answer. */
-async function filesService() {
-	const dir = mkdtempSync(join(tmpdir(), "ff-"));
-	chmodSync(dir, 0o700);
-	const socket = join(dir, "agent.sock");
-	const child: ChildProcess = spawn(process.execPath, ["--no-warnings", "--experimental-strip-types", FIXTURE, socket], { stdio: ["pipe", "pipe", "inherit"] });
-	const lines = createInterface({ input: child.stdout! })[Symbol.asyncIterator]();
-	assert.deepEqual(JSON.parse(String((await lines.next()).value)), { ready: true });
-	let chain = Promise.resolve() as Promise<unknown>;
-	const cmd = (c: Record<string, unknown>): Promise<{ ok: boolean; value?: any; code?: string; message?: string }> => {
-		const next = chain.then(async () => { child.stdin!.write(JSON.stringify(c) + "\n"); return JSON.parse(String((await lines.next()).value)); });
-		chain = next.catch(() => {});
-		return next as Promise<any>;
-	};
-	const must = async (c: Record<string, unknown>) => { const r = await cmd(c); assert.ok(r.ok, `${JSON.stringify(c)}: ${r.message}`); return r.value; };
-	return { socket, cmd, must, env: { FORUM_FILES_SOCKET: socket, FORUM_FILES_TENANT: "acme", FORUM_FILES_HOST: "forum-host" },
-		async close() { child.stdin!.end(); await new Promise((r) => { child.once("exit", r); setTimeout(r, 3000); }); child.kill("SIGKILL"); await rm(dir, { recursive: true, force: true }); } };
-}
 
 const post = async (url: string, path: string, body: unknown) => {
 	const r = await fetch(url + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -61,7 +39,7 @@ async function until<T>(what: string, fn: () => Promise<T | null | undefined | f
 }
 
 /** The fixture's folders for a room: `ref` (only read) and `sky/plan` (the project), with things beside both. */
-async function material(f: Awaited<ReturnType<typeof filesService>>, agent: string) {
+async function material(f: FilesService, agent: string) {
 	await f.must({ op: "workspace", name: "ref" });
 	await f.must({ op: "workspace", name: "sky" });
 	await f.must({ op: "workspace", name: "private" });
@@ -120,11 +98,11 @@ test("a linked room copies the granted folders and nothing beside them, and the 
 	assert.deepEqual([src.sourceId, src.kind, src.files, src.texts, src.tenant], ["files", "files", 5, 3, "acme"]);
 	// every file of the two folders by its content, the denied name left out, nothing beside the folders
 	assert.deepEqual((await getJson(srv.url, `/api/rooms/${id}/files/${block.blockId}`)).files, [
-		{ path: "project/chart.txt", size: PNG.length, kind: "png" },
-		{ path: "project/needs.md", size: 79, kind: "text" },
-		{ path: "project/notes/deep/later.md", size: 16, kind: "text" },
-		{ path: "project/photo.jpg", size: JPEG.length, kind: "jpeg" },
-		{ path: "reference/catalogue.csv", size: 64, kind: "text" }]);
+		{ path: "project/chart.txt", size: PNG.length, kind: "png", readable: false },
+		{ path: "project/needs.md", size: 79, kind: "text", readable: true },
+		{ path: "project/notes/deep/later.md", size: 16, kind: "text", readable: true },
+		{ path: "project/photo.jpg", size: JPEG.length, kind: "jpeg", readable: false },
+		{ path: "reference/catalogue.csv", size: 64, kind: "text", readable: true }]);
 	const stored = JSON.stringify((await srv.stack.space.readAll({ type: "SourceFile", fields: { session: id } }, { limit: 50 })).map((e) => e.fields));
 	for (const absent of ["secret-of-the-folder", "Beside the project folder", "Not granted"]) assert.ok(!stored.includes(absent), absent);
 

@@ -4,6 +4,7 @@
 // of the room, with its document), and starts and stops runs.
 // The pattern (change stream, debounced pushes, the room lock, the admin's choices) is taken over from
 // codemode-chat/server/hub.ts.
+import { createHash } from "node:crypto";
 import { FOREVER, NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import type { WsConnection } from "phi-spaces/ws";
 import { MAX_AGENTS_PER_MODEL, MAX_MODELS, MIN_MODELS, today } from "./limits.ts";
@@ -15,8 +16,8 @@ import { checkOf } from "./check-host.ts";
 import type { Failure } from "./checks.ts";
 import { askSources, indexPages, sourceWaitMs } from "./source-host.ts";
 import { remoteLimits } from "./remote.ts";
-import { checkDocs, docsPack, indexHash, type IndexEntry, type PlanSource } from "./sources.ts";
-import { agentOf, askFiles, checkFolder, filesInfo, filesWaitMs, folderName, readLink, saveLink, type CheckAnswer, type FilesInfo, type RoomLink } from "./files.ts";
+import { checkDocs, docsPack, indexHash, readable, type IndexEntry, type PlanSource } from "./sources.ts";
+import { agentOf, askFiles, fileNotes, PICTURE_TYPES, saveFileNote, UPLOAD, uploadName, type UploadAnswer, type UploadDone, checkFolder, filesInfo, filesWaitMs, folderName, readLink, saveLink, type CheckAnswer, type FilesInfo, type RoomLink } from "./files.ts";
 import { decisionsOf, messagesOf, newMsgId, owed, PERSON_TABLE, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
 import { objectionsOf, type PlanObjection } from "./review.ts";
 import { acceptOf, ballotsOf, type PlanAccept, type PlanBallot } from "./ballots.ts";
@@ -24,6 +25,7 @@ import { MAX_ROUNDS, runType, TABLE_SHARE, tableInfo } from "./run.ts";
 import { comparesOf, resultOf, standings, type PlanCompare, type PlanStrategyStat } from "./compare.ts";
 import { chosenOf, exportPlan, type Chosen } from "./export.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
+import { addImage, imageData, imagesOf, imageViews, noteImage, removeImage, type ImageView } from "./images.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
 
 const LIMITS = { sessions: 50, lines: 200, blocks: 30 };
@@ -43,6 +45,8 @@ type Session = { id: string; clients: Set<WsConnection>; buckets: Map<string, nu
 export type Line = { text: string; ts: number };
 /** A plan task of the room with the state of its document: the newest version's sections, without their texts. */
 export type Block = Omit<PlanTask, "session"> & {
+	/** The pictures the task holds for the models (images.ts). */
+	images: number;
 	/** The table whose document and discussion the block shows: the one of the newest run on it, else one that has a
 	 *  document. */
 	table: Table;
@@ -257,7 +261,7 @@ export class ForumHub {
 			const res = await resultOf(this.host, s.id, t.blockId);
 			const heads: Block["heads"] = {};
 			for (const x of ["A", "B"] as const) { const h = x === TABLE ? head : await headOf(this.host, { ...d, table: x }); if (h) heads[x] = h.version; }
-			return { ...t, table: TABLE, heads, result: res ? { table: res.table, version: res.version } : null, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
+			return { ...t, images: await this.host.count({ type: "TaskImage", fields: { session: s.id, blockId: t.blockId } }), table: TABLE, heads, result: res ? { table: res.table, version: res.version } : null, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
 		}));
 		return { standings: await standings(this.host), session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: effectiveLimits(await readLimits(this.host)).runBudgetTokens }, defaults: await readRoom(this.host, s.id), link: await readLink(this.host, s.id).then((l) => (l ? { tenant: l.tenant, read: l.read, project: l.project } : null)) };
 	}
@@ -541,6 +545,8 @@ export class ForumHub {
 		const table: Table = o.way === "parallel" ? "B" : "A", rounds = Math.min(MAX_ROUNDS, Math.max(0, Math.floor(Number(o.rounds ?? (o.way === "parallel" || o.way === "turns" || o.way === "both" ? 2 : 0))) || 0)), both = o.way === "both";
 		const tasks = await this.#tasks(s.id), task = o.blockId ? tasks.find((t) => t.blockId === String(o.blockId)) : tasks.at(-1);
 		if (!task) throw new Error(o.blockId ? "Unknown plan task" : "No plan task yet: create one first");
+		// a task with pictures: one model at the table describes them for the others, so one must take pictures
+		if ((await imagesOf(this.host, s.id, task.blockId)).length && !models.some((m) => info.models.find((x) => x.label === m)?.images)) throw new Error("The task has pictures: at least one model at the table must take pictures");
 		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, blockId: task.blockId, table, rounds, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: task.lang, budget, ...(both ? { both } : {}), ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}), ...(room.personWaitS !== undefined ? { personWaitMs: room.personWaitS * 1000 } : {}) };
 		// a request that was refused above started nothing and does not count
 		if (!this.#allow(s, "run", 6)) throw new Error("Too many runs, slow down");
@@ -590,14 +596,96 @@ export class ForumHub {
 		return { agent: agentOf(s.id), files: await filesInfo(this.host), link: await readLink(this.host, s.id) };
 	}
 
-	/** The files of a task's workspace copy, for the Files pane: path, size, and for a file not copied as text its kind. */
-	async filesIndex(id: string, blockId: string): Promise<{ files: Array<{ path: string; size: number; kind: string }> }> {
+	/** A task's pictures with the description that counts (images.ts). */
+	async images(id: string, blockId: string): Promise<{ images: ImageView[] }> {
 		const s = await this.session(id);
+		return { images: await imageViews(this.host, s.id, blockId) };
+	}
+	/** A picture's bytes, for the page; null: no such picture. */
+	async imageBytes(id: string, blockId: string, imageId: string): Promise<Buffer | null> {
+		const s = await this.session(id);
+		const img = (await imagesOf(this.host, s.id, blockId)).find((x) => x.imageId === imageId);
+		const data = img ? await imageData(this.host, img) : null;
+		return data ? Buffer.from(data, "base64") : null;
+	}
+	/** A member adds a picture (the reduced copy the page made) to a task; sent again under the same ID it is one. */
+	async addImage(id: string, blockId: string, o: { imageId: string; name: unknown; bytes: Buffer; by: string }): Promise<{ image: ImageView; again: boolean }> {
+		const s = await this.session(id);
+		if (!(await this.#tasks(s.id)).some((t) => t.blockId === blockId)) throw new Error("Unknown plan task");
+		if (!this.#allow(s, "image", 30)) throw new Error("Too many pictures, slow down");
+		const { image: { session: _s, parts: _p, ...img }, again } = await addImage(this.host, this.#ttl, { session: s.id, blockId, ...o });
+		if (!again) await systemLine(this.host, null, this.#ttl, s.id, `${o.by} added the picture ${img.name} (${img.width} × ${img.height}, ${Math.ceil(img.bytes / 1000)} kB) to a task`);
+		this.push(s);
+		return { image: { ...img, note: null }, again };
+	}
+	/** A person writes or corrects a picture's description. */
+	async noteImage(id: string, blockId: string, imageId: string, text: unknown, by: string): Promise<{ ok: true }> {
+		const s = await this.session(id);
+		if (!this.#allow(s, "image", 30)) throw new Error("Too many changes, slow down");
+		await noteImage(this.host, this.#ttl, { session: s.id, blockId, imageId, text, by });
+		this.push(s);
+		return { ok: true };
+	}
+	/** A member removes a picture with its descriptions. */
+	async removeImage(id: string, blockId: string, imageId: string, by: string): Promise<{ ok: true }> {
+		const s = await this.session(id);
+		const img = (await imagesOf(this.host, s.id, blockId)).find((x) => x.imageId === imageId);
+		if (!img || !(await removeImage(this.host, s.id, blockId, imageId))) throw new Error("No such picture");
+		await systemLine(this.host, null, this.#ttl, s.id, `${by} removed the picture ${img.name}`);
+		this.push(s);
+		return { ok: true };
+	}
+
+	/** The files of a task's workspace copy, for the Files pane: path, size, and for a file not copied as text its kind. */
+	async filesIndex(id: string, blockId: string): Promise<{ files: Array<{ path: string; size: number; kind: string; readable: boolean; note?: string }> }> {
+		const s = await this.session(id);
+		const notes = await fileNotes(this.host, s.id);
 		const src = (await this.host.readIfExists({ type: "PlanSource", fields: { session: s.id, blockId, sourceId: "files" } }, NO_WAIT))?.fields as unknown as PlanSource | undefined;
 		if (!src?.copy) return { files: [] };
 		const pages = await this.host.readAll({ type: "SourceIndex", fields: { session: s.id, blockId, sourceId: "files", copy: src.copy } }, { limit: 2000 });
 		const index = pages.sort((a, b) => Number(a.fields.part) - Number(b.fields.part)).flatMap((e) => (e.fields as unknown as { paths: IndexEntry[] }).paths);
-		return { files: index.map(([path, size, kind]) => ({ path, size, kind: kind ?? "text" })) };
+		return { files: index.map((e) => ({ path: e[0], size: e[1], kind: e[2] ?? "text", readable: readable(e), ...(notes.get(e[0]) ? { note: notes.get(e[0])! } : {}) })) };
+	}
+	/** A picture of the linked folders as it is now, for the page: its bytes and media type (files.ts PICTURE_TYPES). */
+	async preview(id: string, path: string): Promise<{ type: string; bytes: Buffer }> {
+		const s = await this.session(id);
+		if (!(await readLink(this.host, s.id))) throw new Error("The room is not linked to a workspace");
+		const previewId = `pv${rid()}${rid()}`;
+		const { preview } = await askFiles(this.host, { requestId: `pv-${previewId}`, session: s.id, op: "preview", path, previewId, ts: Date.now() }, sourceWaitMs());
+		const parts = (await this.host.readAll({ type: "PreviewPart", fields: { session: s.id, previewId } }, { limit: preview!.parts + 2 })).map((e) => e.fields as { part: number; data: string }).sort((a, b) => a.part - b.part);
+		for (let n = 0; n <= parts.length && (await this.host.take({ type: "PreviewPart", fields: { session: s.id, previewId } }, NO_WAIT)); n++) { /* read: gone */ }
+		const bytes = Buffer.from(parts.map((p) => p.data).join(""), "base64");
+		if (parts.length !== preview!.parts || bytes.length !== preview!.bytes) throw new Error("The picture arrived incomplete");
+		return { type: PICTURE_TYPES[preview!.kind]!, bytes };
+	}
+
+	/** A member's file into `material/` of the room's project folder, through the sources process (files.ts). Sent
+	 *  again under the same upload ID (a lost reply), it is answered with the file already written. */
+	async upload(id: string, o: { uploadId: string; name: unknown; bytes: Buffer; by: string }): Promise<{ upload: UploadAnswer; again: boolean }> {
+		const s = await this.session(id);
+		if (!/^[a-zA-Z0-9_-]{8,40}$/.test(o.uploadId)) throw new Error("An upload needs an ID of 8 to 40 letters and digits");
+		const had = (await this.host.readIfExists({ type: "UploadDone", fields: { session: s.id, uploadId: o.uploadId } }, NO_WAIT))?.fields as unknown as UploadDone | undefined;
+		if (had) return { upload: { workspace: had.workspace, path: had.path, version: had.version, kind: had.kind, bytes: had.bytes }, again: true };
+		if (!(await readLink(this.host, s.id))) throw new Error("The room is not linked to a workspace");
+		const name = uploadName(o.name);
+		if (!o.bytes.length) throw new Error("The file is empty");
+		if (o.bytes.length > UPLOAD.bytes) throw new Error(`A file has at most ${UPLOAD.bytes / 1024 / 1024} MB`);
+		if (!this.#allow(s, "upload", 20)) throw new Error("Too many uploads, slow down");
+		const key = { session: s.id, uploadId: o.uploadId }, data = o.bytes.toString("base64"), parts = Math.ceil(data.length / UPLOAD.part), ttl = 3600_000;
+		while (await this.host.take({ type: "UploadPart", fields: key }, NO_WAIT)) { /* an attempt cut off */ }
+		for (let part = 0; part < parts; part++) await this.host.write({ type: "UploadPart", fields: { ...key, part, data: data.slice(part * UPLOAD.part, (part + 1) * UPLOAD.part) } }, null, ttl);
+		const { upload } = await askFiles(this.host, { requestId: `up-${o.uploadId}-${rid()}`, session: s.id, op: "upload", uploadId: o.uploadId, name, parts, hash: createHash("sha256").update(o.bytes).digest("hex"), bytes: o.bytes.length, by: o.by, ttl, ts: Date.now() }, filesWaitMs());
+		this.push(s);
+		return { upload: upload!, again: false };
+	}
+
+	/** A person's note on a file of the room's workspace that has no text to read; the models get it with the file. */
+	async noteFile(id: string, o: { path?: unknown; text?: unknown; by: string }): Promise<{ ok: true }> {
+		const s = await this.session(id);
+		if (!this.#allow(s, "note", 30)) throw new Error("Too many notes, slow down");
+		await saveFileNote(this.host, this.#ttl, { session: s.id, path: String(o.path ?? ""), text: String(o.text ?? ""), by: o.by });
+		this.push(s);
+		return { ok: true };
 	}
 
 	/** The owner's work on the link: `check` (what the agent sees, and the folders named, if any), `link` (checked again,

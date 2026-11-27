@@ -8,7 +8,7 @@ export type TipId = "signin" | "name" | "signout" | "rooms" | "newroom" | "invit
 	| "models" | "way" | "rounds" | "budget" | "start" | "stop" | "answer" | "say"
 	| "version" | "compare" | "accept" | "object" | "tableview" | "language" | "mode" | "palette"
 	| "providers" | "providerkey" | "providersignin" | "loginanswer" | "providertest" | "providerremove" | "allowed" | "limits" | "roomdefaults"
-	| "roomlink" | "folders" | "linkcheck" | "fromworkspace" | "workspacefiles";
+	| "roomlink" | "folders" | "linkcheck" | "fromworkspace" | "workspacefiles" | "pictures" | "picturenote" | "upload" | "filenote";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -340,5 +340,33 @@ export const TIPS: Record<TipId, Tip> = {
 			en: "This task's copy. The models read the texts; other files they know only by kind and size.",
 		},
 		article: "help.topic.material", anchor: "files",
+	},
+	pictures: {
+		text: {
+			de: "Fotos oder Skizzen für die Modelle. Die Seite verkleinert sie und entfernt Ort und Kameradaten, bevor sie gesendet werden.",
+			en: "Photos or sketches for the models. The page reduces them and removes the place and camera data before they are sent.",
+		},
+		article: "help.topic.pictures", anchor: "add",
+	},
+	picturenote: {
+		text: {
+			de: "Was das Bild zeigt, in Worten. Alle Modelle bekommen diese Beschreibung; deine Korrektur zählt.",
+			en: "What the picture shows, in words. Every model gets this description; your correction counts.",
+		},
+		article: "help.topic.pictures", anchor: "describe",
+	},
+	upload: {
+		text: {
+			de: "Legt Dateien in material/ des Projektordners in spaces-files ab, als Agent des Raums. Bis 16 MB je Datei; nichts wird überschrieben.",
+			en: "Puts files into material/ of the project folder in spaces-files, as the room's agent. Up to 16 MB a file; nothing is overwritten.",
+		},
+		article: "help.topic.pictures", anchor: "upload",
+	},
+	filenote: {
+		text: {
+			de: "Die Modelle lesen diese Datei nicht. Sie bekommen ihren Namen, ihre Art und Größe und diese Notiz.",
+			en: "The models do not read this file. They get its name, kind and size, and this note.",
+		},
+		article: "help.topic.pictures", anchor: "other",
 	},
 };

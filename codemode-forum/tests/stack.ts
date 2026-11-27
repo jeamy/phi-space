@@ -42,6 +42,8 @@ export type Stack = {
 	sources(o?: { repos?: string; leaseMs?: number; pause?: string; env?: Record<string, string> }): Promise<ChildProcess>;
 	/** Starts one more checker process. */
 	checker(): Promise<ChildProcess>;
+	/** Starts one more sandbox process (it reads PDFs isolated; `env`: e.g. FORUM_PDF_TIMEOUT_S). */
+	sandbox(o?: { env?: Record<string, string> }): Promise<ChildProcess>;
 	/** Stops the space process and starts it again on the same socket (and the same file, if it has one). */
 	restartSpace(): Promise<void>;
 	/** Stops a process: SIGTERM, or SIGKILL to make it die in the middle of its work. */
@@ -80,6 +82,11 @@ export async function startStack(o: { dbPath?: string; agents?: boolean; model?:
 		},
 		async checker() {
 			const c = await run("server/check-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "" }, (l) => l.startsWith("[checker]"));
+			others.push(c);
+			return c;
+		},
+		async sandbox(x = {}) {
+			const c = await run("server/sandbox-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", ...(x.env ?? {}) }, (l) => l.startsWith("[sandbox]"));
 			others.push(c);
 			return c;
 		},

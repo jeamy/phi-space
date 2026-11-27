@@ -154,3 +154,12 @@ main.fp-room { display: grid; gap: 14px; padding: 12px 16px 24px; align-items: s
 .fp-login { margin-top: 8px; padding: 10px; border-left: 3px solid var(--accent); background: var(--surface); border-radius: 6px; overflow-wrap: anywhere; }
 .fp-code { font-size: 1.25em; letter-spacing: .12em; padding: 2px 8px; border-radius: 6px; background: var(--raised); }
 .fp-limit { display: grid; gap: 2px; margin-bottom: 10px; }
+/* the task's pictures for the models (RoomPlace TaskPictures): the reduced copy beside its description */
+.fp-pics { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 12px; }
+.fp-pic { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; }
+.fp-pic img { width: 96px; height: auto; max-height: 160px; object-fit: contain; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); }
+.fp-pic p { margin: 4px 0; overflow-wrap: anywhere; }
+/* a workspace picture in the copy's list, a note on a file without text, the drop area of the uploads */
+.fp-wspic { display: block; max-width: min(100%, 220px); max-height: 180px; margin: 6px 0; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); object-fit: contain; }
+.fp-filenote { display: grid; gap: 6px; margin: 6px 0 2px; }
+.fp-drop { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; }

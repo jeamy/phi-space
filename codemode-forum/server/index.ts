@@ -24,6 +24,8 @@ import { ForumHub } from "./hub.ts";
 import { accessOf, createRoom, may, roleIn, roomsOf, setRole, type Role } from "./rooms.ts";
 import { announce, connectSpace, takeAll } from "./space.ts";
 import { answerPrompt, askProvider, cancelLogin, providerState } from "./providers.ts";
+import { IMAGE_LIMITS } from "./images.ts";
+import { UPLOAD } from "./files.ts";
 import { ceilings, checkLimits, effectiveLimits, readLimits, saveLimits } from "./settings.ts";
 
 const ID = /^[a-zA-Z0-9._-]{1,48}$/;
@@ -109,6 +111,16 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 		req.on("error", fail);
 	});
 
+	/** A body of bytes (a picture), refused beyond `max`. */
+	const readRaw = (req: http.IncomingMessage, max: number, what = `A picture has at most ${IMAGE_LIMITS.bytes / 1000} kB`) => new Promise<Buffer>((ok, fail) => {
+		let n = 0; const parts: Buffer[] = [];
+		// beyond the limit the rest is read and dropped, so the answer reaches the page (a cut connection would not); a
+		// body far beyond it is cut
+		req.on("data", (c: Buffer) => { n += c.length; if (n > 4 * max) req.destroy(); else if (n <= max) parts.push(c); });
+		req.on("end", () => (n > max ? fail(new Error(`${what} (this one ${Math.ceil(n / 1000)} kB)`)) : ok(Buffer.concat(parts))));
+		req.on("error", fail);
+	});
+
 	const handle = async (req: http.IncomingMessage, res: http.ServerResponse) => {
 		try {
 			const url = new URL(req.url ?? "/", "http://localhost");
@@ -182,6 +194,43 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			// the index of a task's workspace copy: every file with its kind and size (files.ts)
 			const fx = /^\/api\/rooms\/([^/]+)\/files\/([a-z0-9]{1,40})$/.exec(p);
 			if (fx && req.method === "GET") return ID.test(fx[1]!) ? json(res, 200, await hub.filesIndex(fx[1]!, fx[2]!)) : json(res, 400, { error: "Invalid room id" });
+			// a picture of the linked folders as it is now, only ever as a picture: no script, no style, no frame of its own
+			const pv = /^\/api\/rooms\/([^/]+)\/preview$/.exec(p);
+			if (pv && req.method === "GET") {
+				if (!ID.test(pv[1]!)) return json(res, 400, { error: "Invalid room id" });
+				const got = await hub.preview(pv[1]!, String(url.searchParams.get("path") ?? ""));
+				res.writeHead(200, { "content-type": got.type, "cache-control": "private, max-age=600", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "content-disposition": "inline" });
+				return res.end(got.bytes);
+			}
+			// a member's file into the project folder's material/ (files.ts): the bytes as they are, any kind
+			const up = /^\/api\/rooms\/([^/]+)\/upload$/.exec(p);
+			if (up && req.method === "POST") { if (!ID.test(up[1]!)) return json(res, 400, { error: "Invalid room id" }); return json(res, 200, await hub.upload(up[1]!, { uploadId: String(url.searchParams.get("id") ?? ""), name: url.searchParams.get("name"), bytes: await readRaw(req, UPLOAD.bytes, `A file has at most ${UPLOAD.bytes / 1024 / 1024} MB`), by: who ? who.user.name : "script" })); }
+			// a note on a file that has no text to read (files.ts FileNote): its members write it
+			const fn = /^\/api\/rooms\/([^/]+)\/filenote$/.exec(p);
+			if (fn && req.method === "POST") { if (!ID.test(fn[1]!)) return json(res, 400, { error: "Invalid room id" }); const b = await readBody(req, 8_000); return json(res, 200, await hub.noteFile(fn[1]!, { path: b.path, text: b.text, by: who ? who.user.name : "script" })); }
+			// ---- a task's pictures for the models (images.ts): its people see them, its members add, describe, remove ----
+			const im = /^\/api\/rooms\/([^/]+)\/images\/([a-z0-9]{1,40})(?:\/([a-zA-Z0-9_-]{8,40})(?:\/(note|remove))?)?$/.exec(p);
+			if (im) {
+				const [, room, block, img, act] = im as unknown as [string, string, string, string | undefined, string | undefined];
+				if (!ID.test(room)) return json(res, 400, { error: "Invalid room id" });
+				const name = who ? who.user.name : "script";
+				if (!img) {
+					if (req.method === "GET") return json(res, 200, await hub.images(room, block));
+					if (req.method !== "POST") return json(res, 405, { error: "GET or POST expected" });
+					if (!/^image\/jpeg\b/i.test(String(req.headers["content-type"] ?? ""))) return json(res, 415, { error: "Send the reduced copy as image/jpeg" });
+					return json(res, 200, await hub.addImage(room, block, { imageId: String(url.searchParams.get("id") ?? ""), name: url.searchParams.get("name"), bytes: await readRaw(req, IMAGE_LIMITS.bytes), by: name }));
+				}
+				if (!act && req.method === "GET") {
+					const bytes = await hub.imageBytes(room, block, img);
+					if (!bytes) return json(res, 404, { error: "No such picture" });
+					res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox" });
+					return res.end(bytes);
+				}
+				if (req.method !== "POST") return json(res, 405, { error: "POST expected" });
+				if (act === "note") return json(res, 200, await hub.noteImage(room, block, img, (await readBody(req, 16_000)).text, name));
+				if (act === "remove") return json(res, 200, await hub.removeImage(room, block, img, name));
+				return json(res, 404, { error: "Not found" });
+			}
 			// ---- models and providers, limits: administrators only (providers.ts, settings.ts) ----
 			if (p.startsWith("/api/admin/providers") || p === "/api/admin/limits") {
 				if (!(await isAdmin(req, who))) return json(res, 403, { error: "Only administrators" });

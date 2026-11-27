@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "next": "16.4.6",
+    "pdfjs-dist": "6.5.438",
     "phi-spaces": "file:../spaces",
     "react": "19.3.0",
     "react-dom": "19.3.0"

@@ -13,6 +13,9 @@ export const MODELS = ["fake/alpha", "fake/beta", "fake/gamma", "fake/delta"];
 /** The models of the stack (a test may name its own: FORUM_FAKE_MODELS), else all of the fake ones. */
 export async function models(): Promise<string[]> { const own = (process.env.FORUM_FAKE_MODELS ?? "").split(",").filter(Boolean); return own.length ? own : MODELS; }
 
+/** The fake models that take pictures (FORUM_FAKE_IMAGE_MODELS names others; "none": no model takes them). */
+export async function imageModels(): Promise<string[]> { const own = process.env.FORUM_FAKE_IMAGE_MODELS; return own === "none" ? [] : own ? own.split(",").filter(Boolean) : ["fake/alpha"]; }
+
 export const use = (total: number, costUsd: number) => ({ input: total - 20, output: 20, cacheRead: 0, cacheWrite: 0, total, costUsd });
 /** Waits until the test writes the room's FakeGate; like a real call it ends when its run is stopped (callSignal). */
 const gate = async (space: SpaceLike, session: string) => {
@@ -204,6 +207,13 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 		const read = c.user.includes("What you read so far");
 		await log({ model: c.model, kind: call.kind, callId: call.callId, read, prompt: c.user });
 		if (call.kind === "outline" && !read) return { text: "READ\nlist project/\nread project/needs.md\nread project/photo.jpg\nsearch Messier", model: c.model, usage: use(200, 0.02) };
+		return answer(c, call);
+	} }),
+	// a task with pictures (images.test.ts): a model that takes them describes each before the kickoff; every call logs
+	// how many pictures came with it and the descriptions its prompt shows
+	pictures: (_s, _space, log) => ({ text: async (c, call) => {
+		await log({ model: c.model, kind: call.kind, callId: call.callId, images: c.images?.length ?? 0, mimeTypes: (c.images ?? []).map((x) => x.mimeType), prompt: c.user });
+		if (call.kind === "describe") return { text: `A sketch of the evening sky with Orion low in the south, described by ${c.model}.`, model: c.model, usage: use(300, 0.03) };
 		return answer(c, call);
 	} }),
 	// the same, and an answer that follows a reading is held at the gate

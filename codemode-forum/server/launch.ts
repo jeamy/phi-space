@@ -3,14 +3,14 @@
 // after a second. Taken over from codemode-chat/server/launch.ts.
 //
 //   node --experimental-strip-types server/launch.ts [--dev]
-//   FORUM_ROLES=space,sources,checker,agents,model,web   which roles to start here (default all of them)
+//   FORUM_ROLES=space,sources,sandbox,checker,agents,model,web  which roles to start here (default all of them)
 //   --dev                                every process restarts when its sources change (node --watch-path), web in dev mode
 import { ROOT } from "./env.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { spaceServer } from "./space-server.ts";
 import { DEFAULT_SPACE } from "./space.ts";
 
-const ROLES = { space: "server/space-host.ts", sources: "server/source-host.ts", checker: "server/check-host.ts", agents: "server/agent-host.ts", model: "server/model-host.ts", web: "server/index.ts" } as const;
+const ROLES = { space: "server/space-host.ts", sources: "server/source-host.ts", sandbox: "server/sandbox-host.ts", checker: "server/check-host.ts", agents: "server/agent-host.ts", model: "server/model-host.ts", web: "server/index.ts" } as const;
 type Role = keyof typeof ROLES;
 const dev = process.argv.includes("--dev");
 const wanted = (process.env.FORUM_ROLES || Object.keys(ROLES).join(",")).split(",").map((r) => r.trim()).filter(Boolean);
@@ -48,7 +48,7 @@ function start(role: Role): Promise<void> {
 	});
 }
 
-const order = (["space", "sources", "checker", "agents", "model", "web"] as Role[]).filter((r) => wanted.includes(r));
+const order = (["space", "sources", "sandbox", "checker", "agents", "model", "web"] as Role[]).filter((r) => wanted.includes(r));
 for (const role of order) await start(role);
 console.log(`[launch] ${order.join(", ")} running${dev ? " (dev)" : ""}; space ${env.FORUM_SPACE}`);
 

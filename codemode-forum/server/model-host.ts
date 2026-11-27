@@ -29,7 +29,7 @@ import { announce, awaitWork, connectSpace, DEFAULT_SPACE, keepAlive, readExisti
  *  answers beside the prompt. */
 export type ModelApi = { models: () => Promise<string[]>; text: (c: TextCall, call: LlmCall) => Promise<TextAnswer> };
 /** The fake models of the tests: picked per room, with a log that writes FakeCall entries. */
-type FakeModule = { models: () => Promise<string[]>; llmFor: (session: string, o: { space: SpaceLike; log: (e: Record<string, unknown>) => Promise<void> }) => Partial<ModelApi> };
+type FakeModule = { models: () => Promise<string[]>; imageModels?: () => Promise<string[]>; llmFor: (session: string, o: { space: SpaceLike; log: (e: Record<string, unknown>) => Promise<void> }) => Partial<ModelApi> };
 
 /** A call's transaction lease, renewed while the model answers: a model process that dies holds its call this long. */
 const CALL_LEASE_MS = 30_000;
@@ -87,7 +87,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 			await applyLimits(space);
 			if (!fakes) await applyAdmin(space);
 			const info: ModelInfoView = fakes
-				? await (async () => { const labels = await fakes.models(); return { info: { enabled: true, on: true, models: labels.map((l) => ({ id: l.split("/")[1] ?? l, label: l })) }, admin: { enabled: true, on: true, models: labels.map((l) => ({ label: l, provider: l.split("/")[0] ?? "", id: l.split("/")[1] ?? l, name: l })), allowed: labels, custom: false } }; })()
+				? await (async () => { const labels = await fakes.models(), img = new Set(await fakes.imageModels?.() ?? []); return { info: { enabled: true, on: true, models: labels.map((l) => ({ id: l.split("/")[1] ?? l, label: l, ...(img.has(l) ? { images: true } : {}) })) }, admin: { enabled: true, on: true, models: labels.map((l) => ({ label: l, provider: l.split("/")[0] ?? "", id: l.split("/")[1] ?? l, name: l })), allowed: labels, custom: false } }; })()
 				: { info: await llmInfo(), admin: await adminModels() };
 			const text = JSON.stringify(info);
 			if (text === lastInfo && infoLease) { try { await space.renew(infoLease, 30_000); return; } catch { infoLease = null; } }
