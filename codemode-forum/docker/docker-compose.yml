@@ -8,8 +8,8 @@
 #   profile test:  the test suite
 #
 # big and nano run only the Rust space server (R-D12): docker-compose.rust.yml lays rust/forum-space over the space
-# container (`docker:rust:up` locally, `docker:nano:rust:up` on nano). The forum has not been deployed to a server yet
-# (docs/gemeinsame-planung-plan-2026-11-22.en.md). The space socket has no TLS and treats every connection as a process of the forum: never publish it on a public
+# container (`docker:rust:up` locally, `docker:nano:rust:up` on nano). On the servers since 2026-11-27
+# (docs/forum-seite-plan-2026-11-26.en.md, section 13; on big with docker-compose.hostnet.yml). The space socket has no TLS and treats every connection as a process of the forum: never publish it on a public
 # interface.
 # Ports: 4100 (web), 4180 (space); the local test bed publishes them as 4110 and 4190.
 #

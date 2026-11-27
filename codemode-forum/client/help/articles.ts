@@ -1159,8 +1159,8 @@ Whether a section contradicts a decision of the table, whether a step makes sens
 		section: "operate",
 		title: { de: "Betrieb: Prozesse, Start, Docker, Sicherung", en: "Operations: processes, start, Docker, backup" },
 		short: {
-			de: "Sechs Rollen um einen Space; lokal als Prozesse oder als Container auf diesem Rechner.",
-			en: "Six roles around one space; locally as processes or as containers on this machine.",
+			de: "Sechs Rollen um einen Space; lokal als Prozesse oder Container, auf den Servern big und nano.",
+			en: "Six roles around one space; locally as processes or containers, on the servers big and nano.",
 		},
 		body: {
 			de: `## Überblick {#overview}
@@ -1213,7 +1213,22 @@ npm --prefix codemode-forum run docker:local:logs
 npm --prefix codemode-forum run docker:local:down
 \`\`\`
 
-Das lokale Testbett startet einen Container je Rolle; sie sprechen über TCP mit dem Space (Port 4190 auf diesem Rechner). Die Repositories aus \`FORUM_REPOS_DIR\` sind im Quellen-Container nur lesend eingehängt. \`docker:image:rust\` und \`docker:rust:up\` starten dasselbe Testbett mit dem Rust-Space-Server. Auf einem Server ist das Forum noch nicht eingerichtet.
+Das lokale Testbett startet einen Container je Rolle; sie sprechen über TCP mit dem Space (Port 4190 auf diesem Rechner). Die Repositories aus \`FORUM_REPOS_DIR\` sind im Quellen-Container nur lesend eingehängt. \`docker:image:rust\` und \`docker:rust:up\` starten dasselbe Testbett mit dem Rust-Space-Server.
+
+## Auf den Servern {#servers}
+
+Die Seite läuft unter \`https://codeforum.eibrain.org\`, die Anmeldung unter \`https://id.eibrain.org\`; beide stehen hinter nginx auf big.
+
+| Was | Wo |
+|---|---|
+| web, agents, model, sources | big, im Host-Netz, die Seite nur auf 127.0.0.1:4100: \`npm --prefix codemode-forum run docker:big:up\` |
+| space, checker | nano, der Rust-Space-Server auf 127.0.0.1:4180: \`docker:nano:rust:up\`; big erreicht ihn über die Benutzer-Unit \`forum-nano-tunnel\` |
+| Keycloak und seine Datenbank | big, Compose-Projekt \`phi-idp\` auf 127.0.0.1:4300: \`idp/server.sh\` |
+| nginx | \`codemode-forum/docker/nginx-codeforum.conf\` und \`idp/nginx-id.conf\` |
+
+Ein Update ist \`git pull --ff-only\` und das Skript des Hosts. Die Admin-Konsole von Keycloak ist von außen gesperrt; sie ist über \`ssh -L 4300:127.0.0.1:4300 big\` und \`http://localhost:4300/admin/\` erreichbar. Modellaufrufe bleiben dort aus (\`FORUM_LLM=0\`), bis es Budgets je Person gibt.
+
+Die Sicherung macht \`codemode-forum/deploy/forum-backup.sh\` täglich über einen systemd-Timer: nano kopiert den Speicher des Space, big sichert die Datenbank von Keycloak. Beide tauschen ihre Kopien aus, sodass jeder Host beide hat (\`~/phi-backup/forum\`, 30 Tage). Wie eine Kopie zurückgespielt wird, steht im Kopf des Skripts.
 
 ## Sicherung {#backup}
 
@@ -1280,7 +1295,22 @@ npm --prefix codemode-forum run docker:local:logs
 npm --prefix codemode-forum run docker:local:down
 \`\`\`
 
-The local test bed starts one container per role; they talk to the space over TCP (port 4190 on this machine). The repositories of \`FORUM_REPOS_DIR\` are mounted read-only into the sources container. \`docker:image:rust\` and \`docker:rust:up\` start the same test bed with the Rust space server. The forum is not set up on a server yet.
+The local test bed starts one container per role; they talk to the space over TCP (port 4190 on this machine). The repositories of \`FORUM_REPOS_DIR\` are mounted read-only into the sources container. \`docker:image:rust\` and \`docker:rust:up\` start the same test bed with the Rust space server.
+
+## On the servers {#servers}
+
+The page runs at \`https://codeforum.eibrain.org\`, the sign-in at \`https://id.eibrain.org\`; both are behind nginx on big.
+
+| What | Where |
+|---|---|
+| web, agents, model, sources | big, on the host network, the page on 127.0.0.1:4100 only: \`npm --prefix codemode-forum run docker:big:up\` |
+| space, checker | nano, the Rust space server on 127.0.0.1:4180: \`docker:nano:rust:up\`; big reaches it through the user unit \`forum-nano-tunnel\` |
+| Keycloak and its database | big, compose project \`phi-idp\` on 127.0.0.1:4300: \`idp/server.sh\` |
+| nginx | \`codemode-forum/docker/nginx-codeforum.conf\` and \`idp/nginx-id.conf\` |
+
+An update is \`git pull --ff-only\` and the host's script. Keycloak's admin console is closed from outside; it is reached through \`ssh -L 4300:127.0.0.1:4300 big\` and \`http://localhost:4300/admin/\`. Model calls stay off there (\`FORUM_LLM=0\`) until there are budgets per person.
+
+The backup is \`codemode-forum/deploy/forum-backup.sh\`, run daily by a systemd timer: nano copies the space's store and big dumps Keycloak's database. They exchange their copies, so each host holds both (\`~/phi-backup/forum\`, 30 days). The script's head says how to restore a copy.
 
 ## Backup {#backup}
 

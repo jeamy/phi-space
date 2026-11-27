@@ -406,9 +406,15 @@ npm --prefix codemode-forum run docker:image:rust && npm --prefix codemode-forum
 `FORUM_SPACE_SERVER` names the binary (relative to `codemode-forum/`); one that is not there ends the start, it never
 falls back. `docker/docker-compose.rust.yml` lays the binary over the space container. big and nano run only the Rust
 implementation (R-D12), so the scripts for a server are `docker:nano:rust:up` (space and checker) and `docker:big:up`
-(web, agents, model, sources; `FORUM_DOCKER_SPACE` names nano's space); `docker:nano:up` refuses. **The forum has not
-been deployed to a server**: those scripts have never run there, and a deployment needs the decisions a server needs
-(the address the space is published on, the reverse proxy, the tunnel between the hosts).
+(web, agents, model, sources; `FORUM_DOCKER_SPACE` names nano's space); `docker:nano:up` refuses. Since 2026-11-27 the forum runs
+on them (phase 3 of docs/forum-seite-plan-2026-11-26.en.md, models off): the space and checker on nano on
+127.0.0.1:4180, reached from big through the user unit `forum-nano-tunnel` (`docker/forum-nano-tunnel.service`); web,
+agents, model and sources on big on the host network (`docker/docker-compose.hostnet.yml`, the page on 127.0.0.1:4100)
+behind the nginx site `https://codeforum.eibrain.org` (`docker/nginx-codeforum.conf`); the sign-in at
+`https://id.eibrain.org`, Keycloak in the compose project `phi-idp` on big (`idp/server.sh`, `idp/nginx-id.conf`,
+idp/README.md "On big"). The daily backup is `deploy/forum-backup.sh` with its systemd units on both hosts (the
+space's store on nano, Keycloak's dump on big, each host holding both in `~/phi-backup/forum`). An update is
+`git pull --ff-only` and the host's script; the help's operations article has the same in short.
 
 ## Tests
 
