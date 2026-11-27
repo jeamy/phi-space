@@ -256,6 +256,25 @@ export class ForumHub {
 		return { standings: await standings(this.host), session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
 	}
 
+	/** A room's state for a list of rooms, read without opening the room (no session, no ForumRoom entry): "waiting" while
+	 *  a run waits for the person (a question to them, or stuck) or a question to them is open at a task's table, "running" while a run works, "ready" when a plan task has
+	 *  an accepted version or a result, "idle" when it has tasks and none of these, "new" without a task. */
+	async summary(id: string): Promise<{ state: "new" | "idle" | "running" | "waiting" | "ready"; tasks: number }> {
+		const tasks = await this.#tasks(id);
+		const r = await readExisting(this.host, { type: "ForumRun", fields: { session: id } }).catch(() => "held" as const);
+		if (r) {
+			if (r === "held") return { state: "running", tasks: tasks.length };
+			const info = (r.fields as unknown as RunEntry).info;
+			const owes = info.phase === "stalled" || owed(await messagesOf(this.host, { session: id, blockId: info.blockId, table: info.table }), [], {}).person.length > 0;
+			return { state: owes ? "waiting" : "running", tasks: tasks.length };
+		}
+		// a question to the person stays open after a run ends: the room's page counts it (talk.forPerson), so does the list
+		const last = (await this.host.readAll({ type: "ForumRunDone", fields: { session: id } }, { limit: 5 })).map((e) => e.fields as unknown as { info: RunInfo; ts: number }).sort((a, b) => b.ts - a.ts)[0]?.info ?? null;
+		for (const t of tasks) if (owed(await messagesOf(this.host, { session: id, blockId: t.blockId, table: await this.#tableOf(id, t.blockId, last) }), [], {}).person.length) return { state: "waiting", tasks: tasks.length };
+		for (const t of tasks) if ((await acceptOf(this.host, { session: id, blockId: t.blockId, table: "A" })) || (await acceptOf(this.host, { session: id, blockId: t.blockId, table: "B" })) || (await resultOf(this.host, id, t.blockId))) return { state: "ready", tasks: tasks.length };
+		return { state: tasks.length ? "idle" : "new", tasks: tasks.length };
+	}
+
 	/** The table of a block that is shown when none is asked for: the one the room's run (active or last) works at on
 	 *  this block, else table B if it has a document, else A. */
 	async #tableOf(session: string, blockId: string, run?: RunInfo | null): Promise<Table> {

@@ -99,6 +99,10 @@ test("a run on a plan task: the roll call, then one model writes the outline and
 		assert.equal((await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 50_000 })).status, 200);
 		const again = await until("the second run to end", async () => { const x = await snapshot(srv.url, id); return x.run && !x.run.active && x.run.runId !== s.run!.runId ? x : null; });
 		assert.deepEqual([again.run!.phase, again.run!.doc, again.run!.usage.tokens], ["done", { table: "A", version: 4, sections: 3, written: 3 }, 300]);
+		// a version a person accepted: the room list says the plan is ready
+		assert.equal((await srv.hub.summary(id)).state, "idle");
+		assert.equal((await post(srv.url, `/api/rooms/${id}/accept`, { blockId, version: 4 })).status, 200);
+		assert.deepEqual(await srv.hub.summary(id), { state: "ready", tasks: 1 });
 	} finally { await srv.close(); }
 });
 
@@ -143,6 +147,7 @@ test("a stopped run leaves nothing behind, and the room takes the next run", asy
 		await task(srv.url, id);
 		assert.equal((await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 50_000 })).status, 200);
 		await until("the models to be asked", async () => (await srv.stack.space.count({ type: "FakeCall", fields: { session: id } })) >= 2);
+		assert.deepEqual(await srv.hub.summary(id), { state: "running", tasks: 1 }, "the room list's state of a working room");
 		const second = await post(srv.url, `/api/rooms/${id}/run`, { models: THREE, budgetTokens: 50_000 });
 		assert.equal(second.status, 400);
 		assert.match(second.body.error, /already active/);
@@ -150,6 +155,7 @@ test("a stopped run leaves nothing behind, and the room takes the next run", asy
 		const s = await snapshot(srv.url, id);
 		assert.equal(s.run!.active, false);
 		assert.match(s.lines.at(-1)!.text, /^Run stopped: 0 of 3 models answered/);
+		assert.deepEqual(await srv.hub.summary(id), { state: "idle", tasks: 1 });
 		// the agents and the model process let go of what they held: nothing of the run stays, also not a moment later
 		const left = async () => (await Promise.all(["WorkItem", "AgentSlot", "LlmCall", "LlmResult", "ItemStart"].map((type) => srv.stack.space.count({ type, fields: { session: id } })))).reduce((a, b) => a + b, 0);
 		await new Promise((r) => setTimeout(r, 4000));

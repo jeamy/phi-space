@@ -89,6 +89,6 @@ test("every tip has both languages, links to a section that exists, and is used 
 			assert.ok(tip.text[l].trim(), `tip ${id} ${l}`);
 			assert.ok(anchorsOf(target!.body[l]).has(tip.anchor), `tip ${id} ${l}: unknown anchor ${tip.article}#${tip.anchor}`);
 		}
-		assert.match(sources, new RegExp(`<HelpTip id="${id}"`), `tip ${id} is not used`);
+		assert.match(sources, new RegExp(`<HelpTip id="${id}"|\\btip="${id}"`), `tip ${id} is not used`);
 	}
 });

@@ -98,6 +98,7 @@ test("the table talks before it writes: a kickoff, replies, a decision the write
 	// the run waits for the person: gamma asked them something
 	const waiting = await until("the question to the person", async () => { const s = await snapshot(srv.url, id); return s.blocks[0]!.talk.forPerson === 1 && s.run!.phase === "discuss" ? s : null; });
 	assert.equal(waiting.run!.active, true);
+	assert.equal((await srv.hub.summary(id)).state, "waiting", "the room list says the room waits for the person");
 	const question = (await talk(srv.url, id, blockId)).messages.find((m) => m.to === "person")!;
 	assert.deepEqual([question.model, question.text], ["fake/gamma", "May the save format change?"]);
 	await new Promise((r) => setTimeout(r, 2500));
@@ -119,6 +120,7 @@ test("the table talks before it writes: a kickoff, replies, a decision the write
 	// two of three agreed: decided
 	assert.deepEqual(said.decisions.map((x) => [x.text, [...x.agreed].sort(), x.against, x.of]), [["Keep the tile size and scale the grid, because the art stays as it is.", ["fake/alpha", "fake/beta"], ["fake/gamma"], 3]]);
 	assert.deepEqual([s.run!.talk, s.blocks[0]!.talk], [{ messages: 10, decisions: 1 }, { messages: 12, decisions: 1, forPerson: 0 }]);
+	assert.notEqual((await srv.hub.summary(id)).state, "waiting", "answered: the room no longer waits for the person");
 	assert.match(s.lines.at(-1)!.text, /^Run finished: 3 of 3 models answered the roll call; 10 messages, 1 decision; M1 wrote 3 of 3 sections/);
 	// what the writer was told: the person's word first, then the decision; and a reply is asked for by thread
 	const outline = (await prompts(stack.space, id, "outline"))[0]!.prompt;
@@ -157,5 +159,6 @@ test("a reply that never comes and a question the person does not answer hold th
 	const outline = (await prompts(stack.space, id, "outline"))[0]!.prompt;
 	assert.match(outline, /Questions to the person that got no answer\. Make a sensible assumption for each and name it as an assumption in the plan:\n- May the save format change\?/);
 	assert.equal(s.blocks[0]!.talk.forPerson, 1);
+	assert.equal((await srv.hub.summary(id)).state, "waiting", "the run has ended, the question to the person is still open: the room list says so as the room's tab does");
 	assert.equal((await decisionsOf(stack.space, { session: id, blockId, table: "A" })).length, 1);
 });

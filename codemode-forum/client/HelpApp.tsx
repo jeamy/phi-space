@@ -9,8 +9,8 @@ import { renderMarkdownToHtml } from "./lib/markdown.ts";
 import { useTheme, type Lang } from "./lib/theme.ts";
 
 const T = {
-	de: { chat: "← Forum", search: "Hilfe durchsuchen …", nav: "NAVIGATION", toc: "AUF DIESER SEITE", results: "Treffer", none: "Keine Treffer.", brand: "HILFE", home: "Alle Hilfethemen", eyebrow: "CODEMODE-FORUM · HILFE", notice: "Testversion – Nutzung auf eigene Gefahr. Das Forum ist in Entwicklung: Aufgaben, Dokumente und Läufe können jederzeit verschwinden oder zurückgesetzt werden. Es gibt keine Gewähr für Verfügbarkeit oder Richtigkeit." },
-	en: { chat: "← Forum", search: "Search the help …", nav: "NAVIGATION", toc: "ON THIS PAGE", results: "results", none: "No results.", brand: "HELP", home: "All help topics", eyebrow: "CODEMODE FORUM · HELP", notice: "Test version – use at your own risk. The forum is under development: tasks, documents and runs can disappear or be reset at any time. No guarantee of availability or correctness." },
+	de: { chat: "← Forum", search: "Hilfe durchsuchen …", nav: "NAVIGATION", toc: "AUF DIESER SEITE", results: "Treffer", none: "Keine Treffer.", brand: "HILFE", home: "Alle Hilfethemen", eyebrow: "FORUM · HILFE", notice: "Testversion – Nutzung auf eigene Gefahr. Das Forum ist in Entwicklung: Aufgaben, Dokumente und Läufe können jederzeit verschwinden oder zurückgesetzt werden. Es gibt keine Gewähr für Verfügbarkeit oder Richtigkeit." },
+	en: { chat: "← Forum", search: "Search the help …", nav: "NAVIGATION", toc: "ON THIS PAGE", results: "results", none: "No results.", brand: "HELP", home: "All help topics", eyebrow: "FORUM · HELP", notice: "Test version – use at your own risk. The forum is under development: tasks, documents and runs can disappear or be reset at any time. No guarantee of availability or correctness." },
 } as const;
 
 const textOf = (a: Article, lang: Lang) => `${a.title[lang]} ${a.short[lang]} ${a.body[lang]}`.toLowerCase();
@@ -71,7 +71,7 @@ export function HelpApp() {
 	return (
 		<div className="help">
 			<header className="top">
-				<a className="brand" href={`/help?lang=${lang}`} onClick={(e) => { e.preventDefault(); go(DEFAULT_ARTICLE); }}>PHI-SPACES / <b>CODEMODE FORUM</b> <span className="help__brand">{t.brand}</span></a>
+				<a className="brand" href={`/help?lang=${lang}`} onClick={(e) => { e.preventDefault(); go(DEFAULT_ARTICLE); }}><b>FORUM</b> <span className="help__brand">{t.brand}</span></a>
 				<span className="spacer" />
 				<input className="help__search" type="search" placeholder={t.search} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t.search} />
 				<a className="toplink" href="/">{t.chat}</a>

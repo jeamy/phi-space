@@ -199,7 +199,7 @@ test("rooms: the owner invites by ID; a room one has no role in does not exist; 
 		assert.equal((await owner.post("/api/rooms", { room: "sky app" })).status, 400, "a name of letters, digits, dots, dashes");
 		assert.equal((await owner.post("/api/rooms", { room: "sky-app" })).status, 200);
 		assert.equal((await mia.post("/api/rooms", { room: "sky-app" })).status, 400, "a name that is taken");
-		assert.deepEqual((await owner.request("GET", "/api/rooms")).json.rooms, [{ room: "sky-app", role: "owner" }]);
+		assert.deepEqual((await owner.request("GET", "/api/rooms")).json.rooms, [{ room: "sky-app", role: "owner", state: "new", tasks: 0 }]);
 		// nobody else is in it: not a stranger, not an administrator; the answer does not tell that it exists
 		for (const b of [mia, tom, ada]) {
 			assert.equal((await b.request("GET", "/api/rooms/sky-app")).status, 404);
@@ -212,7 +212,10 @@ test("rooms: the owner invites by ID; a room one has no role in does not exist; 
 		assert.equal((await owner.post("/api/rooms/sky-app/access", { userId: await id(mia), role: "member" })).status, 200);
 		const a = await owner.post("/api/rooms/sky-app/access", { userId: await id(tom), role: "viewer" });
 		assert.deepEqual({ members: a.json.members.map((p: { name: string }) => p.name), viewers: a.json.viewers.length }, { members: [(await mia.request("GET", "/api/me")).json.user.name], viewers: 1 });
-		assert.deepEqual((await mia.request("GET", "/api/rooms")).json.rooms, [{ room: "sky-app", role: "member" }]);
+		assert.deepEqual((await mia.request("GET", "/api/rooms")).json.rooms, [{ room: "sky-app", role: "member", state: "new", tasks: 0 }]);
+		// with a task the room is idle in the list
+		assert.equal((await mia.post("/api/rooms/sky-app/task", { brief: "An app that shows the starry sky for a place and a time.", lang: "en" })).status, 200);
+		assert.deepEqual((await owner.request("GET", "/api/rooms")).json.rooms.map((r: { state: string; tasks: number }) => [r.state, r.tasks]), [["idle", 1]]);
 		assert.equal((await mia.request("GET", "/api/rooms/sky-app")).status, 200);
 		assert.equal((await tom.request("GET", "/api/rooms/sky-app")).status, 200);
 		assert.equal(await upgrade(srv.url, "/ws/sky-app", { origin: ORIGIN, cookie: `__Host-forum=${tom.jar.get("__Host-forum")}` }), 101);

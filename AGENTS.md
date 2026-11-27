@@ -60,7 +60,10 @@ so a relative path still means the repository root (`checks/root-scripts.mjs` ke
   (changes containers on this machine; never on a shared server without asking).
 - Codemode forum (`codemode-forum/`: Next.js; at least three models develop one plan together; plan and phases in
   `docs/gemeinsame-planung-plan-2026-11-22.en.md`, state in `codemode-forum/README.md`; roles space, sources, checker, agents, model, web around one
-  space; its base is copied from codemode-chat, it imports nothing from there; variables `FORUM_*`, port 4100):
+  space; its base is copied from codemode-chat, it imports nothing from there; variables `FORUM_*`, port 4100; the page FORUM
+  in `client/forum/` (rooms `/`, a room `/r/<room>`, `/settings`, help `/help`; the earlier page at `/expert`; every control a wrapper
+  of `client/forum/controls.tsx` with label and tip, `tests/page.test.ts`; screenshots `node --experimental-strip-types codemode-forum/tests/screenshots.ts`
+  with phi-idp running and the page built)):
   `npm --prefix codemode-forum run dev`, `npm run codemode-forum` (after `npm --prefix codemode-forum run build`), tests
   `npm run test:codemode-forum` (they start the processes, with the fake models of `tests/fakes.ts`), typecheck
   `npm --prefix codemode-forum run typecheck` (own tsconfig, not part of the root `tsc`); the result of a plan task as Markdown with

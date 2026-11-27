@@ -1,0 +1,142 @@
+/* The FORUM page (client/forum/; docs/forum-seite-plan-2026-11-26.en.md, sections 4 and 10), on the tokens of
+   layout.css (the shared palettes through --color-a/b/c, light and dark). Above 1100 px a room shows three panes, from
+   760 px two with Files as a drawer, below one with a bar at the bottom. No width or min-width here is above 360 px
+   (tests/page.test.ts); a wider thing gets a max-width. */
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* the bar */
+.fp-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); background: var(--header-bg); border-bottom: 1px solid var(--line); }
+.fp-brand { font-weight: 800; letter-spacing: .12em; color: var(--accent); text-decoration: none; }
+.fp-crumb { color: var(--text-strong); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fp-crumb::before { content: "›"; color: var(--muted); margin-right: 10px; }
+.fp-spacer { flex: 1; }
+.fp-nav { display: flex; gap: 4px; }
+.fp-nav a { color: var(--text); text-decoration: none; padding: 6px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; }
+.fp-nav a:hover { background: var(--raised); }
+.fp-nav a[aria-current="page"] { background: var(--raised); color: var(--text-strong); box-shadow: inset 0 -2px 0 var(--accent); }
+.fp-dot { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent-fill); color: var(--accent-ink); font-size: 11px; font-weight: 700; }
+
+/* places */
+main.fp-main { display: block; padding: 20px 16px 40px; padding-bottom: max(40px, env(safe-area-inset-bottom)); }
+main.fp-narrow { max-width: 760px; margin: 0 auto; }
+.fp-center { display: grid !important; place-items: center; min-height: 60vh; }
+.fp-title { font-size: 24px; margin: 4px 0 16px; color: var(--text-strong); display: flex; align-items: center; gap: 8px; }
+.fp-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 0 0 14px; max-width: 760px; }
+.fp-card h1, .fp-card h2 { margin: 0 0 10px; color: var(--text-strong); }
+.fp-card h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.fp-meta { color: var(--muted); font-size: 12.5px; }
+.fp-empty { color: var(--muted); margin: 8px 0; line-height: 1.6; }
+.fp-error { color: var(--danger); margin: 8px 0; }
+.fp-failed { margin: 10px 16px 0; padding: 10px 12px; border: 1px solid var(--danger); border-radius: 10px; color: var(--text); }
+.fp-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 10px 0; }
+
+/* the room list */
+.fp-rooms { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 8px; }
+.fp-roomcard { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name state" "meta state"; gap: 2px 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); text-decoration: none; }
+.fp-roomcard:hover, .fp-roomcard:focus-visible { border-color: var(--accent); }
+.fp-roomcard b { grid-area: name; color: var(--text-strong); overflow-wrap: anywhere; }
+.fp-roomcard .fp-meta { grid-area: meta; }
+.fp-roomcard.is-waiting { border-color: var(--accent); }
+.fp-state { grid-area: state; font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); white-space: nowrap; }
+.fp-state--running { color: var(--text-strong); border-color: var(--color-c); }
+.fp-state--waiting { background: var(--accent-fill); color: var(--accent-ink); border-color: var(--accent-fill); font-weight: 700; }
+.fp-state--ready { color: var(--success); border-color: var(--success); }
+
+/* controls (client/forum/controls.tsx) */
+.f { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 8px 0; }
+.f.wide, .fp-pane .f { flex: 1 1 200px; }
+.f input, .f select, .f textarea { width: 100%; max-width: 100%; }
+.f input[type="number"] { max-width: 140px; }
+.f__head { display: inline-flex; align-items: center; gap: 6px; }
+.f__head--quiet { position: absolute; right: 0; top: 0; }
+.f:has(.f__head--quiet) { position: relative; padding-right: 26px; }
+.f__label { font-size: 12.5px; color: var(--muted); }
+.tick { display: inline-flex; align-items: center; gap: 6px; margin: 4px 12px 4px 0; }
+.act { display: inline-flex; align-items: center; gap: 6px; }
+.b { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--raised); color: var(--text); cursor: pointer; text-decoration: none; font-weight: 500; }
+.b:hover:not(:disabled) { border-color: var(--accent); }
+.b:focus-visible, .fp-nav a:focus-visible, .fp-tabs a:focus-visible, .fp-roomcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.b--primary { background: var(--accent-fill); color: var(--accent-ink); border-color: var(--accent-fill); font-weight: 700; }
+.b--danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, var(--line-strong)); }
+.b:disabled { opacity: .45; cursor: not-allowed; }
+.fp-fold { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 10px 0; background: var(--surface); }
+.fp-fold > summary { cursor: pointer; font-weight: 600; color: var(--text-strong); padding: 4px 0; }
+.fp-models { border: 0; padding: 0; margin: 8px 0; }
+.fp-models legend { font-size: 12.5px; color: var(--muted); padding: 0; margin-bottom: 4px; }
+.fp-people { border-top: 1px solid var(--line); padding: 8px 0; }
+.fp-people > summary { cursor: pointer; }
+.fp-people ul { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+
+/* loading */
+.fp-skeleton { display: grid; gap: 10px; padding: 8px 0; }
+.fp-skeleton span { display: block; height: 14px; border-radius: 7px; background: linear-gradient(90deg, var(--raised), var(--surface), var(--raised)); background-size: 200% 100%; animation: fp-shine 1.4s linear infinite; }
+.fp-skeleton span:nth-child(2n) { max-width: 70%; }
+.fp-skeleton span:nth-child(3n) { max-width: 45%; }
+@keyframes fp-shine { to { background-position: -200% 0; } }
+
+/* a room */
+main.fp-room { display: grid; gap: 14px; padding: 12px 16px 24px; align-items: start; grid-template-columns: minmax(0, 260px) minmax(0, 1fr) minmax(0, 1.15fr); grid-template-areas: "bar bar bar" "files table plan"; }
+.fp-roombar { grid-area: bar; display: flex; align-items: center; gap: 10px; }
+.fp-roomname { display: none; color: var(--text-strong); overflow-wrap: anywhere; min-width: 0; }
+.fp-live { font-size: 12px; color: var(--muted); }
+.fp-live::before { content: "●"; margin-right: 5px; color: var(--muted); }
+.fp-live.is-live::before { color: var(--success); }
+.fp-pane { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.fp-pane > h2 { margin: 0 0 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.fp-pane--files { grid-area: files; position: sticky; top: 64px; }
+.fp-pane--table { grid-area: table; }
+.fp-pane--plan { grid-area: plan; }
+.fp-pane .panel { background: transparent; border: 0; padding: 0; margin: 12px 0; }
+.fp-files { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 8px; }
+.fp-files li { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.fp-brief { background: var(--raised); border-radius: 10px; padding: 10px 12px; margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fp-brief p { margin: 0; }
+.fp-brief ul { margin: 8px 0 0; padding-left: 18px; white-space: normal; }
+.fp-filesbtn { display: none; }
+.fp-tabs { display: none; }
+.fp-pane table { display: block; max-width: 100%; overflow-x: auto; }
+.fp-pane pre, .fp-pane .doc { max-width: 100%; overflow-x: auto; }
+
+/* 760 to 1100 px: Table and Plan, Files as a drawer */
+@media (max-width: 1100px) {
+	main.fp-room { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "bar bar" "table plan"; }
+	.fp-filesbtn { display: inline-flex; }
+	.fp-pane--files { display: none; }
+	.fp-room--drawer .fp-pane--files { display: block; position: fixed; z-index: 6; top: 56px; left: 0; bottom: 0; width: min(340px, 88vw); overflow-y: auto; border-radius: 0 12px 12px 0; box-shadow: 0 12px 40px rgba(0, 0, 0, .45); }
+}
+
+/* below 760 px: one pane, the three at the bottom */
+@media (max-width: 760px) {
+	main.fp-room { grid-template-columns: minmax(0, 1fr); grid-template-areas: "bar" "pane"; padding: 10px 10px calc(76px + env(safe-area-inset-bottom)); }
+	.fp-filesbtn { display: none; }
+	.fp-pane--files, .fp-pane--table, .fp-pane--plan, .fp-room--drawer .fp-pane--files { display: none; position: static; grid-area: pane; width: auto; box-shadow: none; border-radius: 12px; }
+	.fp-room--files .fp-pane--files, .fp-room--table .fp-pane--table, .fp-room--plan .fp-pane--plan { display: block; }
+	.fp-tabs { display: flex; position: fixed; z-index: 5; left: 0; right: 0; bottom: 0; align-items: center; gap: 4px; padding: 6px 10px; padding-bottom: max(6px, env(safe-area-inset-bottom)); background: var(--header-bg); border-top: 1px solid var(--line); }
+	.fp-tabs a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border-radius: 10px; color: var(--text); text-decoration: none; font-weight: 600; }
+	.fp-tabs a[aria-current="page"] { background: var(--raised); color: var(--text-strong); box-shadow: inset 0 -3px 0 var(--accent); }
+	.fp-bar { gap: 8px; padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+	.fp-nav a { padding: 6px 7px; }
+	main.fp-main { padding: 14px 12px 40px; }
+}
+
+/* the keyboard open: the bar at the bottom gives way */
+.fp-room--typing .fp-tabs { display: none; }
+
+/* a narrow phone: the bar has no room for the room's name, the room's own bar shows it */
+@media (max-width: 420px) {
+	.fp-crumb { display: none; }
+	.fp-roomname { display: inline; }
+	.fp-roombar { flex-wrap: wrap; }
+}
+
+/* a phone: inputs at 16 px so that it does not zoom, targets of 44 px */
+@media (pointer: coarse) {
+	.f input, .f select, .f textarea, .fp-pane input, .fp-pane select, .fp-pane textarea { font-size: 16px; }
+	.b, .fp-nav a { min-height: 44px; }
+	.tick input { width: 22px; height: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.fp-skeleton span { animation: none; }
+}

@@ -32,9 +32,35 @@ A run with `way: "both"` (the page's default) sets up both tables at the same ti
 The application is a directory of its own. Its base is copied from `codemode-chat/` (the comments at the top of each
 file say so) and it imports nothing from there; it depends on the library as `"phi-spaces": "file:../spaces"`.
 
+## The page
+
+FORUM is the page a person uses (`client/forum/`, plan `../docs/forum-seite-plan-2026-11-26.en.md`, phase 2). Its
+places:
+
+- **Rooms** (`/`): the rooms of the signed-in person with their role, the number of tasks and a state: still empty,
+  resting, working, **waiting for you** (a run is stuck or a question to the person is open, also after the run has
+  ended) or plan accepted (`ForumHub.summary`, in `GET /api/rooms`); creating a room; the person's ID for invitations.
+  The bar counts the rooms that wait, and so does the browser tab's title.
+- **A room** (`/r/<room>`): three panes, **Files** (the task's material), **Table** (the brief, a new task, the run and
+  its talk with the person's answers) and **Plan** (the comparison, the document, its versions, accepting and
+  objecting). Above 1100 px side by side; from 760 px Table and Plan with Files as a drawer; below 760 px one pane at a
+  time with a bar of the three at the bottom, the Table's tab counting the open questions. The pane stays in the
+  address (`#files`, `#table`, `#plan`), so a link leads to it.
+- **Settings** (`/settings`): the name at the table, the ID, signing out, language, light or dark, the colours, and
+  for each room one owns the people in it (inviting by ID, removing).
+- **Help** (`/help`) and, for administrators, the **expert view** (`/expert`): the earlier page with everything at
+  once, also models, providers, repository sources and the system's processes (until the administration moves to the
+  page in a later phase).
+
+Every control of the page is a wrapper of `client/forum/controls.tsx` (field, text area, choice, tick, action) with
+a visible or screen-reader label and a help tip beside it (`client/lib/tips.ts`); `tests/page.test.ts` holds the page
+to that, to no width above 360 px in `client/styles/page.css`, and to its routes, manifest and icon. The panes the page
+shares with the expert view are in `client/panes.tsx`, the room's state in `client/lib/use-room.ts`. Screenshots in
+`docs/screenshots/`, taken by `tests/screenshots.ts` (fake models, the local Keycloak, headless Chromium).
+
 ## What you see
 
-Open a room (the name after `#` in the URL) and create a **plan task**: the brief (up to 8000 characters), the language
+This section describes the expert view (`/expert`, `client/App.tsx`). Open a room (the name after `#` in the URL) and create a **plan task**: the brief (up to 8000 characters), the language
 of the document, optionally an outline to keep and criteria of your own. Each task is a block of the room. Choose three
 to five models, a budget, and start the run on it. Each model gets a name for this run, M1, M2, …, drawn anew every
 time; the models learn each other only by these names. The page shows who is at the table, how far the run is, what it
@@ -53,7 +79,7 @@ Beside the document (`client/App.tsx`, `client/lib/diff.ts`):
 - **the comparison** after a run with both tables: the result and why, each table's rounds, use and approvals, and
   every model's blind comparison with its reasons;
 - **the standings** over all runs with both tables: how often each way of working was the base of the result;
-- **help** (`/help`, `client/help/articles.ts`): eight articles in German and English.
+- **help** (`/help`, `client/help/articles.ts`): fifteen articles in German and English.
 
 ## The result and its export
 
@@ -427,7 +453,9 @@ password, a host that is not allowed, which is never contacted), a redirect that
 not there, a task whose repository is fetched once into a bare, shallow cache and read like a local one, a sources
 process that lost its cache and fetches the task's commit again (and does not once the host is off the list), and a
 repository that is too large and a server that is too slow, of which nothing stays. `tests/space-server.test.ts`
-covers the switch to the Rust space server. `tests/help.test.ts` holds the help articles to both languages, the
+covers the switch to the Rust space server. `tests/page.test.ts` holds the FORUM page to its controls with label and
+tip, its widths and its routes; `tests/auth.test.ts`, `tests/forum.test.ts` and `tests/talk.test.ts` also check the
+rooms' states in the list. `tests/help.test.ts` holds the help articles to both languages, the
 same anchors in each, and links that lead somewhere.
 
 ## Sign-in

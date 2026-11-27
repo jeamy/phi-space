@@ -23,6 +23,166 @@ export const SECTIONS: Record<Article["section"], { de: string; en: string }> = 
 
 export const ARTICLES: Article[] = [
 	{
+		id: "help.topic.forum",
+		section: "start",
+		plain: true,
+		title: { de: "Was ist FORUM?", en: "What is FORUM?" },
+		short: {
+			de: "Du und mehrere KI-Modelle arbeitet gemeinsam einen Plan aus. Die vier Orte der Seite und die drei Teile eines Raums.",
+			en: "You and several AI models work out a plan together. The page's four places and the three parts of a room.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Nach dieser Seite weißt du, wofür FORUM da ist, welche vier Orte die Seite hat und aus welchen drei Teilen ein [Raum](help.topic.words#room) besteht.
+
+In FORUM arbeiten du und mehrere KI-[Modelle](help.topic.words#model) gemeinsam einen Plan aus. Du schreibst den [Auftrag](help.topic.words#brief): wofür der Plan ist und was er leisten muss. Die Modelle besprechen ihn, schreiben den Plan, prüfen einander und stimmen ab. Du beantwortest ihre Fragen und entscheidest am Ende.
+
+Wie du anfängst, steht in [Dein erster Plan in sechs Schritten](help.topic.first_plan#overview).
+
+## Die vier Orte {#places}
+
+| Ort | Was du dort tust |
+|---|---|
+| Räume | du siehst die Räume, in denen du bist, und was jeder gerade tut; du legst einen neuen an |
+| Ein Raum | du arbeitest an einem Plan: Dateien, [Tisch](help.topic.words#table), Plan |
+| Einstellungen | dein Name, das Aussehen der Seite, die Personen in deinen Räumen |
+| Hilfe | diese Seiten; das „?“ neben einem Bedienelement öffnet einen kurzen Hinweis |
+
+Steht bei einem Raum „wartet auf dich“, hat dich ein Modell etwas gefragt.
+
+## Die drei Teile eines Raums {#panes}
+
+- **Dateien:** das Material der gezeigten Aufgabe, also die Dokumente, die du ihr mitgegeben hast. Die Modelle lesen nur darin.
+- **Tisch:** hier arbeiten die Modelle: die Aufgaben, die Läufe, ihre Diskussion und ihre Fragen an dich. Siehe [Der Tisch](help.topic.table#overview).
+- **Plan:** das Dokument, das am Tisch entsteht, [Fassung](help.topic.words#version) für Fassung. Siehe [Der Plan](help.topic.plan#overview).
+
+Auf einem breiten Bildschirm siehst du alle drei nebeneinander, auf einem Tablet zwei, auf einem Telefon einen nach dem anderen. Siehe [Auf dem Telefon](help.topic.phone#overview).
+
+## Deine Einstellungen {#settings}
+
+Sprache, hell oder dunkel und die Farben merkt sich dein Browser, für dieses Gerät. Deinen Namen und die Personen in deinen Räumen hält FORUM.
+
+## Die Expertenansicht {#expert}
+
+Die Seite, die FORUM vorher hatte, bleibt unter /expert erreichbar: mit dem Stand der beiden Arbeitsweisen und beiden Tischen nebeneinander. Sie ist in [Codemode-Forum: Was es ist und wie ein Lauf abläuft](help.topic.overview#overview) erklärt.`,
+			en: `## Overview {#overview}
+
+After this page you know what FORUM is for, which four places the page has and which three parts a [room](help.topic.words#room) has.
+
+In FORUM you and several AI [models](help.topic.words#model) work out a plan together. You write the [brief](help.topic.words#brief): what the plan is for and what it must achieve. The models discuss it, write the plan, check each other and vote. You answer their questions and decide in the end.
+
+How to begin is in [Your first plan in six steps](help.topic.first_plan#overview).
+
+## The four places {#places}
+
+| Place | What you do there |
+|---|---|
+| Rooms | you see the rooms you are in and what each is doing; you make a new one |
+| A room | you work on a plan: files, [table](help.topic.words#table), plan |
+| Settings | your name, the look of the page, the people in your rooms |
+| Help | these pages; the "?" beside a control opens a short tip |
+
+When a room says "waiting for you", a model has asked you something.
+
+## The three parts of a room {#panes}
+
+- **Files:** the material of the task shown, that is the documents you gave it. The models read only in these.
+- **Table:** here the models work: the tasks, the runs, their discussion and their questions to you. See [The table](help.topic.table#overview).
+- **Plan:** the document the table writes, [version](help.topic.words#version) by version. See [The plan](help.topic.plan#overview).
+
+On a wide screen you see all three side by side, on a tablet two, on a phone one after the other. See [On the phone](help.topic.phone#overview).
+
+## Your settings {#settings}
+
+Your browser keeps the language, light or dark and the colours, for this device. FORUM keeps your name and the people in your rooms.
+
+## The expert view {#expert}
+
+The page FORUM had before stays at /expert: with the standings of the two ways of working and both tables side by side. It is explained in [Codemode forum: what it is and how a run goes](help.topic.overview#overview).`,
+		},
+	},
+	{
+		id: "help.topic.first_plan",
+		section: "start",
+		plain: true,
+		title: { de: "Dein erster Plan in sechs Schritten", en: "Your first plan in six steps" },
+		short: {
+			de: "Vom neuen Raum bis zum heruntergeladenen Plan, am Beispiel einer App für den Sternenhimmel.",
+			en: "From a new room to the downloaded plan, with an app for the starry sky as the example.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Nach dieser Seite hast du einen [Raum](help.topic.words#room) angelegt, ihm einen [Auftrag](help.topic.words#brief) gegeben und die [Modelle](help.topic.words#model) einen ersten Plan ausarbeiten lassen. Das Beispiel: eine App, die den Sternenhimmel für einen Ort und eine Zeit zeigt.
+
+## 1 Einen Raum anlegen {#room}
+
+Unter „Räume“ gibst du dem neuen Raum einen Namen, etwa \`sternenhimmel\`, und wählst „Raum anlegen“. Der Raum gehört dir. Wen du dazuholst, steht in [Anmelden](help.topic.signing_in#invite).
+
+## 2 Den Auftrag schreiben {#brief}
+
+Im Raum öffnest du „Neue Aufgabe“ und schreibst den Auftrag, zum Beispiel: „Eine App, die den Sternenhimmel zu einer bestimmten Zeit an einem bestimmten Ort zeigt, mit Kometen, Asteroiden, Sternbildern und Messier-Objekten.“
+
+Dazu kannst du wählen:
+
+- die Sprache des Dokuments;
+- eine Gliederung, wenn du die Überschriften vorgeben willst;
+- Kriterien, die der Plan auf jeden Fall erfüllen muss, eines je Zeile;
+- Dokumente, die die Modelle lesen dürfen. Auszüge daraus gehen an die Anbieter der gewählten Modelle.
+
+## 3 Einen Lauf starten {#run}
+
+Unter „Einen Lauf starten“ hakst du mindestens drei Modelle an, lässt die Arbeitsweise, wie sie ist, und wählst „Lauf starten“. Das [Budget](help.topic.words#budget) begrenzt, wie viel der Lauf verbrauchen darf. „Stopp“ hält ihn sofort an; was geschrieben ist, bleibt.
+
+## 4 Dem Tisch antworten {#answer}
+
+Die Modelle melden sich, sagen, wie sie den Auftrag verstehen, und stellen Fragen. Eine Frage an dich ist hervorgehoben, und der Raum steht in der Liste auf „wartet auf dich“. Du antwortest im Feld darunter. Was am [Tisch](help.topic.words#table) sonst geschieht, steht in [Der Tisch](help.topic.table#overview).
+
+## 5 Lesen und annehmen {#accept}
+
+Unter „Plan“ wächst das Dokument [Fassung](help.topic.words#version) für Fassung. Stimmt mehr als die Hälfte der Modelle zu, ist es angenommen. Du kannst auch selbst eine Fassung annehmen oder einen [Einwand](help.topic.words#objection) gegen einen Abschnitt erheben. Siehe [Der Plan](help.topic.plan#overview).
+
+## 6 Mitnehmen {#download}
+
+„Ergebnis mit Anhang (.md)“ lädt den Plan mit seinen Entscheidungen als Markdown-Datei herunter.`,
+			en: `## Overview {#overview}
+
+After this page you have made a [room](help.topic.words#room), given it a [brief](help.topic.words#brief) and let the [models](help.topic.words#model) work out a first plan. The example: an app that shows the starry sky for a place and a time.
+
+## 1 Make a room {#room}
+
+Under "Rooms" you give the new room a name, such as \`starry-sky\`, and choose "Create room". The room belongs to you. Whom you bring in is in [Signing in](help.topic.signing_in#invite).
+
+## 2 Write the brief {#brief}
+
+In the room you open "New task" and write the brief, for example: "An app that shows the starry sky at a given time and place, with comets, asteroids, constellations and Messier objects."
+
+Besides it you can choose:
+
+- the language of the document;
+- an outline, if you want to give the headings;
+- criteria the plan must meet in any case, one a line;
+- documents the models may read. Excerpts of them go to the providers of the chosen models.
+
+## 3 Start a run {#run}
+
+Under "Start a run" you tick at least three models, leave the way of working as it is and choose "Start run". The [budget](help.topic.words#budget) limits how much the run may use. "Stop" ends it at once; what is written stays.
+
+## 4 Answer the table {#answer}
+
+The models report, say how they understand the brief and ask questions. A question to you is marked, and the room's list says "waiting for you". You answer in the field below it. What else happens at the [table](help.topic.words#table) is in [The table](help.topic.table#overview).
+
+## 5 Read and accept {#accept}
+
+Under "Plan" the document grows [version](help.topic.words#version) by version. When more than half of the models agree, it is accepted. You can also accept a version yourself or raise an [objection](help.topic.words#objection) to a section. See [The plan](help.topic.plan#overview).
+
+## 6 Take it with you {#download}
+
+"Result with appendix (.md)" downloads the plan with its decisions as a Markdown file.`,
+		},
+	},
+	{
 		id: "help.topic.overview",
 		section: "start",
 		title: { de: "Codemode-Forum: Was es ist und wie ein Lauf abläuft", en: "Codemode forum: what it is and how a run goes" },
@@ -307,6 +467,198 @@ As the owner you open "People in this room", enter the ID and choose "as a membe
 ## A second factor {#factor}
 
 The sign-in service can ask for a second factor besides your password, such as a code from an app on your phone. Whether it does is set by whoever runs the service; FORUM itself never sees the code.`,
+		},
+	},
+	{
+		id: "help.topic.table",
+		section: "use",
+		plain: true,
+		title: { de: "Der Tisch: wie die Modelle zu einem Plan kommen", en: "The table: how the models work it out" },
+		short: {
+			de: "Appell, Diskussion, Schreiben, Prüfen und Abstimmen, und wann du gefragt wirst.",
+			en: "Roll call, discussion, writing, checking and voting, and when you are asked.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Nach dieser Seite weißt du, wie die [Modelle](help.topic.words#model) am [Tisch](help.topic.words#table) zu einem Plan kommen und wann du mitredest.
+
+![Wie der Tisch zu einem Plan kommt: Dein Auftrag, dann Appell und Auftakt, Diskussion, Schreiben, Prüfprogramm und Abstimmung. Stimmt mehr als die Hälfte zu, ist der Plan angenommen; sonst folgt mit den Einwänden die nächste Runde. Du antwortest in der Diskussion und widersprichst oder nimmst selbst an.](/help/img/forum-table-de.svg)
+
+## Die Schritte {#steps}
+
+1. **Appell:** Jedes Modell meldet sich unter einem Namen am Tisch (M1, M2, …). Welches Modell dahintersteht, erfahren die anderen nicht.
+2. **Auftakt:** Jedes Modell sagt, wie es den [Auftrag](help.topic.words#brief) versteht, und stellt Fragen.
+3. **Diskussion:** Die Modelle machen Vorschläge, fragen einander und stimmen darüber ab. Ein Vorschlag, dem die meisten zustimmen, wird eine Entscheidung, an die sich alle halten.
+4. **Schreiben:** Erst die Gliederung, dann die Abschnitte.
+5. **Prüfen:** Ein Programm prüft Tatsachen, etwa ob ein zitierter Satz wirklich im Material steht.
+6. **Abstimmen:** Jedes Modell stimmt über die [Fassung](help.topic.words#version) ab. Stimmt mehr als die Hälfte zu, ist der Plan angenommen; sonst werden die [Einwände](help.topic.words#objection) aufgegriffen und die nächste Runde beginnt.
+
+## Du am Tisch {#you}
+
+- **Eine Frage an dich** ist hervorgehoben. Der Tisch wartet eine Weile auf deine Antwort; kommt keine, macht er ohne sie weiter.
+- **Etwas sagen** kannst du jederzeit im Feld unter der Diskussion. Die Modelle lesen es vor ihrem nächsten Schritt.
+- Was du sagst, gilt vor jeder Entscheidung der Modelle.
+
+## Arbeitsweisen und Runden {#ways}
+
+| Arbeitsweise | So arbeiten die Modelle |
+|---|---|
+| abwechselnd | ein Modell nach dem anderen ist am Zug |
+| gleichzeitig | die Abschnitte werden verteilt, danach prüfen die Modelle einander |
+| beide im Wettbewerb | beide Arbeitsweisen an je einem eigenen Dokument, dann ein blinder Vergleich und eine gemeinsame Schlussrunde |
+
+Die Zahl der Runden sagt, wie oft die Modelle höchstens überarbeiten und abstimmen.
+
+## Was ein Lauf kostet {#budget}
+
+Jeder Aufruf eines Modells verbraucht Tokens. Das [Budget](help.topic.words#budget) eines Laufs sagt, wie viele er verbrauchen darf; ist es aufgebraucht, hält der Lauf an. Was ein Lauf verbraucht hat, steht in seiner Zeile unter „Tisch“.`,
+			en: `## Overview {#overview}
+
+After this page you know how the [models](help.topic.words#model) at the [table](help.topic.words#table) reach a plan and when you have a say.
+
+![How the table reaches a plan: your brief, then roll call and kickoff, discussion, writing, the checking program and the ballots. When more than half agree, the plan is accepted; otherwise the next round follows with the objections. You answer in the discussion, and object or accept yourself.](/help/img/forum-table.svg)
+
+## The steps {#steps}
+
+1. **Roll call:** every model reports under a name at the table (M1, M2, …). The others are not told which model is behind it.
+2. **Kickoff:** every model says how it understands the [brief](help.topic.words#brief) and asks questions.
+3. **Discussion:** the models make proposals, ask each other and vote on them. A proposal most of them agree to becomes a decision everyone keeps to.
+4. **Writing:** first the outline, then the sections.
+5. **Checking:** a program checks facts, such as whether a quoted sentence really stands in the material.
+6. **Voting:** every model votes on the [version](help.topic.words#version). When more than half agree, the plan is accepted; otherwise the [objections](help.topic.words#objection) are taken up and the next round begins.
+
+## You at the table {#you}
+
+- **A question to you** is marked. The table waits a while for your answer; if none comes, it goes on without it.
+- **You can say something** at any time in the field below the discussion. The models read it before their next step.
+- What you say outranks any decision of the models.
+
+## Ways of working and rounds {#ways}
+
+| Way of working | How the models work |
+|---|---|
+| taking turns | one model after the other has the turn |
+| at the same time | the sections are dealt out, then the models review each other |
+| both in competition | both ways, each on a document of its own, then a blind comparison and a joint final round |
+
+The number of rounds says how often at most the models revise and vote.
+
+## What a run costs {#budget}
+
+Every call of a model uses tokens. A run's [budget](help.topic.words#budget) says how many it may use; when it is used up, the run stops. What a run has used stands in its line under "Table".`,
+		},
+	},
+	{
+		id: "help.topic.plan",
+		section: "use",
+		plain: true,
+		title: { de: "Der Plan: Fassungen, Annehmen, Herunterladen", en: "The plan: versions, accepting, downloading" },
+		short: {
+			de: "Fassungen lesen und vergleichen, einen Plan annehmen oder widersprechen, und ihn mitnehmen.",
+			en: "Reading and comparing versions, accepting a plan or objecting, and taking it with you.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Nach dieser Seite kannst du jede [Fassung](help.topic.words#version) des Plans lesen und vergleichen, ihn annehmen oder ihm widersprechen und ihn herunterladen.
+
+## Fassungen {#versions}
+
+Jede Änderung am Plan ergibt eine neue Fassung; die älteren bleiben lesbar. Unter „Fassung“ wählst du, welche du liest. Ohne Wahl siehst du die neueste, oder das Ergebnis, wenn es eines gibt. Neben jedem Abschnitt steht, welches [Modell](help.topic.words#model) ihn zuletzt geschrieben hat.
+
+## Vergleichen {#compare}
+
+Unter „vergleichen mit“ wählst du eine andere Fassung. Dann zeigt jeder Abschnitt, was gestrichen und was hinzugekommen ist, Zeile für Zeile; unveränderte Abschnitte bleiben kurz.
+
+## Annehmen {#accept}
+
+Stimmt mehr als die Hälfte der Modelle einer Fassung zu, ist sie angenommen. Du kannst auch selbst eine Fassung annehmen, mit „Diese Fassung annehmen“: Sie gilt dann als Ergebnis, auch ohne Mehrheit.
+
+## Widersprechen {#object}
+
+Stimmt an einem Abschnitt etwas nicht, wählst du den Abschnitt, schreibst, was falsch ist, und erhebst den [Einwand](help.topic.words#objection). Kein Modell kann einen Einwand von dir ablehnen; die nächste Runde muss ihn aufgreifen. Einwände stehen beim Abschnitt, bis sie erledigt sind.
+
+## Zwei Tische {#tables}
+
+Haben in einem Lauf beide Arbeitsweisen gearbeitet, hat jeder [Tisch](help.topic.words#table) ein eigenes Dokument. Unter „Welcher Tisch“ wählst du eines, oder beide nebeneinander. Darüber steht, wie die Modelle beide blind verglichen haben und welches das Ergebnis wurde.
+
+## Herunterladen {#download}
+
+„Ergebnis mit Anhang (.md)“ lädt den Plan mit seinen Entscheidungen und dem Verlauf als Markdown-Datei. „diese Fassung (.md)“ lädt nur die Fassung, die du gerade liest.`,
+			en: `## Overview {#overview}
+
+After this page you can read and compare every [version](help.topic.words#version) of the plan, accept it or object to it, and download it.
+
+## Versions {#versions}
+
+Every change to the plan makes a new version; the older ones stay readable. Under "Version" you choose which one you read. Without a choice you see the newest, or the result when there is one. Beside every section stands which [model](help.topic.words#model) wrote it last.
+
+## Comparing {#compare}
+
+Under "compare with" you choose another version. Then every section shows what was struck out and what was added, line by line; sections that did not change stay short.
+
+## Accepting {#accept}
+
+When more than half of the models agree to a version, it is accepted. You can also accept a version yourself, with "Accept this version": it then counts as the result, even without a majority.
+
+## Objecting {#object}
+
+When something is wrong in a section, you choose the section, write what is wrong and raise the [objection](help.topic.words#objection). No model can decline an objection of yours; the next round must take it up. Objections stand beside their section until they are settled.
+
+## Two tables {#tables}
+
+When both ways of working worked in a run, each [table](help.topic.words#table) has a document of its own. Under "Which table" you choose one, or both side by side. Above them stands how the models compared both blind and which one became the result.
+
+## Downloading {#download}
+
+"Result with appendix (.md)" downloads the plan with its decisions and its course as a Markdown file. "this version (.md)" downloads only the version you are reading.`,
+		},
+	},
+	{
+		id: "help.topic.phone",
+		section: "use",
+		plain: true,
+		title: { de: "Auf dem Telefon", en: "On the phone" },
+		short: {
+			de: "Die drei Bereiche unten, rechtzeitig antworten, FORUM auf den Startbildschirm legen.",
+			en: "The three parts at the bottom, answering in time, putting FORUM on the home screen.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Nach dieser Seite findest du dich in einem [Raum](help.topic.words#room) auf dem Telefon zurecht, verpasst keine Frage und öffnest FORUM vom Startbildschirm.
+
+## Die drei Bereiche {#tabs}
+
+Auf einem schmalen Bildschirm zeigt ein Raum einen Bereich auf einmal. Unten wechselst du zwischen **Dateien**, **[Tisch](help.topic.words#table)** und **Plan**. Eine Zahl bei „Tisch“ heißt: So viele Fragen warten auf dich. Die Adresse merkt sich den Bereich, ein Link kann also direkt auf den Plan zeigen.
+
+## Rechtzeitig antworten {#answer}
+
+Fragt dich ein [Modell](help.topic.words#model) etwas, wartet der Tisch eine Weile, in der Regel zwei Minuten, dann macht er ohne deine Antwort weiter. Lass die Seite offen, solange ein Lauf arbeitet. In der Liste der Räume steht „wartet auf dich“, und der Titel des Tabs zeigt, wie viele Räume warten. Wenn du einen Lauf startest, fragt der Browser, ob FORUM dir Mitteilungen zeigen darf; erlaubst du es, meldet sich die offene Seite mit einer Mitteilung, sobald eine Frage auf dich wartet, auch wenn du gerade in einem anderen Tab bist. Eine geschlossene Seite meldet nichts.
+
+Tippst du eine Antwort, verschwindet die Leiste unten, und das Feld bleibt über der Tastatur.
+
+## Auf den Startbildschirm {#home}
+
+Im Menü deines Browsers wählst du „Zum Startbildschirm hinzufügen“. FORUM öffnet sich dann wie eine App, ohne die Leisten des Browsers. Es braucht weiterhin eine Verbindung.`,
+			en: `## Overview {#overview}
+
+After this page you find your way around a [room](help.topic.words#room) on a phone, miss no question and open FORUM from the home screen.
+
+## The three parts {#tabs}
+
+On a narrow screen a room shows one part at a time. At the bottom you switch between **Files**, **[Table](help.topic.words#table)** and **Plan**. A number at "Table" means: that many questions wait for you. The address keeps the part, so a link can point straight at the plan.
+
+## Answering in time {#answer}
+
+When a [model](help.topic.words#model) asks you something, the table waits a while, usually two minutes, then it goes on without your answer. Keep the page open while a run works. The list of rooms says "waiting for you", and the tab's title shows how many rooms wait. When you start a run, the browser asks whether FORUM may show you notifications; if you allow it, the open page notifies you as soon as a question waits for you, even while you are in another tab. A closed page notifies nothing.
+
+While you type an answer, the bar at the bottom steps aside and the field stays above the keyboard.
+
+## On the home screen {#home}
+
+In your browser's menu you choose "Add to Home screen". FORUM then opens like an app, without the browser's bars. It still needs a connection.`,
 		},
 	},
 	{
@@ -1077,7 +1429,7 @@ The forum is under development. Runs with real models are not evaluated yet: how
 ];
 
 export const articleById = (id: string): Article | undefined => ARTICLES.find((a) => a.id === id);
-export const DEFAULT_ARTICLE = "help.topic.overview";
+export const DEFAULT_ARTICLE = "help.topic.forum";
 
 /** The words of "Words used here" (help.topic.words), by their anchor there, with the forms each language uses. */
 export const WORDS: Record<string, { de: string[]; en: string[] }> = {

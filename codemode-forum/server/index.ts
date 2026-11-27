@@ -138,7 +138,8 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			// ---- rooms: with a sign-in only the people a room's owner invited enter it (server/rooms.ts) ----
 			if (auth && p === "/api/rooms") {
 				if (!who) return json(res, 401, { error: "Sign in first" });
-				if (req.method === "GET") return json(res, 200, { rooms: await roomsOf(conn.space, who.user.userId) });
+				// each with its state for the list (the first 50; a person with more rooms sees the rest without one)
+				if (req.method === "GET") return json(res, 200, { rooms: await Promise.all((await roomsOf(conn.space, who.user.userId)).map(async (r, i) => (i < 50 ? { ...r, ...(await hub.summary(r.room).catch(() => ({}))) } : r))) });
 				if (req.method !== "POST") return json(res, 405, { error: "GET or POST expected" });
 				const room = String((await readBody(req)).room ?? "").trim();
 				if (!ID.test(room)) return json(res, 400, { error: "A room's name: 1 to 48 letters, digits, dots, dashes or underscores" });

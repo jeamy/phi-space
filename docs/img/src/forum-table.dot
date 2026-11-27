@@ -1,0 +1,21 @@
+// How the models at the table reach a plan (docs/forum-seite-plan-2026-11-26.en.md, section 11). The labels are in a
+// file per language (forum-table.en.sed, forum-table.de.sed): render as style.inc says, with "-f forum-table.en.sed"
+// added to the sed for ../forum-table.svg and "-f forum-table.de.sed" for ../forum-table-de.svg.
+digraph "@title@" {
+#include
+	rankdir=TB; nodesep=0.5;
+	brief [label="@brief@", fillcolor="#fcf2d9"];
+	kickoff [label="@kickoff@"];
+	talk [label="@talk@", fillcolor="#d8eeea"];
+	write [label="@write@", fillcolor="#d8eeea"];
+	check [label="@check@"];
+	vote [label="@vote@", fillcolor="#d8eeea"];
+	done [label="@done@", fillcolor="#fcf2d9"];
+	you [label="@you@", fillcolor="#fcf2d9"];
+	brief -> kickoff -> talk -> write -> check -> vote;
+	vote -> done [label="@majority@"];
+	vote -> write [label="@revise@", constraint=false];
+	you -> talk [style=dashed, label="@answers@"];
+	you -> vote [style=dashed, label="@objects@"];
+	{ rank=same; talk; you; }
+}
