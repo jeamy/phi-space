@@ -48,3 +48,25 @@ sign-in, sign out, sign in):
   server's own compose file.
 - `KC_HOSTNAME` takes the whole public address; with plain HTTP on loopback `KC_HTTP_ENABLED=true` is needed.
 - The first start takes about half a minute before the realm answers (the import runs after "started").
+
+## On the LAN
+
+For a test from another device, or from a browser that does not reach this machine's loopback, the forum and
+Keycloak are served over https on the machine's LAN address with one self-signed certificate (the forum's session
+cookie is `__Host-`, Secure, so a plain-HTTP address other than `localhost` cannot sign in; Keycloak's own cookies
+need https as well):
+
+```bash
+idp/lan.sh 192.168.8.27      # the certificate in .local/lan-tls/, Keycloak on https://192.168.8.27:4301,
+                             # the forum's LAN address among the codemode-forum client's redirect URIs
+cd codemode-forum && T=$PWD/../.local/lan-tls && set -a && . ../idp/.env && set +a && \
+FORUM_BIND=192.168.8.27 FORUM_DEV_ORIGINS=192.168.8.27 FORUM_TLS_CERT=$T/cert.pem FORUM_TLS_KEY=$T/key.pem \
+FORUM_MEM=1 FORUM_LOGIN=oidc FORUM_PUBLIC_ORIGIN=https://192.168.8.27:4100 \
+FORUM_OIDC_ISSUER=https://192.168.8.27:4301/realms/phi FORUM_OIDC_CA=$T/cert.pem \
+FORUM_OIDC_CLIENT_ID=codemode-forum FORUM_OIDC_CLIENT_SECRET="$IDP_FORUM_SECRET" npm run dev
+```
+
+The browser warns about the certificate once for each of the two ports. While the LAN file is in use the issuer is
+`https://<ip>:4301/realms/phi`; `docker compose --env-file idp/.env -f idp/docker-compose.yml -p phi-idp up -d`
+returns to the loopback issuer. Both services listen on the LAN address: anyone on that network reaches them, so it
+runs for the test and is stopped afterwards.

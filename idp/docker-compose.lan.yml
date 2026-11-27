@@ -1,0 +1,13 @@
+# Keycloak over https on this machine's LAN address, for a test from another device (a phone, a browser that does not
+# reach loopback): added to docker-compose.yml by lan.sh, README.md "On the LAN". The issuer becomes
+# https://<IDP_LAN_IP>:4301/realms/phi while this runs; `up -d` without this file returns to the loopback issuer.
+services:
+  keycloak:
+    environment:
+      KC_HOSTNAME: https://${IDP_LAN_IP:?the LAN address}:4301
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/lan-tls/cert.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/lan-tls/key.pem
+    volumes:
+      - ../.local/lan-tls:/opt/keycloak/conf/lan-tls:ro
+    ports:
+      - "${IDP_LAN_IP:?the LAN address}:4301:8443"

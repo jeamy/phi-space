@@ -5,7 +5,7 @@ phi-spaces: a space library with its own store; the optional `agent/` package co
 
 The package (`src/`, `test/`, `examples/`, `agent/`, `scripts/`, its `package.json` with the exports, the Rust core in
 `rust/`) lives in `spaces/`; the applications (`spaces-mmo/`, `codemode-chat/`, `codemode-forum/`, `help-site/`, `spaces-files/`) sit beside it, each with
-its own Rust workspace in `<app>/rust/`, and `docs/`, `de-docs/`, `checks/`, `idp/` (Keycloak in Docker on this machine, the OpenID provider of spaces-files and codemode-forum: `docker compose --env-file idp/.env -f idp/docker-compose.yml -p phi-idp up -d`, `idp/README.md`; plan `docs/forum-seite-plan-2026-11-26.en.md`) and the `.env` stay at the repository root
+its own Rust workspace in `<app>/rust/`, and `docs/`, `de-docs/`, `checks/`, `idp/` (Keycloak in Docker on this machine, the OpenID provider of spaces-files and codemode-forum: `docker compose --env-file idp/.env -f idp/docker-compose.yml -p phi-idp up -d`, `idp/README.md`; over https on the LAN for another device: `idp/lan.sh <ip>`, the forum with `FORUM_TLS_CERT`/`_KEY`; plan `docs/forum-seite-plan-2026-11-26.en.md`) and the `.env` stay at the repository root
 (docs/umstellung-verzeichnisse.en.md). Paths of the package below are from `spaces/`, paths of an application from
 the repository root. The root `package.json` is thin: it runs `checks/` and forwards every command of the package
 (`npm run typecheck`, `npm test`, …) to `spaces/`; the commands that take a path run the package's file from the root,

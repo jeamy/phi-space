@@ -12,6 +12,8 @@
 //      WebSocket need a signed-in person, a change also our origin and the session's CSRF token; the admin password is
 //      then taken only from scripts (x-admin-token), administrators are named by identity.
 import http from "node:http";
+import https from "node:https";
+import { readFileSync } from "node:fs";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ROOT } from "./env.ts";
 import { pathToFileURL } from "node:url";
@@ -64,7 +66,7 @@ const cookieOf = (req: http.IncomingMessage, name: string): string | undefined =
 
 /** `space`: the shared space (default FORUM_SPACE, else unix:/tmp/codemode-forum-space.sock). */
 /** `login`: the sign-in (default FORUM_LOGIN from the environment; null: open, as for play on one machine). */
-export async function startServer(o: { port?: number; bind?: string; space?: string; useNext?: boolean; dev?: boolean; login?: LoginConfig | null; /** the sign-in's clock (tests) */ now?: () => number } = {}) {
+export async function startServer(o: { port?: number; bind?: string; space?: string; useNext?: boolean; dev?: boolean; login?: LoginConfig | null; /** the sign-in's clock (tests) */ now?: () => number; /** PEM files; null: plain HTTP whatever the environment says */ tls?: { cert: string; key: string } | null } = {}) {
 	const login = o.login === undefined ? loginConfig() : o.login;
 	const conn = connectSpace(o.space);
 	const hub = new ForumHub(conn.space);
@@ -245,7 +247,12 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 		}
 	};
 
-	const server = http.createServer((req, res) => void handle(req, res));
+	// FORUM_TLS_CERT and FORUM_TLS_KEY (PEM files): https here, for a test from another device on the LAN (idp/README.md,
+	// "On the LAN"); on the servers nginx ends TLS and the forum speaks plain HTTP on a loopback address
+	const tlsCert = o.tls === undefined ? process.env.FORUM_TLS_CERT : o.tls?.cert, tlsKey = o.tls === undefined ? process.env.FORUM_TLS_KEY : o.tls?.key;
+	if (!tlsCert !== !tlsKey) throw new Error("FORUM_TLS_CERT and FORUM_TLS_KEY go together");
+	const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => void handle(req, res);
+	const server = tlsCert && tlsKey ? https.createServer({ cert: readFileSync(tlsCert), key: readFileSync(tlsKey), minVersion: "TLSv1.2" }, onRequest) : http.createServer(onRequest);
 	// upgraded sockets (our /ws and Next's HMR) are not closed by server.close(): track every socket and destroy them on shutdown
 	const conns = new Set<import("node:net").Socket>();
 	server.on("connection", (s) => { conns.add(s); s.on("close", () => conns.delete(s)); });
@@ -269,7 +276,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	const addr = server.address();
 	const actual = typeof addr === "object" && addr ? addr.port : port;
 	return {
-		url: `http://127.0.0.1:${actual}`, port: actual, hub,
+		url: `${tlsCert ? "https" : "http"}://127.0.0.1:${actual}`, port: actual, hub,
 		async close() { await hub.close(); await new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections?.(); for (const s of conns) s.destroy(); }); await presence.stop(); conn.close(); },
 	};
 }

@@ -26,3 +26,4 @@ process.env.FORUM_OIDC_CLIENT_ID = "";
 process.env.FORUM_OIDC_CLIENT_SECRET = "";
 process.env.FORUM_OIDC_CA = "";
 process.env.FORUM_ADMINS = "";
+process.env.FORUM_TLS_CERT = ""; process.env.FORUM_TLS_KEY = ""; // the suites speak plain HTTP
