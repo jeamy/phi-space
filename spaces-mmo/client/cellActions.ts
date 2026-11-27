@@ -1,7 +1,8 @@
 // What can be done on a cell of the map: one function for the mouse's menu and the action sheet of a touch screen. Every
 // entry is a text command; `run` is for what stays on the page. Pure, so it is tested without a browser.
 import type { CharView, ItemUses, ObjView, PlanView, Todo } from "../shared/frames.ts";
-import { BESIDE, REACH_POINT, SITE_REACH, MENU_NEAR, bedCapacity } from "../shared/rules.ts";
+import { BESIDE, FEED_FIRE, REACH_POINT, SITE_REACH, MENU_NEAR, bedCapacity } from "../shared/rules.ts";
+import { distToArea } from "../shared/grid.ts";
 
 export type CellEntry = { label: string; line: string; run?: () => void; /** asked before the line is sent (what cannot be undone) */ confirm?: string };
 export type CellInput = {
@@ -124,7 +125,8 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	}
 	const beside = [...objs.values()].filter((b) => b.location === room && self.x >= b.x - 1 && self.y >= b.y - 1 && self.x <= b.x + (b.w ?? 1) && self.y <= b.y + (b.h ?? 1));
 	const built = beside.filter((b) => b.kind === "building");
-	if ((o.fuels.includes(name) || o.fuels.includes(as)) && beside.some((b) => b.kind === "beacon")) { const fire = beside.find((b) => b.kind === "beacon")!; add({ label: `${name} nachlegen`, line: `put ${name} in ${fire.name}` }); }
+	const fire = [...objs.values()].find((b) => b.kind === "beacon" && b.location === room && distToArea(self, b) <= FEED_FIRE);
+	if ((o.fuels.includes(name) || o.fuels.includes(as)) && fire) { add({ label: `${name} nachlegen`, line: `put ${name} in ${fire.name}` }); }
 	for (const b of built) {
 		// for a day, at this building (the same line as its own menu's entry, which then stands for both)
 		if (b.herd && uses.feed[b.herd]?.includes(name)) add({ label: `${name} verfüttern (${HERD_NAME[b.herd] ?? "Tiere"})`, line: `füttere ${name} @${b.x},${b.y}` });
@@ -265,7 +267,7 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 			continue;
 		}
 		// a door to another room of this island without a road: plan one (server: road.ts; it says when the island is too young)
-		if (o.kind === "exit" && travel && !guest && o.location === room && o.x === at.x && o.y === at.y && o.toRoom) {
+		if (o.kind === "exit" && travel && !guest && o.location === room && covers(o, at) && o.toRoom) {
 			const isl = (id: string) => travel.rooms.find((r) => r.roomId === id)?.island;
 			const has = [...objs.values()].some((r) => r.kind === "road" && r.location === room && r.roadTo === o.toRoom);
 			if (!has && isl(o.toRoom) && isl(o.toRoom) === isl(room) && travel.roadEpoch && (travel.epochs?.[isl(room)!] ?? 1) >= travel.roadEpoch) entries.push({ label: `Straße nach ${o.to ?? o.name} planen`, line: `straße plane ${o.to ?? o.name}` });
@@ -472,9 +474,10 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 		}
 	}
 	for (const o of objs.values()) {
-		if (o.location !== room || o.x !== at.x || o.y !== at.y || o.kind === "zone" || o.kind === "scenery" || o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || o.kind === "tree") continue;
+		// a fire and an exit answer on every cell of their area (two by two at scale 2)
+		if (o.location !== room || !(o.kind === "beacon" || o.kind === "exit" ? covers(o, at) : o.x === at.x && o.y === at.y) || o.kind === "zone" || o.kind === "scenery" || o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || o.kind === "tree") continue;
 		if (o.kind === "item") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach) entries.push({ label: `${o.name} aufheben`, line: `get ${o.name}` }); }
-		if (o.kind === "beacon") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach && fuel) entries.push({ label: "Treibholz nachlegen", line: `put ${fuel.name} in ${o.name}` }); }
+		if (o.kind === "beacon") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (self && distToArea(self, o) <= FEED_FIRE && fuel) entries.push({ label: "Treibholz nachlegen", line: `put ${fuel.name} in ${o.name}` }); }
 		if (o.kind === "exit") entries.push({ label: `Nach ${o.to ?? o.name} gehen`, line: `go ${o.name}` });
 		// a hare, deer, fox or mouse from the fog: anyone scares it off from three cells (server: wild.ts)
 		if (o.kind === "animal") entries.push({ label: `${o.animal === "hase" || !o.animal ? `${o.name}n` : o.name} verscheuchen`, line: `scheuche ${o.animal ?? "hase"}` });
@@ -503,8 +506,8 @@ function cellEntriesAll({ at, chars, objs, self, room, me, plans, guest, fuel, o
 /** What a tap on `at` opens: the cell when something stands or lies there, or the own figure; null for free ground and exits,
  *  which are walked to. Only that cell counts: the cells beside a fire or a site must stay reachable. */
 export function tapTarget(at: { x: number; y: number }, chars: Map<string, CharView>, objs: Map<string, ObjView>, room: string, me: string): { x: number; y: number } | null {
-	const here = [...chars.values()].some((f) => f.x === at.x && f.y === at.y) || [...objs.values()].some((o) => o.location === room && !o.through && (AREA.has(o.kind) ? covers(o, at) : o.kind !== "exit" && o.x === at.x && o.y === at.y));
-	if ([...objs.values()].some((o) => o.kind === "exit" && o.location === room && o.x === at.x && o.y === at.y)) return null;
+	const here = [...chars.values()].some((f) => f.x === at.x && f.y === at.y) || [...objs.values()].some((o) => o.location === room && !o.through && (AREA.has(o.kind) || o.kind === "beacon" ? covers(o, at) : o.kind !== "exit" && o.x === at.x && o.y === at.y));
+	if ([...objs.values()].some((o) => o.kind === "exit" && o.location === room && covers(o, at))) return null;
 	return here ? at : null;
 }
 
@@ -520,6 +523,6 @@ export function cellAbout(at: { x: number; y: number }, chars: Map<string, CharV
 	if (area) return { title: area.owner ? `${area.name} von ${area.owner}` : area.name, article: (area.plan && HELP_OF_PLAN[area.plan]) || HELP_OF_KIND[area.kind] };
 	const figure = [...chars.values()].find((c) => c.x === at.x && c.y === at.y);
 	if (figure) return { title: figure.name };
-	const o = [...objs.values()].find((o) => o.location === room && o.x === at.x && o.y === at.y);
+	const o = [...objs.values()].find((o) => o.location === room && (o.kind === "beacon" || o.kind === "exit" ? covers(o, at) : o.x === at.x && o.y === at.y));
 	return o ? { title: o.name, article: HELP_OF_KIND[o.kind] } : {};
 }

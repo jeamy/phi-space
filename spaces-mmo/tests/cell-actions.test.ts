@@ -411,3 +411,23 @@ test("feeding is offered only while the animal eats: a sated herd or cat has no 
 	const big = labels(coop(now - DAY, now), { ...fed, patience: 24, rate: 24 } as typeof fed);
 	assert.ok(big.includes("Hühner einen Tag mit Weizen füttern (echt 1 Stunde)") && big.includes("Katze einen Tag mit Fisch füttern"), big.join(" | "));
 });
+
+test("a fire and an exit of two by two cells (scale 2) answer on each of their cells, and a fire is fed from beside its area", () => {
+	const fire = obj({ id: "fire", kind: "beacon", name: "Leuchtfeuer", x: 20, y: 20, w: 2, h: 2 }), door = obj({ id: "door2", kind: "exit", name: "west", x: 0, y: 8, w: 2, h: 2 });
+	const things = new Map([["fire", fire], ["door2", door]]);
+	for (const c of [{ x: 20, y: 20 }, { x: 21, y: 21 }]) {
+		assert.deepEqual(tapTarget(c, chars, things, "r", "me"), c, "a tap on the fire opens it");
+		assert.equal(cellAbout(c, chars, things, "r").title, "Leuchtfeuer");
+		assert.ok(cellEntries({ ...input, objs: things, at: c }).some((e) => e.line === "look Leuchtfeuer"));
+	}
+	assert.equal(tapTarget({ x: 22, y: 21 }, chars, things, "r", "me"), null, "beside it is ground");
+	for (const c of [{ x: 0, y: 8 }, { x: 1, y: 9 }]) {
+		assert.equal(tapTarget(c, chars, things, "r", "me"), null, "an exit is walked to");
+		assert.ok(cellEntries({ ...input, objs: things, at: c }).some((e) => e.line === "go west"));
+	}
+	// feeding: from the cell beside the area, not from two cells off
+	const wood = obj({ id: "w", kind: "item", name: "Treibholz", location: "me", x: 0, y: 0 });
+	const feeds = (x: number, y: number) => cellEntries({ ...input, self: char("me", "Mira", x, y), objs: new Map([...things, ["w", wood]]), fuel: wood, at: { x: 21, y: 20 } }).some((e) => e.line === "put Treibholz in Leuchtfeuer");
+	assert.equal(feeds(22, 21), true);
+	assert.equal(feeds(23, 21), false);
+});

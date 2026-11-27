@@ -771,7 +771,11 @@ impl Gateway {
 				st.sessions.insert(id.to_owned(), cid.clone());
 				*st.online.entry(cid).or_insert(0.0) += 1.0;
 			}
-			"Beacon" => self.set_obj(id, obj! { "id" => j::at(f, "beaconId").clone(), "kind" => "beacon", "name" => j::at(f, "name").clone(), "location" => j::at(f, "room").clone(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone() }),
+			"Beacon" => {
+				let mut v = obj! { "id" => j::at(f, "beaconId").clone(), "kind" => "beacon", "name" => j::at(f, "name").clone(), "location" => j::at(f, "room").clone(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone() };
+				with_area(&mut v, f);
+				self.set_obj(id, v)
+			}
 			"Cart" => {
 				let name = format!("Karren von {}", txt(&self.shown_name(j::s(f, "charId"), j::at(f, "ownerName"))));
 				self.set_obj(id, obj! { "id" => j::at(f, "cartId").clone(), "kind" => "cart", "name" => name, "ownerId" => j::at(f, "charId").clone(), "location" => j::at(f, "room").clone(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone(), "glyph" => obj! { "shape" => "square", "color" => "#8a6a44" }, "icon" => "items/karren.png" });

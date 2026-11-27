@@ -24,8 +24,8 @@ import { PROTOCOL, type ChatState } from "../shared/frames.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
-import { chooseTarget, MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
-import { distToArea, indexOf, walkGrid } from "../shared/grid.ts";
+import { chooseTarget, MAX_AHEAD, nextMove, screenToGrid, WALK_MS, Walker } from "./walk.ts";
+import { areaCells, distToArea, inArea, indexOf, walkGrid } from "../shared/grid.ts";
 import { cellAbout, cellEntries, type CellInput, hereEntries, itemEntries, KEEPERS, tapTarget, wildHere } from "./cellActions.ts";
 import { hintsFor, type Hint } from "./hints.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
@@ -44,7 +44,7 @@ const GONE_GRACE_MS = 2500;
 import { MapRenderer, type MapMode } from "./MapRenderer.tsx";
 import { TouchPad } from "./TouchPad.tsx";
 import { readMapMode, resetStartView } from "./viewPreferences.ts";
-import { REACH_POINT, FEED_FIRE, PASSAGE, SITE_REACH, TARGET_RINGS } from "../shared/rules.ts";
+import { REACH_POINT, FEED_FIRE, PASSAGE, SITE_REACH, STEP_LENGTH, TARGET_RINGS, useGridScale } from "../shared/rules.ts";
 
 /** A thing picked up shows in the pack at once; without word from the server for this long it lies there again. */
 const PICKUP_MS = 3_000;
@@ -445,7 +445,8 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	const carried = all.filter((o) => o.location === me);
 	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= REACH_POINT;
 	const near = all.filter(close);
-	const fire = [...objs.values()].find((o) => o.kind === "beacon" && close(o));
+	// a fire is fed from beside its area (server: default.ts put)
+	const fire = [...objs.values()].find((o) => o.kind === "beacon" && !!self && o.location === room && distToArea(self, o) <= FEED_FIRE);
 	const fuel = fuelIn(objs, me);
 	// the burn time left counts down while a fire is near
 	const [, tick] = useState(0);
@@ -818,6 +819,8 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 				// the gateway speaks another protocol than this page (a newer build): load anew, and do not connect again before
 				if (f.t === "reload") { dead = true; setStale(true); setTimeout(() => location.reload(), 1500); return; }
 				if (f.t === "hello") {
+					// the rules counted in cells follow the world's grid (shared/rules.ts); a hello of an older gateway has none
+					useGridScale(f.gridScale ?? 1);
 					// the server runs a newer build than this page: reload, so the page understands what it is sent
 					if (pageBuild && f.build && f.build !== pageBuild) { setStale(true); setTimeout(() => location.reload(), 1500); return; }
 					stopWalk.current(); endTravel(); retry = 0; setHello(f); setWind(f.wind); setWorldTime(f.worldTime ? { v: f.worldTime, at: Date.now() } : null);
@@ -928,13 +931,17 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		const exits = [...objs.values()].filter((o) => o.kind === "exit" && o.location === hello.room.roomId);
 		const passage = (c: { x: number; y: number }) => exits.some((e) => distToArea(c, e) <= PASSAGE);
 		const grid = walkGrid(hello.world.tiles, hello.room.ground), take = (x: number, y: number) => { const i = indexOf(grid, { x, y }); if (i >= 0) grid.open[i] = 0; };
-		for (const c of [...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)]) take(c.x, c.y);
+		for (const c of chars.values()) if (c.charId !== meRef.current && !passage(c)) take(c.x, c.y);
+		// a fire covers its area (at scale 2 two by two cells; server: occupancy.ts blockedIn)
+		for (const o of objs.values()) if (o.kind === "beacon" && o.location === hello.room.roomId) for (const c of areaCells(o)) take(c.x, c.y);
 		// sites and buildings cover their cells: nobody walks into them (server: occupancy.ts blockedIn)
 		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || o.kind === "tree" || (o.kind === "scenery" && !o.through)) && !(from && (o.kind === "bed" || o.kind === "field") && from.x >= o.x && from.y >= o.y && from.x < o.x + (o.w ?? 1) && from.y < o.y + (o.h ?? 1)) && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) take(o.x + dx, o.y + dy);
 		// the room as one grid (shared/grid.ts): a search looks each cell up by its index
 		return (x: number, y: number) => { const i = indexOf(grid, { x, y }); return i >= 0 && grid.open[i] === 1; };
 	}, []);
-	const step = useCallback((d: [number, number] | { x: number; y: number }) => {
+	// a move of up to STEP_LENGTH cells on one axis (two at scale 2), as far as its cells are free; `extend`: a held key's
+	// single step, taken as far as STEP_LENGTH allows
+	const step = useCallback((d: [number, number] | { x: number; y: number }, extend = false) => {
 		const from = walker.current.shown;
 		if (!from || !seen.current.hello) return;
 		const s = ws.current;
@@ -948,7 +955,14 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 			const horizontal = Math.abs(d.x - from.x) >= Math.abs(d.y - from.y);
 			moves = (horizontal ? [[dx, 0], [0, dy]] : [[0, dy], [dx, 0]] as Array<[number, number]>).filter(([a, b]) => a || b) as Array<[number, number]>;
 		}
-		const go = moves.find(([a, b]) => free(from.x + a, from.y + b));
+		// each cell of the move must be free; it ends before the first that is not
+		const reach = ([a, b]: [number, number]): [number, number] | null => {
+			const n = extend ? STEP_LENGTH : Math.min(STEP_LENGTH, Math.abs(a) + Math.abs(b)), u = [Math.sign(a), Math.sign(b)] as const;
+			let k = 0;
+			while (k < n && free(from.x + u[0] * (k + 1), from.y + u[1] * (k + 1))) k++;
+			return k ? [u[0] * k, u[1] * k] : null;
+		};
+		const go = moves.map(reach).find((m) => m !== null);
 		if (!go) return;
 		const st = walker.current.step(go[0], go[1], Date.now());
 		if (!st) return;
@@ -970,7 +984,10 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		const ground = seen.current.hello?.room.ground ?? [];
 		const here = (c: { x: number; y: number }) => c.x === start.x && c.y === start.y;
 		const end = chooseTarget(freeCells(), start, goal, Math.max(0, ...ground.map((row) => row.length)), ground.length, TARGET_RINGS) ?? undefined;
-		const way = () => { const from = walker.current.shown; return from && end ? nextStep(freeCells(), from, end) : null; };
+		// the way as moves of up to STEP_LENGTH cells that keep their direction while it stays on a shortest way
+		const w = Math.max(0, ...ground.map((row) => row.length)), h = ground.length;
+		let last: [number, number] | null = null;
+		const way = () => { const from = walker.current.shown; return from && end ? nextMove(freeCells(), from, end, w, h, STEP_LENGTH, last) : null; };
 		if (end && here(end)) return;
 		if (!way()) { if (!here(goal)) append({ kind: "error", text: "Dorthin führt kein Weg.", from: "", at: Date.now() }); return; }
 		setWalkGoal(end!);
@@ -978,6 +995,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 			const go = way();
 			if (!go) return stopWalk.current();
 			if (walker.current.ahead >= MAX_AHEAD) return; // the answers come first
+			last = go;
 			step(go);
 		};
 		tick();
@@ -1000,8 +1018,8 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const onGrid = useCallback((d: [number, number]): [number, number] => (modeRef.current === "3d" && viewAngle.current !== null ? screenToGrid(d, viewAngle.current) : d), []);
 	const hold = useCallback((d: [number, number]) => {
 		held.current = [...held.current.filter(([a, b]) => a !== d[0] || b !== d[1]), d];
-		step(onGrid(d));
-		holdTimer.current ??= setInterval(() => { const last = held.current.at(-1); if (last) step(onGrid(last)); }, WALK_MS);
+		step(onGrid(d), true);
+		holdTimer.current ??= setInterval(() => { const last = held.current.at(-1); if (last) step(onGrid(last), true); }, WALK_MS);
 	}, [step, onGrid]);
 	const release = useCallback((d?: [number, number]) => {
 		held.current = d ? held.current.filter(([a, b]) => a !== d[0] || b !== d[1]) : [];
@@ -1038,7 +1056,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		const near = [...objs.values()].filter((o) => o.location === hello.room.roomId && d(o) <= REACH_POINT);
 		const item = near.filter((o) => o.kind === "item").sort((a, b) => d(a) - d(b))[0];
 		if (item) return pickUp(item);
-		const fire = near.find((o) => o.kind === "beacon");
+		const fire = [...objs.values()].find((o) => o.kind === "beacon" && o.location === hello.room.roomId && distToArea(self, o) <= FEED_FIRE);
 		const fuel = fuelIn(objs, me);
 		if (fire && fuel) return send(`put ${fuel.name} in ${fire.name}`);
 		append({ kind: "error", text: "Hier liegt nichts zum Aufheben.", from: "", at: Date.now() });
@@ -1140,7 +1158,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		const item = [...objs.values()].find((o) => o.kind === "item" && o.location === room && o.x === at.x && o.y === at.y);
 		if (item) { fetching.current = { id: item.id, until: Date.now() + FETCH_MS }; walkTo(at); return; }
 		// a fire out of reach: to it, "Hier möglich" then offers to feed it
-		const fire = [...objs.values()].find((o) => o.kind === "beacon" && o.location === room && o.x === at.x && o.y === at.y), own = chars.get(me);
+		const fire = [...objs.values()].find((o) => o.kind === "beacon" && o.location === room && inArea(o, at)), own = chars.get(me);
 		if (fire && own && distToArea(own, fire) > FEED_FIRE) { walkTo(at); return; }
 		if (hit) { stopWalk.current(); setMenu({ x: at.x, y: at.y, left: lastPress.current.x, top: lastPress.current.y }); return; }
 		walkTo({ x, y });

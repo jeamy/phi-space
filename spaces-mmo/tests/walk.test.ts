@@ -1,7 +1,7 @@
 // The own character's walk on the page (client/walk.ts): ahead of the server, matched by step numbers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chooseTarget, MAX_AHEAD, nextStep, RESYNC_MS, screenToGrid, Walker } from "../client/walk.ts";
+import { chooseTarget, MAX_AHEAD, nextMove, nextStep, RESYNC_MS, screenToGrid, Walker } from "../client/walk.ts";
 
 const walker = (x = 5, y = 5) => { const w = new Walker(); w.reset({ x, y }); return w; };
 
@@ -107,4 +107,61 @@ test("the occupied goal beyond the water: one search instead of one per candidat
 	const counted = (x: number, y: number) => { looks++; return free(x, y); };
 	assert.equal(chooseTarget(counted, { x: 1, y: 1 }, mid, w, h, 6), null);
 	assert.ok(looks <= w * h + 169, `${looks} cells looked at (before: about 133,000)`);
+});
+
+/** The moves nextMove makes from `from` to `to`, each one applied (at most `max` of them). */
+function route(free: (x: number, y: number) => boolean, from: { x: number; y: number }, to: { x: number; y: number }, w: number, h: number, length: number, max = 10_000) {
+	const moves: Array<[number, number]> = [];
+	let at: { x: number; y: number } = { ...from }, last: [number, number] | null = null;
+	for (let m: [number, number] | null = nextMove(free, at, to, w, h, length, last); m && moves.length < max; m = nextMove(free, at, to, w, h, length, last)) {
+		assert.ok((m[0] === 0) !== (m[1] === 0) && Math.abs(m[0] + m[1]) <= length, `one axis, at most ${length}: ${m}`);
+		for (let k = 1; k <= Math.abs(m[0] + m[1]); k++) { const x: number = at.x + Math.sign(m[0]) * k, y: number = at.y + Math.sign(m[1]) * k; assert.ok(free(x, y) || (x === to.x && y === to.y), `a free cell ${x},${y}`); }
+		at = { x: at.x + m[0], y: at.y + m[1] };
+		moves.push(m); last = m;
+	}
+	const turns = moves.filter((m, i) => i > 0 && Math.sign(m[0]) !== Math.sign(moves[i - 1]![0])).length;
+	return { at, moves, cells: moves.reduce((n, m) => n + Math.abs(m[0]) + Math.abs(m[1]), 0), turns };
+}
+const open = (w: number, h: number) => (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h;
+
+test("the way as moves of up to two cells: a shortest way that bends once in the open, single steps only for odd remainders", () => {
+	const free = open(72, 48);
+	// straight: two cells per move
+	const straight = route(free, { x: 0, y: 0 }, { x: 40, y: 0 }, 72, 48, 2);
+	assert.deepEqual([straight.at, straight.moves.length, straight.cells, straight.turns], [{ x: 40, y: 0 }, 20, 40, 0]);
+	// diagonal: one bend, as many moves as the straight way of the same length (the plan asks 90 % of its speed)
+	const diagonal = route(free, { x: 0, y: 0 }, { x: 20, y: 20 }, 72, 48, 2);
+	assert.deepEqual([diagonal.at, diagonal.moves.length, diagonal.cells, diagonal.turns], [{ x: 20, y: 20 }, 20, 40, 1]);
+	assert.ok(straight.moves.length / diagonal.moves.length >= 0.9);
+	// odd runs: one single step each
+	const odd = route(free, { x: 0, y: 0 }, { x: 5, y: 3 }, 72, 48, 2);
+	assert.deepEqual(odd.moves, [[2, 0], [2, 0], [1, 0], [0, 2], [0, 1]]);
+	// the corner to corner of the largest room: 118 cells
+	assert.equal(route(free, { x: 0, y: 0 }, { x: 71, y: 47 }, 72, 48, 2).cells, 118);
+	// at scale 1 the same way in single steps
+	const single = route(open(24, 16), { x: 0, y: 0 }, { x: 5, y: 3 }, 24, 16, 1);
+	assert.deepEqual([single.cells, single.moves.length, single.turns], [8, 8, 1]);
+});
+
+test("the way around walls: as long as the shortest, longer than 80 cells and over more than 1024 cells where the room asks it; none is none", () => {
+	// a serpentine of walls across a room of 72 × 48: every other column of walls open at the bottom or the top
+	const wall = (x: number, y: number) => x % 4 === 1 ? y < 47 : x % 4 === 3 ? y > 0 : false;
+	const free = (x: number, y: number) => open(72, 48)(x, y) && !wall(x, y);
+	const r = route(free, { x: 0, y: 0 }, { x: 70, y: 0 }, 72, 48, 2);
+	assert.equal(r.at.x, 70);
+	// 18 walls to go round, down and up 47 cells each: (70 + 18 · 47 · 2 = ) 1762 cells, the shortest way
+	assert.equal(r.cells, 70 + 18 * 47 * 2);
+	assert.ok(r.cells > 80);
+	// walled off: none
+	const shut = (x: number, y: number) => open(72, 48)(x, y) && x !== 36;
+	assert.equal(nextMove(shut, { x: 0, y: 0 }, { x: 70, y: 0 }, 72, 48, 2), null);
+	// there already: none
+	assert.equal(nextMove(free, { x: 4, y: 4 }, { x: 4, y: 4 }, 72, 48, 2), null);
+	// a goal that is not free itself (an exit the walk ends on) is walked onto
+	const exitAt = { x: 10, y: 0 }, notExit = (x: number, y: number) => open(24, 16)(x, y) && !(x === exitAt.x && y === exitAt.y);
+	assert.deepEqual(route(notExit, { x: 0, y: 0 }, exitAt, 24, 16, 2).at, exitAt);
+	// a figure in the way: the move ends before it, the next goes round
+	const figure = (x: number, y: number) => open(24, 16)(x, y) && !(x === 3 && y === 0);
+	const round = route(figure, { x: 0, y: 0 }, { x: 6, y: 0 }, 24, 16, 2);
+	assert.deepEqual([round.at, round.cells], [{ x: 6, y: 0 }, 8]);
 });

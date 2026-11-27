@@ -74,7 +74,8 @@ export class Walker {
 
 /** The first step of a shortest way from `from` to `to` over cells `free` allows (`to` itself need not be free when it is
  *  an exit the walk ends on: the caller says), or null when there is none or it is there. A way is searched anew at every
- *  step, so a figure that steps in is walked around. At most `limit` cells are looked at (a room has 384). */
+ *  step, so a figure that steps in is walked around. At most `limit` cells are looked at (a room has 384). The page walks
+ *  by nextMove since the grid switch; this one stays the reference of the tests and tests/perf/target-choice.ts. */
 export function nextStep(free: (x: number, y: number) => boolean, from: Cell, to: Cell, limit = 1024): [number, number] | null {
 	if (from.x === to.x && from.y === to.y) return null;
 	// from the goal back, so the first cell reached beside `from` is the step to take
@@ -94,6 +95,45 @@ export function nextStep(free: (x: number, y: number) => boolean, from: Cell, to
 	}
 	return null;
 }
+
+/** The next move of a walk from `from` to `to` over the cells `free` allows in a room of `w` × `h` (`to` need not be free:
+ *  an exit the walk ends on), or null when there is none or it is there. It is a shortest way, and among those it keeps
+ *  the direction of the `last` move while that stays on one, else takes the direction whose straight run along a
+ *  shortest way is longest (ties in the order right, left, down, up): so a way bends seldom, and its straight runs go
+ *  as moves of up to `length` cells (STEP_LENGTH: two at scale 2, docs/3d-welt-und-raster-plan-2026-11-21.en.md section 3,
+ *  "Path smoothing"). One search from the goal over the whole room (its area is the budget), anew at every move, so a
+ *  figure that steps in is walked around. */
+export function nextMove(free: (x: number, y: number) => boolean, from: Cell, to: Cell, w: number, h: number, length = 1, last: [number, number] | null = null): [number, number] | null {
+	if (from.x === to.x && from.y === to.y) return null;
+	const inRoom = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h;
+	if (!inRoom(from.x, from.y) || !inRoom(to.x, to.y)) return null;
+	const dist = new Int32Array(w * h).fill(-1), queue = new Int32Array(w * h), at = (x: number, y: number) => y * w + x;
+	const start = at(from.x, from.y);
+	dist[at(to.x, to.y)] = 0; queue[0] = at(to.x, to.y);
+	let tail = 1;
+	for (let i = 0; i < tail && dist[start] < 0; i++) {
+		const c = queue[i]!, x = c % w, y = (c - x) / w;
+		for (const [dx, dy] of DIRS) {
+			const nx = x + dx, ny = y + dy;
+			if (!inRoom(nx, ny)) continue;
+			const n = at(nx, ny);
+			if (dist[n]! >= 0 || (n !== start && !free(nx, ny))) continue;
+			dist[n] = dist[c]! + 1;
+			if (n !== start) queue[tail++] = n;
+		}
+	}
+	const d = dist[start]!;
+	if (d < 0) return null;
+	// how far a straight run in (dx, dy) goes down the way, cell by cell one nearer to the goal
+	const run = ([dx, dy]: readonly [number, number]) => { let k = 0; while (k < d) { const x = from.x + dx * (k + 1), y = from.y + dy * (k + 1); if (!inRoom(x, y) || dist[at(x, y)] !== d - k - 1) break; k++; } return k; };
+	let best: readonly [number, number] | null = null, bestRun = 0;
+	if (last && Math.abs(last[0]) + Math.abs(last[1]) > 0) { const u = [Math.sign(last[0]), Math.sign(last[1])] as const, k = run(u); if (k > 0) { best = u; bestRun = k; } }
+	if (!best) for (const dir of DIRS) { const k = run(dir); if (k > bestRun) { best = dir; bestRun = k; } }
+	if (!best) return null;
+	const n = Math.min(Math.max(1, length), bestRun);
+	return [best[0] * n, best[1] * n];
+}
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
 /** Where a tap at `goal` leads (App.tsx walkTo): the goal itself when it is free; else the first cell of the rings 1 to
  *  `rings` around it (ring by ring, row by row) that is the figure's own cell, or free and reachable from `start` over

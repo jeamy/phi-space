@@ -52,7 +52,9 @@ pub fn item_view(f: &Json, proto_icon: &dyn Fn(&str) -> Option<String>, w: &Json
 }
 
 pub fn exit_view(f: &Json, w: &Json) -> Json {
-	obj! { "id" => j::at(f, "exitId").clone(), "kind" => "exit", "name" => j::at(f, "name").clone(), "to" => where_to(w, f), "toRoom" => j::at(f, "destination").clone(), "location" => j::at(f, "location").clone(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone() }
+	let mut v = obj! { "id" => j::at(f, "exitId").clone(), "kind" => "exit", "name" => j::at(f, "name").clone(), "to" => where_to(w, f), "toRoom" => j::at(f, "destination").clone(), "location" => j::at(f, "location").clone(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone() };
+	with_area(&mut v, f);
+	v
 }
 
 /// The names in the list of who plays ("Gerade spielen 3: Anna (Graue Bucht), Bo (Fischerdorf)").
@@ -287,6 +289,16 @@ pub fn todos_for<'a>(char_id: &str, objs: impl Iterator<Item = &'a Json>, herd_o
 	Json::Array(out.into_iter().map(|(_, t)| t).collect())
 }
 
+/// The area of an exit or a fire where it covers more than one cell (at scale 2; one cell has none): `w` and `h` after the
+/// other fields (gateway.ts areaOf).
+pub fn with_area(v: &mut Json, f: &Json) {
+	if j::opt(f, "w").is_some() || j::opt(f, "h").is_some() {
+		let (w, h) = (j::opt(f, "w").cloned().unwrap_or(Json::from(1.0)), j::opt(f, "h").cloned().unwrap_or(Json::from(1.0)));
+		j::set(v, "w", w);
+		j::set(v, "h", h);
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -334,3 +346,4 @@ mod tests {
 		assert!(told(&b("huette", "Hütte", decay + H), None).is_empty(), "without a clock nothing that goes by the time");
 	}
 }
+

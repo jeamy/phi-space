@@ -95,7 +95,9 @@ const ATLAS_MS = 1_000;
 /** The characters a model plays (docs/modell-npcs.en.md: marked as AI wherever they appear). */
 const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(c.look ? { look: c.look } : {}), ...(c.aboard ? { aboard: { island: c.aboard.island, arriveWorldMs: c.aboard.arriveWorldMs, to: c.aboard.to, ...(c.aboard.from ? { from: c.aboard.from } : {}) } } : {}), ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}), ...(c.guest ? { guest: true as const } : {}) });
 const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>, w: WorldDef): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(f.icon ? { icon: `/assets/${w.id}/${f.icon}` } : protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}), ...(w.pack ? { load: loadOf(w, f.proto) } : {}), ...(w.pack?.bags?.[f.proto] ? { bag: w.pack.bags[f.proto] } : {}), ...(f.variety && !f.variety.name ? { cross: { id: f.variety.id, from: w.garden?.sorts.find((s) => s.seed === f.proto || s.yields.proto === f.proto)?.name ?? "", breeder: f.variety.breeder } } : {}) });
-const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), toRoom: f.destination, location: f.location, x: f.x, y: f.y });
+/** The area of an exit or a fire where it covers more than one cell (at scale 2; one cell has none, shared/grid.ts Area). */
+const areaOf = (f: { w?: number; h?: number }) => (f.w !== undefined || f.h !== undefined ? { w: f.w ?? 1, h: f.h ?? 1 } : {});
+const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), toRoom: f.destination, location: f.location, x: f.x, y: f.y, ...areaOf(f) });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),
 	// said to the viewer alone, or what its own figure did as the room is told ("$you() stellst 3 Brot her": „Du stellst …“;
 	// "jeamy erntet auf dem Acker …", told as an emote like most deeds); what it says (talk, channels) stays with the room's talk
@@ -566,7 +568,7 @@ export class Gateway {
 		}
 		else if (type === "Beacon") {
 			const b = fields as unknown as BeaconFields;
-			const o: ObjView = { id: b.beaconId, kind: "beacon", name: b.name, location: b.room, x: b.x, y: b.y };
+			const o: ObjView = { id: b.beaconId, kind: "beacon", name: b.name, location: b.room, x: b.x, y: b.y, ...areaOf(b) };
 			this.#setObj(id, o);
 		}
 		else if (type === "Cart") {
