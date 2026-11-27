@@ -189,9 +189,8 @@ Die Karte zeigt den Ort, an dem du gerade bist. Ein Klick lässt deine Figur dor
 
 | Eingabe | Wirkung |
 | --- | --- |
-| Klick auf ein Feld | Einen Schritt in diese Richtung (\`step dx dy\`) |
+| Klick auf ein Feld, am Handy ein Tipp | Den ganzen Weg dorthin, Schritt für Schritt (\`step dx dy\`); ein neuer Klick ändert das Ziel, eine Pfeiltaste hält an |
 | Rechtsklick → **Hierhin gehen** | Den ganzen Weg dorthin |
-| Tipp auf ein Feld | Am Handy den ganzen Weg dorthin, Schritt für Schritt; ein neuer Tipp ändert das Ziel |
 | Doppelklick auf ein Ding | Hingehen und aufheben, wenn es nahe liegt (Holz, Muschel, Tang …); am Handy reicht ein Tipp, auch von weit |
 | Rechtsklick oder langes Drücken | Menü zu diesem Feld (siehe unten) |
 | Klick auf ein Ausgangsfeld | Zum Ausgang gehen; im Menü des Feldes steht „Nach … gehen“ (\`go\`, von überall im Raum) |
@@ -299,9 +298,8 @@ The map shows the place you are in. A click sends your figure there. The right m
 
 | Input | Effect |
 | --- | --- |
-| Click a cell | One step that way (\`step dx dy\`) |
+| Click a cell, on a phone a tap | The whole way there, step by step (\`step dx dy\`); a new click changes the goal, an arrow key stops |
 | Right click → **Hierhin gehen** | The whole way there |
-| Tap a cell | On a phone the whole way there, step by step; a new tap changes the goal |
 | Double click on a thing | Walk there and pick it up when it lies close (wood, shell, kelp …); on a phone one tap is enough, from afar too |
 | Right click or long press | Menu for that cell (see below) |
 | Click an exit cell | Walk to the exit; the cell's menu has “Go to …” (\`go\`, from anywhere in the room) |

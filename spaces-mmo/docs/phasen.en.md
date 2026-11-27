@@ -97,8 +97,8 @@ bounded).
   is what remains of a choice of frames: since 2026-10-31 the game has one frame everywhere, the desktop too, and the page never scrolls; a phone on its side goes to full screen at the first touch. The canvas takes
   the frame's size, the camera follows the figure and leaves the sheet's height free, the sea goes on around the room,
   zoom steps are whole device pixels per art pixel (`fillZooms`). A tap walks the whole way by numbered steps (`nextStep`
-  in `client/walk.ts`; `move` would set the figure down at the end in one go), on the desktop a click stays one step and the
-  right click's menu opens as the same action sheet. What is on a cell comes from `client/cellActions.ts`, shown as an action sheet;
+  in `client/walk.ts`; `move` would set the figure down at the end in one go), on the desktop a click stayed one step (since 2026-11-27 it walks the whole way too,
+  a new click changes the goal, an arrow key ends it) and the right click's menu opens as the same action sheet. What is on a cell comes from `client/cellActions.ts`, shown as an action sheet;
   `client/Sheet.tsx` holds bag, log and chats in three heights; two fingers also turn the 3D view; `client/useBack.ts` makes the back gesture close the topmost
   layer. Help and commands are one page with two tabs, the world map a page of its own. Not yet checked on real devices;
   frame rate on a phone not measured. A hint leads to the home screen on iPhone (the only full screen there) and Android

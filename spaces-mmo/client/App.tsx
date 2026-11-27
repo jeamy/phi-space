@@ -970,8 +970,8 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		showOwn(walker.current.shown);
 	}, [showOwn, freeCells]);
 
-	// a tap on a touch screen walks the whole way: steps like a held key's, so the figure is seen walking and a new tap or the
-	// cross ends it at once. (`move` would set it down at the end in one go.) The way is searched anew at every step.
+	// a click or a tap walks the whole way: steps like a held key's, so the figure is seen walking and a new click or tap, an
+	// arrow key or the cross ends it at once. (`move` would set it down at the end in one go.) The way is searched anew at every step.
 	const [walkGoal, setWalkGoal] = useState<{ x: number; y: number } | null>(null);
 	const walkTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 	stopWalk.current = () => { if (walkTimer.current) clearInterval(walkTimer.current); walkTimer.current = null; setWalkGoal(null); };
@@ -1017,6 +1017,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const onTurn = useCallback((a: number) => { viewAngle.current = a; }, []);
 	const onGrid = useCallback((d: [number, number]): [number, number] => (modeRef.current === "3d" && viewAngle.current !== null ? screenToGrid(d, viewAngle.current) : d), []);
 	const hold = useCallback((d: [number, number]) => {
+		stopWalk.current(); // a key (or the pad) takes over from a clicked or tapped way
 		held.current = [...held.current.filter(([a, b]) => a !== d[0] || b !== d[1]), d];
 		step(onGrid(d), true);
 		holdTimer.current ??= setInterval(() => { const last = held.current.at(-1); if (last) step(onGrid(last), true); }, WALK_MS);
@@ -1068,19 +1069,20 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		send(`versetze ${o.id} ${o.x + m.dx} ${o.y + m.dy}`);
 	}, [objs, send]);
 
-	// a double click (or double tap) on a thing on the map: walk there (the first click already does) and pick it up as
-	// Space does, once the figure stands next to it
+	// a click on the map walks the whole way there, as a tap does on a phone (walkTo: step by step, a new click changes the
+	// goal, an arrow key ends it); a double click on a thing lying there walks to it and picks it up as Space does, once
+	// the figure stands next to it
 	const fetching = useRef<{ id: string; until: number } | null>(null);
 	const lastTap = useRef<{ x: number; y: number; at: number } | null>(null);
 	const onCell = useCallback((x: number, y: number) => {
 		const now = Date.now(), prev = lastTap.current;
 		lastTap.current = { x, y, at: now };
-		step({ x, y });
+		walkTo({ x, y });
 		if (!prev || prev.x !== x || prev.y !== y || now - prev.at > DOUBLE_MS || !hello) return;
 		lastTap.current = null;
 		const item = [...objs.values()].find((o) => o.kind === "item" && o.location === hello.room.roomId && o.x === x && o.y === y);
 		if (item) fetching.current = { id: item.id, until: now + FETCH_MS };
-	}, [step, objs, hello]);
+	}, [walkTo, objs, hello]);
 	// the large ship lies in this bay by the timetable (the world time the page shows): a thing on the water, for the eye
 	const liner = hello?.world.liner, stopAt = liner && hello ? liner.stops.findIndex((x) => x.room === hello.room.roomId) : -1, bay = stopAt >= 0;
 	const berthAt = useMemo(() => (bay && hello?.room.spawn ? berth(hello.room.ground, hello.room.spawn) : null), [bay, hello?.room]);
