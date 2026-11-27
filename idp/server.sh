@@ -10,8 +10,7 @@ URL=${IDP_URL:-https://id.eibrain.org}
 
 if [ ! -f .env ]; then
 	secret() { head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 40; }
-	umask 077
-	cat > .env <<EOF
+	(umask 077; cat > .env) <<EOF
 IDP_DB_PASSWORD=$(secret)
 IDP_ADMIN=admin
 IDP_ADMIN_PASSWORD=$(secret)
@@ -27,12 +26,14 @@ EOF
 	echo "wrote idp/.env with new secrets (the bootstrap admin's password is IDP_ADMIN_PASSWORD there)"
 fi
 
-mkdir -p realm-server
+# readable by Keycloak's user in the container (another uid under rootless docker); the file holds placeholders only
+mkdir -p realm-server && chmod 755 realm-server
 node -e '
 const fs = require("node:fs");
 const realm = JSON.parse(fs.readFileSync("realm/phi.json", "utf8"));
 delete realm.users;
-fs.writeFileSync("realm-server/phi.json", JSON.stringify(realm, null, 2) + "\n");
+fs.writeFileSync("realm-server/phi.json", JSON.stringify(realm, null, 2) + "\n", { mode: 0o644 });
+fs.chmodSync("realm-server/phi.json", 0o644);
 '
 
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.server.yml -p phi-idp up -d
