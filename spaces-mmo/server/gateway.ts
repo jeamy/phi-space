@@ -33,6 +33,7 @@ const NOTICES_SHOWN = 200;
 import type { CharView, ItemUses, PlanView, ObjView, MsgView, AtlasView, AtlasOwned, AtlasState, TradeView, ServerFrame, ClientFrame } from "../shared/frames.ts";
 import { PROTOCOL } from "../shared/frames.ts";
 import { gridScale, STEP_LENGTH } from "../shared/rules.ts";
+import { previewGround } from "../shared/grid.ts";
 export type { CharView, ItemUses, PlanView, ObjView, MsgView, AtlasView, AtlasOwned, AtlasState, TradeView, ServerFrame, ClientFrame } from "../shared/frames.ts";
 /** What things are good for in world `w`, sent with the page (the pack's buttons, client/hints.ts). */
 export function usesOf(w: WorldDef): ItemUses {
@@ -714,7 +715,9 @@ export class Gateway {
 
 	/** The overview: the rooms with a place on it (rooms builders dug have none) and the ways between them. */
 	#atlas(): AtlasView {
-		const rooms = [...this.#rooms.values()].filter((r) => r.map).map((r) => ({ roomId: r.roomId, name: r.name, island: r.island ?? "", x: r.map!.x, y: r.map!.y, ground: r.ground, fires: [...this.#objs.values()].filter((o) => o.kind === "beacon" && o.location === r.roomId).map(({ x, y }) => ({ x, y })), ...(this.w.market.rooms.includes(r.roomId) ? { market: true as const } : {}) }));
+		// the ground as a preview, one cell per gridScale × gridScale cells; the room's size and the fires stay in game cells
+		const sample = gridScale();
+		const rooms = [...this.#rooms.values()].filter((r) => r.map).map((r) => ({ roomId: r.roomId, name: r.name, island: r.island ?? "", x: r.map!.x, y: r.map!.y, w: Math.max(0, ...r.ground.map((row) => [...row].length)), h: r.ground.length, sample, ground: previewGround(r.ground, sample), fires: [...this.#objs.values()].filter((o) => o.kind === "beacon" && o.location === r.roomId).map((o) => ({ x: o.x, y: o.y, ...areaOf(o) })), ...(this.w.market.rooms.includes(r.roomId) ? { market: true as const } : {}) }));
 		const placed = new Set(rooms.map((r) => r.roomId)), links = new Map<string, [string, string]>();
 		for (const e of this.w.exits) if (placed.has(e.room) && placed.has(e.destination)) links.set([e.room, e.destination].sort().join(" "), [e.room, e.destination].sort() as [string, string]);
 		return { rooms, links: [...links.values()] };

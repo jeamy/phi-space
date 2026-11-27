@@ -46,6 +46,12 @@ test("a double step: two cells when both are free, one when the second is taken,
 			await a.p.leave();
 			const hello = await a.p.play();
 			assert.deepEqual([hello.gridScale, hello.protocol], [2, PROTOCOL]);
+			// the fire's view carries its area, and the atlas a preview of a cell per two by two with the room's real size
+			assert.deepEqual(hello.objs.filter((o) => o.kind === "beacon").map((o) => [o.w, o.h]), [[2, 2]]);
+			const atlas = (await a.p.until((f) => f.t === "atlas")) as Extract<ServerFrame, { t: "atlas" }>;
+			const bay = atlas.atlas.rooms.find((r) => r.roomId === "graue-bucht")!;
+			assert.deepEqual([bay.w, bay.h, bay.sample, bay.ground.length, [...bay.ground[0]!].length], [hello.room.ground[0]!.length, hello.room.ground.length, 2, hello.room.ground.length / 2, hello.room.ground[0]!.length / 2]);
+			assert.deepEqual(bay.fires.map((f) => [f.w, f.h]), [[2, 2]]);
 			const from = a.p.frames.length, send = (seq: number, dx: number, dy: number) => a.p.ws!.send(JSON.stringify({ t: "step", seq, dx, dy }));
 			send(1, 2, 0);
 			await a.p.until((f) => f.t === "char" && f.c.charId === a.me && f.ack === 1, 10_000, from);

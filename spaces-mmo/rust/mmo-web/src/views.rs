@@ -299,8 +299,44 @@ pub fn with_area(v: &mut Json, f: &Json) {
 	}
 }
 
+/// The ground of a room as the atlas shows it: one preview cell per `sample` × `sample` cells, clipped at the room's edge,
+/// each the tile most of its cells have, a tie to the tile met first in reading order (shared/grid.ts previewGround).
+pub fn preview_ground(ground: &Json, sample: f64) -> Json {
+	if sample <= 1.0 { return ground.clone(); }
+	let n = sample as usize;
+	let rows: Vec<Vec<char>> = ground.as_array().map_or(&[][..], Vec::as_slice).iter().map(|r| r.as_str().unwrap_or("").chars().collect()).collect();
+	let (h, w) = (rows.len(), rows.iter().map(Vec::len).max().unwrap_or(0));
+	let mut out = Vec::new();
+	for y0 in (0..h).step_by(n) {
+		let mut line = String::new();
+		for x0 in (0..w).step_by(n) {
+			let mut count: Vec<(char, usize)> = Vec::new();
+			for row in &rows[y0..h.min(y0 + n)] {
+				for &t in row.iter().take(w.min(x0 + n)).skip(x0) {
+					match count.iter_mut().find(|(c, _)| *c == t) { Some(e) => e.1 += 1, None => count.push((t, 1)) }
+				}
+			}
+			let mut best: Option<(char, usize)> = None;
+			for &(t, k) in &count { if best.is_none_or(|(_, m)| k > m) { best = Some((t, k)); } }
+			if let Some((t, _)) = best { line.push(t); }
+		}
+		out.push(Json::from(line));
+	}
+	Json::Array(out)
+}
+
 #[cfg(test)]
 mod tests {
+	#[test]
+	fn the_atlas_preview_takes_the_most_of_each_block_and_the_first_met_on_a_tie() {
+		let g = |rows: &[&str]| Json::Array(rows.iter().map(|r| Json::from(*r)).collect());
+		// the same vectors as tests/area.test.ts
+		assert_eq!(super::preview_ground(&g(&["ab", "ba"]), 2.0), g(&["a"]));
+		assert_eq!(super::preview_ground(&g(&["ba", "ab"]), 2.0), g(&["b"]));
+		assert_eq!(super::preview_ground(&g(&["aab", "abb", "ccc"]), 2.0), g(&["ab", "cc"]));
+		assert_eq!(super::preview_ground(&g(&["~~.", "~.."]), 1.0), g(&["~~.", "~.."]));
+	}
+
 	use super::*;
 
 	/// The thirst goes by the patience as in the engine (tests/todos.test.ts); a sponsor is told when the bed gets dry.

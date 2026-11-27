@@ -51,6 +51,9 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 		return { x0: Math.min(...xs), y0: Math.min(...ys), cols: Math.max(...xs) - Math.min(...xs) + 1, rows: Math.max(...ys) - Math.min(...ys) + 1 };
 	}, [atlas]);
 	const at = (r: { x: number; y: number }) => ({ px: (r.x - box.x0) * W, py: (r.y - box.y0) * H });
+	/** A room's game cells in preview cells, the one conversion (a preview cell is `sample` × `sample` game cells; an older
+	 *  frame has none: 1). */
+	const img = (r: { sample?: number }, v: number) => v / (r.sample ?? 1);
 	// the ground, drawn once into an offscreen canvas
 	const ground = useMemo(() => {
 		if (typeof document === "undefined") return null;
@@ -116,9 +119,11 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 			if (fog) { g.fillStyle = `rgba(205,210,220,${0.16 * fog})`; g.fillRect(px * s, py * s, W * s, H * s); }
 			const lit = state?.lit.includes(r.roomId);
 			for (const f of r.fires) {
-				g.beginPath(); g.arc((px + f.x + 0.5) * s, (py + f.y + 0.5) * s, lit ? 7 : 4, 0, Math.PI * 2);
+				// at the middle of its area (two by two cells at scale 2)
+				const fx = (px + img(r, f.x + (f.w ?? 1) / 2)) * s, fy = (py + img(r, f.y + (f.h ?? 1) / 2)) * s;
+				g.beginPath(); g.arc(fx, fy, lit ? 7 : 4, 0, Math.PI * 2);
 				g.fillStyle = lit ? DOTS[1][0] : DOTS[2][0]; g.fill();
-				if (lit) { g.beginPath(); g.arc((px + f.x + 0.5) * s, (py + f.y + 0.5) * s, 14, 0, Math.PI * 2); g.fillStyle = "rgba(255,176,46,0.25)"; g.fill(); }
+				if (lit) { g.beginPath(); g.arc(fx, fy, 14, 0, Math.PI * 2); g.fillStyle = "rgba(255,176,46,0.25)"; g.fill(); }
 			}
 			// a market: a red dot in the room's lower right corner (the people's dots are lower left, the island's name over the top), ringed so it holds on any ground
 			if (r.market) { g.beginPath(); g.arc((px + W - 3) * s, (py + H - 3) * s, 5.5, 0, Math.PI * 2); g.fillStyle = DOTS[5][0]; g.fill(); g.lineWidth = 1.5; g.strokeStyle = "#fff7e0"; g.stroke(); }
@@ -127,7 +132,7 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 			dots.forEach((color, i) => { g.beginPath(); g.arc((px + 3 + i * 2.6) * s, (py + H - 3) * s, 3.2, 0, Math.PI * 2); g.fillStyle = color; g.fill(); });
 			if (r.roomId === state?.here) {
 				g.strokeStyle = "#ffffff"; g.lineWidth = page ? 6 : 3; g.strokeRect(px * s + 1.5, py * s + 1.5, W * s - 3, H * s - 3);
-				here = { x: (px + (me?.x ?? W / 2)) * s, y: (py + (me?.y ?? H / 2)) * s };
+				here = { x: (px + (me ? img(r, me.x) : W / 2)) * s, y: (py + (me ? img(r, me.y) : H / 2)) * s };
 			}
 		}
 		// what the player owns: a small square each, on its cell, without a frame (many side by side stay apart)
@@ -136,7 +141,7 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 			if (!r) continue;
 			const { px, py } = at(r);
 			g.fillStyle = MINE[m.kind].color;
-			g.fillRect((px + m.x) * s - 5, (py + m.y) * s - 5, 10, 10);
+			g.fillRect((px + img(r, m.x)) * s - 5, (py + img(r, m.y)) * s - 5, 10, 10);
 		}
 		// the picked target: outlined, and a dashed line to it from where the player stands (beaming goes this way)
 		const target = picked ? byId.get(picked) : null;

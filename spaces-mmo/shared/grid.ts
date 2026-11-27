@@ -153,3 +153,29 @@ export function besideArea(a: Area, corners = false): At[] {
 	if (corners) out.push({ x: a.x + w, y: a.y + h }, { x: a.x - 1, y: a.y + h }, { x: a.x + w, y: a.y - 1 }, { x: a.x - 1, y: a.y - 1 });
 	return out;
 }
+
+/** The ground of a room as the atlas shows it (docs/3d-welt-und-raster-plan-2026-11-21.en.md section 4, "Atlas"): one
+ *  preview cell per `sample` × `sample` cells, clipped at the room's edge, each the tile most of its cells have; a tie
+ *  goes to the tile met first in reading order. With `sample` 1 the ground itself. The same in Rust (mmo-web views.rs
+ *  preview_ground). */
+export function previewGround(ground: string[], sample: number): string[] {
+	if (sample <= 1) return ground;
+	const rows = ground.map((r) => [...r]), h = rows.length, w = Math.max(0, ...rows.map((r) => r.length));
+	const out: string[] = [];
+	for (let y0 = 0; y0 < h; y0 += sample) {
+		let line = "";
+		for (let x0 = 0; x0 < w; x0 += sample) {
+			// counted in the order the tiles are met (a Map keeps it), so the first of the most is the one met first
+			const count = new Map<string, number>();
+			for (let y = y0; y < Math.min(h, y0 + sample); y++) for (let x = x0; x < Math.min(w, x0 + sample); x++) {
+				const t = rows[y]![x];
+				if (t !== undefined) count.set(t, (count.get(t) ?? 0) + 1);
+			}
+			let best = "", most = 0;
+			for (const [t, n] of count) if (n > most) { most = n; best = t; }
+			line += best;
+		}
+		out.push(line);
+	}
+	return out;
+}

@@ -3,7 +3,7 @@
 // a finer grid. rust/mmo-engine/src/grid.rs `Area` has the same answers (its tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { areaCells, besideArea, distToArea, inArea } from "../shared/grid.ts";
+import { areaCells, besideArea, distToArea, inArea, previewGround } from "../shared/grid.ts";
 
 test("one cell: the point's distance, the four and eight neighbours in the old order", () => {
 	const p = { x: 5, y: 7 };
@@ -26,4 +26,12 @@ test("an area of 2 × 2: its cells, the distance to its nearest cell, its sides 
 	assert.deepEqual(besideArea(a), [{ x: 12, y: 4 }, { x: 12, y: 5 }, { x: 9, y: 4 }, { x: 9, y: 5 }, { x: 10, y: 6 }, { x: 11, y: 6 }, { x: 10, y: 3 }, { x: 11, y: 3 }]);
 	assert.deepEqual(besideArea(a, true).slice(8), [{ x: 12, y: 6 }, { x: 9, y: 6 }, { x: 12, y: 3 }, { x: 9, y: 3 }]);
 	for (const c of besideArea(a, true)) assert.equal(distToArea(c, a), 1);
+});
+
+test("the atlas preview: the tile most of each block has, the first met on a tie, clipped at the room's edge", () => {
+	// the same vectors as mmo-web views.rs
+	assert.deepEqual(previewGround(["ab", "ba"], 2), ["a"]);
+	assert.deepEqual(previewGround(["ba", "ab"], 2), ["b"]);
+	assert.deepEqual(previewGround(["aab", "abb", "ccc"], 2), ["ab", "cc"]);
+	assert.deepEqual(previewGround(["~~.", "~.."], 1), ["~~.", "~.."]);
 });

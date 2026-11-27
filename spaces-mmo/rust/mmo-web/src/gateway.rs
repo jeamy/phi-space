@@ -1081,8 +1081,13 @@ impl Gateway {
 		let market = j::a(j::at(w, "market"), "rooms");
 		let rooms: Vec<Json> = st.rooms.values().filter(|r| j::truthy(j::at(r, "map"))).map(|r| {
 			let rid = j::s(r, "roomId");
-			let mut o = obj_of(obj! { "roomId" => rid, "name" => j::at(r, "name").clone(), "island" => j::so(r, "island").unwrap_or(""), "x" => j::at(j::at(r, "map"), "x").clone(), "y" => j::at(j::at(r, "map"), "y").clone(), "ground" => j::at(r, "ground").clone(),
-				"fires" => Json::Array(st.atlas_objs.keys().filter_map(|id| st.objs.get(id)).filter(|o| j::s(o, "kind") == "beacon" && j::s(o, "location") == rid).map(|o| obj! { "x" => j::at(o, "x").clone(), "y" => j::at(o, "y").clone() }).collect()) });
+			// the ground as a preview, one cell per gridScale × gridScale cells; the room's size and the fires stay in game cells
+			let ground = j::at(r, "ground");
+			let rows = ground.as_array().map_or(&[][..], Vec::as_slice);
+			let (gw, gh) = (rows.iter().map(|row| row.as_str().unwrap_or("").chars().count()).max().unwrap_or(0), rows.len());
+			let mut o = obj_of(obj! { "roomId" => rid, "name" => j::at(r, "name").clone(), "island" => j::so(r, "island").unwrap_or(""), "x" => j::at(j::at(r, "map"), "x").clone(), "y" => j::at(j::at(r, "map"), "y").clone(),
+				"w" => gw as f64, "h" => gh as f64, "sample" => grid_scale(), "ground" => preview_ground(ground, grid_scale()),
+				"fires" => Json::Array(st.atlas_objs.keys().filter_map(|id| st.objs.get(id)).filter(|o| j::s(o, "kind") == "beacon" && j::s(o, "location") == rid).map(|o| { let mut f = obj! { "x" => j::at(o, "x").clone(), "y" => j::at(o, "y").clone() }; with_area(&mut f, o); f }).collect()) });
 			if market.iter().any(|m| m.as_str() == Some(rid)) { o.insert("market", Json::Bool(true)); }
 			Json::Object(o)
 		}).collect();
