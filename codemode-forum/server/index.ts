@@ -168,7 +168,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			// the repositories a task may name as a source: only an admin may, so only an admin learns their names
 			if (p === "/api/sources" && req.method === "GET") { const admin = await isAdmin(req, who); return json(res, 200, { repos: admin ? await hub.repos() : [], hosts: admin ? await hub.gitHosts() : [] }); }
 			// ---- admin panel: login with the password from .env, then the choice of models ----
-			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: (await isAdmin(req, who)), available: !auth && !!adminSecret() });
+			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: (await isAdmin(req, who)), available: !auth && !!adminSecret(), signIn: !!auth });
 			if (p === "/api/admin/login" && req.method === "POST") {
 				if (auth) return json(res, 404, { error: "Administrators are named by identity here (FORUM_ADMINS)" });
 				if (!loginTries(clientIp(req))) return json(res, 429, { error: "Too many login attempts; retry in a minute" });

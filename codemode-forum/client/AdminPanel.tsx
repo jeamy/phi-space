@@ -10,8 +10,8 @@ type AdminModel = { label: string; provider: string; id: string; name: string };
 type AdminState = { enabled: boolean; on: boolean; models: AdminModel[]; allowed: string[]; custom: boolean };
 
 const T = {
-	de: { title: "ADMIN", badge: "🔐 admin", login: "🔐 Admin-Login", tokenPh: "Admin-Passwort", signIn: "Anmelden", logout: "Abmelden", noToken: "Kein Admin-Passwort gesetzt (FORUM_ADMIN_PASSWORD in der .env).", agentsOn: "Modell-Agenten an", models: "Erlaubte Modelle", filter: "Modelle filtern …", save: "Speichern", reset: "Standard", resetTitle: "Zurück zur Auswahl aus FORUM_MODELS", saved: "Gespeichert.", none: "Keine Modelle mit Zugangsdaten (FORUM_LLM=1 und API-Schlüssel oder pi-CLI-Anmeldung).", count: (k: number, n: number) => `${k} von ${n}`, std: "Auswahl aus FORUM_MODELS" },
-	en: { title: "ADMIN", badge: "🔐 admin", login: "🔐 Admin login", tokenPh: "Admin password", signIn: "Sign in", logout: "Sign out", noToken: "No admin password set (FORUM_ADMIN_PASSWORD in .env).", agentsOn: "Model agents on", models: "Allowed models", filter: "Filter models …", save: "Save", reset: "Default", resetTitle: "Back to the choice of FORUM_MODELS", saved: "Saved.", none: "No models with credentials (FORUM_LLM=1 and an API key or the pi CLI login).", count: (k: number, n: number) => `${k} of ${n}`, std: "choice of FORUM_MODELS" },
+	de: { title: "ADMIN", badge: "🔐 admin", login: "🔐 Admin-Login", tokenPh: "Admin-Passwort", signIn: "Anmelden", logout: "Abmelden", noToken: "Kein Admin-Passwort gesetzt (FORUM_ADMIN_PASSWORD in der .env).", byIdentity: "Nur für Administratoren (FORUM_ADMINS in der .env nennt sie nach ihrer Anmeldung).", agentsOn: "Modell-Agenten an", models: "Erlaubte Modelle", filter: "Modelle filtern …", save: "Speichern", reset: "Standard", resetTitle: "Zurück zur Auswahl aus FORUM_MODELS", saved: "Gespeichert.", none: "Keine Modelle mit Zugangsdaten (FORUM_LLM=1 und API-Schlüssel oder pi-CLI-Anmeldung).", count: (k: number, n: number) => `${k} von ${n}`, std: "Auswahl aus FORUM_MODELS" },
+	en: { title: "ADMIN", badge: "🔐 admin", login: "🔐 Admin login", tokenPh: "Admin password", signIn: "Sign in", logout: "Sign out", noToken: "No admin password set (FORUM_ADMIN_PASSWORD in .env).", byIdentity: "For administrators only (FORUM_ADMINS in .env names them by their sign-in).", agentsOn: "Model agents on", models: "Allowed models", filter: "Filter models …", save: "Save", reset: "Default", resetTitle: "Back to the choice of FORUM_MODELS", saved: "Saved.", none: "No models with credentials (FORUM_LLM=1 and an API key or the pi CLI login).", count: (k: number, n: number) => `${k} of ${n}`, std: "choice of FORUM_MODELS" },
 } as const;
 
 async function call<R>(path: string, body?: unknown): Promise<R> {
@@ -31,7 +31,8 @@ function GroupBox({ all, some, onChange, label }: { all: boolean; some: boolean;
 /** `onSession`: whether this browser is signed in as admin (an admin names the budget of a run freely). */
 export function AdminPanel({ lang, onChanged, onSession }: { lang: Lang; onChanged: () => void; onSession?: (admin: boolean) => void }) {
 	const t = T[lang];
-	const [session, setSession] = useState<{ admin: boolean; available: boolean } | null>(null);
+	// signIn: the forum has a sign-in, administrators are named by identity (FORUM_ADMINS), no password login
+	const [session, setSession] = useState<{ admin: boolean; available: boolean; signIn?: boolean } | null>(null);
 	const [form, setForm] = useState(false);
 	const [token, setToken] = useState("");
 	const [state, setState] = useState<AdminState | null>(null);
@@ -43,7 +44,7 @@ export function AdminPanel({ lang, onChanged, onSession }: { lang: Lang; onChang
 
 	const load = async () => { const s = await call<AdminState>("/models"); setState(s); setChosen(new Set(s.allowed)); setOn(s.on); };
 	useEffect(() => {
-		void call<{ admin: boolean; available: boolean }>("/session").then((s) => { setSession(s); if (s.admin) void load().catch((e) => setMsg((e as Error).message)); }).catch(() => {});
+		void call<{ admin: boolean; available: boolean; signIn?: boolean }>("/session").then((s) => { setSession(s); if (s.admin) void load().catch((e) => setMsg((e as Error).message)); }).catch(() => {});
 	}, []);
 
 	const groups = useMemo(() => {
@@ -59,7 +60,8 @@ export function AdminPanel({ lang, onChanged, onSession }: { lang: Lang; onChang
 	return (
 		<div className="panel admin">
 			<h2>{t.title} {session.admin ? <span className="admin__badge">{t.badge}</span> : null}</h2>
-			{!session.available ? <div className="notice">{t.noToken}</div>
+			{session.signIn && !session.admin ? <div className="notice">{t.byIdentity}</div>
+			: !session.admin && !session.available ? <div className="notice">{t.noToken}</div>
 			: !session.admin ? (
 				form ? (
 					<form className="row" onSubmit={(e) => { e.preventDefault(); void run(async () => { await call("/login", { password: token }); setToken(""); setSession({ ...session, admin: true }); await load(); }); }}>
@@ -99,7 +101,7 @@ export function AdminPanel({ lang, onChanged, onSession }: { lang: Lang; onChang
 							</div>
 						</>
 					)}
-					<div className="row"><button type="button" className="btn" onClick={() => void run(async () => { await call("/logout", {}); setSession({ ...session, admin: false }); setState(null); setForm(false); })}>{t.logout}</button></div>
+					{session.signIn ? null : <div className="row"><button type="button" className="btn" onClick={() => void run(async () => { await call("/logout", {}); setSession({ ...session, admin: false }); setState(null); setForm(false); })}>{t.logout}</button></div>}
 				</>
 			) : null}
 			{msg ? <div className="notice">{msg}</div> : null}

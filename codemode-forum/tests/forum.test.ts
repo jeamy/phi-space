@@ -284,15 +284,15 @@ test("the admin logs in with the password, and only then chooses the models", as
 	process.env.FORUM_ADMIN_PASSWORD = "open sesame";
 	const srv = await startServer();
 	try {
-		const session = async (cookie = "") => (await (await fetch(`${srv.url}/api/admin/session`, { headers: { cookie } })).json()) as { admin: boolean; available: boolean };
-		assert.deepEqual(await session(), { admin: false, available: true });
+		const session = async (cookie = "") => (await (await fetch(`${srv.url}/api/admin/session`, { headers: { cookie } })).json()) as { admin: boolean; available: boolean; signIn: boolean };
+		assert.deepEqual(await session(), { admin: false, available: true, signIn: false });
 		assert.equal((await post(srv.url, "/api/admin/models", { allowed: THREE })).status, 403);
 		assert.equal((await post(srv.url, "/api/admin/login", { password: "wrong" })).status, 403);
 		const login = await post(srv.url, "/api/admin/login", { password: "open sesame" });
 		assert.equal(login.status, 200);
 		const cookie = login.cookie.split(";")[0]!;
 		assert.match(login.cookie, /HttpOnly; SameSite=Strict/);
-		assert.deepEqual(await session(cookie), { admin: true, available: true });
+		assert.deepEqual(await session(cookie), { admin: true, available: true, signIn: false });
 		// the cookie alone is not enough for a change: a cross-site form could send it
 		assert.equal((await post(srv.url, "/api/admin/models", { allowed: THREE }, { cookie })).status, 403);
 		const saved = await post(srv.url, "/api/admin/models", { allowed: THREE, on: true }, { cookie, "x-forum-admin": "1" });
@@ -309,6 +309,6 @@ test("the admin logs in with the password, and only then chooses the models", as
 		const spends = (await srv.stack.space.readAll({ type: "Spend", fields: { session: id } }, { limit: 20 })).map((e) => e.fields as unknown as Spend);
 		assert.deepEqual([spends.length, spends.every((x) => x.admin)], [10, true]);
 		assert.equal((await post(srv.url, "/api/admin/logout", {}, { cookie })).status, 200);
-		assert.deepEqual(await session(cookie), { admin: false, available: true });
+		assert.deepEqual(await session(cookie), { admin: false, available: true, signIn: false });
 	} finally { process.env.FORUM_ADMIN_PASSWORD = ""; await srv.close(); }
 });

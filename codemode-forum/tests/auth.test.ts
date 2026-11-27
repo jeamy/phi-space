@@ -158,6 +158,7 @@ test("administrators by identity; the admin password only from scripts", async (
 		await lea.signIn(idp, "lea");
 		assert.equal((await ada.request("GET", "/api/me")).json.admin, true);
 		assert.equal((await ada.request("GET", "/api/admin/session")).json.admin, true);
+		assert.equal((await ada.request("GET", "/api/admin/session")).json.signIn, true, "with a sign-in the panel names administrators by identity, not by the password");
 		assert.equal((await lea.request("GET", "/api/admin/session")).json.admin, false);
 		assert.equal((await lea.request("GET", "/api/admin/models")).status, 403);
 		assert.equal((await ada.request("GET", "/api/admin/models")).status, 200);
