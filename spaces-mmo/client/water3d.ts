@@ -3,9 +3,11 @@
 // shore comes from the room's grid: every water cell knows how many cells it is from the nearest land (`shoreDistances`),
 // which the surface reads as a small texture. Visual only.
 
+import { cellEdge } from "./cell3d.ts";
+
 type T = typeof import("three");
 
-/** How far out the shore still shows (cells): beyond it the water has its deep colour. */
+/** How far out the shore still shows (world units; `SHORE_REACH / e` cells, e a cell's edge): beyond it the water has its deep colour. */
 export const SHORE_REACH = 4;
 
 /** For every cell of the grid (row by row) how far it is from the nearest land, in cells: 0 on land, 1 beside it,
@@ -33,6 +35,7 @@ const HEAD = /* glsl */ `
 uniform float uWaterTime;
 uniform sampler2D uShore;
 uniform vec2 uRoom;
+uniform float uLine;
 uniform vec3 uShallow;
 uniform vec3 uDeep;
 varying vec3 vWaterPos;
@@ -46,8 +49,10 @@ float waterHeight( vec2 p ) {
 	return 0.5 * sin( dot( p, vec2( 0.8, 0.6 ) ) * 2.1 + t * 1.1 ) + 0.3 * sin( dot( p, vec2( -0.5, 0.86 ) ) * 3.7 - t * 1.5 )
 		+ 0.2 * sin( dot( p, vec2( 0.3, -0.95 ) ) * 6.3 + t * 2.2 ) + 0.45 * waterNoise( p * 4.0 + vec2( t * 0.3, -t * 0.22 ) ) + 0.25 * waterNoise( p * 9.0 - vec2( t * 0.4, t * 0.1 ) );
 }`;
-/** The shore's value at the waterline (the texture runs from 0 on land to 1 at SHORE_REACH; the line lies half a cell out). */
-const LINE = (0.5 / SHORE_REACH).toFixed(4);
+/** The shore's value at the waterline (the texture runs from 0 on land to 1 at SHORE_REACH; the line lies half a cell
+ *  out, `uLine` = waterLine(e)). */
+const LINE = "uLine";
+export const waterLine = (e = cellEdge()): number => (0.5 * e) / SHORE_REACH;
 const COLOUR = /* glsl */ `
 	float waterShore = texture2D( uShore, vWaterPos.xz / uRoom + 0.5 ).r;
 	float waterDeep = smoothstep( ${LINE}, 0.85, waterShore );
@@ -66,21 +71,22 @@ const NORMAL = /* glsl */ `
 		normal = normalize( ( viewMatrix * vec4( up, 0.0 ) ).xyz );
 	}`;
 
-/** `shoreDistances` as a texture, one texel a cell: 0 where `water` says no, 1 at SHORE_REACH cells from there. */
-export function shoreTexture(t: T, ground: readonly string[], water: (key: string) => boolean): import("three").DataTexture {
-	const h = ground.length, w = ground[0]?.length ?? 0, distances = shoreDistances(ground, water), data = new Uint8Array(w * h);
-	for (let i = 0; i < data.length; i++) data[i] = Math.round((distances[i]! / SHORE_REACH) * 255);
+/** `shoreDistances` as a texture, one texel a cell: 0 where `water` says no, 1 at SHORE_REACH world units from there (so
+ *  at scale 2 the shore has twice the texels per world unit). */
+export function shoreTexture(t: T, ground: readonly string[], water: (key: string) => boolean, e = cellEdge()): import("three").DataTexture {
+	const reach = SHORE_REACH / e, h = ground.length, w = ground[0]?.length ?? 0, distances = shoreDistances(ground, water, reach), data = new Uint8Array(w * h);
+	for (let i = 0; i < data.length; i++) data[i] = Math.round((distances[i]! / reach) * 255);
 	const texture = new t.DataTexture(data, Math.max(1, w), Math.max(1, h), t.RedFormat, t.UnsignedByteType);
 	texture.magFilter = texture.minFilter = t.LinearFilter; texture.needsUpdate = true;
 	return texture;
 }
 
 /** The material of a room's water surface (a face that looks up): `ground` gives the shore. It owns a small texture;
- *  `material.userData.dispose` frees it. */
-export function waterMaterial(t: T, ground: readonly string[], water: (key: string) => boolean): import("three").MeshStandardMaterial {
-	const h = ground.length, w = ground[0]?.length ?? 0, shore = shoreTexture(t, ground, water);
+ *  `material.userData.dispose` frees it. `e` is a cell's edge (cell3d.ts). */
+export function waterMaterial(t: T, ground: readonly string[], water: (key: string) => boolean, e = cellEdge()): import("three").MeshStandardMaterial {
+	const h = ground.length * e, w = (ground[0]?.length ?? 0) * e, shore = shoreTexture(t, ground, water, e);
 	const material = new t.MeshStandardMaterial({ color: 0xffffff, roughness: 0.07, metalness: 0, envMapIntensity: 1.25 });
-	const uniforms = { uWaterTime: time, uShore: { value: shore }, uRoom: { value: new t.Vector2(Math.max(1, w), Math.max(1, h)) }, uShallow: { value: new t.Color(0x4f9a94) }, uDeep: { value: new t.Color(0x0d3350) } };
+	const uniforms = { uWaterTime: time, uShore: { value: shore }, uRoom: { value: new t.Vector2(Math.max(e, w), Math.max(e, h)) }, uLine: { value: waterLine(e) }, uShallow: { value: new t.Color(0x4f9a94) }, uDeep: { value: new t.Color(0x0d3350) } };
 	material.onBeforeCompile = (shader) => {
 		Object.assign(shader.uniforms, uniforms);
 		shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vWaterPos;")

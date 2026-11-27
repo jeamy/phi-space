@@ -5,13 +5,14 @@
 // until the pictures have loaded (or where the page is served without them) a surface shows its plain colour.
 // Visual only.
 import { SHORE_REACH, shoreTexture } from "./water3d.ts";
+import { cellEdge } from "./cell3d.ts";
 import { withAo } from "./ao3d.ts";
 import type { TerraceLook } from "./terraces3d.ts";
 
 type T = typeof import("three");
 type Texture = import("three").Texture;
 
-/** The material of each tile kind: its folder, how many cells one picture covers, a tint (and a gain on it, where the
+/** The material of each tile kind: its folder, how many world units (cells of scale 1) one picture covers, a tint (and a gain on it, where the
  *  photograph is darker than the game's ground), and whether it gets wet near the water. */
 type Spec = { name: string; cells: number; tint: number; gain?: number; wet?: boolean };
 export const GROUND: Record<string, Spec> = {
@@ -61,15 +62,15 @@ const COLOUR = (wet: boolean) => /* glsl */ `
 /** The looks of a room's tile kinds: `look(key, plain)` gives a kind's three materials (top, rounded edge, wall), or
  *  null for a kind without a material here. `plain` is the colour it shows until its pictures are there. The looks own
  *  one small texture (how near the water is); `dispose` on any of the materials' userData frees it. */
-export function groundLooks(t: T, ground: readonly string[], water: (key: string) => boolean, anisotropy: number): (key: string, plain: number) => TerraceLook | null {
-	const h = ground.length, w = ground[0]?.length ?? 0;
+export function groundLooks(t: T, ground: readonly string[], water: (key: string) => boolean, anisotropy: number, e = cellEdge()): (key: string, plain: number) => TerraceLook | null {
+	const h = ground.length * e, w = (ground[0]?.length ?? 0) * e;
 	// for every land cell how far the water is: the water's own shore texture with land and water swapped
 	// (made with the first material: a room without any of these kinds makes none, and nothing would free it)
 	let near: import("three").DataTexture | null = null;
-	const uniforms = { uWet: { value: null as import("three").DataTexture | null }, uRoom: { value: new t.Vector2(Math.max(1, w), Math.max(1, h)) } };
+	const uniforms = { uWet: { value: null as import("three").DataTexture | null }, uRoom: { value: new t.Vector2(Math.max(e, w), Math.max(e, h)) } };
 	const make = (spec: Spec, plain: number, shade: number) => {
 		const material = new t.MeshStandardMaterial({ color: new t.Color(plain).multiplyScalar(shade), roughness: 0.95, metalness: 0 });
-		const wet = !!spec.wet, shore = near ??= shoreTexture(t, ground, (key) => !water(key));
+		const wet = !!spec.wet, shore = near ??= shoreTexture(t, ground, (key) => !water(key), e);
 		uniforms.uWet.value = shore;
 		material.onBeforeCompile = (shader) => {
 			Object.assign(shader.uniforms, uniforms);

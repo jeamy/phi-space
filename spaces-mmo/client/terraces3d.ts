@@ -3,31 +3,31 @@
 // plan, edges round in height; the middle of every cell keeps its height (terrain3d.ts), so nothing on it moves.
 // At the room's edge a terrace's corners stay square, so it stands flush on the block below (block3d.ts).
 import { outlineLoops, rounded, terraces, withHoles, type Pt } from "./terrace.ts";
+import { cellEdge, cornerCells, edgeSize } from "./cell3d.ts";
 
 type T = typeof import("three");
-
-/** How far a corner rounds in plan (cells). */
-export const CORNER = 0.42;
 
 export type TerraceLook = { top: import("three").Material; flank: import("three").Material; wall: import("three").Material };
 
 /** The terraces of a room as meshes, lowest first; `look(key)` gives each kind's materials (top, the rounded edge, the
- *  wall below it). The meshes are centred like the cells: cell x,y lies at x - w/2 .. x - w/2 + 1. */
-export function terraceMeshes(t: T, ground: readonly string[], kind: (key: string) => { height: number; water: boolean }, look: (key: string) => TerraceLook): import("three").Mesh[] {
+ *  wall below it). The meshes are centred like the cells (cell3d.ts): cell x,y lies at (x - w/2) e .. (x + 1 - w/2) e, `e`
+ *  the cell's edge in world units. The outlines are rounded in cells and extruded in world units, so the rounded edge,
+ *  the corners and the uvs (the materials repeat per world unit) are the same at every scale. */
+export function terraceMeshes(t: T, ground: readonly string[], kind: (key: string) => { height: number; water: boolean }, look: (key: string) => TerraceLook, e = cellEdge()): import("three").Mesh[] {
 	const h = ground.length, w = ground[0]?.length ?? 0;
 	const out: import("three").Mesh[] = [];
 	for (const terrace of terraces(ground, kind)) {
 		// corners on the room's edge stay square: rounded, they would leave a notch over the block's corner
 		const outside = (p: Pt) => p[0] <= 0 || p[1] <= 0 || p[0] >= w || p[1] >= h;
 		const shapes = withHoles(outlineLoops(w, h, terrace.at)).map(({ outer, holes }) => {
-			const shape = new t.Shape(rounded(outer, CORNER, 6, outside).map(([x, y]) => new t.Vector2(x, -y)));
-			for (const hole of holes) shape.holes.push(new t.Path(rounded(hole, CORNER, 6, outside).map(([x, y]) => new t.Vector2(x, -y))));
+			const shape = new t.Shape(rounded(outer, cornerCells(e), 6, outside).map(([x, y]) => new t.Vector2(x * e, -y * e)));
+			for (const hole of holes) shape.holes.push(new t.Path(rounded(hole, cornerCells(e), 6, outside).map(([x, y]) => new t.Vector2(x * e, -y * e))));
 			return shape;
 		});
 		if (!shapes.length) continue;
-		const { thick, size } = terrace, edge = thick > 0.005;
+		const { thick } = terrace, size = edgeSize(terrace.size, e), edge = thick > 0.005;
 		const geo = new t.ExtrudeGeometry(shapes, { depth: terrace.height - (edge ? thick : 0), steps: 1, curveSegments: 1, bevelEnabled: edge, bevelThickness: thick, bevelSize: size, bevelOffset: -size, bevelSegments: 5 });
-		const mesh = new t.Mesh(profile(t, geo, terrace.bottom, w, h), [look(terrace.key).top, look(terrace.key).flank, look(terrace.key).wall]);
+		const mesh = new t.Mesh(profile(t, geo, terrace.bottom, w * e, h * e), [look(terrace.key).top, look(terrace.key).flank, look(terrace.key).wall]);
 		mesh.userData.pick = true; mesh.userData.terrace = terrace.key;
 		out.push(mesh);
 	}
@@ -36,7 +36,7 @@ export function terraceMeshes(t: T, ground: readonly string[], kind: (key: strin
 
 /** An extruded terrace as the ground needs it: without the bevelled underside (it would show as a groove at the foot), its
  *  wall reaching down to `bottom`, lying with y up, and its faces in three groups: the top (0), the rounded edge (1, uvs
- *  from above, so the tile art runs on over it) and the upright wall (2). */
+ *  from above, so the tile art runs on over it) and the upright wall (2). `w` and `h` are the room's extent in world units. */
 function profile(t: T, geo: import("three").ExtrudeGeometry, bottom: number, w: number, h: number): import("three").BufferGeometry {
 	const pos = geo.getAttribute("position") as import("three").BufferAttribute, uv = geo.getAttribute("uv") as import("three").BufferAttribute;
 	const caps = new Set<number>();

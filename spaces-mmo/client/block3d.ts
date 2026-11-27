@@ -5,11 +5,12 @@ import { tile3d } from "./terrain3d.ts";
 import { fishBody, fishTail, tailRoot, type FishKind } from "./fish3d.ts";
 import { propMaterial } from "./props3d.ts";
 import { groundMaps } from "./ground3d.ts";
+import { cellEdge } from "./cell3d.ts";
 
 type T = typeof import("three");
 type Geo = import("three").BufferGeometry;
 
-/** How deep the block reaches below the ground (world units; a cell is 1). */
+/** How deep the block reaches below the ground (world units; a cell of scale 1 is 1). */
 export const BLOCK_DEPTH = 2.6;
 
 let strata: import("three").CanvasTexture | null = null;
@@ -66,7 +67,8 @@ function blobTexture(t: T): import("three").CanvasTexture {
  *  strata (v by height, so the bands line up along the whole side), the sea ones in another with a colour per vertex. */
 /** A border cell's sea side: its two ends and the way into the room (for the seabed and the fish behind it). */
 export type SeaEdge = { ax: number; az: number; bx: number; bz: number; ix: number; iz: number };
-export function sides(t: T, ground: string[], water: (key: string) => boolean, depth: number): { land: Geo; sea: Geo; bed: Geo; edges: SeaEdge[] } {
+/** `e` is a cell's edge in world units (cell3d.ts): the quads are a cell long, the strata and the seabed in world units. */
+export function sides(t: T, ground: string[], water: (key: string) => boolean, depth: number, e = cellEdge()): { land: Geo; sea: Geo; bed: Geo; edges: SeaEdge[] } {
 	const h = ground.length, w = ground[0]?.length ?? 0;
 	const land = { pos: [] as number[], uv: [] as number[] }, sea = { pos: [] as number[], col: [] as number[] };
 	const bed = { pos: [] as number[], col: [] as number[] }, edges: SeaEdge[] = [];
@@ -93,14 +95,15 @@ export function sides(t: T, ground: string[], water: (key: string) => boolean, d
 		}
 		else { land.pos.push(...p); const u0 = ax + az, u1 = bx + bz; land.uv.push(u1, depth, u0, depth, u1, 0, u0, depth, u0, 0, u1, 0); }
 	};
-	const x0 = -w / 2, z0 = -h / 2;
+	// a cell's border in world units, n cells from the room's west (north) edge
+	const bx = (n: number) => (n - w / 2) * e, bz = (n: number) => (n - h / 2) * e;
 	for (let x = 0; x < w; x++) {
-		quad(x0 + x + 1, z0, x0 + x, z0, water(ground[0]![x]!), 0, 1); // north, facing -z
-		quad(x0 + x, z0 + h, x0 + x + 1, z0 + h, water(ground[h - 1]![x]!), 0, -1); // south, facing +z
+		quad(bx(x + 1), bz(0), bx(x), bz(0), water(ground[0]![x]!), 0, 1); // north, facing -z
+		quad(bx(x), bz(h), bx(x + 1), bz(h), water(ground[h - 1]![x]!), 0, -1); // south, facing +z
 	}
 	for (let y = 0; y < h; y++) {
-		quad(x0, z0 + y, x0, z0 + y + 1, water(ground[y]![0]!), 1, 0); // west, facing -x
-		quad(x0 + w, z0 + y + 1, x0 + w, z0 + y, water(ground[y]![w - 1]!), -1, 0); // east, facing +x
+		quad(bx(0), bz(y), bx(0), bz(y + 1), water(ground[y]![0]!), 1, 0); // west, facing -x
+		quad(bx(w), bz(y + 1), bx(w), bz(y), water(ground[y]![w - 1]!), -1, 0); // east, facing +x
 	}
 	const a = new t.BufferGeometry(); a.setAttribute("position", new t.Float32BufferAttribute(land.pos, 3)); a.setAttribute("uv", new t.Float32BufferAttribute(land.uv, 2)); a.computeVertexNormals();
 	const b = new t.BufferGeometry(); b.setAttribute("position", new t.Float32BufferAttribute(sea.pos, 3)); b.setAttribute("color", new t.Float32BufferAttribute(sea.col, 3)); b.computeVertexNormals();
@@ -108,11 +111,11 @@ export function sides(t: T, ground: string[], water: (key: string) => boolean, d
 	return { land: a, sea: b, bed: c, edges };
 }
 
-/** The block under a room's tiles: its sides and the shadow it casts on the void below. */
-export function blockUnder(t: T, ground: string[], tiles: Record<string, { walk: boolean }>, depth = BLOCK_DEPTH, anisotropy = 4): import("three").Group {
-	const group = new t.Group(), h = ground.length, w = ground[0]?.length ?? 0;
+/** The block under a room's tiles: its sides and the shadow it casts on the void below; `e` a cell's edge (cell3d.ts). */
+export function blockUnder(t: T, ground: string[], tiles: Record<string, { walk: boolean }>, depth = BLOCK_DEPTH, anisotropy = 4, e = cellEdge()): import("three").Group {
+	const group = new t.Group(), h = ground.length * e, w = (ground[0]?.length ?? 0) * e;
 	const water = (key: string) => tile3d(key, !!tiles[key]?.walk).water;
-	const { land, sea, bed, edges } = sides(t, ground, water, depth);
+	const { land, sea, bed, edges } = sides(t, ground, water, depth, e);
 	group.add(new t.Mesh(land, rockSide(t, depth, anisotropy)));
 	// the seabed and its back wall first, then the sea's side over them: lighter at the surface, deep below, a little
 	// light of its own (the hemisphere's ground colour would turn a side face green), and clear enough to see the sand
@@ -129,9 +132,10 @@ export function blockUnder(t: T, ground: string[], tiles: Record<string, { walk:
 }
 
 /** A neighbour's block for the island level: a lid of flat tile colours at the tiles' heights (one merged geometry, no
- *  art), its sides, its shadow. Cheap enough to draw every room of an island at once. */
+ *  art), its sides, its shadow. Cheap enough to draw every room of an island at once. `ground` is the atlas's preview,
+ *  one cell per `sample` × `sample` game cells: one world unit at every scale (cell3d.ts). */
 export function islandBlock(t: T, ground: string[], tiles: Record<string, { walk: boolean }>, haze = 0, depth = BLOCK_DEPTH): import("three").Group {
-	const group = blockUnder(t, ground, tiles, depth), h = ground.length, w = ground[0]?.length ?? 0;
+	const group = blockUnder(t, ground, tiles, depth, 4, 1), h = ground.length, w = ground[0]?.length ?? 0;
 	const pos: number[] = [], col: number[] = [], c = new t.Color(), grey = new t.Color(0x8a919c);
 	const box = (x: number, z: number, top: number, colour: number) => {
 		c.setHex(colour).lerp(grey, Math.min(0.85, Math.max(0, haze)));
@@ -174,18 +178,20 @@ export function nameCard(t: T, name: string, people: number, here: boolean): imp
  *  school (the members share one path, each a little offset); the plaice glides over the sand slope. `pos`, `turn` and
  *  `beat` are where it is now, which way it looks and how its tail stands (swimFish). */
 export type Fish = { kind: FishKind; x: number; z: number; dx: number; dz: number; span: number; y: number; ix: number; iz: number; phase: number; speed: number; hx: number; hz: number; along: number; inward: number; scale: number; pos: { x: number; y: number; z: number }; turn: number; beat: number };
-/** Fish for the sea sides of the room's block: where each swims; `fishSchool` draws them, `swimFish` moves them. */
+/** Fish for the sea sides of the room's block: where each swims; `fishSchool` draws them, `swimFish` moves them. `w` and
+ *  `h0` are the room's extent in world units; the fish's number goes by the sea sides' length, not their cells. */
 export function fishFor(edges: SeaEdge[], w: number, h0: number, seed: number, depth = BLOCK_DEPTH): Fish[] {
 	if (!edges.length) return [];
 	let h = seed || 1;
 	const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 10_000) / 10_000; };
-	const units = Math.min(8, Math.max(2, Math.round(edges.length / 6))), out: Fish[] = [];
+	const length = edges.reduce((sum, e) => sum + Math.hypot(e.bx - e.ax, e.bz - e.az), 0);
+	const units = Math.min(8, Math.max(2, Math.round(length / 6))), out: Fish[] = [];
 	const bed = (inward: number) => -depth + 0.15 + (-0.3 + depth - 0.15) * (inward / 1.6);
 	for (let u = 0; u < units; u++) {
 		const e = edges[Math.floor(rnd() * edges.length)]!, k = rnd(), r = rnd();
 		const kind: FishKind = r < 0.45 ? "hering" : r < 0.78 ? "dorsch" : "scholle";
 		const members = kind === "hering" ? 4 + Math.floor(rnd() * 4) : 1;
-		const base = { kind, x: e.ax + (e.bx - e.ax) * k, z: e.az + (e.bz - e.az) * k, dx: e.bx - e.ax, dz: e.bz - e.az, span: 1 + rnd() * 2.5, ix: e.ix, iz: e.iz, phase: rnd() * Math.PI * 2, speed: (kind === "scholle" ? 0.12 : 0.25) + rnd() * 0.3, hx: w / 2 - 0.25, hz: h0 / 2 - 0.25 };
+		const base = { kind, x: e.ax + (e.bx - e.ax) * k, z: e.az + (e.bz - e.az) * k, dx: (e.bx - e.ax) / Math.hypot(e.bx - e.ax, e.bz - e.az), dz: (e.bz - e.az) / Math.hypot(e.bx - e.ax, e.bz - e.az), span: 1 + rnd() * 2.5, ix: e.ix, iz: e.iz, phase: rnd() * Math.PI * 2, speed: (kind === "scholle" ? 0.12 : 0.25) + rnd() * 0.3, hx: w / 2 - 0.25, hz: h0 / 2 - 0.25 };
 		const y = kind === "scholle" ? bed(0.32) + 0.03 : -0.4 - rnd() * (depth - 1.3);
 		for (let m = 0; m < members; m++) {
 			const scale = kind === "hering" ? 1.3 + rnd() * 0.3 : 1.4 + rnd() * 0.5;

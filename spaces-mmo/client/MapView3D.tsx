@@ -33,6 +33,8 @@ import { calendar, shownWorldMs, WORLD_HOUR_MS } from "../shared/worldtime.ts";
 import { fishItem, fishModel, type FishKind } from "./fish3d.ts";
 import { blockUnder, fishFor, fishSchool, islandBlock, nameCard, swimFish, type Fish, type SeaEdge } from "./block3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
+import { cellEdge, toCell, toWorld } from "./cell3d.ts";
+import { gridScale } from "../shared/rules.ts";
 
 type T = typeof import("three");
 type O3 = import("three").Object3D;
@@ -222,7 +224,7 @@ export function MapView3D(props: MapRendererProps) {
 					if (now - s.lightAt > 500) { s.lightAt = now; daylight(s, latest.current.worldTime ?? null); }
 					if (now - s.detailAt >= 150) { updateModelDetails(t, s.scene, s.camera, s.zoom); s.detailAt = now; }
 					// the occlusion anew when the room's things or plants changed, at most once a second
-					if (s.aoDue && s.ground && now - s.aoAt >= 1000) { s.aoDue = false; s.aoAt = now; const { w, h } = dims(s.room); s.ao.bake(s.scene, { x0: -w / 2, z0: -h / 2, w, d: h }, s.aoHide); }
+					if (s.aoDue && s.ground && now - s.aoAt >= 1000) { s.aoDue = false; s.aoAt = now; const { W, H } = extent(s.room); s.ao.bake(s.scene, { x0: -W / 2, z0: -H / 2, w: W, d: H }, s.aoHide); }
 					// the shadow map only when a caster moved; what stands still is drawn into it once a second (a model's
 					// level of detail, a thing moving slowly), at once when the sun moved (daylight) or the things changed
 					// (sync), and between those only the figures are drawn anew, over the kept still part (shadow3d.ts)
@@ -369,6 +371,8 @@ export function MapView3D(props: MapRendererProps) {
 }
 
 const dims = (room: MapRendererProps["room"]) => ({ w: room.ground[0]?.length ?? 0, h: room.ground.length });
+/** The room's extent in world units (cell3d.ts): its cells times a cell's edge `e`. */
+const extent = (room: MapRendererProps["room"]) => { const { w, h } = dims(room), e = cellEdge(); return { W: w * e, H: h * e, e }; };
 
 /** The ground (terraces3d.ts): the land as rounded terraces, one mesh per kind with the tile art on top and over its
  *  rounded edge, earth on its wall; the water as one surface under the whole room, so the rounded corners at the coast
@@ -402,24 +406,25 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 		top ??= waterMaterial(t, room.ground, (key) => kind(key).water);
 		return [side, side, top, side, side, side];
 	};
+	const { W, H, e } = extent(room);
 	if (main) {
-		const height = kind(main).height, box = new t.BoxGeometry(w - 0.004, height, h - 0.004);
-		// the top face's uvs in cells, so the tile art repeats once a cell
+		const height = kind(main).height, box = new t.BoxGeometry(W - 0.004, height, H - 0.004);
+		// the top face's uvs in world units, so the tile art repeats once a world unit
 		const uv = box.getAttribute("uv") as import("three").BufferAttribute;
-		for (let i = 8; i < 12; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h);
+		for (let i = 8; i < 12; i++) uv.setXY(i, uv.getX(i) * W, uv.getY(i) * H);
 		const sea = new t.Mesh(box, waterMaterials(main)); sea.position.y = height / 2; sea.userData.pick = true; sea.userData.water = true; group.add(sea);
 	}
 	let geometry: import("three").BoxGeometry | null = null;
 	for (const [key, cells] of wet) {
 		if (key === main) continue;
 		const mesh = new t.InstancedMesh(geometry ??= new t.BoxGeometry(1, 1, 1), waterMaterials(key), cells.length), matrix = new t.Matrix4();
-		cells.forEach((c, i) => { const height = surface(room, world, c.x, c.y); matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, height / 2, c.y - h / 2 + 0.5), new t.Quaternion(), new t.Vector3(1, Math.max(0.04, height), 1)); mesh.setMatrixAt(i, matrix); });
+		cells.forEach((c, i) => { const height = surface(room, world, c.x, c.y); matrix.compose(new t.Vector3(toWorld(c.x, w, e), height / 2, toWorld(c.y, h, e)), new t.Quaternion(), new t.Vector3(e, Math.max(0.04, height), e)); mesh.setMatrixAt(i, matrix); });
 		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); mesh.userData.pick = true; mesh.userData.water = true; group.add(mesh);
 	}
 	// the room as a diorama block: strata and sea under the tiles, its shadow on the void (block3d.ts)
 	const block = blockUnder(t, room.ground, world.tiles);
 	block.userData.block = true;
-	s.fish = fishFor(block.userData.seaEdges as SeaEdge[], w, h, stableHash(room.roomId));
+	s.fish = fishFor(block.userData.seaEdges as SeaEdge[], W, H, stableHash(room.roomId));
 	s.school = s.fish.length ? fishSchool(t, s.fish) : null;
 	if (s.school) { block.add(s.school.group); swimFish(s.fish, 0); s.school.draw(); }
 	// under the ground and the water nothing takes the room's occlusion: its heights lie over all of it (ao3d.ts)
@@ -436,12 +441,15 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 const WILD_SORTS = ["flower", "flower", "rose", "mist"] as const;
 /** The small plants of the ground, and a flower's colour where the world names none (plantGeometry's own). */
 const SMALL_PLANTS = new Set<string>(["flower", "herb", "grass", "fern"]), FLOWER_COLOUR = 0xf4f0e6;
+/** The decor that stands upright with a crown, and how near to one (world units) no plant of the page's own grows. */
+const UPRIGHT = new Set<string>(["tree", "conifer", "bush", "berrybush"]), CLEARANCE = 0.75;
 const BLOOM = [0xe8443a, 0xf08a24, 0xf2d23a, 0xf4f0e6, 0xe86aa8, 0xb04ad0, 0x5a6ee8, 0x4ab0e8, 0xd8344a, 0xffb0c8, 0x9a3ad0, 0xffe680];
 
 function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): import("three").Group {
-	const { t, room, world } = s, { w, h } = dims(room), plants = s.plantLooks;
+	const { t, room, world } = s, { w, h } = dims(room), plants = s.plantLooks, e = cellEdge(), g = gridScale();
 	const group = new t.Group(); group.userData.owned = true;
 	const materials = new Map<string, import("three").SpriteMaterial>();
+	const wx = (x: number) => toWorld(x, w, e), wz = (y: number) => toWorld(y, h, e);
 	// trees and bushes as models (props3d.ts), one instanced mesh per shape; turn and size come from the cell
 	// A mesh covers a patch of cells, not the room: the close level of detail is set per mesh by its distance and a
 	// budget of triangles (modelDetail3d.ts), so only the plants near the camera get their fine leaves. Trees and bushes
@@ -451,7 +459,8 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 		const key = room.decor?.[y]?.[x] ?? " ", d = world.decor?.[key];
 		if (!d?.model || covered.has(`${x},${y}`)) continue;
-		const look = placeLook(`${room.roomId}:${x}:${y}`), flower = d.model === "flower", patch = SMALL_PLANTS.has(d.model) ? 8 : 4;
+		// the patches cover the same ground at every scale (cells of scale 1)
+		const look = placeLook(`${room.roomId}:${x}:${y}`), flower = d.model === "flower", patch = (SMALL_PLANTS.has(d.model) ? 8 : 4) * g;
 		const at = `${d.model}:${look.variant}:${flower ? "" : d.tint ?? ""}:${Math.floor(x / patch)},${Math.floor(y / patch)}`;
 		const list = models.get(at) ?? []; list.push({ x, y, turn: look.turn, size: look.size, ...(flower ? { colour: d.tint ?? FLOWER_COLOUR } : {}) }); models.set(at, list);
 	}
@@ -461,18 +470,29 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 	const add = (key: string, c: { x: number; y: number; turn: number; size: number; dx: number; dz: number; colour?: number }) => { const l = extra.get(key) ?? []; l.push(c); extra.set(key, l); };
 	// the soft shadows under trees, bushes and palms: one instanced mesh for the room
 	const shadows: Array<{ x: number; y: number; z: number; size: number }> = [];
-	const shadow = (c: { x: number; y: number }, size: number) => shadows.push({ x: c.x - w / 2 + 0.5, y: surface(room, world, c.x, c.y) + 0.012, z: c.y - h / 2 + 0.5, size });
+	const shadow = (c: { x: number; y: number }, size: number) => shadows.push({ x: wx(c.x), y: surface(room, world, c.x, c.y) + 0.012, z: wz(c.y), size });
+	// the plants the page adds stay out of an upright plant's crown: no cell nearer to one than CLEARANCE (at scale 1 every
+	// other cell is farther, so nothing changes there)
+	const crowned = new Set<string>(), reach = Math.ceil(CLEARANCE / e);
+	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+		const d = world.decor?.[room.decor?.[y]?.[x] ?? " "];
+		if (!d?.model || !(UPRIGHT.has(d.model) || TREE_SORT_MODELS.has(d.model))) continue;
+		for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) if ((dx || dy) && Math.hypot(dx, dy) * e < CLEARANCE) crowned.add(`${x + dx},${y + dy}`);
+	}
+	// a quarter as likely per cell at scale 2 (a cell is a quarter of the ground), the thresholds whole: 28 in 100 and 7
+	// in 100 at scale 1, 28 in 400 and 7 in 400 at scale 2
+	const odds = 100 * g * g;
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 		const ground = room.ground[y]?.[x], decor = room.decor?.[y]?.[x] ?? " ";
-		if ((decor !== " " && world.decor?.[decor]) || covered.has(`${x},${y}`)) continue;
+		if ((decor !== " " && world.decor?.[decor]) || covered.has(`${x},${y}`) || crowned.has(`${x},${y}`)) continue;
 		const roll = stableHash(`${room.roomId}:${x}:${y}:bloom`);
-		if (ground === "," && roll % 100 < 28) {
+		if (ground === "," && roll % odds < 28) {
 			for (let k = 0; k < 1 + ((roll >>> 8) % 2); k++) {
 				const r = stableHash(`${room.roomId}:${x}:${y}:${k}`), sort = WILD_SORTS[(r >>> 4) % WILD_SORTS.length]!, colour = BLOOM[(r >>> 9) % BLOOM.length]!;
 				// one mesh per sort and shape: the blossom's colour is the instance's (props3d.ts, TINTED)
 				add(`${sort}:${(r >>> 14) % PLANT_VARIANTS}`, { x, y, turn: ((r >>> 17) % 628) / 100, size: 0.75 + ((r >>> 21) % 40) / 100, dx: (((r >>> 24) % 60) - 30) / 100, dz: (((r >>> 3) % 60) - 30) / 100, colour });
 			}
-		} else if (ground === "." && !free.has(`${x},${y}`) && roll % 100 < 7) {
+		} else if (ground === "." && !free.has(`${x},${y}`) && roll % odds < 7) {
 			add(`palm:${(roll >>> 8) % PLANT_VARIANTS}`, { x, y, turn: ((roll >>> 11) % 628) / 100, size: 0.85 + ((roll >>> 20) % 30) / 100, dx: 0, dz: 0 });
 		}
 	}
@@ -482,7 +502,7 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 		const mesh = new t.InstancedMesh(geo, propMaterial(t), cells.length);
 		const matrix = new t.Matrix4(), q = new t.Quaternion(), up = new t.Vector3(0, 1, 0), colour = new t.Color();
 		cells.forEach((c, i) => {
-			matrix.compose(new t.Vector3(c.x - w / 2 + 0.5 + c.dx, surface(room, world, c.x, c.y), c.y - h / 2 + 0.5 + c.dz), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix);
+			matrix.compose(new t.Vector3(wx(c.x) + c.dx * e, surface(room, world, c.x, c.y), wz(c.y) + c.dz * e), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix);
 			if (c.colour !== undefined) mesh.setColorAt(i, colour.setHex(c.colour));
 		});
 		mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
@@ -493,7 +513,7 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 		const mesh = new t.InstancedMesh(plantGeometry(t, model, Number(variant) % PLANT_VARIANTS, model === "flower" ? TINTED : tint ? Number(tint) : undefined), propMaterial(t), cells.length);
 		const matrix = new t.Matrix4(), q = new t.Quaternion(), up = new t.Vector3(0, 1, 0), colour = new t.Color();
 		cells.forEach((c, i) => {
-			matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y), c.y - h / 2 + 0.5), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix);
+			matrix.compose(new t.Vector3(wx(c.x), surface(room, world, c.x, c.y), wz(c.y)), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix);
 			if (c.colour !== undefined) mesh.setColorAt(i, colour.setHex(c.colour));
 		});
 		mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
@@ -509,7 +529,7 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 		const sprite = new t.Sprite(material), size = d.upright ? 1 : 0.6;
 		sprite.center.set(0.5, 0);
 		sprite.scale.set((d.w / world.tileSize) * size, (d.h / world.tileSize) * size, 1);
-		sprite.position.set(x - w / 2 + 0.5, surface(room, world, x, y), y - h / 2 + 0.5);
+		sprite.position.set(wx(x), surface(room, world, x, y), wz(y));
 		group.add(sprite);
 	}
 	return group;
@@ -532,18 +552,20 @@ function rowTick(s: Scene3D, now: number, props: MapRendererProps): boolean {
 				.sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0];
 			const water = (key: string) => tile3d(key, !!s.world.tiles[key]?.walk).water;
 			// a sail ends in a bay, which may have no jetty near the figure: then it lands on the shore before it
-			const near = jetty && c && (!sail || want.kind === "out" || Math.hypot(jetty.x - c.x, jetty.y - c.y) <= 4) ? jetty : undefined;
+			const near = jetty && c && (!sail || want.kind === "out" || Math.hypot(jetty.x - c.x, jetty.y - c.y) * cellEdge() <= 4) ? jetty : undefined;
 			const path = (near && rowPath(s.room.ground, water, near)) || (sail && c ? shorePath(s.room.ground, water, c) : null);
 			if (c && path) {
-				const { w, h } = dims(s.room), key = s.room.ground[Math.floor(path.moor.y)]?.[Math.floor(path.moor.x)] ?? "";
+				const { w, h } = dims(s.room), e = cellEdge(), key = s.room.ground[Math.floor(path.moor.y)]?.[Math.floor(path.moor.x)] ?? "";
 				const sea = tile3d(key, !!s.world.tiles[key]?.walk).height;
-				const v = (p: { x: number; y: number }) => new s.t.Vector3(p.x - w / 2, sea, p.y - h / 2);
+				// the paths are in cells (rowing3d.ts, sailing3d.ts), points on the grid's lines and between them
+				const v = (p: { x: number; y: number }) => new s.t.Vector3((p.x - w / 2) * e, sea, (p.y - h / 2) * e);
 				const fig = makeFigure(s.t, { id: me, skin: c.skin, own: true, ai: false, ...(c.look ? { style: c.look } : {}) });
 				if (sail) {
 					// out past the jetty's way to the open sea; in from the sea to the jetty or the shore (sailPlan: how long, how far)
 					const plan = sailPlan(want.mode, want.kind);
 					const len = Math.hypot(path.out.x - path.moor.x, path.out.y - path.moor.y) || 1, dir = { x: (path.out.x - path.moor.x) / len, y: (path.out.y - path.moor.y) / len };
-					const far = (k: number) => v({ x: path.moor.x + dir.x * k, y: path.moor.y + dir.y * k });
+					// plan.far in world units
+					const far = (k: number) => v({ x: path.moor.x + (dir.x * k) / e, y: path.moor.y + (dir.y * k) / e });
 					const [from, to] = want.kind === "out" ? [v(path.moor), far(plan.far)] : [far(plan.far), v(path.moor)];
 					const boat = sailboat(s.t);
 					seatSailor(fig); boat.group.add(fig.group);
@@ -715,7 +737,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		let e = s.objs.get(id);
 		// a site that became a building (or got further) is drawn anew
 		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
-		if (!e) { e = obj.kind === "track" ? track(s, obj) : obj.kind === "road" ? road(s, obj) : object(s.t, obj, me); plinth(s, obj, e.obj); prepareModelDetails(s.t, e.obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
+		if (!e) { e = obj.kind === "track" ? track(s, obj) : obj.kind === "road" ? road(s, obj) : object(s.t, worldSized(obj), me); plinth(s, obj, e.obj); prepareModelDetails(s.t, e.obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; }
 	}
@@ -741,7 +763,7 @@ function plinth(s: Scene3D, obj: ObjView, group: O3): void {
 	if (!AREA.has(obj.kind)) return;
 	const { top, bottom } = areaGround(s, obj), drop = top - bottom;
 	if (drop < 0.01) return;
-	const w = obj.w ?? 1, d = obj.h ?? 1;
+	const w = (obj.w ?? 1) * cellEdge(), d = (obj.h ?? 1) * cellEdge();
 	// its top a hair over the highest ground: level with it, the two fought for the same pixels and the grass flickered
 	// through the earth
 	const lift = 0.006;
@@ -751,8 +773,8 @@ function plinth(s: Scene3D, obj: ObjView, group: O3): void {
 
 function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 	if (obj.kind === "track" || obj.kind === "road") return new s.t.Vector3(); // its pieces stand where they lie
-	const v = at(s, obj.x, obj.y, 0);
-	v.x += ((obj.w ?? 1) - 1) / 2; v.z += ((obj.h ?? 1) - 1) / 2;
+	const v = at(s, obj.x, obj.y, 0), e = cellEdge();
+	v.x += (((obj.w ?? 1) - 1) / 2) * e; v.z += (((obj.h ?? 1) - 1) / 2) * e;
 	return v;
 }
 
@@ -761,16 +783,17 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 function track(s: Scene3D, obj: ObjView): Entry {
 	const t = s.t, group = new t.Group(); group.userData.owned = true;
 	// all sleepers are one mesh and all rails another: a mesh a piece was over a hundred draw calls for a line of 20 cells
-	const sleepers: Part[] = [], rails: Part[] = [];
+	const sleepers: Part[] = [], rails: Part[] = [], e = cellEdge(), g = gridScale();
 	for (const run of obj.runs ?? []) run.forEach((c, i) => {
 		const here = at(s, c.x, c.y, 0), { d1, d2 } = stepsAt(run, i);
-		// the piece's points are in cell units (x right, y down = world x, z)
-		if (i > 0 || !obj.fromStation) for (const k of sleeperSpots(d1, d2)) sleepers.push({ g: new t.BoxGeometry(0.1, 0.03, 0.42), c: 0x4a3522, p: [here.x + k.x, here.y + 0.02, here.z + k.y], r: [0, Math.atan2(k.ax, k.ay), 0] });
+		// the piece's points are in cell units (x right, y down = world x, z), times a cell's edge; the gauge and the
+		// sleepers' spacing stay in world units (at scale 2 one sleeper of a straight cell's two, two of a bend's three)
+		if (i > 0 || !obj.fromStation) for (const [n, k] of sleeperSpots(d1, d2).entries()) if (n % g === 0) sleepers.push({ g: new t.BoxGeometry(0.1, 0.03, 0.42), c: 0x4a3522, p: [here.x + k.x * e, here.y + 0.02, here.z + k.y * e], r: [0, Math.atan2(k.ax, k.ay), 0] });
 		for (const side of [0.12, -0.12]) {
-			const pts = railPoints(d1, d2, side);
+			const pts = railPoints(d1, d2, side / e);
 			for (let n = 0; n + 1 < pts.length; n++) {
-				const a = pts[n]!, b = pts[n + 1]!, len = Math.hypot(b.x - a.x, b.y - a.y);
-				rails.push({ g: new t.BoxGeometry(len + 0.02, 0.04, 0.04), c: 0x9aa0a8, p: [here.x + (a.x + b.x) / 2, here.y + 0.05, here.z + (a.y + b.y) / 2], r: [0, -Math.atan2(b.y - a.y, b.x - a.x), 0] });
+				const a = pts[n]!, b = pts[n + 1]!, len = Math.hypot(b.x - a.x, b.y - a.y) * e;
+				rails.push({ g: new t.BoxGeometry(len + 0.02, 0.04, 0.04), c: 0x9aa0a8, p: [here.x + ((a.x + b.x) / 2) * e, here.y + 0.05, here.z + ((a.y + b.y) / 2) * e], r: [0, -Math.atan2(b.y - a.y, b.x - a.x), 0] });
 			}
 		}
 	});
@@ -784,14 +807,15 @@ function track(s: Scene3D, obj: ObjView): Entry {
 function road(s: Scene3D, obj: ObjView): Entry {
 	const t = s.t, group = new t.Group(); group.userData.owned = true;
 	// every bed, slab and peg of the road is one mesh: a paved cell alone would be ten draw calls
-	const parts: Part[] = [], marks: Part[] = [], paved = obj.paved ?? 0;
+	const parts: Part[] = [], marks: Part[] = [], paved = obj.paved ?? 0, e = cellEdge();
 	(obj.runs?.[0] ?? []).forEach((c, i) => {
 		const here = at(s, c.x, c.y, 0);
+		// a cell's bed and its slabs are a cell wide; a peg and a mark keep their size
 		if (i < paved) {
-			parts.push({ g: new t.BoxGeometry(1, 0.03, 1), c: 0x6f675a, p: [here.x, here.y + 0.015, here.z], m: "none" });
-			for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) parts.push({ g: new t.BoxGeometry(0.28, 0.025, 0.28), c: (i + j + k) % 2 ? 0x9c9383 : 0x8f8676, p: [here.x - 0.32 + j * 0.32, here.y + 0.04, here.z - 0.32 + k * 0.32], m: "none" });
+			parts.push({ g: new t.BoxGeometry(e, 0.03, e), c: 0x6f675a, p: [here.x, here.y + 0.015, here.z], m: "none" });
+			for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) parts.push({ g: new t.BoxGeometry(0.28 * e, 0.025, 0.28 * e), c: (i + j + k) % 2 ? 0x9c9383 : 0x8f8676, p: [here.x + (-0.32 + j * 0.32) * e, here.y + 0.04, here.z + (-0.32 + k * 0.32) * e], m: "none" });
 		} else if (obj.roadState === "build") {
-			for (const [dx, dz] of [[-0.35, -0.35], [0.35, 0.35]] as const) parts.push({ g: new t.BoxGeometry(0.05, 0.22, 0.05), c: 0x6b4a2e, p: [here.x + dx, here.y + 0.11, here.z + dz] });
+			for (const [dx, dz] of [[-0.35, -0.35], [0.35, 0.35]] as const) parts.push({ g: new t.BoxGeometry(0.05, 0.22, 0.05), c: 0x6b4a2e, p: [here.x + dx * e, here.y + 0.11, here.z + dz * e] });
 		} else marks.push({ g: new t.CylinderGeometry(0.07, 0.07, 0.02, 8), c: 0xf0d060, p: [here.x, here.y + 0.02, here.z] });
 	});
 	if (marks.length) group.add(solidMesh(t, marks, "road-mark", 0.8, 0, 0x403010));
@@ -799,6 +823,14 @@ function road(s: Scene3D, obj: ObjView): Entry {
 	return { obj: group, target: new t.Vector3(), kind: "road", sig: bedSig(obj) };
 }
 
+/** An object's view with its area in world units (cell3d.ts): the models are made of world units, so at scale 2 an
+ *  area of 4 × 2 cells is the model of 2 × 1 at scale 1. A thing without an area keeps a cell of scale 1. */
+function worldSized(o: ObjView): ObjView {
+	const e = cellEdge();
+	return e === 1 ? o : { ...o, ...(o.w !== undefined ? { w: o.w * e } : {}), ...(o.h !== undefined ? { h: o.h * e } : {}) };
+}
+
+/** A thing's model; `obj` as worldSized gives it (its area in world units). */
 function object(t: T, obj: ObjView, me: string): Entry {
 	const group = new t.Group(); group.userData.owned = true;
 	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" || obj.kind === "building" || obj.kind === "tree" ? { sig: bedSig(obj) } : {}) };
@@ -855,8 +887,10 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		// the soil, the seeds, the stalks and the weeds are one mesh, the flower heads (a little smoother) another
 		const parts: Part[] = [{ g: new t.BoxGeometry(w * 0.92, 0.08, d * 0.92), c: 0x6b4a2e, p: [0, 0.04, 0] }], heads: Part[] = [], stem = 0x4f8a3a;
 		if (obj.fenced) group.add(propMesh(t, fenceGeometry(t, w, d))); // hares keep out (wild.ts)
+		// each plant in the middle of its cell of the bed (p.x, p.y cells from the bed's corner)
+		const edge = cellEdge();
 		for (const p of obj.plants ?? []) {
-			const px = p.x - (w - 1) / 2, pz = p.y - (d - 1) / 2;
+			const px = (p.x + 0.5) * edge - w / 2, pz = (p.y + 0.5) * edge - d / 2;
 			if (p.model) { const crop = propMesh(t, cropGeometry(t, p.model, p.stage, Number.parseInt(p.color.slice(1), 16))); crop.position.set(px, 0.08, pz); crop.rotation.y = placeLook(`${obj.id}:${p.x}:${p.y}`).turn; group.add(crop); continue; }
 			if (p.stage === 0) { parts.push({ g: new t.SphereGeometry(0.04, 6, 4), c: 0x2e1e10, p: [px, 0.1, pz] }); continue; }
 			const tall = p.stage === 1 ? 0.2 : p.stage === 2 ? 0.38 : 0.15;
@@ -1014,10 +1048,10 @@ function areaGround(s: Scene3D, o: ObjView): { top: number; bottom: number } {
 /** The world position of a cell, standing on its ground (or on the field, bed or building over it). */
 function at(s: Scene3D, x: number, y: number, above: number): import("three").Vector3 {
 	const { w, h } = dims(s.room);
-	return new s.t.Vector3(x - w / 2 + 0.5, (s.raised.get(`${x},${y}`) ?? surface(s.room, s.world, x, y)) + above, y - h / 2 + 0.5);
+	return new s.t.Vector3(toWorld(x, w), (s.raised.get(`${x},${y}`) ?? surface(s.room, s.world, x, y)) + above, toWorld(y, h));
 }
 
-/** The cells between two blocks on the island level. */
+/** The world units between two blocks on the island level. */
 const ISLAND_GAP = 5;
 /** The other rooms of the island this one lies on, as blocks round it at their places on the world map (AtlasView x, y:
  *  one step per room), each with a lid of flat tile colours greyed by its fog, and a name card with how many are there.
@@ -1026,7 +1060,7 @@ function buildIsland(s: Scene3D, atlas: AtlasView, state: AtlasState): import("t
 	const { t, room, world } = s, group = new t.Group(); group.userData.owned = true;
 	const here = atlas.rooms.find((r) => r.roomId === room.roomId);
 	if (!here) return group;
-	const { w, h } = dims(room), cards = new t.Group(); cards.userData.cards = true;
+	const { W: w, H: h } = extent(room), cards = new t.Group(); cards.userData.cards = true;
 	const mids: Array<{ x: number; z: number }> = [];
 	for (const r of atlas.rooms) {
 		if (r.island !== here.island) continue;
@@ -1093,7 +1127,7 @@ function islandCards(s: Scene3D, atlas: AtlasView, state: AtlasState, group = s.
 	const here = atlas.rooms.find((r) => r.roomId === s.room.roomId);
 	if (!cards || !here) return;
 	for (const c of [...cards.children]) { cards.remove(c); dispose(c); }
-	const { w, h } = dims(s.room);
+	const { W: w, H: h } = extent(s.room);
 	for (const r of atlas.rooms) {
 		if (r.island !== here.island) continue;
 		const [humans = 0, npcs = 0] = state.people[r.roomId] ?? [];
@@ -1126,7 +1160,7 @@ function shade(root: O3, receive: boolean): void {
 }
 /** Fits the shadow map to the room: an orthographic box round the block, the light where the clock puts it (daylight). */
 function lightRoom(s: Scene3D): void {
-	const { w, h } = dims(s.room), r = Math.hypot(w, h) / 2 + 2, cam = s.sun.shadow.camera;
+	const { W, H } = extent(s.room), r = Math.hypot(W, H) / 2 + 2, cam = s.sun.shadow.camera;
 	cam.left = -r; cam.right = r; cam.top = r; cam.bottom = -r; cam.near = 0.5; cam.far = r * 4; cam.updateProjectionMatrix();
 	s.lightFor = ""; s.lightAt = 0;
 }
@@ -1214,7 +1248,7 @@ function daylight(s: Scene3D, clock: { v: import("../shared/worldtime.ts").World
 	if (key === s.lightFor) return;
 	s.lightFor = key;
 	const tone = (daylightTone ??= new s.t.Color());
-	const from = shadowLightAt(hour), d = daylightAt(hour), r = Math.hypot(dims(s.room).w, dims(s.room).h) / 2 + 2;
+	const from = shadowLightAt(hour), d = daylightAt(hour), r = Math.hypot(extent(s.room).W, extent(s.room).H) / 2 + 2;
 	s.sun.position.set(from.dir[0] * r * 1.6, from.dir[1] * r * 1.6, from.dir[2] * r * 1.6); s.sun.target.position.set(0, 0, 0);
 	// under fog the sun is a pale disc: less of its light comes straight, more from all round (the sky's own haze)
 	const clear = 1 - s.level * 0.22;
@@ -1234,7 +1268,7 @@ function daylight(s: Scene3D, clock: { v: import("../shared/worldtime.ts").World
  *  The far plane follows the distance, so the room stays in view at the island's end of the slider. */
 function positionCamera(s: Scene3D): void {
 	if (s.catalogue) return;
-	const { w, h } = dims(s.room), aspect = s.camera.aspect || 1, elevation = cameraElevation(s.zoom, s.tilt);
+	const { W: w, H: h } = extent(s.room), aspect = s.camera.aspect || 1, elevation = cameraElevation(s.zoom, s.tilt);
 	// from the approach outwards the view turns from the room to the middle of the island, and may be dragged over all of it
 	const toIsland = s.island && s.islandMid.reach > 0 ? clamp((0.6 - s.zoom) / 0.3, 0, 1) : 0, reach = s.islandMid.reach * toIsland;
 	s.panX = clamp(s.panX, -w / 2 - reach, w / 2 + reach); s.panZ = clamp(s.panZ, -h / 2 - reach, h / 2 + reach);
@@ -1337,11 +1371,11 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 			// a point on a wall lies on the line between two cells: a hair into the face it hit is the cell it belongs to
 			const p = first.point.clone(), n = first.face?.normal;
 			if (n) p.addScaledVector(n, -0.01);
-			const x = Math.floor(p.x + w / 2), y = Math.floor(p.z + h / 2);
+			const x = toCell(p.x, w), y = toCell(p.z, h);
 			if (x >= 0 && y >= 0 && x < w && y < h) return { x, y };
 		}
 		if (!ground(e.clientX, e.clientY)) return null;
-		const x = Math.floor(hit.x + w / 2), y = Math.floor(hit.z + h / 2);
+		const x = toCell(hit.x, w), y = toCell(hit.z, h);
 		return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 	};
 	/** The cell of the figure whose speech bubble is under the pointer (a tap there opens that figure's menu: accept an

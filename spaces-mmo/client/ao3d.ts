@@ -13,8 +13,8 @@ import type { Mesh, Object3D, OrthographicCamera, Scene, ShaderMaterial, Texture
 type T = typeof import("three");
 type Shader = { uniforms: Record<string, { value: unknown }>; vertexShader: string; fragmentShader: string };
 
-/** The numbers of the occlusion: how dark a hollow gets at most, how deep (in world units, a cell is 1) a surface must
- *  lie under the heights round it to get that dark, how far the heights are blurred, and texels per cell. */
+/** The numbers of the occlusion: how dark a hollow gets at most, how deep (in world units, a cell of scale 1 is 1) a surface must
+ *  lie under the heights round it to get that dark, how far the heights are blurred, and texels per world unit. */
 export const AO = { strength: 0.45, depth: 0.7, reach: 0.45, texels: 8 };
 
 const uniforms = { uAoMap: { value: null as Texture | null }, uAoRect: { value: null as Vector4 | null }, uAoStrength: { value: 0 }, uAoDepth: { value: AO.depth } };
