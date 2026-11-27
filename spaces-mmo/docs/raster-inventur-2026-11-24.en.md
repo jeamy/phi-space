@@ -452,6 +452,19 @@ What it says:
 - **The open question is not fixed in phase 1.** Making growth get through under steady load would change how growth takes `WORLD_LOCK`: waiting for it, a bounded retry, or a turn before new commands. Every one of these changes every command's wait. That is a decision for plan section 3, not part of the switch at the same behaviour.
 - **The windows still drift.** As before, `load again` is the slowest of all windows in every run, without growth. Only the split inside a window compares.
 
+**A bounded wait for `WORLD_LOCK` (2026-11-27, the owner's choice of the three above: a bounded retry).** The take of `WORLD_LOCK` in a growth run waited up to 2 s (`GROWTH_LOCK_WAIT_MS`) instead of `NO_WAIT`. Measured as run C (five rooms with a step, the Rust stack, `GROWTH_GROWING=5`). `timedLock` (`tests/growth-worst.ts`) now starts a hold when the lock is held, not when the take begins; with `NO_WAIT` that is the same, so the rows above stand.
+
+| Run | Window | Growth runs | Longest single hold | Rooms with a step | Answers p50 / p95: all, during a run, outside one |
+| --- | --- | --- | --- | --- | --- |
+| D: five, wait 2 s | idle | 28, median 117 ms | 46 ms | 5 of 5 in their first run, 159 ms (median) | – |
+| | load | – | – | – | 111 / 500 |
+| | load+growth | 8, median 6.4 s; `WORLD_LOCK` refused in 5 | 92 ms | 3 grew in their first run, 2.2 s (median), at most 4.7 s; the fourth still waiting after 5 runs (42.5 s); lock held 79 ms | 617 / 1,523; 533 / 1,213 (695); 815 / 1,711 (488) |
+| | load again | – | – | – | 1,232 / 2,444 |
+
+- **The wait does not get growth through.** With 50 figures the commands that read `WORLD_LOCK` overlap without a gap of 2 s: 5 of 8 runs were still refused, against 8 of 11 with `NO_WAIT`. One room waited 5 runs, as long as before. A first run without the measurement fix gave the same: 5 of 7 refused, a room waiting 5 runs (43.6 s).
+- **It only makes a run longer.** Each refused run waits the full 2 s, so a run took 6.4 s (median) against 1.7 s. A hold, once taken, is as short as before (79 to 92 ms), and the commands answer no worse than in run C; the windows drift as before.
+- A longer wait would not change this: a take that waits gets the lock only in a moment when no command holds it, and under this load there is none. What would get growth through is a turn before new commands (they wait for a growth run that is waiting). That changes every command, so the change was not kept: growth takes `WORLD_LOCK` with `NO_WAIT` as before, until the owner decides (the 10 s answers at p99 in both load windows are timeouts of the figures, with and without growth).
+
 ### 6.2 Cells looked at per target choice
 
 **Measurement.** `node --no-warnings --experimental-strip-types tests/perf/target-choice.ts`, with no browser and no space:

@@ -64,8 +64,9 @@ export function timedLock(space: SpaceLike, holds: number[], refused?: Record<st
 			const f = Reflect.get(target, key, receiver);
 			if (typeof f !== "function") return f;
 			if (key === "takeIfExists") return async (template: { type?: string }, ms: number, o?: { txn?: string }) => {
-				const t = performance.now(), got = await f.call(target, template, ms, o);
-				if (got && o?.txn && template.type === WORLD_LOCK.type) since.set(o.txn, t);
+				// the hold from when the lock is held: a take that waits (GROWTH_LOCK_WAIT_MS) does not hold it while it waits
+				const got = await f.call(target, template, ms, o);
+				if (got && o?.txn && template.type === WORLD_LOCK.type) since.set(o.txn, performance.now());
 				if (!got && o?.txn && refused) { const k = template.type ?? "entry by id"; refused[k] = (refused[k] ?? 0) + 1; }
 				return got;
 			};
