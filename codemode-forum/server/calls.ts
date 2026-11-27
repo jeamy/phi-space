@@ -88,7 +88,7 @@ export const mayRead = (steps: ReadStep[]) => steps.length < READING.steps && st
 /** The part of a prompt about the sources: what there is, what was read so far, and how to ask for more. */
 function readingText(sources: PlanSource[], steps: ReadStep[]): string[] {
 	if (!sources.length) return [];
-	const one = sources.length === 1, name = (s: PlanSource) => (s.kind === "repo" ? `the git repository "${s.name}" at commit ${s.commit!.slice(0, 12)}` : "the documents the person uploaded");
+	const one = sources.length === 1, name = (s: PlanSource) => (s.kind === "repo" ? `the git repository "${s.name}" at commit ${s.commit!.slice(0, 12)}` : s.kind === "files" ? `a copy of the room's workspace (reference/: material that is only read, project/: the project's folder; ${s.texts ?? 0} files as text, the others listed with their kind)` : "the documents the person uploaded");
 	const parts = [`Sources you can read (read-only):\n${sources.map((s) => `- ${s.sourceId}: ${name(s)}, ${s.files} files`).join("\n")}`];
 	if (steps.length) {
 		let room = READING.shownBytes;

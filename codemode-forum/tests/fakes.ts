@@ -198,6 +198,14 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 		if (call.kind === "draft" && !read) return { text: "```\nREAD\nread docs:requirements.md 2 1\n```", model: c.model, usage: use(200, 0.02) };
 		return answer(c, call);
 	} }),
+	// a task with a copy of the room's workspace (files.test.ts): the outline lists it, reads a text, asks for a picture
+	// it cannot read and searches
+	workspace: (_s, _space, log) => ({ text: async (c, call) => {
+		const read = c.user.includes("What you read so far");
+		await log({ model: c.model, kind: call.kind, callId: call.callId, read, prompt: c.user });
+		if (call.kind === "outline" && !read) return { text: "READ\nlist project/\nread project/needs.md\nread project/photo.jpg\nsearch Messier", model: c.model, usage: use(200, 0.02) };
+		return answer(c, call);
+	} }),
 	// the same, and an answer that follows a reading is held at the gate
 	readhold: (s, space, log) => ({ text: async (c, call) => {
 		const read = c.user.includes("What you read so far");

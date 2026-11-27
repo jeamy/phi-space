@@ -15,7 +15,8 @@ import { checkOf } from "./check-host.ts";
 import type { Failure } from "./checks.ts";
 import { askSources, indexPages, sourceWaitMs } from "./source-host.ts";
 import { remoteLimits } from "./remote.ts";
-import { checkDocs, docsPack, indexHash, type PlanSource } from "./sources.ts";
+import { checkDocs, docsPack, indexHash, type IndexEntry, type PlanSource } from "./sources.ts";
+import { agentOf, askFiles, checkFolder, filesInfo, filesWaitMs, folderName, readLink, saveLink, type CheckAnswer, type FilesInfo, type RoomLink } from "./files.ts";
 import { decisionsOf, messagesOf, newMsgId, owed, PERSON_TABLE, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
 import { objectionsOf, type PlanObjection } from "./review.ts";
 import { acceptOf, ballotsOf, type PlanAccept, type PlanBallot } from "./ballots.ts";
@@ -50,7 +51,7 @@ export type Block = Omit<PlanTask, "session"> & {
 	/** The result of the newest run with both tables on this block: a table and a version of its document. */
 	result: { table: Table; version: number } | null;
 	/** The version the table (or the person) accepted; null: none yet. */
-	accepted: Pick<PlanAccept, "version" | "by" | "who" | "approvals" | "of" | "round"> | null; sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "url" | "commit" | "ref" | "files" | "bytes">>;
+	accepted: Pick<PlanAccept, "version" | "by" | "who" | "approvals" | "of" | "round"> | null; sources: Array<Pick<PlanSource, "sourceId" | "kind" | "name" | "url" | "commit" | "ref" | "files" | "bytes" | "tenant" | "texts">>;
 	/** The table's discussion in numbers: messages, decisions, and the questions to the person still open. */
 	talk: { messages: number; decisions: number; forPerson: number }; doc: { table: string; version: number; versions: number; bytes: number; sections: PlanDoc["sections"];
 		/** The mechanical check of the newest version (checks.ts); null: not checked yet. */
@@ -61,7 +62,9 @@ export type PlanView = { blockId: string; doc: Omit<FullDoc, "session" | "slot">
 export type Snapshot = { /** Over all runs with both tables: how often each table's document was the base of the result. */
 	standings: { runs: number; A: number; B: number; tokens: Record<Table, number> }; session: string; blocks: Block[]; run: RunInfo | null; rollcall: Array<Omit<RollCall, "session">>; lines: Line[]; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number };
 	/** The room owner's defaults for a run (settings.ts). */
-	defaults?: RoomDefaults };
+	defaults?: RoomDefaults;
+	/** The room's link to a spaces-files workspace (files.ts), if it has one. */
+	link?: Pick<RoomLink, "tenant" | "read" | "project"> | null };
 
 export class ForumHub {
 	/** The shared space of all processes (a RemoteSpace on the space host's socket). */
@@ -246,7 +249,7 @@ export class ForumHub {
 			const TABLE = await this.#tableOf(s.id, t.blockId, run);
 			const versions = await versionsOf(this.host, { session: s.id, blockId: t.blockId, table: TABLE }), head = versions.at(-1);
 			const sources = (await this.host.readAll({ type: "PlanSource", fields: { session: s.id, blockId: t.blockId } }, { limit: 4 })).map((e) => e.fields as unknown as PlanSource).sort((a, b) => a.sourceId.localeCompare(b.sourceId))
-				.map(({ sourceId, kind, name, url, commit, ref, files, bytes }) => ({ sourceId, kind, name, ...(url ? { url } : {}), ...(commit ? { commit } : {}), ...(ref ? { ref } : {}), files, bytes }));
+				.map(({ sourceId, kind, name, url, commit, ref, files, bytes, tenant, texts }) => ({ sourceId, kind, name, ...(url ? { url } : {}), ...(commit ? { commit } : {}), ...(ref ? { ref } : {}), ...(tenant ? { tenant } : {}), ...(texts !== undefined ? { texts } : {}), files, bytes }));
 			const d = { session: s.id, blockId: t.blockId, table: TABLE }, messages = await messagesOf(this.host, d);
 			const talk = { messages: messages.length, decisions: (await decisionsOf(this.host, d)).length, forPerson: owed(messages, [], {}).person.length };
 			const check = head ? await checkOf(this.host, d, head.version) : null;
@@ -256,7 +259,7 @@ export class ForumHub {
 			for (const x of ["A", "B"] as const) { const h = x === TABLE ? head : await headOf(this.host, { ...d, table: x }); if (h) heads[x] = h.version; }
 			return { ...t, table: TABLE, heads, result: res ? { table: res.table, version: res.version } : null, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
 		}));
-		return { standings: await standings(this.host), session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: effectiveLimits(await readLimits(this.host)).runBudgetTokens }, defaults: await readRoom(this.host, s.id) };
+		return { standings: await standings(this.host), session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: effectiveLimits(await readLimits(this.host)).runBudgetTokens }, defaults: await readRoom(this.host, s.id), link: await readLink(this.host, s.id).then((l) => (l ? { tenant: l.tenant, read: l.read, project: l.project } : null)) };
 	}
 
 	/** A room's state for a list of rooms, read without opening the room (no session, no ForumRoom entry): "waiting" while
@@ -305,7 +308,7 @@ export class ForumHub {
 	 *  each), kept in the space, and a repository at a branch, tag or commit (`repo`: one of the sources process by its
 	 *  `name`, or a remote one by its https `url`, which the sources process fetches now if its host is allowed; the
 	 *  server lets only an admin name one: `admin`). Its document begins with the first run on it. */
-	async createTask(id: string, o: { brief?: unknown; lang?: unknown; outline?: unknown; criteria?: unknown; docs?: unknown; repo?: unknown; admin?: boolean }): Promise<{ blockId: string }> {
+	async createTask(id: string, o: { brief?: unknown; lang?: unknown; outline?: unknown; criteria?: unknown; docs?: unknown; repo?: unknown; files?: unknown; admin?: boolean }): Promise<{ blockId: string }> {
 		const s = await this.session(id);
 		const task = planTask(o), docs = checkDocs(o.docs), blockId = `b${Date.now().toString(36)}${rid()}`;
 		const repo = o.repo && typeof o.repo === "object" ? { name: String((o.repo as { name?: unknown }).name ?? ""), url: String((o.repo as { url?: unknown }).url ?? "").trim(), ref: String((o.repo as { ref?: unknown }).ref ?? "").trim() || "HEAD" } : null;
@@ -313,6 +316,8 @@ export class ForumHub {
 		if (repo?.url && repo.name) throw new Error("Name a repository of the sources process or a remote one, not both");
 		if (repo?.url && !/^https?:\/\//i.test(repo.url)) throw new Error("A remote repository is named by its https address");
 		if (repo && !repo.url && !(await this.repos()).includes(repo.name)) throw new Error(`No such repository: ${repo.name.slice(0, 60)}`);
+		const files = o.files === true;
+		if (files && !(await readLink(this.host, s.id))) throw new Error("The room is not linked to a workspace");
 		if (!this.#allow(s, "task", 6)) throw new Error("Too many tasks, slow down");
 		await this.#trimLines(s);
 		await this.#exclusive(s, async () => {
@@ -326,6 +331,11 @@ export class ForumHub {
 					: await askSources(this.host, { requestId: `open-${blockId}`, ...key, op: "open", repo: repo.name, ref: repo.ref, ttl: this.#ttl, ts: Date.now() });
 				sources.push({ ...key, sourceId: "repo", kind: "repo", ...opened!, ts: Date.now() });
 			}
+			// the room's workspace folders: the sources process copies them now, as they are (files.ts)
+			if (files) {
+				const { snapshot: c } = await askFiles(this.host, { requestId: `copy-${blockId}`, session: s.id, op: "snapshot", blockId, ttl: this.#ttl, ts: Date.now() }, sourceWaitMs() + filesWaitMs());
+				sources.push({ ...key, sourceId: "files", kind: "files", name: "workspace", copy: c!.copy, tenant: c!.tenant, files: c!.files, texts: c!.texts, bytes: c!.bytes, indexHash: c!.indexHash, ts: Date.now() });
+			}
 			if (docs.length) {
 				const pack = docsPack(docs);
 				// a document in parts of 12 000 characters: an entry stays under the space's 64 KiB whatever the letters
@@ -336,7 +346,7 @@ export class ForumHub {
 			for (const src of sources) await this.host.write({ type: "PlanSource", fields: src as never }, null, this.#ttl);
 			const entry: PlanTask = { ...key, ...task, ts: Date.now() };
 			await this.host.write({ type: "PlanTask", fields: entry as never }, null, this.#ttl);
-			const with_ = sources.map((x) => (x.kind === "repo" ? `${x.name} at ${x.commit!.slice(0, 12)} (${x.files} files)` : `${x.files} document${x.files === 1 ? "" : "s"}`)).join(" and ");
+			const with_ = sources.map((x) => (x.kind === "repo" ? `${x.name} at ${x.commit!.slice(0, 12)} (${x.files} files)` : x.kind === "files" ? `the workspace's ${x.files} file${x.files === 1 ? "" : "s"} (${x.texts} as text)` : `${x.files} document${x.files === 1 ? "" : "s"}`)).join(" and ");
 			await systemLine(this.host, null, this.#ttl, s.id, `Plan task created${with_ ? ` with ${with_}` : ""}: ${task.brief.replace(/\s+/g, " ").slice(0, 100)}${task.brief.length > 100 ? "…" : ""}`);
 		});
 		this.push(s);
@@ -571,6 +581,49 @@ export class ForumHub {
 		await systemLine(this.host, null, this.#ttl, s.id, `${by} set the room's defaults: ${said || "none"}`);
 		this.push(s);
 		return d;
+	}
+
+	/** The room's link to spaces-files: the agent that stands for it there, what the sources process is connected to,
+	 *  and the link itself. */
+	async roomLink(id: string): Promise<{ agent: string; files: FilesInfo; link: RoomLink | null }> {
+		const s = await this.session(id);
+		return { agent: agentOf(s.id), files: await filesInfo(this.host), link: await readLink(this.host, s.id) };
+	}
+
+	/** The files of a task's workspace copy, for the Files pane: path, size, and for a file not copied as text its kind. */
+	async filesIndex(id: string, blockId: string): Promise<{ files: Array<{ path: string; size: number; kind: string }> }> {
+		const s = await this.session(id);
+		const src = (await this.host.readIfExists({ type: "PlanSource", fields: { session: s.id, blockId, sourceId: "files" } }, NO_WAIT))?.fields as unknown as PlanSource | undefined;
+		if (!src?.copy) return { files: [] };
+		const pages = await this.host.readAll({ type: "SourceIndex", fields: { session: s.id, blockId, sourceId: "files", copy: src.copy } }, { limit: 2000 });
+		const index = pages.sort((a, b) => Number(a.fields.part) - Number(b.fields.part)).flatMap((e) => (e.fields as unknown as { paths: IndexEntry[] }).paths);
+		return { files: index.map(([path, size, kind]) => ({ path, size, kind: kind ?? "text" })) };
+	}
+
+	/** The owner's work on the link: `check` (what the agent sees, and the folders named, if any), `link` (checked again,
+	 *  then kept) and `unlink`. A line in the room says who linked or unlinked what. */
+	async linkRoom(id: string, by: string, b: Record<string, unknown>): Promise<{ check?: CheckAnswer; link: RoomLink | null }> {
+		const s = await this.session(id);
+		if (b.action === "unlink") {
+			const was = await readLink(this.host, s.id);
+			await saveLink(this.host, s.id, null);
+			if (was) { await systemLine(this.host, null, this.#ttl, s.id, `${by} unlinked the room from the workspace; tasks keep the copies they took`); this.push(s); }
+			return { link: null };
+		}
+		if (b.action !== "check" && b.action !== "link") throw new Error("action: check, link or unlink");
+		const info = await filesInfo(this.host);
+		if (!info) throw new Error("No sources process is connected to spaces-files (FORUM_FILES_SOCKET)");
+		const project = b.project ? checkFolder(b.project, "The project folder") : null;
+		const read = b.read ? checkFolder(b.read, "The folder to read") : null;
+		if (b.action === "link" && !project) throw new Error("Name the project folder");
+		if (!this.#allow(s, "link", 10)) throw new Error("Too many checks, slow down");
+		const { check } = await askFiles(this.host, { requestId: `check-${s.id}-${rid()}`, session: s.id, op: "check", read, project, ts: Date.now() }, sourceWaitMs());
+		if (b.action === "check") return { check, link: await readLink(this.host, s.id) };
+		const link: RoomLink = { session: s.id, tenant: info.tenant, agent: agentOf(s.id), read, project: project!, by, ts: Date.now() };
+		await saveLink(this.host, s.id, link, this.#ttl);
+		await systemLine(this.host, null, this.#ttl, s.id, `${by} linked the room to the workspace: ${read ? `reading ${folderName(read)}, ` : ""}project folder ${folderName(project!)}`);
+		this.push(s);
+		return { check, link };
 	}
 
 	/** Stops the room's run: whoever takes its ForumRun ends it, with its closing line, exactly once. */

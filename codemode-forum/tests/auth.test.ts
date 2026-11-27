@@ -240,6 +240,10 @@ test("rooms: the owner invites by ID; a room one has no role in does not exist; 
 		assert.deepEqual((await owner.post("/api/rooms/sky-app/settings", { rounds: 1, way: "turns", budgetTokens: 50_000, personWaitS: 30 })).json.defaults, { rounds: 1, way: "turns", budgetTokens: 50_000, personWaitS: 30 });
 		assert.deepEqual((await mia.request("GET", "/api/rooms/sky-app/settings")).json.defaults.budgetTokens, 50_000);
 		assert.match(JSON.stringify((await mia.request("GET", "/api/rooms/sky-app")).json.lines), /set the room's defaults: way turns; 1 rounds; budget 50000 tokens; waits 30 s for the person/);
+		// the link to a workspace: only its owner makes or removes it; its people see it (files.test.ts has the rest)
+		for (const action of ["check", "link", "unlink"]) for (const who of [mia, tom]) assert.equal((await who.post("/api/rooms/sky-app/link", { action })).status, 403, action);
+		assert.equal((await mia.request("GET", "/api/rooms/sky-app/link")).json.agent, "room-sky-app");
+		assert.match((await owner.post("/api/rooms/sky-app/link", { action: "check" })).json.error, /No sources process is connected to spaces-files/);
 		assert.equal((await mia.request("GET", "/api/rooms/sky-app/access")).status, 200, "a member reads who is in the room");
 		assert.equal((await owner.post("/api/rooms/sky-app/access", { userId: await id(owner), role: null })).status, 400, "the owner keeps the room");
 		// taken out again: the room is gone for her

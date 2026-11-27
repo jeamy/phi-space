@@ -72,7 +72,7 @@ export function ForumPage({ place, room }: { place: Place; room?: string }) {
 			{bar}
 			{failed ? <div className="fp-failed" role="alert">{p.failed} {failed} <a href="">{p.retry}</a></div> : null}
 			{place === "rooms" ? <RoomsPlace lang={lang} p={p} login={me.login} rooms={rooms} reload={loadRooms} userId={person?.id ?? ""} /> : null}
-			{place === "room" && room ? <RoomPlace lang={lang} p={p} t={T[lang]} room={room} login={me.login} row={rooms === null ? undefined : rooms.find((r) => r.room === room) ?? null} /> : null}
+			{place === "room" && room ? <RoomPlace lang={lang} p={p} t={T[lang]} room={room} login={me.login} row={!me.login ? null : rooms === null ? undefined : rooms.find((r) => r.room === room) ?? null} /> : null}
 			{place === "settings" ? <SettingsPlace lang={lang} p={p} me={me} setMe={setMe} rooms={rooms} theme={theme} /> : null}
 		</>
 	);

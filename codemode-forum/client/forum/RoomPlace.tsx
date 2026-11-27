@@ -53,14 +53,17 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 		<section className="fp-pane fp-pane--files" aria-label={p.files}>
 			<h2>{p.files} <HelpTip id="files" lang={lang} label={p.files} /></h2>
 			{!snap ? <Skeleton label={p.loading} /> : !block ? <p className="fp-empty">{p.noTaskFiles}</p> : block.sources.length ? (
-				<ul className="fp-files">
-					{block.sources.map((x) => (
-						<li key={x.sourceId}>
-							<b>{x.kind === "repo" ? `${p.sourceRepo} ${x.name}` : p.sourceDocs}</b>
-							<span className="fp-meta">{p.filesN(x.files)} · {(x.bytes / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB{x.commit ? ` · ${x.commit.slice(0, 12)}` : ""}</span>
-						</li>
-					))}
-				</ul>
+				<>
+					<ul className="fp-files">
+						{block.sources.map((x) => (
+							<li key={x.sourceId}>
+								<b>{x.kind === "repo" ? `${p.sourceRepo} ${x.name}` : x.kind === "files" ? `${p.sourceFiles}${x.tenant ? ` · ${x.tenant}` : ""}` : p.sourceDocs}</b>
+								<span className="fp-meta">{p.filesN(x.files)}{x.texts !== undefined ? ` (${p.textsN(x.texts)})` : ""} · {(x.bytes / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB{x.commit ? ` · ${x.commit.slice(0, 12)}` : ""}</span>
+							</li>
+						))}
+					</ul>
+					{block.sources.some((x) => x.kind === "files") ? <WorkspaceFiles key={block.blockId} lang={lang} p={p} locale={locale} rid={rid} blockId={block.blockId} /> : null}
+				</>
 			) : <p className="fp-empty">{p.noSources}</p>}
 		</section>
 	);
@@ -90,9 +93,10 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 								{block.criteria.length ? <ul>{block.criteria.map((c) => <li key={c}>{c}</li>)}</ul> : null}
 							</div>
 						) : <p className="fp-empty">{canWrite ? p.noTask : p.viewer}</p>}
-						{!canWrite ? (block ? <p className="fp-meta">{p.viewer}</p> : null) : <NewTask lang={lang} p={p} t={t} rid={rid} open={!block} act={act} onMade={(id) => { setFocus(id); setTableSel(null); }} />}
+						{!canWrite ? (block ? <p className="fp-meta">{p.viewer}</p> : null) : <NewTask lang={lang} p={p} t={t} rid={rid} open={!block} linked={!!snap.link} act={act} onMade={(id) => { setFocus(id); setTableSel(null); }} />}
 						{runHere ? <RunPanel t={t} locale={locale} runHere={runHere} table={table} answers={answers} /> : null}
 						{canWrite && block ? <StartRun key={JSON.stringify(snap.defaults ?? {})} lang={lang} p={p} t={t} rid={rid} blockId={block.blockId} available={available} limits={limits} defaults={snap.defaults ?? {}} active={!!run?.active} act={act} /> : null}
+						{(!login || row?.role === "owner") ? <RoomLinkForm lang={lang} p={p} rid={rid} act={act} /> : null}
 						{(!login || row?.role === "owner") ? <RoomDefaultsForm lang={lang} p={p} t={t} rid={rid} available={available} defaults={snap.defaults ?? {}} act={act} /> : null}
 						{msg ? <p className="fp-error" role="alert">{msg}</p> : null}
 						{block ? <TalkPane t={t} lang={lang} block={block} said={said} docTables={docTables} shown={shown} name={name} who={who} threads={threads} send={send} /> : null}
@@ -171,7 +175,8 @@ function useNotifyWhenAsked(forPerson: number, room: string, title: string): voi
 }
 
 /** A new plan task: the brief, the document's language, optionally an outline, criteria and documents to read. */
-function NewTask({ lang, p, t, rid, open, act, onMade }: { lang: Lang; p: PageText; t: Text; rid: string; open: boolean; act: (fn: () => Promise<unknown>) => Promise<boolean>; onMade: (blockId: string) => void }) {
+function NewTask({ lang, p, t, rid, open, linked, act, onMade }: { lang: Lang; p: PageText; t: Text; rid: string; open: boolean; linked: boolean; act: (fn: () => Promise<unknown>) => Promise<boolean>; onMade: (blockId: string) => void }) {
+	const [fromWs, setFromWs] = useState(true);
 	const [brief, setBrief] = useState("");
 	const [docLang, setDocLang] = useState<Lang>(lang);
 	const [outline, setOutline] = useState("");
@@ -182,7 +187,7 @@ function NewTask({ lang, p, t, rid, open, act, onMade }: { lang: Lang; p: PageTe
 		setDocs((cur) => [...cur.filter((d) => !read.some((x) => x.name === d.name)), ...read]);
 	};
 	const create = () => act(async () => {
-		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang, outline, criteria, ...(docs.length ? { docs } : {}) });
+		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang, outline, criteria, ...(docs.length ? { docs } : {}), ...(linked && fromWs ? { files: true } : {}) });
 		setBrief(""); setOutline(""); setCriteria(""); setDocs([]); onMade(r.blockId);
 	});
 	return (
@@ -198,7 +203,8 @@ function NewTask({ lang, p, t, rid, open, act, onMade }: { lang: Lang; p: PageTe
 					{docs.map((d) => <li key={d.name}><b>{d.name}</b> <span className="fp-meta">{(new Blob([d.text]).size / 1000).toFixed(1)} kB</span> <Act kind="danger" label={`${p.drop}: ${d.name}`} tip="docs" lang={lang} onClick={() => setDocs((cur) => cur.filter((x) => x.name !== d.name))}>{p.drop}</Act></li>)}
 				</ul>
 			) : null}
-			{docs.length ? <p className="fp-meta">{t.sourceNote}</p> : null}
+			{linked ? <Tick label={p.fromWorkspace} tip="fromworkspace" lang={lang} checked={fromWs} onChange={(e) => setFromWs(e.target.checked)} /> : null}
+			{docs.length || (linked && fromWs) ? <p className="fp-meta">{t.sourceNote}</p> : null}
 			{brief.trim() && brief.trim().length < 20 ? <p className="fp-meta">{p.briefShort}</p> : null}
 			<Act kind="primary" label={t.create} tip="brief" lang={lang} disabled={brief.trim().length < 20} onClick={() => void create()} />
 		</details>
@@ -281,6 +287,82 @@ function RoomDefaultsForm({ lang, p, t, rid, available, defaults, act }: { lang:
 			{ceil ? <p className="fp-meta">{p.ceilings(ceil.runBudgetTokens, ceil.personWaitS)}</p> : null}
 			<Act kind="primary" label={p.saveDefaults} tip="roomdefaults" lang={lang} onClick={() => void save()} />
 			{saved ? <p className="fp-meta" role="status">{p.saved}</p> : null}
+		</details>
+	);
+}
+
+/** The files of a task's copy of the workspace (server/files.ts): every file with its size, the ones not copied as
+ *  text with their kind. */
+function WorkspaceFiles({ lang, p, locale, rid, blockId }: { lang: Lang; p: PageText; locale: string; rid: string; blockId: string }) {
+	const [files, setFiles] = useState<Array<{ path: string; size: number; kind: string }> | null>(null);
+	useEffect(() => { api<{ files: Array<{ path: string; size: number; kind: string }> }>(`/rooms/${rid}/files/${blockId}`).then((x) => setFiles(x.files)).catch(() => setFiles([])); }, [rid, blockId]);
+	return (
+		<details className="fp-fold" open>
+			<summary>{p.filesOf} <HelpTip id="workspacefiles" lang={lang} label={p.filesOf} /></summary>
+			{files === null ? <Skeleton label={p.loading} /> : (
+				<ul className="fp-files fp-wsfiles">
+					{files.map((f) => (
+						<li key={f.path}>
+							<span className="fp-path">{f.path}</span>
+							<span className="fp-meta">{f.size < 1000 ? `${f.size} B` : `${(f.size / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB`}{f.kind === "text" ? "" : ` · ${f.kind} · ${p.notText}`}</span>
+						</li>
+					))}
+				</ul>
+			)}
+		</details>
+	);
+}
+
+type FolderIn = { workspace: string; path: string };
+type LinkState = { agent: string; files: { tenant: string; host: string } | null; link: { read: FolderIn | null; project: FolderIn } | null };
+
+/** The room's link to folders in spaces-files, for its owner (server/files.ts): the agent's name and the steps, the two
+ *  folders, check, link and unlink. */
+function RoomLinkForm({ lang, p, rid, act }: { lang: Lang; p: PageText; rid: string; act: (fn: () => Promise<unknown>) => Promise<boolean> }) {
+	const [st, setSt] = useState<LinkState | null>(null);
+	const [read, setRead] = useState<FolderIn>({ workspace: "", path: "" });
+	const [project, setProject] = useState<FolderIn>({ workspace: "", path: "" });
+	const [seen, setSeen] = useState<string[] | null>(null);
+	const load = () => api<LinkState>(`/rooms/${rid}/link`).then((x) => {
+		setSt(x);
+		if (x.link) { setRead(x.link.read ?? { workspace: "", path: "" }); setProject(x.link.project); }
+	}).catch(() => {});
+	const body = () => ({ ...(read.workspace.trim() ? { read } : {}), ...(project.workspace.trim() ? { project } : {}) });
+	const run = (action: "check" | "link" | "unlink") => act(async () => {
+		const r = await api<{ check?: { workspaces: string[] }; link: LinkState["link"] }>(`/rooms/${rid}/link`, { action, ...(action === "unlink" ? {} : body()) });
+		if (r.check) setSeen(r.check.workspaces);
+		setSt((cur) => (cur ? { ...cur, link: r.link } : cur));
+	});
+	const name = (f: FolderIn) => (f.path ? `${f.workspace}/${f.path}` : f.workspace);
+	const folder = (label: string, v: FolderIn, set: (f: FolderIn) => void) => (
+		<fieldset className="fp-folder">
+			<legend>{label}</legend>
+			<div className="fp-row">
+				<Field label={p.wsName} tip="folders" lang={lang} value={v.workspace} maxLength={120} list={`fp-ws-${rid}`} onChange={(e) => set({ ...v, workspace: e.target.value })} />
+				<Field label={p.folderPath} tip="folders" lang={lang} value={v.path} maxLength={400} onChange={(e) => set({ ...v, path: e.target.value })} />
+			</div>
+		</fieldset>
+	);
+	return (
+		<details className="fp-fold" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open && !st) void load(); }}>
+			<summary>{p.workspace} <HelpTip id="roomlink" lang={lang} label={p.workspace} /></summary>
+			{!st ? <Skeleton label={p.loading} /> : !st.files ? <p className="fp-empty">{p.noFiles}</p> : (
+				<>
+					<p className="fp-meta">{p.linkIntro}</p>
+					<ol className="fp-meta fp-steps">{p.linkSteps(st.agent, st.files.host, st.files.tenant).map((x) => <li key={x}>{x}</li>)}</ol>
+					{st.link ? <p role="status">{p.linked(st.link.read ? name(st.link.read) : null, name(st.link.project))}</p> : null}
+					{folder(p.readFolder, read, setRead)}
+					{folder(p.projectFolder, project, setProject)}
+					<datalist id={`fp-ws-${rid}`}>{(seen ?? []).map((w) => <option key={w} value={w} />)}</datalist>
+					{seen ? <p className="fp-meta" role="status">{p.sees(seen)}</p> : null}
+					<p className="fp-meta">{p.excerpts}</p>
+					<div className="fp-row">
+						<Act label={p.check} tip="linkcheck" lang={lang} onClick={() => void run("check")} />
+						<Act kind="primary" label={p.link} tip="roomlink" lang={lang} disabled={!project.workspace.trim()} onClick={() => void run("link")} />
+						<Act kind="danger" label={p.unlink} tip="roomlink" lang={lang} disabled={!st.link} onClick={() => void run("unlink")} />
+					</div>
+				</>
+			)}
 		</details>
 	);
 }

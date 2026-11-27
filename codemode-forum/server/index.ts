@@ -153,7 +153,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				// a script with the admin password stands for the operator; a person needs a role in the room, and a room
 				// they have none in does not exist for them
 				const role: Role | null = who ? roleIn(await accessOf(conn.space, inRoom), who.user.userId) : "owner";
-				const need = req.method === "GET" ? "read" : /\/(access|settings)$/.test(p) ? "own" : "write";
+				const need = req.method === "GET" ? "read" : /\/(access|settings|link)$/.test(p) ? "own" : "write";
 				if (!may(role, need)) return role ? json(res, 403, { error: "Your role in this room does not allow this" }) : json(res, 404, { error: "No such room" });
 			}
 			const ac = /^\/api\/rooms\/([^/]+)\/access$/.exec(p);
@@ -172,6 +172,16 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (req.method === "POST") await hub.saveRoomSettings(rs[1]!, who ? who.user.name : "script", await readBody(req));
 				return json(res, 200, await hub.roomSettings(rs[1]!));
 			}
+			// ---- a room's link to a spaces-files workspace: its owner makes it, its people see it (files.ts) ----
+			const lk = /^\/api\/rooms\/([^/]+)\/link$/.exec(p);
+			if (lk) {
+				if (!ID.test(lk[1]!)) return json(res, 400, { error: "Invalid room id" });
+				if (req.method === "POST") return json(res, 200, await hub.linkRoom(lk[1]!, who ? who.user.name : "script", await readBody(req)));
+				return json(res, 200, await hub.roomLink(lk[1]!));
+			}
+			// the index of a task's workspace copy: every file with its kind and size (files.ts)
+			const fx = /^\/api\/rooms\/([^/]+)\/files\/([a-z0-9]{1,40})$/.exec(p);
+			if (fx && req.method === "GET") return ID.test(fx[1]!) ? json(res, 200, await hub.filesIndex(fx[1]!, fx[2]!)) : json(res, 400, { error: "Invalid room id" });
 			// ---- models and providers, limits: administrators only (providers.ts, settings.ts) ----
 			if (p.startsWith("/api/admin/providers") || p === "/api/admin/limits") {
 				if (!(await isAdmin(req, who))) return json(res, 403, { error: "Only administrators" });
@@ -258,7 +268,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				// a task may bring documents (sources.ts: at most 800 kB together)
 				const b = await readBody(req, action === "task" ? 1_500_000 : 64_000);
 				// a visitor's run: the default token budget at most, counted against the day's allowance of the address
-				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria, docs: b.docs, repo: b.repo, admin: await isAdmin(req, who) })) });
+				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria, docs: b.docs, repo: b.repo, files: b.files, admin: await isAdmin(req, who) })) });
 				if (action === "run") return json(res, 200, { ok: true, ...(await hub.startRun(id, { blockId: b.blockId, way: b.way, rounds: b.rounds, models: b.models, perModel: b.perModel, budgetTokens: b.budgetTokens, budgetUsd: b.budgetUsd, client: { ...client(), admin: await isAdmin(req, who) } })) });
 				if (action === "accept") return json(res, 200, { ok: true, ...(await hub.accept(id, { blockId: b.blockId, version: b.version, by: by(b), table: b.table })) });
 				if (action === "objection") return json(res, 200, { ok: true, ...(await hub.object(id, { blockId: b.blockId, section: b.section, text: b.text, fix: b.fix, by: by(b), table: b.table })) });

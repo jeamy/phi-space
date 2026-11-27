@@ -12,11 +12,16 @@ export const SOURCE_LIMITS = { docs: 10, docsBytes: 800_000, fileBytes: 200_000,
 
 /** A source pack of a block, as its PlanSource entry says: `docs` (uploaded documents) or `repo` (a repository of the
  *  operator's list, by its name there, at `commit`). */
-export type PlanSource = { session: string; blockId: string; sourceId: "docs" | "repo"; kind: "docs" | "repo"; name: string;
+export type PlanSource = { session: string; blockId: string; sourceId: SourceId; kind: SourceId; name: string;
+	/** A copy of a room's workspace folders (files.ts): its ID (the parts and index pages carry it) and the tenant. */
+	copy?: string; tenant?: string; texts?: number;
 	/** A remote repository: the address it was fetched from (remote.ts); a local one has none. */
 	url?: string; commit?: string; ref?: string; files: number; bytes: number; indexHash: string; ts: number };
-/** A file of a pack: its path and size in bytes. */
-export type IndexEntry = [path: string, size: number];
+/** The kinds of source: uploaded documents, a git repository, a copy of the room's workspace folders. */
+export type SourceId = "docs" | "repo" | "files";
+/** A file of a pack: its path and size in bytes; a file of a workspace that was not copied (files.ts) also its kind
+ *  and version: it is listed, but has no text to read. */
+export type IndexEntry = [path: string, size: number, kind?: string, version?: number];
 /** A pack as the calls see it: what files there are, and how one is read. */
 export type Pack = { index: IndexEntry[]; read: (path: string) => Promise<Buffer>;
 	/** Lines that contain `query` (fixed text, any case): [path, line number, line]; without it the files are read. */
@@ -48,14 +53,14 @@ export function listDir(pack: Pack, dir = ""): string {
 	const at = safePath(dir);
 	if (at === null) return `No such directory: ${dir}`;
 	const prefix = at ? `${at}/` : "", dirs = new Map<string, number>(), files: IndexEntry[] = [];
-	for (const [path, size] of pack.index) {
+	for (const [path, size, kind] of pack.index) {
 		if (!path.startsWith(prefix)) continue;
 		const rest = path.slice(prefix.length), cut = rest.indexOf("/");
-		if (cut < 0) files.push([rest, size]); else dirs.set(rest.slice(0, cut), (dirs.get(rest.slice(0, cut)) ?? 0) + 1);
+		if (cut < 0) files.push([rest, size, kind]); else dirs.set(rest.slice(0, cut), (dirs.get(rest.slice(0, cut)) ?? 0) + 1);
 	}
 	if (!dirs.size && !files.length) return `No such directory: ${at || "/"}`;
-	const byName = ([a]: [string, number], [b]: [string, number]) => (a < b ? -1 : a > b ? 1 : 0); // the same order on every host
-	const rows = [...[...dirs].sort(byName).map(([d, n]) => `${d}/  (${n} files)`), ...files.sort(byName).map(([f, n]) => `${f}  (${n} bytes)`)];
+	const byName = ([a]: [string, ...unknown[]], [b]: [string, ...unknown[]]) => (a < b ? -1 : a > b ? 1 : 0); // the same order on every host
+	const rows = [...[...dirs].sort(byName).map(([d, n]) => `${d}/  (${n} files)`), ...files.sort(byName).map(([f, n, kind]) => `${f}  (${n} bytes${kind ? `, ${kind}, not readable here` : ""})`)];
 	const more = rows.length - SOURCE_LIMITS.list;
 	return [`${at || "/"}: ${dirs.size} directories, ${files.length} files`, ...rows.slice(0, SOURCE_LIMITS.list), ...(more > 0 ? [`… and ${more} more`] : [])].join("\n");
 }
@@ -63,7 +68,9 @@ export function listDir(pack: Pack, dir = ""): string {
 /** `read`: lines of a file, from line `from` (1 is the first), at most 400 lines or 16 kB. */
 export async function readLines(pack: Pack, raw: string, from = 1, lines: number = SOURCE_LIMITS.readLines): Promise<string> {
 	const path = safePath(raw);
-	if (!path || !pack.index.some(([p]) => p === path)) return `No such file in the source: ${raw.trim().slice(0, 200)} (list a directory to see what is there)`;
+	const entry = path ? pack.index.find(([p]) => p === path) : undefined;
+	if (!path || !entry) return `No such file in the source: ${raw.trim().slice(0, 200)} (list a directory to see what is there)`;
+	if (entry[2]) return `${path} is a file of kind ${entry[2]} with ${entry[1]} bytes; only its name, kind and size are known here`;
 	const buf = await pack.read(path);
 	if (buf.subarray(0, 8000).includes(0)) return `${path} is not a text file`;
 	const all = buf.toString("utf8").replace(/\r\n/g, "\n").split("\n");
@@ -81,14 +88,14 @@ export async function search(pack: Pack, rawQuery: string, rawGlob?: string): Pr
 	const query = rawQuery.trim().slice(0, SOURCE_LIMITS.query), g = safeGlob(rawGlob?.trim());
 	if (query.length < 2) return "A search needs at least two characters";
 	if (rawGlob?.trim() && !g) return `Not a file pattern: ${rawGlob.trim().slice(0, 120)} (letters, digits, . _ - / and *)`;
-	const allowed = new Set(pack.index.map(([p]) => p)), match = g ? glob(g.includes("/") ? g : `**${g}`) : null;
+	const allowed = new Set(pack.index.filter((e) => !e[2]).map(([p]) => p)), match = g ? glob(g.includes("/") ? g : `**${g}`) : null;
 	let hits: Array<[string, number, string]>;
 	if (pack.grep) hits = (await pack.grep(query, g)).filter(([p]) => allowed.has(p) && (!match || match.test(p)));
 	else {
 		hits = [];
 		const needle = query.toLowerCase();
-		for (const [path] of pack.index) {
-			if (match && !match.test(path)) continue;
+		for (const [path, , kind] of pack.index) {
+			if (kind || (match && !match.test(path))) continue;
 			const text = (await pack.read(path)).toString("utf8");
 			text.split("\n").forEach((line, i) => { if (line.toLowerCase().includes(needle)) hits.push([path, i + 1, line]); });
 			if (hits.length > SOURCE_LIMITS.hits) break;

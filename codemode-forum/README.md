@@ -284,6 +284,14 @@ A task may bring sources (`server/sources.ts`), fixed when it is created:
 - **a local git repository** at a branch, tag or commit: one of those the operator lists in `FORUM_REPOS`
   (`name=/abs/path,…`). Only an admin learns their names and may name one. The task keeps the commit; a later commit
   changes nothing for it.
+- **material from the room's workspace** in spaces-files (`server/files.ts`): once the room's owner has linked it to
+  a folder that is only read and a project folder, a task may take a copy of both, as they are then. The sources
+  process is the only process that talks to spaces-files (its agent socket, `FORUM_FILES_SOCKET`, with
+  `FORUM_FILES_TENANT` and `FORUM_FILES_HOST`); each room acts there as an agent of its own, `room-<room>`, and sees
+  only what an owner granted it. The copy holds every file with its path, size, kind (by content, not by name) and
+  version, the text files up to 200 kB as text under `reference/` and `project/`; at most 400 files, 4 MB of text and
+  eight levels (`FORUM_FILES_MAX_*`), refused with the number beyond. A revocation stops the next copy; a copy taken
+  stays with its task.
 
 A repository is never copied or unpacked. Every read goes to the objects of the commit (`git ls-tree`,
 `git cat-file`, `git grep`), so only tracked files exist for a reader, no path leads out of the tree, and a symbolic
@@ -476,7 +484,10 @@ made-up provider of `tests/providers.ts` (`FORUM_PROVIDER_MODULE`, only with `FO
 kind of prompt whose key is nowhere in the space's files, a wrong key scrubbed from the message, the test call, a
 removal, the audit, a sign-in whose refreshed token survives a restart, a model process killed during a login and a
 cancelled one, and the ceilings; `tests/auth.test.ts` refuses providers, limits and a room's defaults to those who may
-not set them.
+not set them. `tests/files.test.ts` runs the join with spaces-files against a real one
+(`spaces-files/tests/support/agent-host-fixture.ts` as a process): the link and its refusals, a copy of the granted
+folders and nothing beside them, a run that reads it, a revocation, a sources process killed during a copy, and each
+limit of the walk at its edge.
 
 ## Sign-in
 

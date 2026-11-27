@@ -690,6 +690,7 @@ Beschreibe, wofür der Plan ist und was er leisten muss, in mindestens 20 und h�
 | Dokumente (.md, .txt, .csv, .json, .yaml) | jeder | bis 10 Dateien, zusammen 800 kB |
 | Git-Repository auf dem Rechner | nur ein Admin | eines der Repositories, die der Betreiber freigegeben hat; ein Branch, Tag oder Commit |
 | Entferntes Git-Repository | nur ein Admin | eine https-Adresse auf einem Host, den der Betreiber erlaubt hat; ein Commit, höchstens 200 MB und 60 Sekunden |
+| Material aus dem Workspace | wer im Raum schreibt, sobald der Raum verbunden ist | eine Kopie beim Anlegen, bis 400 Dateien und 4 MB Text; siehe [Material aus den Dateien](help.topic.material#task) |
 
 Ein Repository wird beim Anlegen auf einen **Commit** festgelegt. Die Modelle lesen aus den Objekten dieses Commits, nicht aus dem Arbeitsverzeichnis: Was später im Repository geschieht, ändert die Aufgabe nicht. Den Commit nennt der Anhang des Ergebnisses.
 
@@ -699,7 +700,7 @@ Die Modelle lesen in Schritten: ein Verzeichnis auflisten, einen Ausschnitt eine
 
 ## Was an die Anbieter geht {#providers}
 
-Auszüge aus den Quellen stehen in den Aufrufen an die gewählten Modelle und gehen damit an deren Anbieter. Gib keine Quellen an, die das nicht dürfen.`,
+Auszüge aus den Quellen stehen in den Aufrufen an die gewählten Modelle und gehen damit an deren Anbieter. Gib keine Quellen an, die das nicht dürfen. Was genau hinausgeht, steht in [Was dieses System verlässt](help.topic.what_leaves#providers).`,
 			en: `## Overview {#overview}
 
 A plan task is a block of the room. It holds the brief and everything that must be fixed when it is created: the language of the document, a fixed outline, criteria of your own and the sources. The document begins with the first run on the task.
@@ -720,6 +721,7 @@ Describe what the plan is for and what it must achieve, in at least 20 and at mo
 | Documents (.md, .txt, .csv, .json, .yaml) | anybody | up to 10 files, 800 kB together |
 | Git repository on the machine | an admin only | one of the repositories the operator offers; a branch, tag or commit |
 | Remote git repository | an admin only | an https address on a host the operator allowed; one commit, at most 200 MB and 60 seconds |
+| Material from the workspace | whoever writes in the room, once the room is linked | a copy when the task is created, up to 400 files and 4 MB of text; see [Material from the files](help.topic.material#task) |
 
 A repository is fixed to a **commit** when the task is created. The models read from the objects of that commit, not from the working directory: what happens in the repository later does not change the task. The appendix of the result names the commit.
 
@@ -729,7 +731,165 @@ The models read in steps: list a directory, read a part of a file (at most 400 l
 
 ## What goes to the providers {#providers}
 
-Excerpts of the sources are part of the calls to the chosen models and so go to their providers. Do not name sources that must not.`,
+Excerpts of the sources are part of the calls to the chosen models and so go to their providers. Do not name sources that must not. What leaves exactly is in [What leaves this system](help.topic.what_leaves#providers).`,
+		},
+	},
+	{
+		id: "help.topic.material",
+		section: "use",
+		plain: true,
+		title: { de: "Material aus den Dateien", en: "Material from the files" },
+		short: {
+			de: "Einen Raum mit Ordnern in spaces-files verbinden, prüfen, was er sieht, und einer Aufgabe eine Kopie davon mitgeben.",
+			en: "Linking a room to folders in spaces-files, checking what it sees, and giving a task a copy of them.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Ein [Raum](help.topic.words#room) kann Material aus einem [Workspace](help.topic.words#workspace) in spaces-files lesen: Anforderungen, Tabellen, Notizen, Bilder. Dafür hat jeder Raum dort einen eigenen Agenten. Was dieser Agent sieht, entscheiden die Besitzerinnen und Besitzer der [Ordner](help.topic.words#folder), nicht FORUM. Wer sieht was, steht in [Wer sieht was](help.topic.who_sees_what#overview).
+
+## Verbinden {#link}
+
+Nur wem der Raum gehört, verbindet ihn. Unter dem [Tisch](help.topic.words#table) zeigt der Bereich **Workspace** den Namen des Agenten (\`room-<Raum>\`) und drei Schritte:
+
+1. Eine Verwaltung von spaces-files registriert den Agenten für den Host, den die Seite nennt.
+2. Wer die Ordner besitzt, gibt dem Agenten dort eine [Freigabe](help.topic.words#grant): Lesen auf den Ordner, der nur gelesen wird, Bearbeiten auf den Projektordner. Lesen gilt für einen ganzen Workspace oder für einen eingeschränkten Ordner darin.
+3. Zurück im Raum nennst du beide Ordner, prüfst und verbindest.
+
+## Prüfen {#check}
+
+**Prüfen** fragt spaces-files, was der Agent sieht. Die Seite nennt die Workspaces, die er sieht, und für jeden genannten Ordner, wie viele Einträge er hat. Abgelehnt wird ein Ordner, den der Agent nicht sieht, und einer, der ihm gehört: Ein Raum darf nie selbst Rechte weitergeben können, auch nicht in seinem eigenen Bereich.
+
+## Material für eine Aufgabe {#task}
+
+Beim Anlegen einer Aufgabe nimmt das Häkchen **Material aus dem Workspace mitnehmen** eine Kopie beider Ordner, so wie sie jetzt sind. Der Ordner zum Lesen erscheint darin als \`reference/\`, der Projektordner als \`project/\`. Textdateien bis 200 kB werden kopiert; jede andere Datei steht mit ihrer Art und Größe in der Liste, aber ihr Inhalt nicht. Die Art erkennt FORUM am Inhalt, nicht am Namen. Dateien mit Schlüsseln und lokalen Einstellungen bleiben draußen.
+
+Grenzen einer Kopie: 400 Dateien, zusammen 4 MB Text, acht Ebenen tief. Was darüber liegt, wird mit der Zahl abgelehnt und nie still gekürzt.
+
+## Die Dateien der Kopie {#files}
+
+Der Bereich **Dateien** zeigt die Kopie der gezeigten Aufgabe: jede Datei mit Größe, bei den nicht kopierten mit ihrer Art. Die [Modelle](help.topic.words#model) am Tisch lesen daraus wie aus hochgeladenen Dokumenten: auflisten, einen Ausschnitt lesen, suchen.
+
+## Freigabe zurücknehmen {#revoke}
+
+Nimmt jemand die Freigabe in spaces-files zurück, scheitert die nächste Kopie mit dem Grund. Eine Kopie, die eine Aufgabe schon genommen hat, bleibt bei ihr, bis die Aufgabe oder der Raum gelöscht wird. **Verbindung lösen** trennt den Raum; seine Aufgaben behalten ihre Kopien.`,
+			en: `## Overview {#overview}
+
+A [room](help.topic.words#room) can read material from a [workspace](help.topic.words#workspace) in spaces-files: requirements, spreadsheets, notes, pictures. For that each room has an agent of its own there. What that agent sees is decided by the owners of the [folders](help.topic.words#folder), not by FORUM. Who sees what is in [Who sees what](help.topic.who_sees_what#overview).
+
+## Linking {#link}
+
+Only the room's owner links it. Under the [table](help.topic.words#table), the part **Workspace** shows the agent's name (\`room-<room>\`) and three steps:
+
+1. An administrator of spaces-files registers the agent for the host the page names.
+2. Whoever owns the folders gives the agent a [grant](help.topic.words#grant) there: viewer on the folder that is only read, editor on the project folder. Viewer applies to a whole workspace or to a restricted folder in it.
+3. Back in the room you name both folders, check and link.
+
+## Checking {#check}
+
+**Check** asks spaces-files what the agent sees. The page names the workspaces it sees and, for each folder named, how many entries it holds. A folder the agent does not see is refused, and so is one it owns: a room must never be able to pass rights on, not even in its own space.
+
+## Material for a task {#task}
+
+When a task is created, the tick **Take material from the workspace** takes a copy of both folders as they are now. The folder to read appears in it as \`reference/\`, the project folder as \`project/\`. Text files up to 200 kB are copied; every other file is in the list with its kind and size, but not its contents. FORUM tells the kind by the contents, not by the name. Files with keys and local settings stay out.
+
+Limits of a copy: 400 files, 4 MB of text together, eight levels deep. What lies beyond is refused with the number and never cut silently.
+
+## The files of the copy {#files}
+
+The part **Files** shows the copy of the task shown: every file with its size, those not copied with their kind. The [models](help.topic.words#model) at the table read from it as from uploaded documents: list, read a part, search.
+
+## Revoking {#revoke}
+
+When somebody revokes the access in spaces-files, the next copy fails with the reason. A copy a task already took stays with it until the task or the room is deleted. **Unlink** separates the room; its tasks keep their copies.`,
+		},
+	},
+	{
+		id: "help.topic.who_sees_what",
+		section: "use",
+		plain: true,
+		title: { de: "Wer sieht was", en: "Who sees what" },
+		short: {
+			de: "Was der Agent eines Raums in spaces-files sieht, was die Personen im Raum sehen, und wer es beendet.",
+			en: "What a room's agent sees in spaces-files, what the people in the room see, and who ends it.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Zwischen einem [Raum](help.topic.words#room) und den Dateien steht genau ein Agent je Raum. Er sieht, was ihm in spaces-files gegeben wurde, und nichts sonst.
+
+![Wer sieht was: Die Besitzerin oder der Besitzer gibt dem Agenten des Raums Lesen auf einen Ordner und Bearbeiten auf den Projektordner und kann beides jederzeit entziehen. Der Agent liest beide; alles andere im Workspace sieht der Raum nie. Beim Anlegen einer Aufgabe entsteht eine Kopie der Texte; die Personen im Raum sehen sie, und Auszüge daraus gehen in den Aufrufen an die Modellanbieter.](/help/img/forum-access-de.svg)
+
+## Der Agent des Raums {#agent}
+
+Jeder Raum hat in spaces-files seinen eigenen Agenten. Ein gemeinsamer Agent für alle Räume ginge nicht: Dann könnte eine Aufgabe in einem Raum einen [Ordner](help.topic.words#folder) nennen, der für einen anderen freigegeben wurde. So prüft spaces-files selbst, was jeder Raum darf. Die [Freigabe](help.topic.words#grant) steht im Protokoll von spaces-files.
+
+## Die Personen im Raum {#people}
+
+Wer im Raum ist, sieht die Kopie der Aufgaben, den [Tisch](help.topic.words#table) und den Plan, auch wer nur mitliest. Den Raum mit den Ordnern verbinden oder die Verbindung lösen kann nur, wem er gehört. Wer dich einlädt, gibt dir also auch die Kopien zu sehen.
+
+## Beenden {#revoke}
+
+Die Besitzerin oder der Besitzer der Ordner nimmt die Freigabe in spaces-files zurück, wann immer sie oder er will. Ab dann liest der Raum nichts Neues mehr; Kopien, die Aufgaben schon genommen haben, bleiben, bis die Aufgabe oder der Raum gelöscht wird. Mehr dazu in [Material aus den Dateien](help.topic.material#revoke).`,
+			en: `## Overview {#overview}
+
+Between a [room](help.topic.words#room) and the files there is exactly one agent per room. It sees what it was given in spaces-files, and nothing else.
+
+![Who may see what: the folder owner grants the room's agent viewer on a folder and editor on the project folder and can revoke both at any time. The agent reads both; everything else in the workspace is never visible to the room. A copy of the text is taken when a task is created; the people in the room see it, and excerpts of it go to the model providers in prompts.](/help/img/forum-access.svg)
+
+## The room's agent {#agent}
+
+Each room has its own agent in spaces-files. One agent for all rooms would not do: a task in one room could then name a [folder](help.topic.words#folder) that was shared with another. This way spaces-files itself checks what each room may do. The [grant](help.topic.words#grant) is in spaces-files' audit.
+
+## The people in the room {#people}
+
+Whoever is in the room sees the copy of its tasks, the [table](help.topic.words#table) and the plan, even those who only read along. Only the room's owner links it to folders or unlinks it. Whoever invites you therefore also shows you the copies.
+
+## Ending it {#revoke}
+
+The owner of the folders revokes the access in spaces-files whenever they want. From then on the room reads nothing new; copies tasks already took stay until the task or the room is deleted. More in [Material from the files](help.topic.material#revoke).`,
+		},
+	},
+	{
+		id: "help.topic.what_leaves",
+		section: "reference",
+		plain: true,
+		title: { de: "Was dieses System verlässt", en: "What leaves this system" },
+		short: {
+			de: "Was an die Modellanbieter geht, was in spaces-files zurückgeht, und was nie hinausgeht.",
+			en: "What goes to the model providers, what goes back to spaces-files, and what never leaves.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+FORUM läuft auf eigenen Rechnern. Hinaus gehen nur die Aufrufe an die [Modelle](help.topic.words#model) und, ab einer späteren Stufe, was ein [Raum](help.topic.words#room) in seinen Projektordner speichert.
+
+## An die Modellanbieter {#providers}
+
+Jeder Aufruf an ein Modell geht an dessen Anbieter. Darin stehen der [Auftrag](help.topic.words#brief), was am [Tisch](help.topic.words#table) gesagt wurde, der Plan und die Auszüge aus den Quellen, die das Modell gelesen hat: aus hochgeladenen Dokumenten, aus Repositories und aus der Kopie der [Ordner](help.topic.words#folder). Gib keine Quellen an, die das nicht dürfen. Welche Anbieter es gibt, legt die Verwaltung fest ([Modelle und Anbieter](help.topic.models_and_providers#overview)).
+
+## In spaces-files {#files}
+
+Die Dateien selbst bleiben in spaces-files. FORUM nimmt beim Anlegen einer Aufgabe eine Kopie der Texte in seinen eigenen Speicher; Bilder und andere Dateien kennt es nur mit Name, Art und Größe. Zurückgeschrieben wird in dieser Stufe nichts.
+
+## Was nie hinausgeht {#never}
+
+Schlüssel der Anbieter und der Dateien, Dateien mit Schlüsseln und lokalen Einstellungen, deine Anmeldung und was du bei einer Anmeldung eines Anbieters eintippst. Die Gründe stehen in [Sicherheit und Grenzen](help.topic.safety_and_limits#overview).`,
+			en: `## Overview {#overview}
+
+FORUM runs on machines of its own. Only the calls to the [models](help.topic.words#model) leave it and, from a later stage on, what a [room](help.topic.words#room) saves into its project [folder](help.topic.words#folder).
+
+## To the model providers {#providers}
+
+Every call to a model goes to its provider. It holds the [brief](help.topic.words#brief), what was said at the [table](help.topic.words#table), the plan and the excerpts of the sources the model read: from uploaded documents, from repositories and from the copy of the folders. Do not name sources that must not go there. Which providers there are is set by the administrators ([Models and providers](help.topic.models_and_providers#overview)).
+
+## In spaces-files {#files}
+
+The files themselves stay in spaces-files. When a task is created, FORUM takes a copy of the text into its own store; pictures and other files it knows only by name, kind and size. Nothing is written back at this stage.
+
+## What never leaves {#never}
+
+The keys of the providers and of the files, files with keys and local settings, your sign-in and what you type into a provider's sign-in. The reasons are in [Safety and limits](help.topic.safety_and_limits#overview).`,
 		},
 	},
 	{

@@ -150,6 +150,11 @@ services:
       FORUM_REPOS: "${FORUM_DOCKER_REPOS:-}"
       # remote repositories (server/remote.ts): the hosts they may be fetched from (none: off), fetched into /cache
       FORUM_GIT_HOSTS: "${FORUM_GIT_HOSTS:-}"
+      # spaces-files' agent socket as this container sees it (server/files.ts); empty: no workspaces. Joining the two on
+      # the servers is phase 12 of docs/forum-seite-plan-2026-11-26.en.md (an agent host over TLS), not a socket mount
+      FORUM_FILES_SOCKET: "${FORUM_DOCKER_FILES_SOCKET:-}"
+      FORUM_FILES_TENANT: "${FORUM_FILES_TENANT:-}"
+      FORUM_FILES_HOST: "${FORUM_FILES_HOST:-}"
       FORUM_GIT_MAX_MB: "${FORUM_GIT_MAX_MB:-200}"
       FORUM_GIT_TIMEOUT_S: "${FORUM_GIT_TIMEOUT_S:-60}"
       FORUM_GIT_CACHE: /cache

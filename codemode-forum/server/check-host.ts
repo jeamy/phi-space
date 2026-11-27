@@ -11,6 +11,7 @@ import { checkDoc, type PlanCheck, type SourceFiles } from "./checks.ts";
 import { fullDoc, headOf } from "./plandoc.ts";
 import type { PlanTask } from "./plantask.ts";
 import { askSources } from "./source-host.ts";
+import type { SourceId } from "./sources.ts";
 import { announce, awaitWork, connectSpace, DEFAULT_SPACE, keepAlive } from "./space.ts";
 
 /** A request to check a table's document: its newest version, or the one `version` names. */
@@ -22,7 +23,9 @@ const RESULT_LEASE_MS = 10 * 60_000;
 
 /** The files of a block's sources, from the index pages in the space; null when the block has no sources. */
 export async function sourceFiles(space: SpaceLike, session: string, blockId: string): Promise<SourceFiles | null> {
-	const pages = (await space.readAll({ type: "SourceIndex", fields: { session, blockId } }, { limit: 2000 })).map((e) => e.fields as unknown as { sourceId: string; paths: Array<[string, number]> });
+	const copy = ((await space.readAll({ type: "PlanSource", fields: { session, blockId, sourceId: "files" } }, { limit: 1 }))[0]?.fields as { copy?: string } | undefined)?.copy;
+	// a workspace copy's pages count only for the copy its PlanSource names (an attempt cut off may have left others)
+	const pages = (await space.readAll({ type: "SourceIndex", fields: { session, blockId } }, { limit: 2000 })).map((e) => e.fields as unknown as { sourceId: string; copy?: string; paths: Array<[string, number]> }).filter((p) => p.sourceId !== "files" || p.copy === copy);
 	if (!pages.length) return null;
 	const files: SourceFiles = new Map();
 	// the documents a person uploaded come first: a name that is in both is the document's
@@ -59,7 +62,7 @@ export async function startCheckHost(o: { space?: string } = {}) {
 				const task = (await space.readIfExists({ type: "PlanTask", fields: { session: req.session, blockId: req.blockId } }, NO_WAIT))?.fields as unknown as PlanTask | undefined;
 				if (!doc || !task) throw new Error("the document or its task is gone");
 				// a line is in a file when a search for it in that file finds it (the sources process; fixed text, any case)
-				const quoted = async (source: string, path: string, line: string) => !/^No line contains/.test((await askSources(space, { requestId: `${req.requestId}-q${Math.random().toString(36).slice(2, 8)}`, session: req.session, blockId: req.blockId, op: "call", sourceId: source as "docs" | "repo", call: { op: "search", query: line.slice(0, 200), glob: path }, ts: Date.now() })).text ?? "");
+				const quoted = async (source: string, path: string, line: string) => !/^No line contains/.test((await askSources(space, { requestId: `${req.requestId}-q${Math.random().toString(36).slice(2, 8)}`, session: req.session, blockId: req.blockId, op: "call", sourceId: source as SourceId, call: { op: "search", query: line.slice(0, 200), glob: path }, ts: Date.now() })).text ?? "");
 				const found = await checkDoc(await fullDoc(space, doc), task, await sourceFiles(space, req.session, req.blockId), quoted);
 				const check: PlanCheck = { ...d, version: doc.version, ...found, ts: Date.now() };
 				// one result a version: an earlier one of the same version is replaced

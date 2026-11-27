@@ -48,6 +48,7 @@ import type { Usage } from "./llm.ts";
 import { otherTable } from "./calls.ts";
 import { mayRead, parseOutline, parseReads, parseSection, READING, readSteps, ROLLCALL_CHARS, sourcesOf, type CallKind, type LlmCall, type LlmResultEntry, type ReadStep } from "./calls.ts";
 import { askSources } from "./source-host.ts";
+import type { SourceId } from "./sources.ts";
 import { askChecker } from "./check-host.ts";
 import type { PlanCheck } from "./checks.ts";
 import { ballotsOf, counts, parseBallot, quoted, SETTLED_FROM_ROUND, stalled, stands, tally, type PlanAccept, type PlanBallot, type RoundMark } from "./ballots.ts";
@@ -544,7 +545,7 @@ async function work(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: Ru
 		const texts: string[] = [];
 		for (const r of reads) {
 			let text: string;
-			try { text = (await askSources(space, { requestId: `${it.itemId}-s${steps.length}-${texts.length}-${rid()}`, session: it.session, blockId: run.params.blockId, op: "call", sourceId: r.sourceId as "docs" | "repo", call: r.call, ts: Date.now() })).text ?? ""; }
+			try { text = (await askSources(space, { requestId: `${it.itemId}-s${steps.length}-${texts.length}-${rid()}`, session: it.session, blockId: run.params.blockId, op: "call", sourceId: r.sourceId as SourceId, call: r.call, ts: Date.now() })).text ?? ""; }
 			catch (e) { throw new ModelFailed(`the sources did not answer: ${(e as Error).message}`, v.usage); }
 			texts.push(`> ${r.line}\n${text.length > READING.resultBytes ? text.slice(0, READING.resultBytes) + "\n…" : text}`);
 		}

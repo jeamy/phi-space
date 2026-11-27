@@ -9,12 +9,19 @@
 //   FORUM_REPOS=name=/abs/path,other=/abs/path        the local git repositories it offers (default: none)
 //   FORUM_GIT_HOSTS=github.com,git.example.org        hosts a remote repository may be fetched from (default: none),
 //   FORUM_GIT_MAX_MB (200), FORUM_GIT_TIMEOUT_S (60), FORUM_GIT_CACHE (.local/git-cache): remote.ts
+//   FORUM_FILES_SOCKET=/path/agent.sock               spaces-files' agent socket for this host (default: none, no workspaces);
+//   FORUM_FILES_TENANT, FORUM_FILES_HOST              the tenant and host peer it stands for, shown to a room's owner
+//                                                     for registering the room's agent (files.ts; FORUM_FILES_MAX_*)
+// It is the only process that talks to spaces-files: a room's link is checked and a task's copy of the linked folders
+// taken here (FilesRequest, FilesResult; files.ts).
 import "./env.ts";
 import { existsSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
-import { answer, docsPack, gitPack, indexHash, reposOf, resolveCommit, type IndexEntry, type Pack, type PlanSource, type SourceCall } from "./sources.ts";
+import { answer, docsPack, gitPack, indexHash, reposOf, resolveCommit, type IndexEntry, type Pack, type PlanSource, type SourceCall, type SourceId } from "./sources.ts";
+import { agentOf, folderName, walkFolders, walkedIndex, type CheckAnswer, type FilesRequest, type FilesResult, type RoomLink, type SnapshotAnswer } from "./files.ts";
+import { FilesAgentClient, FilesError } from "./files-client.ts";
 import { fetchRemote, gitHosts, hasCommit, remoteDir, remoteName, remoteUrl } from "./remote.ts";
 import { announce, awaitWork, connectSpace, DEFAULT_SPACE, keepAlive } from "./space.ts";
 
@@ -23,7 +30,7 @@ import { announce, awaitWork, connectSpace, DEFAULT_SPACE, keepAlive } from "./s
  *  block. */
 export type SourceRequest = { requestId: string; session: string; blockId: string; ts: number } & (
 	| { op: "open"; repo?: string; url?: string; ref: string; ttl: number }
-	| { op: "call"; sourceId: "docs" | "repo"; call: SourceCall });
+	| { op: "call"; sourceId: SourceId; call: SourceCall });
 /** Its answer. `text`: what a reading call returned (also what the caller got wrong); `opened`: the pack. An `error`
  *  is a failure of the request itself (no such repository, the pack is gone). */
 export type SourceResult = { requestId: string; session: string; ok: boolean; text?: string; opened?: Pick<PlanSource, "name" | "url" | "commit" | "ref" | "files" | "bytes" | "indexHash">; error?: string; ts: number };
@@ -37,8 +44,8 @@ const INDEX_PAGE_BYTES = 40_000;
 
 /** Test only (FORUM_TEST=1): the first request of FORUM_TEST_SOURCE_PAUSE writes that file and holds here, with the
  *  request taken, until the test kills the process. */
-async function holdBeforeAnswer(): Promise<void> {
-	const marker = process.env.FORUM_TEST_SOURCE_PAUSE;
+async function holdBeforeAnswer(name = "FORUM_TEST_SOURCE_PAUSE"): Promise<void> {
+	const marker = process.env[name];
 	if (process.env.FORUM_TEST !== "1" || !marker || existsSync(marker)) return;
 	writeFileSync(marker, "holding");
 	await new Promise<void>(() => {});
@@ -60,6 +67,8 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 	const conn = connectSpace(o.space);
 	const space = conn.space;
 	const repos = reposOf(), hosts = gitHosts();
+	const filesSocket = process.env.FORUM_FILES_SOCKET || "";
+	const files = filesSocket ? { tenant: process.env.FORUM_FILES_TENANT || "?", host: process.env.FORUM_FILES_HOST || "?" } : null;
 	const presence = announce(space, "sources");
 	const open = new Set<string>();
 	let stopping = false;
@@ -79,7 +88,7 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 	const publish = async () => {
 		try {
 			if (infoLease) { try { await space.renew(infoLease, 30_000); return; } catch { infoLease = null; } }
-			infoLease = (await space.write({ type: "SourceInfo", fields: { procId, repos: [...repos.keys()].sort(), hosts, ts: Date.now() } }, null, 30_000)).id;
+			infoLease = (await space.write({ type: "SourceInfo", fields: { procId, repos: [...repos.keys()].sort(), hosts, files, ts: Date.now() } }, null, 30_000)).id;
 		} catch (e) { if (!stopping) console.error("[sources] publishing the repositories failed", (e as Error).message); }
 	};
 	await publish();
@@ -99,8 +108,19 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 			return gitPack(dir, src.commit!);
 		});
 		if (src.kind === "repo") return cached(`repo:${src.name}@${src.commit}`, () => gitPack(repoPath(src.name), src.commit!));
+		if (src.kind === "files") return cached(`files:${req.session}:${req.blockId}:${src.copy}`, async () => {
+			// the task's copy of the workspace folders: its index (every file) and the parts of its text files
+			const key = { session: req.session, blockId: req.blockId, sourceId: "files", copy: src.copy ?? "" };
+			const index = (await space.readAll({ type: "SourceIndex", fields: key }, { limit: 2000 })).sort((a, b) => Number(a.fields.part) - Number(b.fields.part)).flatMap((e) => (e.fields as unknown as { paths: IndexEntry[] }).paths);
+			const parts = (await space.readAll({ type: "SourceFile", fields: key }, { limit: 2000 })).map((e) => e.fields as unknown as { path: string; part: number; text: string });
+			const by = new Map<string, string[]>();
+			for (const p of parts.sort((a, b) => a.part - b.part)) by.set(p.path, [...(by.get(p.path) ?? []), p.text]);
+			const texts = new Map([...by].map(([path, t]) => [path, Buffer.from(t.join(""), "utf8")]));
+			return { index, read: async (path: string) => texts.get(path) ?? Buffer.alloc(0) };
+		});
 		return cached(`docs:${req.session}:${req.blockId}:${src.indexHash}`, async () => {
-			const parts = (await space.readAll({ type: "SourceFile", fields: { session: req.session, blockId: req.blockId } }, { limit: 500 })).map((e) => e.fields as unknown as { path: string; part: number; text: string });
+			// the uploaded documents: the parts without a source of their own (a workspace copy's carry `sourceId`)
+			const parts = (await space.readAll({ type: "SourceFile", fields: { session: req.session, blockId: req.blockId } }, { limit: 2000 })).map((e) => e.fields as unknown as { path: string; part: number; text: string; sourceId?: string }).filter((p) => !p.sourceId);
 			const by = new Map<string, string[]>();
 			for (const p of parts.sort((a, b) => a.part - b.part)) by.set(p.path, [...(by.get(p.path) ?? []), p.text]);
 			return docsPack([...by].map(([path, texts]) => ({ path, text: texts.join("") })));
@@ -148,8 +168,102 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 		}
 	};
 	const loops = Array.from({ length: Math.max(1, o.parallel ?? Number(process.env.FORUM_SOURCE_PARALLEL ?? 4)) }, () => worker());
+	if (files) loops.push(...Array.from({ length: 2 }, () => filesWorker()));
+
+	// ---- spaces-files (files.ts): the room's agent checks what it sees and takes a task's copy ----
+	const clientFor = (room: string) => new FilesAgentClient({ path: filesSocket, agent: agentOf(room), retries: 2 });
+	/** Says what went wrong with spaces-files in words for the room's owner, with spaces-files' own code. */
+	const refusal = (e: unknown, what: string): { code: string; error: string } => {
+		if (!(e instanceof FilesError)) return { code: "error", error: `${what}: ${String((e as Error)?.message ?? e).slice(0, 240)}` };
+		const why = e.code === "unauthenticated" ? "the room's agent is not registered in spaces-files, or is disabled"
+			: e.code === "notFound" ? "the room's agent cannot see it (not granted, revoked, or not there)"
+			: e.code === "permissionDenied" ? "the room's agent may not do that there" : e.message;
+		return { code: e.code, error: `${what}: ${why} (${e.code})` };
+	};
+	/** `check`: the workspaces the agent sees that it does not own, and each chosen folder: seen, and not owned. */
+	const check = async (req: FilesRequest & { op: "check" }): Promise<CheckAnswer> => {
+		const c = clientFor(req.session);
+		try {
+			let all: string[];
+			try { all = await c.workspaces(); } catch (e) { throw Object.assign(new Error(refusal(e, "spaces-files").error), { code: (e as FilesError).code }); }
+			// an agent's own home, and any workspace it owns, is no folder of the room: an owner could grant on
+			const owns = async (ws: string, path: string) => { try { await c.call("listGrants", { workspace: ws, path: path || "." }); return true; } catch { return false; } };
+			const workspaces: string[] = [];
+			for (const ws of all.slice(0, 50)) if (!(await owns(ws, ""))) workspaces.push(ws);
+			const folders: CheckAnswer["folders"] = [];
+			for (const [role, f] of [["read", req.read], ["project", req.project]] as const) {
+				if (!f) continue;
+				let entries: number;
+				try { entries = (await c.listPage(f.workspace, f.path || ".", null)).entries.length; }
+				catch (e) { const r = refusal(e, folderName(f)); throw Object.assign(new Error(r.error), { code: r.code }); }
+				if (await owns(f.workspace, f.path)) throw Object.assign(new Error(`${folderName(f)}: the room's agent owns it; a room must never be able to grant what it reads, so it is not linked`), { code: "ownerAgent" });
+				folders.push({ role, ...f, entries });
+			}
+			return { agent: agentOf(req.session), workspaces, folders };
+		} finally { c.close(); }
+	};
+	/** `snapshot`: the copy of the linked folders for a task, written in parts outside the transaction under a copy ID of
+	 *  its own; parts of an attempt cut off before are removed first. `alive` turns false when the request's lease is
+	 *  lost, so a walk that outlived it writes nothing more. */
+	const snapshot = async (req: FilesRequest & { op: "snapshot" }, alive: () => boolean): Promise<SnapshotAnswer> => {
+		const link = (await space.readIfExists({ type: "RoomLink", fields: { session: req.session } }, NO_WAIT))?.fields as unknown as RoomLink | undefined;
+		if (!link) throw Object.assign(new Error("The room is not linked to a workspace"), { code: "notLinked" });
+		const key = { session: req.session, blockId: req.blockId, sourceId: "files" };
+		for (const type of ["SourceFile", "SourceIndex"]) while (await space.take({ type, fields: key }, NO_WAIT)) { /* an earlier attempt's */ }
+		const c = clientFor(req.session);
+		let walked;
+		try { walked = await walkFolders(c, link); }
+		catch (e) { const r = refusal(e, "The workspace"); throw Object.assign(new Error(e instanceof FilesError ? r.error : (e as Error).message), { code: r.code }); }
+		finally { c.close(); }
+		if (!walked.length) throw Object.assign(new Error("The linked folders hold no file"), { code: "empty" });
+		const copy = `c${randomBytes(6).toString("hex")}`, at = { ...key, copy };
+		const put = async (type: string, fields: Record<string, unknown>) => {
+			if (!alive()) throw new Error("the request's lease was lost");
+			await space.write({ type, fields: { ...at, ...fields } as never }, null, req.ttl);
+		};
+		let wrote = 0;
+		for (const f of walked) if (f.text !== undefined) for (let part = 0; part === 0 || part * 12_000 < f.text.length; part++) {
+			await put("SourceFile", { path: f.path, part, text: f.text.slice(part * 12_000, (part + 1) * 12_000) });
+			if (++wrote === 1) await holdBeforeAnswer("FORUM_TEST_FILES_PAUSE");
+		}
+		const index = walkedIndex(walked), pages = indexPages(index);
+		for (const [part, paths] of pages.entries()) await put("SourceIndex", { part, parts: pages.length, paths });
+		const texts = walked.filter((f) => f.text !== undefined);
+		return { copy, files: walked.length, texts: texts.length, bytes: walked.reduce((n, f) => n + f.size, 0), textBytes: texts.reduce((n, f) => n + f.size, 0), indexHash: indexHash(index), tenant: link.tenant };
+	};
+	/** One FilesRequest: taken in a transaction whose lease is renewed while it is answered, the answer written in it. */
+	async function filesOne(): Promise<boolean> {
+		if (!(await awaitWork(space, { type: "FilesRequest" }, halt.signal))) return false;
+		const t = await space.createTransaction(LEASE_MS);
+		open.add(t.id);
+		let lost = false;
+		const renew = setInterval(() => void space.renew(t.id, LEASE_MS).catch(() => { lost = true; }), Math.max(500, Math.floor(LEASE_MS / 3)));
+		renew.unref?.();
+		try {
+			const e = await space.take({ type: "FilesRequest" }, NO_WAIT, { txn: t.id });
+			if (!e) { await space.abort(t.id); return false; }
+			const req = e.fields as unknown as FilesRequest;
+			let result: Omit<FilesResult, "requestId" | "session" | "ts">;
+			try {
+				result = req.op === "check" ? { ok: true, check: await check(req) } : { ok: true, snapshot: await snapshot(req, () => !lost && !stopping) };
+			} catch (err) { result = { ok: false, code: (err as { code?: string }).code ?? "error", error: String((err as Error).message ?? err).slice(0, 400) }; }
+			await space.write({ type: "FilesResult", fields: { requestId: req.requestId, session: req.session, ...result, ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
+			await space.commit(t.id);
+			return true;
+		} catch (e) {
+			await space.abort(t.id).catch(() => {});
+			if (e instanceof TransactionError) return true;
+			throw e;
+		} finally { clearInterval(renew); open.delete(t.id); }
+	}
+	async function filesWorker() {
+		while (!stopping) {
+			try { await filesOne(); }
+			catch (e) { if (stopping) return; console.error("[sources] files request failed", (e as Error).message); await new Promise((r) => setTimeout(r, 1000)); }
+		}
+	}
 	return {
-		repos: [...repos.keys()], hosts,
+		repos: [...repos.keys()], hosts, files,
 		async close() {
 			stopping = true; halt.abort(); clearInterval(beat);
 			await Promise.allSettled([...open].map((id) => space.abort(id)));
@@ -181,7 +295,7 @@ export async function askSources(space: SpaceLike, req: SourceRequest, waitMs = 
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const host = await startSourceHost();
-	console.log(`[sources] reading for ${process.env.FORUM_SPACE || DEFAULT_SPACE}; repositories: ${host.repos.join(", ") || "none"}; remote hosts: ${host.hosts.join(", ") || "none"}`);
+	console.log(`[sources] reading for ${process.env.FORUM_SPACE || DEFAULT_SPACE}; repositories: ${host.repos.join(", ") || "none"}; remote hosts: ${host.hosts.join(", ") || "none"}; spaces-files: ${host.files ? `${host.files.tenant} as ${host.files.host}` : "none"}`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 4000).unref(); await host.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());

@@ -1,22 +1,25 @@
-digraph "Who may see what?" {
+// Who may see what when a room is linked to a workspace (docs/forum-seite-plan-2026-11-26.en.md, section 6). The labels
+// are in a file per language (forum-access.en.sed, forum-access.de.sed): render as style.inc says, with
+// "-f forum-access.en.sed" added to the sed for ../forum-access.svg and "-f forum-access.de.sed" for ../forum-access-de.svg.
+digraph "@title@" {
 #include
 	rankdir=LR;
-	owner [label="Folder owner\na person in spaces-files", fillcolor="#fcf2d9"];
+	owner [label="@owner@", fillcolor="#fcf2d9"];
 	subgraph cluster_ws {
-		labelloc=b; label="Workspace in spaces-files"; labeljust=l; color="#648a85"; style=rounded;
-		src [label="a folder that is\nonly read"];
-		dst [label="the project folder\nuploads, plan, documents"];
-		other [label="everything else\nnever visible to the room"];
+		labelloc=b; label="@ws@"; labeljust=l; color="#648a85"; style=rounded;
+		src [label="@src@"];
+		dst [label="@dst@"];
+		other [label="@other@"];
 	}
-	agent [label="The room's agent\none actor per room", fillcolor="#d8eeea"];
+	agent [label="@agent@", fillcolor="#d8eeea"];
 	subgraph cluster_room {
-		labelloc=b; label="Room in the forum"; labeljust=l; color="#648a85"; style=rounded;
-		copy [label="Copy of the text and\nreduced pictures of a task"];
-		members [label="Room members\nsee the copy, the table,\nthe plan"];
+		labelloc=b; label="@room@"; labeljust=l; color="#648a85"; style=rounded;
+		copy [label="@copy@"];
+		members [label="@members@"];
 	}
-	providers [label="Model providers\nreceive excerpts", fillcolor="#fcf2d9"];
-	owner -> src [label="grants viewer"]; owner -> dst [label="grants editor"];
-	owner -> agent [label="can revoke\nat any time", style=dashed];
-	agent -> src [label="reads"]; agent -> dst [label="reads and writes"];
-	agent -> copy; copy -> members; copy -> providers [label="excerpts in prompts"];
+	providers [label="@providers@", fillcolor="#fcf2d9"];
+	owner -> src [label="@viewer@"]; owner -> dst [label="@editor@"];
+	owner -> agent [label="@revoke@", style=dashed];
+	agent -> src [label="@reads@"]; agent -> dst [label="@readswrites@"];
+	agent -> copy; copy -> members; copy -> providers [label="@excerpts@"];
 }

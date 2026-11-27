@@ -7,7 +7,8 @@ export type TipId = "signin" | "name" | "signout" | "rooms" | "newroom" | "invit
 	| "files" | "table" | "plan" | "panes" | "task" | "brief" | "doclang" | "outline" | "criteria" | "docs"
 	| "models" | "way" | "rounds" | "budget" | "start" | "stop" | "answer" | "say"
 	| "version" | "compare" | "accept" | "object" | "tableview" | "language" | "mode" | "palette"
-	| "providers" | "providerkey" | "providersignin" | "loginanswer" | "providertest" | "providerremove" | "allowed" | "limits" | "roomdefaults";
+	| "providers" | "providerkey" | "providersignin" | "loginanswer" | "providertest" | "providerremove" | "allowed" | "limits" | "roomdefaults"
+	| "roomlink" | "folders" | "linkcheck" | "fromworkspace" | "workspacefiles";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -304,5 +305,40 @@ export const TIPS: Record<TipId, Tip> = {
 			en: "What a run in this room takes when nobody chooses otherwise. The budget is also the most a member may ask for.",
 		},
 		article: "help.topic.budgets_and_limits", anchor: "room",
+	},
+	roomlink: {
+		text: {
+			de: "Verbindet den Raum über seinen eigenen Agenten mit Ordnern in spaces-files. Was er sieht, entscheiden die Besitzer der Ordner.",
+			en: "Links the room to folders in spaces-files through its own agent. What it sees is decided by the folders' owners.",
+		},
+		article: "help.topic.material", anchor: "link",
+	},
+	folders: {
+		text: {
+			de: "Ein Workspace und ein Pfad darin. Lesen gibt es für einen ganzen Workspace oder einen eingeschränkten Ordner.",
+			en: "A workspace and a path in it. Viewer applies to a whole workspace or a restricted folder.",
+		},
+		article: "help.topic.material", anchor: "link",
+	},
+	linkcheck: {
+		text: {
+			de: "Fragt spaces-files, was der Agent sieht. Ein Ordner, den er nicht sieht oder der ihm gehört, wird abgelehnt.",
+			en: "Asks spaces-files what the agent sees. A folder it does not see, or one it owns, is refused.",
+		},
+		article: "help.topic.material", anchor: "check",
+	},
+	fromworkspace: {
+		text: {
+			de: "Nimmt jetzt eine Kopie der verbundenen Ordner für diese Aufgabe. Auszüge gehen an die Modellanbieter.",
+			en: "Takes a copy of the linked folders for this task now. Excerpts go to the model providers.",
+		},
+		article: "help.topic.material", anchor: "task",
+	},
+	workspacefiles: {
+		text: {
+			de: "Die Kopie dieser Aufgabe. Texte lesen die Modelle; andere Dateien kennen sie nur mit Art und Größe.",
+			en: "This task's copy. The models read the texts; other files they know only by kind and size.",
+		},
+		article: "help.topic.material", anchor: "files",
 	},
 };
