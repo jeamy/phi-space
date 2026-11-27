@@ -70,6 +70,14 @@ the goal the fewest points win. A candidate carries a lane: `bot` candidates go 
 port 3990), and `codemode-chat/.env` there sets `CODEMODE_ARENA=tcp:127.0.0.1:3990` for web and judge. The tests use `tests/fake-arena.ts`, which speaks the same lines; the real arena has its own test
 in spaces-mmo (`tests/arena.test.ts`).
 
+The grid scale (`server/grid.ts`, spaces-mmo's grid switch, `spaces-mmo/docs/3d-welt-und-raster-plan-2026-11-21.en.md`
+section 2.2): `CODEMODE_GRID_SCALE` (1 or 2, default 1) is the scale of the world the bots play, the same as the arena's
+(`SPACES_MMO_GRID_SCALE`). The arena says its own in `open` and `map`; a judge whose scale differs takes no verdict from it
+(the candidate goes back, `ArenaDown`). At scale 2 the episodes' cells, the fires a task names and the toy islands are the
+cell points `(2x, 2y)` of those of scale 1, a fire and an exit cover 2 × 2 cells (`look` gives them `w`, `h`), and the
+lengths the texts name (near, a jump in the memory, cells in from an exit) double; at scale 1 every text and every
+scripted bot is as it was. The tests run at both: `CODEMODE_GRID_SCALE=2 npm --prefix codemode-chat test`.
+
 A durable bot task ("Tide bot", `durable: true`) survives its judge (`server/durable-run.ts`): the bot runs with
 pi-codemode's deterministic `start()`, every answer of the arena is written to the space (`BotRun`, `BotCall`) before
 the bot gets it, and a judge that takes the candidate over replays the log with the same seed and start time and goes

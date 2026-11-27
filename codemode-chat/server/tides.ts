@@ -5,6 +5,7 @@
 // islands no shown episode enters, so only a law that speaks of an island's shape (not of its room ids) carries over.
 import type { BotEpisode } from "./bottask.ts";
 import { deadEnds, genIsland } from "./toyisland.ts";
+import { cells } from "./grid.ts";
 
 /** Islands with at least two dead ends (rooms with one exit, the fire's room left out), from `from` on. */
 export function tideIslands(from: number, n: number): number[] {
@@ -45,13 +46,13 @@ const BASE = `const OPP={nord:"süd","süd":"nord",ost:"west",west:"ost"};const 
  *  earliest to the latest and learns the world's minute from the first piece it sees; `calibrate: false` looks once at
  *  the earliest minute and goes on. */
 const PLAY = (calibrate: boolean) => `const play=async(rooms,cellOf,offs)=>{if(!fire||!rooms.length)return;const lo=Math.min(...offs),hi=Math.max(...offs),k=rooms.length;let off=null,fed=0;for(let j=0;fed<3&&j<20;j++){const r=rooms[j%k],steps=(route(here(),r)||[]).length,arrive=now+steps*WALK;const first=(off??lo)+60*j,last=(off??hi)+60*j+LIFE-1;if(arrive>last)continue;if(first>DAY)break;await goTo(r);const c=cellOf(r);await tools.act({line:"move "+c.x+" "+c.y});let got=null;if(off!==null){await waitUntil(off+60*j);await look();got=wood()}else{${calibrate ? `for(let t=Math.max(lo+60*j,now);t<=hi+60*j&&t<=DAY;t+=10){await waitUntil(t);await look();got=wood();if(got){off=now-60*j;break}}` : `await waitUntil(lo+60*j);await look();got=wood()`}}if(!got)continue;await take(got);await feed();fed++}};`;
-/** The law as an agent could write it after reading the observations: dead ends by number, 3 cells in from the exit. */
+/** The law as an agent could write it after reading the observations: dead ends by number, 3 cells of scale 1 in from the exit. */
 const LAW = `const inFrom=(r,n)=>{const e=EX[r][0],c=EC[e],d={nord:[0,-1],"süd":[0,1],ost:[1,0],west:[-1,0]}[e];return {x:c.x-d[0]*n,y:c.y-d[1]*n}};const dead=()=>Object.keys(EX).filter(r=>r!==fire?.room&&EX[r].length===1).sort((a,b)=>num(a)-num(b));`;
 
 /** The law in code (an agent fitted it to the observations and wrote it down): correct on any island, any seed. */
-const lawBot = `async function bot(){${BASE}${PLAY(true)}${LAW}await look();await explore();await play(dead(),(r)=>inFrom(r,3),[30,40,50])}`;
+const lawBot = `async function bot(){${BASE}${PLAY(true)}${LAW}await look();await explore();await play(dead(),(r)=>inFrom(r,${cells(3)}),[30,40,50])}`;
 /** The same without calibration: it takes the first minute it saw for the only one (the lesson of several seeds). */
-const lawNoCalibration = `async function bot(){${BASE}${PLAY(false)}${LAW}await look();await explore();await play(dead(),(r)=>inFrom(r,3),[30])}`;
+const lawNoCalibration = `async function bot(){${BASE}${PLAY(false)}${LAW}await look();await explore();await play(dead(),(r)=>inFrom(r,${cells(3)}),[30])}`;
 /** Without a model: tours the island again and again and takes what it finds. */
 const SEARCH = `let fed=0;const tour=[];const seen=new Set();const walk=(r)=>{seen.add(r);for(const [d,t] of Object.entries(G[r]||{}))if(!seen.has(t)){tour.push(d);walk(t);tour.push(OPP[d])}};walk(here());if(!tour.length)return;await waitUntil(30);for(let round=0;fed<3&&now<DAY&&round<12;round++)for(const d of tour){if(fed>=3||now+WALK>DAY)break;const w=wood();if(w){await take(w);await feed();fed++;break}await cross(d)}`;
 /** Fits its model to the frozen observations: which rooms (one exit? never the fire's?), in which order (by number up

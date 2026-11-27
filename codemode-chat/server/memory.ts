@@ -16,6 +16,7 @@ import { createHash } from "node:crypto";
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import type { PathStep } from "./bottask.ts";
 import type { ChanceSeen, TideSeen } from "./toyisland.ts";
+import { cells } from "./grid.ts";
 
 /** One path of the memory, as the judge gets it from the freeze. */
 export type MemoryPath = { memoryId: string; gen: number; author: string; episode: string; goal: string; path: PathStep[]; /** an observation (goal "tide"): what the judge logged of a landing (step 7) or of a day of the chance tide (step 8) */ obs?: TideSeen | ChanceSeen };
@@ -26,10 +27,10 @@ export type Recall =
 	| { found: true; from: PathStep; distance: number; jumps: number; cost: number; steps: PathStep[]; links: Array<[PathStep, PathStep]> }
 	| { found: false; reason: string };
 
-/** "Near": in the same room, at most this many cells apart (Manhattan). */
-export const NEAR = 3;
-/** What a jump from one remembered path to another costs, in cells. */
-export const JUMP_CELLS = 10;
+/** "Near": in the same room, at most this many cells apart (Manhattan; 3 of scale 1). */
+export const NEAR = cells(3);
+/** What a jump from one remembered path to another costs, in cells (10 of scale 1). */
+export const JUMP_CELLS = cells(10);
 /** The most paths a block remembers, and the most a freeze names. */
 export const MAX_MEMORY = 300;
 

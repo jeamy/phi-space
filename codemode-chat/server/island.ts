@@ -1,11 +1,13 @@
 // The island bot (codemode-chat/docs/codemode-planung.en.md, step 1): the first planning task. Its episodes start the figure in the
 // rooms of the Graue Insel of spaces-mmo's world Leuchtfeuer and lay out the island's only piece of driftwood; the goal
 // is always the beacon of the Graue Bucht. The rooms, exits and cells are those of spaces-mmo/worlds/leuchtfeuer
-// (world.json); spaces-mmo/tests/arena.test.ts opens the episodes in the real world.
+// (world.json); spaces-mmo/tests/arena.test.ts opens the episodes in the real world. The cells below are those of scale 1;
+// at grid scale 2 (grid.ts) each is its cell point (2x, 2y), as in the world's definition at that scale.
 import type { BotEpisode } from "./bottask.ts";
 import { explorer, explorerBot, surveyBot, tideWaiter } from "./explorer.ts";
 import type { Subgoal } from "./subgoals.ts";
 import type { HarnessSpec } from "./harnesstask.ts";
+import { cells, point } from "./grid.ts";
 
 /** The island's rooms and their exits on the island (exits that leave it are left out). */
 export const ISLAND_ROOMS: Record<string, { name: string; exits: Record<string, string> }> = {
@@ -23,7 +25,7 @@ export const ISLAND_MAP = Object.entries(ISLAND_ROOMS).map(([id, r]) => `- ${r.n
 
 /** Everything that feeds a fire, taken off the ground of every room before an episode's piece is laid out. */
 const FUEL = ["treibholz", "holzbuendel", "tran"];
-const ep = (id: string, kind: BotEpisode["kind"], start: [string, number, number], wood: [string, number, number]): BotEpisode => ({
+const ep = (id: string, kind: BotEpisode["kind"], start1: [string, number, number], wood1: [string, number, number]): BotEpisode => { const start = at(start1), wood = at(wood1); return {
 	id, kind,
 	start: { room: start[0], x: start[1], y: start[2] },
 	setup: { clear: FUEL, items: [{ proto: "treibholz", room: wood[0], x: wood[1], y: wood[2] }] },
@@ -31,7 +33,11 @@ const ep = (id: string, kind: BotEpisode["kind"], start: [string, number, number
 		de: `Start ${ISLAND_ROOMS[start[0]]!.name} (${start[1]},${start[2]}), Treibholz ${ISLAND_ROOMS[wood[0]]!.name} (${wood[1]},${wood[2]})`,
 		en: `start ${ISLAND_ROOMS[start[0]]!.name} (${start[1]},${start[2]}), driftwood ${ISLAND_ROOMS[wood[0]]!.name} (${wood[1]},${wood[2]})`,
 	},
-});
+}; };
+/** A cell of scale 1 as `[room, x, y]` at this scale. */
+const at = ([room, x, y]: [string, number, number]): [string, number, number] => { const c = point({ x, y }); return [room, c.x, c.y]; };
+/** The same as a script's array literal. */
+const A = (c: [string, number, number]) => JSON.stringify(at(c));
 
 /** Three shown, six hidden. Five hidden ones start in rooms no shown one starts in; H3 and H6 need driftwood from a
  *  room that is neither the start nor on the shortest way to the fire. */
@@ -61,7 +67,7 @@ export const ISLAND_VARIANTS: string[] = [
 	// the same, and it looks after every step: correct, more points
 	`async function bot(){${ROUTE}let s=await tools.look();let here=s.room.id;const order=[here];for(let i=0;i<order.length;i++)for(const d of Object.values(MAP[order[i]]||{}))if(!order.includes(d))order.push(d);for(const r of order){if(r!==here){for(const ex of route(here,r)){await tools.act({line:ex});await tools.look()}here=r;s=await tools.look()}const w=s.things.find(t=>t.name==="Treibholz");if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.look();await tools.act({line:"nimm treibholz"});await tools.look();break}}for(const ex of route(here,"graue-bucht")){await tools.act({line:ex});await tools.look()}${FEED}}`,
 	// knows the three shown episodes by heart: all of them, none of the hidden ones
-	`async function bot(){${ROUTE}let s=await tools.look();const known={"graue-bucht":["graue-bucht",5,7],fischerdorf:["fischerdorf",5,5],klippenpfad:["graue-bucht",17,9]};const k=known[s.room.id]||["graue-bucht",5,7];let here=s.room.id;for(const ex of route(here,k[0]))await tools.act({line:ex});here=k[0];await tools.act({line:"move "+k[1]+" "+k[2]});await tools.act({line:"nimm treibholz"});for(const ex of route(here,"graue-bucht"))await tools.act({line:ex});${FEED}}`,
+	`async function bot(){${ROUTE}let s=await tools.look();const known={"graue-bucht":${A(["graue-bucht", 5, 7])},fischerdorf:${A(["fischerdorf", 5, 5])},klippenpfad:${A(["graue-bucht", 17, 9])}};const k=known[s.room.id]||${A(["graue-bucht", 5, 7])};let here=s.room.id;for(const ex of route(here,k[0]))await tools.act({line:ex});here=k[0];await tools.act({line:"move "+k[1]+" "+k[2]});await tools.act({line:"nimm treibholz"});for(const ex of route(here,"graue-bucht"))await tools.act({line:ex});${FEED}}`,
 	// looks only in the room it starts in and in the Graue Bucht: misses wood elsewhere
 	`async function bot(){${ROUTE}let s=await tools.look();let here=s.room.id,w=s.things.find(t=>t.name==="Treibholz");if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"})}for(const ex of route(here,"graue-bucht"))await tools.act({line:ex});if(!w){s=await tools.look();w=s.things.find(t=>t.name==="Treibholz");if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"})}}${FEED}}`,
 	// wrong: goes to the fire without wood
@@ -77,7 +83,7 @@ export const ISLAND_MEMORY_VARIANTS: string[] = [
 	ISLAND_VARIANTS[0]!,
 	// searches for the driftwood, then recalls the way to the fire from there and walks it, the room route when the
 	// memory has none: correct, and it learns the way once a generation reached it
-	`async function bot(){${ROUTE}${WALK}let s=await tools.look();let here=s.room.id;const order=[here];for(let i=0;i<order.length;i++)for(const d of Object.values(MAP[order[i]]||{}))if(!order.includes(d))order.push(d);for(const r of order){if(r!==here){for(const ex of route(here,r))await tools.act({line:ex});here=r;s=await tools.look()}const w=s.things.find(t=>t.name==="Treibholz");if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});break}}const m=await tools.recall();if(m.found&&m.distance<=3)here=await walk(m,false);for(const ex of route(here,"graue-bucht"))await tools.act({line:ex});${FEED}}`,
+	`async function bot(){${ROUTE}${WALK}let s=await tools.look();let here=s.room.id;const order=[here];for(let i=0;i<order.length;i++)for(const d of Object.values(MAP[order[i]]||{}))if(!order.includes(d))order.push(d);for(const r of order){if(r!==here){for(const ex of route(here,r))await tools.act({line:ex});here=r;s=await tools.look()}const w=s.things.find(t=>t.name==="Treibholz");if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});break}}const m=await tools.recall();if(m.found&&m.distance<=${cells(3)})here=await walk(m,false);for(const ex of route(here,"graue-bucht"))await tools.act({line:ex});${FEED}}`,
 	// only replays the memory from where it starts, picking up what lies on the way: nothing in the first generation,
 	// then the shown episodes whose way passes their driftwood, never a hidden one
 	`async function bot(){${WALK}const m=await tools.recall();if(!m.found)return;await walk(m,true);let s;${FEED}}`,
@@ -89,7 +95,8 @@ export const ISLAND_MEMORY_VARIANTS: string[] = [
 // The Feuerkorb am Anleger lies at the island's south end, behind the Dünen: from most rooms a way of several rooms. The
 // episodes start the figure elsewhere each time and lay the driftwood out in another room; a plan names the subgoals on
 // the way (driftwood, the Dünen, the fire's side, the fire burning).
-export const ANLEGER_FIRE = { room: "anleger", x: 7, y: 5 };
+export const ANLEGER_FIRE = point({ room: "anleger", x: 7, y: 5 });
+const NEAR_FIRE = { x: ANLEGER_FIRE.x, y: ANLEGER_FIRE.y };
 export const ANLEGER_EPISODES: BotEpisode[] = [
 	ep("S1", "sample", ["graue-bucht", 10, 8], ["duenen", 6, 4]),
 	ep("S2", "sample", ["fischerdorf", 12, 8], ["torfmoor", 18, 3]),
@@ -105,9 +112,9 @@ export const ANLEGER_EPISODES: BotEpisode[] = [
 /** The plans scripted agents pick from: one that finds the wood wherever it lies, one that expects it in the Dünen, one
  *  that goes to the fire first and fetches the wood after. */
 export const ANLEGER_PLANS: Array<{ text: string; subgoals: Subgoal[] }> = [
-	{ text: "Search the island for driftwood, nearest rooms first; then through the Dünen to the Anleger, next to the Feuerkorb, and feed it.", subgoals: [{ holds: "pack:treibholz" }, { room: "duenen" }, { room: "anleger", near: { x: 7, y: 5 } }, { room: "anleger", holds: "beacon:feuer-anleger" }] },
-	{ text: "The driftwood washes up in the Dünen: take it there, go south to the Anleger and feed the Feuerkorb.", subgoals: [{ room: "duenen", holds: "pack:treibholz" }, { room: "anleger", near: { x: 7, y: 5 } }, { room: "anleger", holds: "beacon:feuer-anleger" }] },
-	{ text: "Go to the Feuerkorb first to know the way, then search the island for driftwood and come back to feed it.", subgoals: [{ room: "anleger", near: { x: 7, y: 5 } }, { holds: "pack:treibholz" }, { room: "anleger", holds: "beacon:feuer-anleger" }] },
+	{ text: "Search the island for driftwood, nearest rooms first; then through the Dünen to the Anleger, next to the Feuerkorb, and feed it.", subgoals: [{ holds: "pack:treibholz" }, { room: "duenen" }, { room: "anleger", near: NEAR_FIRE }, { room: "anleger", holds: "beacon:feuer-anleger" }] },
+	{ text: "The driftwood washes up in the Dünen: take it there, go south to the Anleger and feed the Feuerkorb.", subgoals: [{ room: "duenen", holds: "pack:treibholz" }, { room: "anleger", near: NEAR_FIRE }, { room: "anleger", holds: "beacon:feuer-anleger" }] },
+	{ text: "Go to the Feuerkorb first to know the way, then search the island for driftwood and come back to feed it.", subgoals: [{ room: "anleger", near: NEAR_FIRE }, { holds: "pack:treibholz" }, { room: "anleger", holds: "beacon:feuer-anleger" }] },
 ];
 
 // FOLLOW walks a plan's subgoals in turn: to a subgoal's room by the island's route, next to its `near` cell, driftwood
@@ -159,7 +166,8 @@ export const PLANNER_HARNESS: HarnessSpec = {
 // their own episodes, three seeds and a hold; the same with one seed per episode, cheaper), and one blind to each lesson.
 const FAR = `${ROUTE}const far=(a)=>{let best=a,n=0;for(const r of Object.keys(MAP)){const k=route(a,r).length;if(k>n){n=k;best=r}}return best};`;
 const RATE = (episodes: string, seeds: string, hold: number) => `async function rate(){${FAR}let n=0;const eps=${episodes};for(const [i,e] of eps.entries())for(const seed of ${seeds}){const r=await tools.run({...e,seed,hold:${hold}});if(r.reached)n++}return n}`;
-const FAR_EPS = `Object.keys(MAP).map(r=>({start:{room:r,x:12,y:8},wood:{room:far(r),x:5,y:5}}))`;
+const C = (x: number, y: number) => { const c = point({ x, y }); return `x:${c.x},y:${c.y}`; };
+const FAR_EPS = `Object.keys(MAP).map(r=>({start:{room:r,${C(12, 8)}},wood:{room:far(r),${C(5, 5)}}}))`;
 const MADE = `[11,12,13].map(island=>({island}))`;
 const ALL_EPS = `[...${FAR_EPS},...${MADE}]`;
 export const PLANNER_RATERS: string[] = [
@@ -170,13 +178,13 @@ export const PLANNER_RATERS: string[] = [
 	`async function rate(){${FAR}let n=0;for(const [i,e] of ${ALL_EPS}.entries()){const x=await tools.run({...e,seed:i%3,hold:5});if(x.reached)n++}return n}`,
 	// wrong: only the shown episodes (the bot that knows them by heart, the one that looks near its start and the one
 	// with the Graue Insel's map pass)
-	RATE(`[{start:{room:"graue-bucht",x:10,y:8},wood:{room:"graue-bucht",x:5,y:7}},{start:{room:"fischerdorf",x:12,y:8},wood:{room:"fischerdorf",x:5,y:5}},{start:{room:"klippenpfad",x:2,y:8},wood:{room:"graue-bucht",x:17,y:9}}]`, "[0,1,2]", 5),
+	RATE(`[{start:{room:"graue-bucht",${C(10, 8)}},wood:{room:"graue-bucht",${C(5, 7)}}},{start:{room:"fischerdorf",${C(12, 8)}},wood:{room:"fischerdorf",${C(5, 5)}}},{start:{room:"klippenpfad",${C(2, 8)}},wood:{room:"graue-bucht",${C(17, 9)}}}]`, "[0,1,2]", 5),
 	// wrong: one seed (the tide waiter passes)
 	RATE(ALL_EPS, "[0]", 5),
 	// wrong: no hold (the bot that lets the fire go out passes)
 	RATE(ALL_EPS, "[0,1,2]", 0),
 	// wrong: the wood always in the start room (the near searcher passes)
-	RATE(`[...Object.keys(MAP).map(r=>({start:{room:r,x:12,y:8},wood:{room:r,x:5,y:5}})),...[11,12,13].map(island=>({island,wood:{room:"n"+island+"-0",x:5,y:5},start:{room:"n"+island+"-0",x:12,y:8}}))]`, "[0,1,2]", 5),
+	RATE(`[...Object.keys(MAP).map(r=>({start:{room:r,${C(12, 8)}},wood:{room:r,${C(5, 5)}}})),...[11,12,13].map(island=>({island,wood:{room:"n"+island+"-0",${C(5, 5)}},start:{room:"n"+island+"-0",${C(12, 8)}}}))]`, "[0,1,2]", 5),
 	// wrong: only the Graue Insel (the bot with its map passes)
 	RATE(FAR_EPS, "[0,1,2]", 5),
 ];

@@ -8,7 +8,7 @@
 //                                              or tcp:127.0.0.1:3990; SPACES_MMO_ARENA_WORLDS=2 worlds at a time
 //
 // The protocol is JSON lines: a request `{ id, op, ... }`, an answer `{ id, ok: true, ... }` or `{ id, ok: false, error }`.
-//   open { start?, setup?, seed? }  → { world, charId, name }      (waits for a free slot) start { room, x, y }: where
+//   open { start?, setup?, seed? }  → { world, charId, name, gridScale }  (waits for a free slot) start { room, x, y }: where
 //                                                                    the guest stands (default: the spawn cell of its
 //                                                                    room); setup { clear?: protos, items?: [{ proto,
 //                                                                    room, x, y }] }: those things off the ground of
@@ -16,6 +16,8 @@
 //                                                                    worker's chance (a planning task's episode,
 //                                                                    codemode-chat/docs/codemode-planung.en.md)
 //   look { world }                  → what the figure sees: its room, place, exits, things, fires, pack, the time
+//                                                                    (an exit or a fire with `w`, `h` where it covers more
+//                                                                    than its cell, its x, y the north-west one)
 //   act { world, line }             → { said: string[], at }        the line as a player types it, done when the
 //                                                                    world worker has carried it out
 //   wait { world, minutes }         → { time }                      the clock moves on (it stands still otherwise)
@@ -32,8 +34,11 @@
 //   map { room }                    → { world, room, name, island, map, ground, decor, walk, exits, fires }   a room's
 //                                                                    geometry for drawing paths (no world needed): the
 //                                                                    ground and decor rows, which ground keys are walkable,
-//                                                                    the exits with their destination, the fires, its
-//                                                                    place on the atlas, and `rev` (changes with them)
+//                                                                    the exits with their destination, the fires (each
+//                                                                    with `w`, `h` where it covers more than a cell), its
+//                                                                    place on the atlas, the world's `gridScale` (also in
+//                                                                    `open`'s answer; a cell is 1 / gridScale of a cell of
+//                                                                    scale 1), and `rev` (changes with the geometry)
 //   close { world }                 → {}
 // A world is closed when its connection ends or nobody asks it anything for SPACES_MMO_ARENA_IDLE_MS (default 5 min).
 // A durable run (codemode-chat, codemode-chat/docs/codemode-anwendungen.en.md D) opens with `keep: true`: its world outlives the
@@ -244,8 +249,8 @@ export async function look(w: WorldDef, x: World) {
 	const things = (await all<ItemFields>(x.space, "Item", { location: me.room }))
 		.map((i) => ({ name: i.name, x: i.x, y: i.y }))
 		.sort((a, b) => dist(a) - dist(b) || a.name.localeCompare(b.name) || a.x - b.x || a.y - b.y).slice(0, MAX_THINGS);
-	const exits = (await all<ExitFields>(x.space, "Exit", { location: me.room })).map((e) => ({ name: e.name, x: e.x, y: e.y })).sort((a, b) => a.name.localeCompare(b.name));
-	const fires = await Promise.all((await all<BeaconFields>(x.space, "Beacon", { room: me.room })).map(async (b) => ({ name: b.name, x: b.x, y: b.y, lit: isLit(await flameOf(x.space, b.beaconId), now) })));
+	const exits = (await all<ExitFields>(x.space, "Exit", { location: me.room })).map((e) => ({ name: e.name, x: e.x, y: e.y, ...area(e) })).sort((a, b) => a.name.localeCompare(b.name));
+	const fires = await Promise.all((await all<BeaconFields>(x.space, "Beacon", { room: me.room })).map(async (b) => ({ name: b.name, x: b.x, y: b.y, ...area(b), lit: isLit(await flameOf(x.space, b.beaconId), now) })));
 	const pack = new Map<string, number>();
 	for (const i of await all<ItemFields>(x.space, "Item", { location: x.charId })) pack.set(i.name, (pack.get(i.name) ?? 0) + 1);
 	return {
@@ -344,6 +349,9 @@ export function pathOf(trail: Step[], max = PATH_STEPS): { path: Step[]; cut: bo
 	return { path: out, cut: true };
 }
 
+/** An exit's or a fire's area where it covers more than its cell (at scale 2 two by two cells; at scale 1 nothing). */
+const area = (o: { w?: number; h?: number }) => (o.w !== undefined && o.h !== undefined && (o.w > 1 || o.h > 1) ? { w: o.w, h: o.h } : {});
+
 /** One room's geometry for the page that draws the paths (codemode-chat imports nothing from here). */
 export function roomMap(w: WorldDef, id: string) {
 	const r = (w.allRooms ?? w.rooms).find((x) => x.roomId === id);
@@ -353,10 +361,11 @@ export function roomMap(w: WorldDef, id: string) {
 		world: w.id, room: r.roomId, name: r.name, ...(r.island ? { island: r.island } : {}), ...(r.map ? { map: r.map } : {}),
 		ground: r.ground, ...(r.decor ? { decor: r.decor } : {}),
 		walk: Object.fromEntries([...keys].sort().map((k) => [k, !!w.tiles[k]?.walk])),
-		exits: w.exits.filter((e) => e.room === r.roomId).map((e) => ({ name: e.name, x: e.x, y: e.y, to: e.destination })),
-		fires: w.beacons.filter((b) => b.room === r.roomId).map((b) => ({ beaconId: b.beaconId, x: b.x, y: b.y })),
+		exits: w.exits.filter((e) => e.room === r.roomId).map((e) => ({ name: e.name, x: e.x, y: e.y, ...area(e), to: e.destination })),
+		fires: w.beacons.filter((b) => b.room === r.roomId).map((b) => ({ beaconId: b.beaconId, x: b.x, y: b.y, ...area(b) })),
 	};
-	return { ...out, rev: createHash("sha256").update(JSON.stringify(out)).digest("hex").slice(0, 16) };
+	// the grid scale beside the geometry, not in its `rev`: a room of scale 1 keeps the revision it had
+	return { ...out, gridScale: w.gridScale ?? 1, rev: createHash("sha256").update(JSON.stringify(out)).digest("hex").slice(0, 16) };
 }
 
 export async function wait(x: World, minutes: number): Promise<{ time: string }> {
@@ -430,7 +439,7 @@ export async function startArena(o: { listen?: string; worlds?: number; /** test
 				const x = await openWorld(w, r.keep === true ? null : sock, openSpec(w, r));
 				if (r.keep === true && typeof r.idleMs === "number" && Number.isFinite(r.idleMs)) x.idleMs = Math.min(MAX_KEEP_MS, Math.max(idle, r.idleMs));
 				worlds.set(x.id, x);
-				return { world: x.id, charId: x.charId, name: x.name };
+				return { world: x.id, charId: x.charId, name: x.name, gridScale: w.gridScale ?? 1 };
 			} finally { starting--; if (worlds.size + starting < max) free(); }
 		}
 		if (r.op === "map") return roomMap(w, String(r.room ?? ""));

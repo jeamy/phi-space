@@ -275,7 +275,7 @@ The class table of plan section 2.2 is this list. The start check fails on a coo
 
 **Not cells.** `PATH_MAX = 200` (`judge.ts:517`, the number of path points kept) and `MAX_MEMORY`.
 
-**Toy islands: a world of their own at scale 1.** `server/toyisland.ts` and `server/toyarena.ts` play bots in the judge's own process on generated islands. Each room is "24 × 16 cells of ground inside a rim of water" (`toyisland.ts:3`), with the rules of `move`, exits, driftwood and fire written there. The Graue Insel is copied by its room names and exits (`island.ts` `ISLAND_ROOMS`), not by its cells. It shares no store or code with the engine. Open decision (5).
+**Toy islands: a world of their own at scale 1.** `server/toyisland.ts` and `server/toyarena.ts` play bots in the judge's own process on generated islands. Each room is "24 × 16 cells of ground inside a rim of water" (`toyisland.ts:3`), with the rules of `move`, exits, driftwood and fire written there. The Graue Insel is copied by its room names and exits (`island.ts` `ISLAND_ROOMS`), not by its cells. It shares no store or code with the engine. Open decision (5); decided 2026-11-24 (plan section 2.3) and built 2026-11-27 (plan step 6): at scale 2 an island is the island of scale 1 with every cell two by two (`codemode-chat/server/grid.ts`).
 
 <a id="offen"></a>
 

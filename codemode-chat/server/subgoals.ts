@@ -9,8 +9,11 @@
 // and the arena marks each where the figure reached it, in turn (spaces-mmo/server/arena.ts, `path`). A hidden episode
 // is played without them: it keeps no subgoals.
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
+import { cells } from "./grid.ts";
 
-/** A subgoal: in `room` (any room when there is none), within 3 cells of `near`, and `holds` true: a goal as the arena
+/** How near `near` a subgoal holds (Manhattan): 3 cells of scale 1, the arena's ARENA_SUBGOAL_NEAR. */
+export const SUBGOAL_NEAR = cells(3);
+/** A subgoal: in `room` (any room when there is none), within SUBGOAL_NEAR cells of `near`, and `holds` true: a goal as the arena
  *  scores it (`beacon:<id>`, `feed:<id>:<n>`) or `pack:<proto>` (the figure carries one). */
 export type Subgoal = { room?: string; near?: { x: number; y: number }; holds?: string };
 /** As the arena takes them (spaces-mmo/server/arena.ts MAX_SUBGOALS). */

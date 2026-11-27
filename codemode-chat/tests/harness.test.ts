@@ -10,6 +10,9 @@ import { genIsland, tideCell, ToyIsland, toyCellError } from "../server/toyislan
 import { teamPrompt } from "../server/llm.ts";
 import { portableTask, restoreTask, taskById } from "../server/tasks.ts";
 import { execute } from "../server/runner.ts";
+import { cells, GRID_SCALE, point } from "../server/grid.ts";
+/** A cell of scale 1 at the grid scale (server/grid.ts): the test runs at both (CODEMODE_GRID_SCALE). */
+const at = (room: string, x: number, y: number) => point({ room, x, y });
 
 const cm = await loadCodemode();
 const t = cm ? test : test.skip;
@@ -83,10 +86,10 @@ const play = async (source: string, a: Record<string, unknown>) => {
 };
 
 test("the toy island: the same episode and seed give the same world; the seed moves the tide, a fed fire burns 10 minutes", () => {
-	const w = new ToyIsland({ room: "klippenpfad", x: 2, y: 8 }, [{ room: "graue-bucht", x: 17, y: 9 }]);
+	const w = new ToyIsland(at("klippenpfad", 2, 8), [at("graue-bucht", 17, 9)]);
 	assert.equal(w.act("west").at.room, "graue-bucht");
-	assert.deepEqual(w.look().things, [{ name: "Treibholz", x: 17, y: 9 }]);
-	w.act("move 17 9"); w.act("nimm treibholz"); w.act("move 9 9");
+	assert.deepEqual(w.look().things, [{ name: "Treibholz", x: cells(17), y: cells(9) }]);
+	w.act(`move ${cells(17)} ${cells(9)}`); w.act("nimm treibholz"); w.act(`move ${cells(9)} ${cells(9)}`);
 	assert.match(w.act("lege holz ins feuer").said[0]!, /Leuchtfeuer/);
 	assert.equal(w.reached(5), true);
 	assert.equal(w.reached(10), false, "one piece burns 10 world minutes");
@@ -94,12 +97,12 @@ test("the toy island: the same episode and seed give the same world; the seed mo
 	assert.equal(w.reached(5), false);
 	assert.deepEqual([tideCell(0).room, tideCell(1).room], ["graue-bucht", "graue-bucht"]);
 	assert.notEqual(tideCell(2).room, "graue-bucht");
-	const t = new ToyIsland({ room: "graue-bucht", x: 3, y: 3 }, [], 2);
+	const t = new ToyIsland(at("graue-bucht", 3, 3), [], 2);
 	t.wait(60);
 	assert.deepEqual(t.wood, [tideCell(2)]);
-	assert.equal(toyCellError({ room: "graue-bucht", x: 9, y: 10 }, "wood"), "wood: the fire stands there");
-	assert.match(toyCellError({ room: "nowhere", x: 1, y: 1 }, "start")!, /no room/);
-	assert.match(toyCellError({ room: "duenen", x: 0, y: 1 }, "start")!, /x 1\.\.22/);
+	assert.equal(toyCellError(at("graue-bucht", 9, 10), "wood"), "wood: the fire stands there");
+	assert.match(toyCellError(at("nowhere", 1, 1), "start")!, /no room/);
+	assert.equal(toyCellError(at("duenen", 0, 1), "start"), `start: x ${cells(1)}..${cells(23) - 1}, y ${cells(1)}..${cells(15) - 1}`, "inside the rim of water");
 });
 
 test("made islands: the same number gives the same island, every room reachable, exits both ways, the tide of seeds 0 and 1 beside the fire", () => {
@@ -116,17 +119,17 @@ test("made islands: the same number gives the same island, every room reachable,
 		assert.equal(toyCellError(w.episode.start, "start", w), null);
 		assert.equal(toyCellError(w.episode.wood, "wood", w), null);
 		assert.notEqual(w.episode.start.room, w.fire.room);
-		assert.deepEqual([w.tide(0), w.tide(1)], [{ room: w.fire.room, x: w.fire.x - 1, y: w.fire.y }, { room: w.fire.room, x: w.fire.x + 1, y: w.fire.y }]);
+		assert.deepEqual([w.tide(0), w.tide(1)], [{ room: w.fire.room, x: w.fire.x - 1, y: w.fire.y }, { room: w.fire.room, x: w.fire.x + GRID_SCALE, y: w.fire.y }], "beside the fire's area, west and east");
 		shapes.add(JSON.stringify(Object.values(w.rooms).map((r) => [r.at, Object.keys(r.exits)])));
 	}
 	assert.ok(shapes.size > 150, `${shapes.size} layouts of 200`);
-	assert.match(toyCellError({ room: "graue-bucht", x: 5, y: 5 }, "start", genIsland(4))!, /no room/);
+	assert.match(toyCellError(at("graue-bucht", 5, 5), "start", genIsland(4))!, /no room/);
 });
 
 t("rate planners: every bad bot reaches the shown episodes with seed 0 and no hold; each fails where its lesson says", async () => {
-	const shown = [{ start: { room: "graue-bucht", x: 10, y: 8 }, wood: { room: "graue-bucht", x: 5, y: 7 } }, { start: { room: "fischerdorf", x: 12, y: 8 }, wood: { room: "fischerdorf", x: 5, y: 5 } }, { start: { room: "klippenpfad", x: 2, y: 8 }, wood: { room: "graue-bucht", x: 17, y: 9 } }];
+	const shown = [{ start: at("graue-bucht", 10, 8), wood: at("graue-bucht", 5, 7) }, { start: at("fischerdorf", 12, 8), wood: at("fischerdorf", 5, 5) }, { start: at("klippenpfad", 2, 8), wood: at("graue-bucht", 17, 9) }];
 	for (const impl of [...spec.good, ...spec.bad, ...spec.hiddenGood, ...spec.hiddenBad]) for (const e of shown) assert.equal((await play(impl.source, e)).reached, true, `${impl.label} on ${e.start.room}`);
-	const far = { start: { room: "klippenkopf", x: 12, y: 8 }, wood: { room: "torfmoor", x: 5, y: 5 } };
+	const far = { start: at("klippenkopf", 12, 8), wood: at("torfmoor", 5, 5) };
 	const [byHeart, near, goesOut, tide, graue] = spec.bad;
 	assert.equal((await play(byHeart!.source, far)).reached, false);
 	assert.equal((await play(near!.source, far)).reached, false);
@@ -136,12 +139,12 @@ t("rate planners: every bad bot reaches the shown episodes with seed 0 and no ho
 	assert.equal((await play(graue!.source, { island: 4 })).reached, false);
 	assert.equal((await play(spec.good[0]!.source, { island: 4, seed: 2, hold: 5 })).reached, true);
 	assert.match((await play(spec.good[0]!.source, { island: -1 })).error!, /island/);
-	assert.match((await play(spec.good[0]!.source, { island: 4, start: { room: "fischerdorf", x: 12, y: 8 } })).error!, /no room fischerdorf/);
+	assert.match((await play(spec.good[0]!.source, { island: 4, start: at("fischerdorf", 12, 8) })).error!, /no room fischerdorf/);
 	const ref = await play(spec.good[0]!.source, { ...far, seed: 7, hold: 5 });
 	assert.equal(ref.reached, true);
 	assert.ok(ref.points! > 10, String(ref.points));
 	// an episode the island does not have is no run of the bot
-	assert.match((await play(spec.good[0]!.source, { start: { room: "graue-bucht", x: 9, y: 10 }, wood: shown[0]!.wood })).error!, /fire stands there/);
+	assert.match((await play(spec.good[0]!.source, { start: at("graue-bucht", 9, 10), wood: shown[0]!.wood })).error!, /fire stands there/);
 	assert.match((await play(spec.good[0]!.source, { ...far, hold: 61 })).error!, /hold/);
 });
 

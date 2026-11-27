@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathOf, startArena } from "../server/arena.ts";
 import { loadWorld } from "../server/engine/world.ts";
+import { useGridScale } from "../shared/rules.ts";
 
 /** A client of the arena: one request at a time, answers by id. */
 async function client(path: string) {
@@ -178,12 +179,50 @@ test("an episode: the guest starts where it says, the setup lays out the driftwo
 		assert.deepEqual(m.fires, [{ beaconId: "feuer-bucht", x: 9, y: 10 }]);
 		assert.deepEqual(m.exits.find((e: any) => e.to === "klippenpfad"), { name: "ost", x: 23, y: 8, to: "klippenpfad" });
 		assert.deepEqual(m.map, { x: 1, y: 1 });
+		assert.equal(m.gridScale, 1);
+		assert.equal(o.gridScale, 1);
 		assert.match(m.rev, /^[0-9a-f]{16}$/);
 		assert.equal((await c.ask("map", { room: "nowhere" })).ok, false);
 		await c.ask("close", { world });
 		await c.end();
 	} finally {
 		await arena.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("at scale 2 the arena says so: the scale in open and map, a fire and an exit as their areas; the episode of scale 1 at its doubled cells", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "arena-test-")), path = join(dir, "a.sock"), was = process.env.SPACES_MMO_GRID_SCALE;
+	process.env.SPACES_MMO_GRID_SCALE = "2"; // the arena's world and its world workers (they inherit the environment)
+	const arena = await startArena({ listen: `unix:${path}`, worlds: 1 });
+	try {
+		const c = await client(path);
+		const m = await c.ask("map", { room: "graue-bucht" });
+		assert.equal(m.ok, true, m.error);
+		assert.deepEqual([m.gridScale, m.ground.length, m.ground[0].length], [2, 32, 48]);
+		assert.deepEqual(m.fires, [{ beaconId: "feuer-bucht", x: 18, y: 20, w: 2, h: 2 }]);
+		assert.deepEqual(m.exits.find((e: any) => e.to === "klippenpfad"), { name: "ost", x: 46, y: 16, w: 2, h: 2, to: "klippenpfad" });
+		// the episode of scale 1 (start 14 9, the wood at 12 9, beside the fire from 9 9) at its cell points
+		const o = await c.ask("open", { start: { room: "graue-bucht", x: 28, y: 18 }, setup: { clear: ["treibholz"], items: [{ proto: "treibholz", room: "graue-bucht", x: 24, y: 18 }] }, seed: 7 });
+		assert.equal(o.ok, true, o.error);
+		assert.equal(o.gridScale, 2);
+		const world = o.world, seen = await c.ask("look", { world });
+		assert.deepEqual(seen.fires.map((f: any) => [f.x, f.y, f.w, f.h]), [[18, 20, 2, 2]], "a fire as its area");
+		assert.deepEqual(seen.exits.find((e: any) => e.name === "ost"), { name: "ost", x: 46, y: 16, w: 2, h: 2 });
+		for (const line of ["move 24 18", "nimm treibholz", "move 18 18", "lege holz ins feuer"]) await c.ask("act", { world, line });
+		const held = await c.ask("score", { world, goal: "beacon:feuer-bucht", hold: 5 });
+		assert.equal(held.done, true, held.detail);
+		assert.deepEqual((await c.ask("path", { world })).path, [["graue-bucht", 28, 18], ["graue-bucht", 18, 18]]);
+		// a move onto any cell of an exit's area goes through it (here its south-east one)
+		const crossed = await c.ask("act", { world, line: "move 47 17" });
+		assert.equal(crossed.ok, true, crossed.error);
+		assert.equal((await c.ask("look", { world })).room.id, "klippenpfad", JSON.stringify(crossed.said));
+		await c.ask("close", { world });
+		await c.end();
+	} finally {
+		await arena.close();
+		if (was === undefined) delete process.env.SPACES_MMO_GRID_SCALE; else process.env.SPACES_MMO_GRID_SCALE = was;
+		useGridScale(1);
 		rmSync(dir, { recursive: true, force: true });
 	}
 });

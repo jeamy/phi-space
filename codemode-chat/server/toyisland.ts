@@ -10,35 +10,47 @@
 // The seed is the world's chance: it decides where the tide lays driftwood every TIDE_MINUTES waited minutes (with
 // seeds 0 and 1 beside the fire, west and east of it, on the Graue Insel as on a made island; with every other seed
 // in some other room).
+// At grid scale 2 (grid.ts) an island is the island of scale 1 with every cell two by two: the same draws, every cell
+// the cell point (2x, 2y), the rim of water two cells wide, the fire and the exits 2 × 2 areas (their x, y the north-west
+// cell), lengths doubled; a `move` onto any cell of an exit crosses, the fire's area blocks, and it is fed from within
+// a length of 1 of its area, as in the arena.
 import { ISLAND_ROOMS } from "./island.ts";
+import { area, cells, GRID_SCALE, point } from "./grid.ts";
 import type { PathStep, RoomMap } from "./bottask.ts";
 
 export type ToyCell = { room: string; x: number; y: number };
 export type ToyRoom = { name: string; exits: Record<string, string>; at: { x: number; y: number } };
 /** An island: its rooms (by id), its fire, where the tide lands with a seed, and the episode it makes of itself. */
 export type ToyWorld = { id: string; name: string; rooms: Record<string, ToyRoom>; fire: ToyCell & { beaconId: string; name: string }; tide: (seed: number) => ToyCell; episode: { start: ToyCell; wood: ToyCell } };
-export const TOY_W = 24, TOY_H = 16;
+/** A room's width and height in cells (24 × 16 at scale 1), and the rim of water around its ground. */
+export const TOY_W = 24 * GRID_SCALE, TOY_H = 16 * GRID_SCALE, RIM = GRID_SCALE;
 export const FUEL_MINUTES = 10, TIDE_MINUTES = 60, MAX_TOY_WAIT = 1440;
 export const DIRECTIONS = ["nord", "ost", "süd", "west"] as const;
 const STEP: Record<string, { x: number; y: number }> = { nord: { x: 0, y: -1 }, ost: { x: 1, y: 0 }, "süd": { x: 0, y: 1 }, west: { x: -1, y: 0 } };
-const EXIT_CELL: Record<string, { x: number; y: number }> = { nord: { x: 12, y: 0 }, "süd": { x: 12, y: 15 }, west: { x: 0, y: 8 }, ost: { x: 23, y: 8 } };
-const ARRIVE: Record<string, { x: number; y: number }> = { nord: { x: 12, y: 14 }, "süd": { x: 12, y: 1 }, west: { x: 22, y: 8 }, ost: { x: 1, y: 8 } };
+const points = (o: Record<string, { x: number; y: number }>) => Object.fromEntries(Object.entries(o).map(([k, c]) => [k, point(c)]));
+/** An exit's cell (its north-west cell at scale 2, where it covers GRID_SCALE × GRID_SCALE), and where one arrives. */
+const EXIT_CELL: Record<string, { x: number; y: number }> = points({ nord: { x: 12, y: 0 }, "süd": { x: 12, y: 15 }, west: { x: 0, y: 8 }, ost: { x: 23, y: 8 } });
+const ARRIVE: Record<string, { x: number; y: number }> = points({ nord: { x: 12, y: 14 }, "süd": { x: 12, y: 1 }, west: { x: 22, y: 8 }, ost: { x: 1, y: 8 } });
+/** Whether a cell lies on the area of a thing at `o` (GRID_SCALE × GRID_SCALE cells). */
+const onArea = (o: { x: number; y: number }, x: number, y: number) => x >= o.x && y >= o.y && x < o.x + GRID_SCALE && y < o.y + GRID_SCALE;
+/** How many cells a cell lies from such an area (Manhattan; 0 on it). */
+const toArea = (o: { x: number; y: number }, c: { x: number; y: number }) => Math.max(0, o.x - c.x, c.x - (o.x + GRID_SCALE - 1)) + Math.max(0, o.y - c.y, c.y - (o.y + GRID_SCALE - 1));
 
 // ---- the Graue Insel -------------------------------------------------------------------------------------------
 const GRAUE_AT: Record<string, { x: number; y: number }> = { fischerdorf: { x: 0, y: 1 }, "graue-bucht": { x: 1, y: 1 }, klippenpfad: { x: 2, y: 1 }, klippenkopf: { x: 3, y: 1 }, torfmoor: { x: 0, y: 2 }, duenen: { x: 1, y: 2 }, salzwiesen: { x: 2, y: 2 }, anleger: { x: 1, y: 3 } };
 const OTHER_ROOMS = ["fischerdorf", "torfmoor", "duenen", "salzwiesen", "klippenkopf", "anleger", "klippenpfad"];
-export const TOY_FIRE = { room: "graue-bucht", x: 9, y: 10 };
-/** Where the tide lays its piece on the Graue Insel with this seed. */
+export const TOY_FIRE = point({ room: "graue-bucht", x: 9, y: 10 });
+/** Where the tide lays its piece on the Graue Insel with this seed (beside the fire with seeds 0 and 1, west and east). */
 export function tideCell(seed: number): ToyCell {
-	if (seed === 0) return { room: "graue-bucht", x: 8, y: 10 };
-	if (seed === 1) return { room: "graue-bucht", x: 10, y: 10 };
-	return { room: OTHER_ROOMS[seed % OTHER_ROOMS.length]!, x: 4 + (seed % 7) * 2, y: 3 + (seed % 5) * 2 };
+	if (seed === 0) return { room: "graue-bucht", x: TOY_FIRE.x - 1, y: TOY_FIRE.y };
+	if (seed === 1) return { room: "graue-bucht", x: TOY_FIRE.x + GRID_SCALE, y: TOY_FIRE.y };
+	return point({ room: OTHER_ROOMS[seed % OTHER_ROOMS.length]!, x: 4 + (seed % 7) * 2, y: 3 + (seed % 5) * 2 });
 }
 export const GRAUE_INSEL: ToyWorld = {
 	id: "graue-insel", name: "Graue Insel",
 	rooms: Object.fromEntries(Object.entries(ISLAND_ROOMS).map(([id, r]) => [id, { name: r.name, exits: r.exits, at: GRAUE_AT[id]! }])),
 	fire: { ...TOY_FIRE, beaconId: "feuer-bucht", name: "Leuchtfeuer" }, tide: tideCell,
-	episode: { start: { room: "fischerdorf", x: 12, y: 8 }, wood: { room: "salzwiesen", x: 5, y: 5 } },
+	episode: { start: point({ room: "fischerdorf", x: 12, y: 8 }), wood: point({ room: "salzwiesen", x: 5, y: 5 }) },
 };
 
 // ---- islands made from a number ---------------------------------------------------------------------------------
@@ -81,14 +93,16 @@ export function genIsland(n: number): ToyWorld {
 	const fireRoom = pick(ids), fromFire = dist(fireRoom);
 	const startRoom = [...ids].sort((a, b) => fromFire.get(b)! - fromFire.get(a)! || a.localeCompare(b))[Math.floor(r() * 2)]!;
 	const woodRoom = pick(ids.filter((x) => x !== startRoom && x !== fireRoom).length ? ids.filter((x) => x !== startRoom && x !== fireRoom) : ids);
-	const fire = { room: fireRoom, x: 3 + Math.floor(r() * 18), y: 3 + Math.floor(r() * 10), beaconId: `feuer-n${n}`, name: "Leuchtfeuer" };
+	// drawn at scale 1, then the cell points of this scale (the same island at both)
+	const fire1 = { room: fireRoom, x: 3 + Math.floor(r() * 18), y: 3 + Math.floor(r() * 10), beaconId: `feuer-n${n}`, name: "Leuchtfeuer" };
 	let wood = { room: woodRoom, x: 2 + Math.floor(r() * 20), y: 2 + Math.floor(r() * 12) };
-	if (wood.room === fire.room && Math.abs(wood.x - fire.x) + Math.abs(wood.y - fire.y) < 2) wood = { ...wood, x: fire.x > 11 ? 2 : 21 };
+	if (wood.room === fire1.room && Math.abs(wood.x - fire1.x) + Math.abs(wood.y - fire1.y) < 2) wood = { ...wood, x: fire1.x > 11 ? 2 : 21 };
+	const fire = point(fire1);
 	const world: ToyWorld = {
 		id: `n${n}`, name: `Neuland ${n}`, rooms, fire,
 		// as on the Graue Insel: with seeds 0 and 1 beside the fire (west, east), with every other one in some room
-		tide: (seed) => (seed < 2 ? { room: fire.room, x: fire.x + (seed ? 1 : -1), y: fire.y } : { room: ids[(seed * 7 + n) % ids.length]!, x: 4 + (seed % 7) * 2, y: 3 + (seed % 5) * 2 }),
-		episode: { start: { room: startRoom, x: 12, y: 8 }, wood },
+		tide: (seed) => (seed < 2 ? { room: fire.room, x: seed ? fire.x + GRID_SCALE : fire.x - 1, y: fire.y } : point({ room: ids[(seed * 7 + n) % ids.length]!, x: 4 + (seed % 7) * 2, y: 3 + (seed % 5) * 2 })),
+		episode: { start: point({ room: startRoom, x: 12, y: 8 }), wood: point(wood) },
 	};
 	if (islands.size > 5000) islands.clear();
 	islands.set(n, world);
@@ -110,21 +124,23 @@ export const worldOf = (island?: number): ToyWorld => (island === undefined ? GR
 export function toyCellError(c: unknown, what: string, w: ToyWorld = GRAUE_INSEL): string | null {
 	const o = (c && typeof c === "object" ? c : {}) as Record<string, unknown>;
 	if (typeof o.room !== "string" || !w.rooms[o.room]) return `${what}: no room ${String(o.room)} on the island`;
-	if (!Number.isInteger(o.x) || !Number.isInteger(o.y) || Number(o.x) < 1 || Number(o.x) > TOY_W - 2 || Number(o.y) < 1 || Number(o.y) > TOY_H - 2) return `${what}: x 1..${TOY_W - 2}, y 1..${TOY_H - 2}`;
-	if (o.room === w.fire.room && o.x === w.fire.x && o.y === w.fire.y) return `${what}: the fire stands there`;
+	if (!Number.isInteger(o.x) || !Number.isInteger(o.y) || !inside(Number(o.x), Number(o.y))) return `${what}: x ${RIM}..${TOY_W - RIM - 1}, y ${RIM}..${TOY_H - RIM - 1}`;
+	if (o.room === w.fire.room && onArea(w.fire, Number(o.x), Number(o.y))) return `${what}: the fire stands there`;
 	return null;
 }
+/** Whether a cell lies on a room's ground, inside the rim of water. */
+const inside = (x: number, y: number) => x >= RIM && x <= TOY_W - RIM - 1 && y >= RIM && y <= TOY_H - RIM - 1;
 
 /** A room's geometry as the arena's `map` gives it, for the page (a rim of water, a path to every exit). */
 export function toyRoomMap(room: string): RoomMap | null {
 	const w = worldOfRoom(room);
 	if (!w) return null;
-	const r = w.rooms[room]!, grid = Array.from({ length: TOY_H }, (_, y) => Array.from({ length: TOY_W }, (_, x): string => (x === 0 || y === 0 || x === TOY_W - 1 || y === TOY_H - 1 ? "~" : ".")));
-	for (const d of Object.keys(r.exits)) { const e = EXIT_CELL[d]!; grid[e.y]![e.x] = ":"; }
+	const r = w.rooms[room]!, grid = Array.from({ length: TOY_H }, (_, y) => Array.from({ length: TOY_W }, (_, x): string => (inside(x, y) ? "." : "~")));
+	for (const d of Object.keys(r.exits)) { const e = EXIT_CELL[d]!; for (let y = e.y; y < e.y + GRID_SCALE; y++) for (let x = e.x; x < e.x + GRID_SCALE; x++) grid[y]![x] = ":"; }
 	return {
 		world: "toy", room, name: r.name, island: w.name, map: r.at, ground: grid.map((row) => row.join("")), walk: { "~": false, ".": true, ":": true },
-		exits: Object.entries(r.exits).map(([name, to]) => ({ name, ...EXIT_CELL[name]!, to })),
-		fires: w.fire.room === room ? [{ beaconId: w.fire.beaconId, x: w.fire.x, y: w.fire.y }] : [], rev: `toy-${w.id}`.padEnd(16, "0").slice(0, 16),
+		exits: Object.entries(r.exits).map(([name, to]) => ({ name, ...EXIT_CELL[name]!, ...area(), to })),
+		fires: w.fire.room === room ? [{ beaconId: w.fire.beaconId, x: w.fire.x, y: w.fire.y, ...area() }] : [], ...(GRID_SCALE > 1 ? { gridScale: GRID_SCALE } : {}), rev: `toy-${w.id}`.padEnd(16, "0").slice(0, 16),
 	};
 }
 
@@ -141,7 +157,7 @@ export function deadEnds(w: ToyWorld): string[] {
 	const k = (id: string) => Number(/-(\d+)$/.exec(id)?.[1] ?? 0);
 	return Object.keys(w.rooms).filter((id) => id !== w.fire.room && Object.keys(w.rooms[id]!.exits).length === 1).sort((a, b) => k(a) - k(b) || a.localeCompare(b));
 }
-/** The cell `n` cells in from an exit (toward the room's middle). */
+/** The cell `n` cells in from an exit's cell (toward the room's middle). */
 export const inFrom = (exit: string, n: number): { x: number; y: number } => { const e = EXIT_CELL[exit]!, d = STEP[exit]!; return { x: e.x - d.x * n, y: e.y - d.y * n }; };
 /** The law: the j-th piece (from 0) lands at minute 30 + 10·(seed mod 3) + 60·j in the island's dead ends in turn, by
  *  their number, 3 cells in from the one exit. Islands without a dead end have no tide under this law. */
@@ -149,7 +165,7 @@ export function tideLanding(w: ToyWorld, seed: number, j: number): (ToyCell & { 
 	const d = deadEnds(w);
 	if (!d.length) return null;
 	const room = d[j % d.length]!, exit = Object.keys(w.rooms[room]!.exits)[0]!;
-	return { room, ...inFrom(exit, 3), minute: 30 + 10 * (seed % 3) + 60 * j };
+	return { room, ...inFrom(exit, cells(3)), minute: 30 + 10 * (seed % 3) + 60 * j };
 }
 // ---- the chance tide of step 8: where is a matter of odds, the odds follow the island's shape --------------------------
 /** The minutes of the day the chance tide comes: every hour at half past (8:30 to 15:30). */
@@ -168,7 +184,7 @@ export function dice(text: string): number {
  *  island, seed, minute and room, so whatever a bot does, every bot meets the same pieces. The cell is 3 in from the exit. */
 export function chanceLands(w: ToyWorld, seed: number, j: number, room: string): (ToyCell & { minute: number }) | null {
 	if (j < 0 || j >= CHANCE_MINUTES.length || dice(`${w.id}/${seed}/${j}/${room}`) >= chanceOf(w, room)) return null;
-	return { room, ...inFrom(Object.keys(w.rooms[room]!.exits)[0]!, 3), minute: CHANCE_MINUTES[j]! };
+	return { room, ...inFrom(Object.keys(w.rooms[room]!.exits)[0]!, cells(3)), minute: CHANCE_MINUTES[j]! };
 }
 /** What the judge logs of one day of the chance tide (step 8's data): the minutes it came, and per room of the island
  *  its exits, its distance from the fire and the pieces it got (minute and cell). Every room, not only the dead ends:
@@ -207,7 +223,7 @@ export function shoreOf(w: ToyWorld, room: string): number {
 }
 /** Where a room's shore lays its pieces: one cell per room, away from the edge. */
 export function shoreCell(w: ToyWorld, room: string): { x: number; y: number } {
-	return { x: 3 + Math.floor(dice(`${w.id}/shore-x/${room}`) * 18), y: 3 + Math.floor(dice(`${w.id}/shore-y/${room}`) * 10) };
+	return point({ x: 3 + Math.floor(dice(`${w.id}/shore-x/${room}`) * 18), y: 3 + Math.floor(dice(`${w.id}/shore-y/${room}`) * 10) });
 }
 /** Whether the tide of step 9 lands a piece in `room` at its `j`-th minute (the minutes of step 8) in the world of `seed`. */
 export function shoreLands(w: ToyWorld, seed: number, j: number, room: string): (ToyCell & { minute: number }) | null {
@@ -251,9 +267,9 @@ export class ToyIsland {
 		for (const w of this.wood) if (w.room === room) this.seen.add(`${w.room}/${w.x}/${w.y}/${w.until ?? ""}`);
 		return {
 			room: { id: room, name: this.world.rooms[room]?.name ?? room }, at: { x: this.at.x, y: this.at.y },
-			exits: Object.keys(this.world.rooms[room]?.exits ?? {}).map((name) => ({ name, ...EXIT_CELL[name]! })),
+			exits: Object.keys(this.world.rooms[room]?.exits ?? {}).map((name) => ({ name, ...EXIT_CELL[name]!, ...area() })),
 			things: this.wood.filter((w) => w.room === room).sort((a, b) => d(a) - d(b)).map((w) => ({ name: "Treibholz", x: w.x, y: w.y })),
-			fires: f.room === room ? [{ name: f.name, x: f.x, y: f.y, lit: this.lit(this.waited) }] : [],
+			fires: f.room === room ? [{ name: f.name, x: f.x, y: f.y, ...area(), lit: this.lit(this.waited) }] : [],
 			pack: this.pack ? [{ name: "Treibholz", count: this.pack }] : [],
 			time: `Tag 1, ${String(8 + Math.floor(this.waited / 60)).padStart(2, "0")}:${String(this.waited % 60).padStart(2, "0")}`,
 		};
@@ -263,7 +279,7 @@ export class ToyIsland {
 		const said = this.#act(String(line ?? "").replace(/\s+/g, " ").trim().toLowerCase());
 		return { said, at: { ...this.at } };
 	}
-	#step(c: ToyCell) { this.at = c; const l = this.trail.at(-1)!; if ((l[0] !== c.room || l[1] !== c.x || l[2] !== c.y) && this.trail.length < 20_000) this.trail.push([c.room, c.x, c.y]); }
+	#step(c: ToyCell) { this.at = c; const l = this.trail.at(-1)!; if ((l[0] !== c.room || l[1] !== c.x || l[2] !== c.y) && this.trail.length < cells(20_000)) this.trail.push([c.room, c.x, c.y]); }
 	#cross(name: string): string[] {
 		const to = this.world.rooms[this.at.room]!.exits[name]!;
 		if (this.rules) {
@@ -279,9 +295,9 @@ export class ToyIsland {
 		const f = this.world.fire;
 		if ((m = /^move (\d+) (\d+)$/.exec(line))) {
 			const x = Number(m[1]), y = Number(m[2]);
-			const exit = Object.keys(this.world.rooms[this.at.room]?.exits ?? {}).find((n) => EXIT_CELL[n]!.x === x && EXIT_CELL[n]!.y === y);
+			const exit = Object.keys(this.world.rooms[this.at.room]?.exits ?? {}).find((n) => onArea(EXIT_CELL[n]!, x, y));
 			if (exit) return this.#cross(exit);
-			if (x < 1 || x > TOY_W - 2 || y < 1 || y > TOY_H - 2 || (this.at.room === f.room && x === f.x && y === f.y)) return ["Dort kannst du nicht hin."];
+			if (!inside(x, y) || (this.at.room === f.room && onArea(f, x, y))) return ["Dort kannst du nicht hin."];
 			this.#step({ room: this.at.room, x, y });
 			return [];
 		}
@@ -296,7 +312,7 @@ export class ToyIsland {
 		}
 		if (/^lege (treib)?holz ins feuer$/.test(line)) {
 			if (!this.pack) return ["Du hast kein Treibholz dabei."];
-			if (this.at.room !== f.room || Math.abs(this.at.x - f.x) + Math.abs(this.at.y - f.y) > 1) return ["Dafür musst du direkt neben dem Feuer stehen."];
+			if (this.at.room !== f.room || toArea(f, this.at) > cells(1)) return ["Dafür musst du direkt neben dem Feuer stehen."];
 			this.pack--; this.fedAt = this.waited; this.fed = true; this.feeds++;
 			return [`Du legst Treibholz ins ${f.name}. Es brennt noch etwa ${FUEL_MINUTES} Minuten.`];
 		}

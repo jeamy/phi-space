@@ -7,25 +7,31 @@
 // marks each in turn after every command, and `path` gives the cells where they were reached.
 // An exit lies on a cell at the room's edge (EXIT_CELL); a `move` onto it crosses as an exit command does, and the figure
 // arrives on the other side (ARRIVE), as in the game.
-// Its own test (spaces-mmo/tests/arena.test.ts) holds the real one.
+// Its own test (spaces-mmo/tests/arena.test.ts) holds the real one. At grid scale 2 (server/grid.ts) its cells are the
+// cell points of those of scale 1, its fires and exits 2 × 2 areas, its lengths doubled, as in the real arena then.
 import { createServer, type Socket } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ISLAND_ROOMS } from "../server/island.ts";
+import { area, cells, GRID_SCALE, point } from "../server/grid.ts";
 
 type Cell = { room: string; x: number; y: number };
 type Sub = { room?: string; near?: { x: number; y: number }; holds?: string };
 type Toy = { at: Cell; wood: Cell[]; pack: number; fedAt: Record<string, number>; pieces: Record<string, number>; waited: number; done: Map<string, Record<string, unknown>>; trail: Array<[string, number, number]>; subgoals: Sub[]; reached: Array<[string, number, number]> };
 /** The fires by room: the Graue Bucht's and the Anleger's, as in Leuchtfeuer. */
-const FIRES: Record<string, { beaconId: string; name: string; x: number; y: number }> = { "graue-bucht": { beaconId: "feuer-bucht", name: "Leuchtfeuer", x: 9, y: 10 }, anleger: { beaconId: "feuer-anleger", name: "Feuerkorb am Anleger", x: 7, y: 5 } };
+const FIRES: Record<string, { beaconId: string; name: string; x: number; y: number }> = { "graue-bucht": point({ beaconId: "feuer-bucht", name: "Leuchtfeuer", x: 9, y: 10 }), anleger: point({ beaconId: "feuer-anleger", name: "Feuerkorb am Anleger", x: 7, y: 5 }) };
+/** Whether a cell lies on the area of a fire or an exit at `o`, and how far it lies from it (Manhattan). */
+const onArea = (o: { x: number; y: number }, x: number, y: number) => x >= o.x && y >= o.y && x < o.x + GRID_SCALE && y < o.y + GRID_SCALE;
+const toArea = (o: { x: number; y: number }, c: { x: number; y: number }) => Math.max(0, o.x - c.x, c.x - (o.x + GRID_SCALE - 1)) + Math.max(0, o.y - c.y, c.y - (o.y + GRID_SCALE - 1));
 const fireById = (id: string) => Object.values(FIRES).find((f) => f.beaconId === id);
 /** A fed fire burns this many world minutes after its last piece. */
 const BURN = 10;
 /** Where the island's rooms sit on the atlas (as in Leuchtfeuer). */
 const TOY_ATLAS: Record<string, { x: number; y: number }> = { fischerdorf: { x: 0, y: 1 }, "graue-bucht": { x: 1, y: 1 }, klippenpfad: { x: 2, y: 1 }, klippenkopf: { x: 3, y: 1 }, torfmoor: { x: 0, y: 2 }, duenen: { x: 1, y: 2 }, salzwiesen: { x: 2, y: 2 }, anleger: { x: 1, y: 3 } };
-const EXIT_CELL: Record<string, { x: number; y: number }> = { nord: { x: 12, y: 0 }, "süd": { x: 12, y: 15 }, west: { x: 0, y: 8 }, ost: { x: 23, y: 8 } };
-const ARRIVE: Record<string, { x: number; y: number }> = { nord: { x: 12, y: 14 }, "süd": { x: 12, y: 1 }, west: { x: 22, y: 8 }, ost: { x: 1, y: 8 } };
+const points = (o: Record<string, { x: number; y: number }>) => Object.fromEntries(Object.entries(o).map(([k, c]) => [k, point(c)]));
+const EXIT_CELL: Record<string, { x: number; y: number }> = points({ nord: { x: 12, y: 0 }, "süd": { x: 12, y: 15 }, west: { x: 0, y: 8 }, ost: { x: 23, y: 8 } });
+const ARRIVE: Record<string, { x: number; y: number }> = points({ nord: { x: 12, y: 14 }, "süd": { x: 12, y: 1 }, west: { x: 22, y: 8 }, ost: { x: 1, y: 8 } });
 const litAt = (t: Toy, minute: number, beacon = "feuer-bucht") => t.fedAt[beacon] !== undefined && minute < t.fedAt[beacon]! + BURN;
 /** A goal as the arena scores it, now. */
 const holdsNow = (t: Toy, goal: string): boolean => {
@@ -38,7 +44,7 @@ const holdsNow = (t: Toy, goal: string): boolean => {
 const passed = (t: Toy) => {
 	for (let g = t.subgoals[t.reached.length]; g; g = t.subgoals[t.reached.length]) {
 		if (g.room && g.room !== t.at.room) return;
-		if (g.near && Math.abs(g.near.x - t.at.x) + Math.abs(g.near.y - t.at.y) > 3) return;
+		if (g.near && Math.abs(g.near.x - t.at.x) + Math.abs(g.near.y - t.at.y) > cells(3)) return;
 		if (g.holds && !holdsNow(t, g.holds)) return;
 		t.reached.push([t.at.room, t.at.x, t.at.y]);
 	}
@@ -55,7 +61,7 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 		const step = (c: Cell) => { t.at = c; const last = t.trail.at(-1)!; if (last[0] !== c.room || last[1] !== c.x || last[2] !== c.y) t.trail.push([c.room, c.x, c.y]); };
 		const cross = (name: string) => { const to = ISLAND_ROOMS[t.at.room]!.exits[name]!; step({ room: t.at.room, ...EXIT_CELL[name]! }); step({ room: to, ...ARRIVE[name]! }); return [`Du gehst nach ${ISLAND_ROOMS[to]!.name}.`]; };
 		if ((m = /^move (\d+) (\d+)$/.exec(line))) {
-			const x = Number(m[1]), y = Number(m[2]), onExit = Object.keys(ISLAND_ROOMS[t.at.room]?.exits ?? {}).find((n) => EXIT_CELL[n]!.x === x && EXIT_CELL[n]!.y === y);
+			const x = Number(m[1]), y = Number(m[2]), onExit = Object.keys(ISLAND_ROOMS[t.at.room]?.exits ?? {}).find((n) => onArea(EXIT_CELL[n]!, x, y));
 			if (onExit) return cross(onExit);
 			step({ ...t.at, x, y }); return [];
 		}
@@ -69,7 +75,7 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 		if (/^lege (treib)?holz ins feuer$/.test(line)) {
 			if (!t.pack) return ["Du hast kein Treibholz dabei."];
 			const fire = FIRES[t.at.room];
-			if (!fire || Math.abs(t.at.x - fire.x) + Math.abs(t.at.y - fire.y) > 1) return ["Dafür musst du direkt neben dem Feuer stehen."];
+			if (!fire || toArea(fire, t.at) > cells(1)) return ["Dafür musst du direkt neben dem Feuer stehen."];
 			t.pack--; t.fedAt[fire.beaconId] = t.waited; t.pieces[fire.beaconId] = (t.pieces[fire.beaconId] ?? 0) + 1; return [`Du legst Treibholz ins ${fire.name}. Es brennt noch etwa 10 Minuten.`, `${fire.name} flammt auf.`];
 		}
 		return [`Unbekannter Befehl: ${line}`];
@@ -80,21 +86,21 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 			const id = `w${++n}`; opened++;
 			if (r.keep === true) idleMs = typeof r.idleMs === "number" ? r.idleMs : null;
 			const start = r.start as Cell | undefined, setup = r.setup as { clear?: string[]; items?: Cell[] } | undefined;
-			const wood: Cell[] = setup?.clear?.includes("treibholz") ? [] : [{ room: "graue-bucht", x: 5, y: 7 }, { room: "graue-bucht", x: 17, y: 9 }];
+			const wood: Cell[] = setup?.clear?.includes("treibholz") ? [] : [point({ room: "graue-bucht", x: 5, y: 7 }), point({ room: "graue-bucht", x: 17, y: 9 })];
 			for (const i of setup?.items ?? []) wood.push({ room: i.room, x: i.x, y: i.y });
-			const at = start ? { room: start.room, x: start.x, y: start.y } : { room: "graue-bucht", x: 12, y: 8 };
+			const at = start ? { room: start.room, x: start.x, y: start.y } : point({ room: "graue-bucht", x: 12, y: 8 });
 			const t: Toy = { at, wood, pack: 0, fedAt: {}, pieces: {}, waited: 0, done: new Map(), trail: [[at.room, at.x, at.y]], subgoals: Array.isArray(r.subgoals) ? r.subgoals as Sub[] : [], reached: [] };
 			passed(t);
 			worlds.set(id, t);
 			lastOpen = r;
-			return { world: id, charId: `c-${id}`, name: "Strandläufer-1" };
+			return { world: id, charId: `c-${id}`, name: "Strandläufer-1", gridScale: GRID_SCALE };
 		}
 		if (r.op === "map") {
 			const room = String(r.room), def = ISLAND_ROOMS[room];
 			if (!def) throw new Error(`no room ${room}`);
 			maps++;
-			const exits = Object.entries(def.exits).map(([name, to]) => ({ name, ...EXIT_CELL[name]!, to }));
-			return { world: "toy", room, name: def.name, island: "Graue Insel", map: TOY_ATLAS[room] ?? { x: 0, y: 0 }, ground: ["~".repeat(24), ...Array.from({ length: 15 }, () => ".".repeat(24))], walk: { "~": false, ".": true }, exits, fires: FIRES[room] ? [{ beaconId: FIRES[room]!.beaconId, x: FIRES[room]!.x, y: FIRES[room]!.y }] : [], rev: "toy0000000000000" };
+			const exits = Object.entries(def.exits).map(([name, to]) => ({ name, ...EXIT_CELL[name]!, ...area(), to }));
+			return { world: "toy", room, name: def.name, island: "Graue Insel", map: TOY_ATLAS[room] ?? { x: 0, y: 0 }, ground: [...Array.from({ length: GRID_SCALE }, () => "~".repeat(cells(24))), ...Array.from({ length: cells(16) - GRID_SCALE }, () => ".".repeat(cells(24)))], walk: { "~": false, ".": true }, exits, fires: FIRES[room] ? [{ beaconId: FIRES[room]!.beaconId, x: FIRES[room]!.x, y: FIRES[room]!.y, ...area() }] : [], gridScale: GRID_SCALE, rev: "toy0000000000000" };
 		}
 		const t = worlds.get(String(r.world));
 		if (!t) throw new Error("no such world");
@@ -112,7 +118,7 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 		switch (r.op) {
 			case "look": {
 				const room = t.at.room;
-				return { room: { id: room, name: ISLAND_ROOMS[room]?.name ?? room }, at: { x: t.at.x, y: t.at.y }, exits: Object.keys(ISLAND_ROOMS[room]?.exits ?? {}).map((name) => ({ name, ...EXIT_CELL[name]! })), things: t.wood.filter((w) => w.room === room).map((w) => ({ name: "Treibholz", x: w.x, y: w.y })), fires: FIRES[room] ? [{ name: FIRES[room]!.name, x: FIRES[room]!.x, y: FIRES[room]!.y, lit: litAt(t, t.waited, FIRES[room]!.beaconId) }] : [], pack: t.pack ? [{ name: "Treibholz", count: t.pack }] : [], time: `Tag 1, 08:${String(t.waited).padStart(2, "0")}` };
+				return { room: { id: room, name: ISLAND_ROOMS[room]?.name ?? room }, at: { x: t.at.x, y: t.at.y }, exits: Object.keys(ISLAND_ROOMS[room]?.exits ?? {}).map((name) => ({ name, ...EXIT_CELL[name]!, ...area() })), things: t.wood.filter((w) => w.room === room).map((w) => ({ name: "Treibholz", x: w.x, y: w.y })), fires: FIRES[room] ? [{ name: FIRES[room]!.name, x: FIRES[room]!.x, y: FIRES[room]!.y, ...area(), lit: litAt(t, t.waited, FIRES[room]!.beaconId) }] : [], pack: t.pack ? [{ name: "Treibholz", count: t.pack }] : [], time: `Tag 1, 08:${String(t.waited).padStart(2, "0")}` };
 			}
 			case "act": {
 				acts++;

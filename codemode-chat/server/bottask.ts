@@ -8,6 +8,9 @@ import { connect, type Socket } from "node:net";
 import type { Meter } from "./tooltask.ts";
 import type { Subgoal } from "./subgoals.ts";
 import type { ChanceSeen, TideSeen } from "./toyisland.ts";
+import { GRID_SCALE } from "./grid.ts";
+import { JUMP_CELLS } from "./memory.ts";
+import { SUBGOAL_NEAR } from "./subgoals.ts";
 
 export type BotTool = "look" | "act" | "wait" | "recall" | "subgoals" | "observations" | "logbook";
 export const BOT_COST: Record<BotTool, number> = { look: 1, act: 1, wait: 1, recall: 1, subgoals: 0, observations: 1, logbook: 1 };
@@ -102,7 +105,9 @@ export async function arenaClient(address: string, callMs = 130_000): Promise<Ar
 			const p = pending.get(r.id);
 			if (!p) continue;
 			pending.delete(r.id); clearTimeout(p.timer);
-			if (r.ok) p.ok(r); else p.fail(new Error(String(r.error ?? "the arena refused")));
+			// the arena's world and this judge share one grid (grid.ts): an arena at another scale is not the bot's doing
+			if (r.ok && typeof r.gridScale === "number" && r.gridScale !== GRID_SCALE) p.fail(new ArenaDown(`the arena plays at grid scale ${r.gridScale}, this judge at ${GRID_SCALE} (CODEMODE_GRID_SCALE)`));
+			else if (r.ok) p.ok(r); else p.fail(new Error(String(r.error ?? "the arena refused")));
 		}
 	});
 	let closing = false, lost = false;
@@ -123,10 +128,13 @@ export async function arenaClient(address: string, callMs = 130_000): Promise<Ar
 // ---- the bot's tools in one world, metered ---------------------------------------------------------------------
 type CodemodeTool = { name: string; description?: string; execute(args: unknown): unknown };
 
+/** At grid scale 2 an exit and a fire cover 2 × 2 cells: look gives them `w`, `h` (grid.ts). Nothing at scale 1. */
+const AREA = GRID_SCALE > 1 ? ", w, h" : "";
+const AREA_NOTE = GRID_SCALE > 1 ? { de: " Ein Ausgang und ein Feuer bedecken w × h Zellen ab x, y (ihrer Nordwest-Zelle); ein move auf eine Zelle eines Ausgangs geht hindurch.", en: " An exit and a fire cover w × h cells from x, y (their north-west cell); a move onto any cell of an exit goes through it." } : { de: "", en: "" };
 const DESCRIPTIONS: Record<BotTool, { de: string; en: string }> = {
 	look: {
-		de: "was die Figur sieht: {} → { room: { id, name }, at: { x, y }, exits: Array<{ name, x, y }>, things: Array<{ name, x, y }> (die nächsten zuerst, höchstens 30), fires: Array<{ name, x, y, lit }>, pack: Array<{ name, count }>, time }. 1 Punkt.",
-		en: "what the figure sees: {} → { room: { id, name }, at: { x, y }, exits: Array<{ name, x, y }>, things: Array<{ name, x, y }> (nearest first, at most 30), fires: Array<{ name, x, y, lit }>, pack: Array<{ name, count }>, time }. 1 point.",
+		de: "was die Figur sieht: {} → { room: { id, name }, at: { x, y }, exits: Array<{ name, x, y" + AREA + " }>, things: Array<{ name, x, y }> (die nächsten zuerst, höchstens 30), fires: Array<{ name, x, y" + AREA + ", lit }>, pack: Array<{ name, count }>, time }." + AREA_NOTE.de + " 1 Punkt.",
+		en: "what the figure sees: {} → { room: { id, name }, at: { x, y }, exits: Array<{ name, x, y" + AREA + " }>, things: Array<{ name, x, y }> (nearest first, at most 30), fires: Array<{ name, x, y" + AREA + ", lit }>, pack: Array<{ name, count }>, time }." + AREA_NOTE.en + " 1 point.",
 	},
 	act: {
 		de: "eine Befehlszeile, wie ein Spieler sie tippt (z. B. \"move 5 7\": den ganzen Weg zu einer Stelle; \"nimm treibholz\"; \"lege holz ins feuer\": neben dem Feuer stehend; \"go ost\"; \"schau\"): { line: string } → { said: string[] (was die Figur dabei gehört hat), at: { room, x, y } }. Fertig, wenn die Welt den Befehl ausgeführt hat. 1 Punkt.",
@@ -137,8 +145,8 @@ const DESCRIPTIONS: Record<BotTool, { de: string; en: string }> = {
 		en: "lets world time pass (it stands still otherwise): { minutes: number (1..120) } → { time }. 1 point.",
 	},
 	recall: {
-		de: "das Gedächtnis: Wege früherer Generationen, die das Ziel einer gezeigten Episode erreicht haben (eingefroren, wenn die Generation begann). { goal?: string (Standard: das Ziel der Aufgabe), from?: { room, x, y } (Standard: wo die Figur steht) } → { found: true, from: [room, x, y] (die nächste gemerkte Stelle im selben Raum), distance (Zellen dorthin), steps: Array<[room, x, y]> (von dort bis dahin, wo das Ziel galt; \"move x y\" auf jeden Schritt im Raum der Figur, ein Schritt auf einen Ausgang wechselt den Raum), jumps (Wechsel zwischen gemerkten Wegen, je 10 Zellen Umweg), cost } oder { found: false, reason }. 1 Punkt.",
-		en: "the memory: paths of earlier generations that reached a shown episode's goal (frozen when the generation began). { goal?: string (default: the task's goal), from?: { room, x, y } (default: where the figure stands) } → { found: true, from: [room, x, y] (the nearest remembered cell in the same room), distance (cells to it), steps: Array<[room, x, y]> (from there to where the goal held; \"move x y\" onto each step in the figure's room, a step onto an exit changes the room), jumps (changes between remembered paths, 10 cells of detour each), cost } or { found: false, reason }. 1 point.",
+		de: "das Gedächtnis: Wege früherer Generationen, die das Ziel einer gezeigten Episode erreicht haben (eingefroren, wenn die Generation begann). { goal?: string (Standard: das Ziel der Aufgabe), from?: { room, x, y } (Standard: wo die Figur steht) } → { found: true, from: [room, x, y] (die nächste gemerkte Stelle im selben Raum), distance (Zellen dorthin), steps: Array<[room, x, y]> (von dort bis dahin, wo das Ziel galt; \"move x y\" auf jeden Schritt im Raum der Figur, ein Schritt auf einen Ausgang wechselt den Raum), jumps (Wechsel zwischen gemerkten Wegen, je " + JUMP_CELLS + " Zellen Umweg), cost } oder { found: false, reason }. 1 Punkt.",
+		en: "the memory: paths of earlier generations that reached a shown episode's goal (frozen when the generation began). { goal?: string (default: the task's goal), from?: { room, x, y } (default: where the figure stands) } → { found: true, from: [room, x, y] (the nearest remembered cell in the same room), distance (cells to it), steps: Array<[room, x, y]> (from there to where the goal held; \"move x y\" onto each step in the figure's room, a step onto an exit changes the room), jumps (changes between remembered paths, " + JUMP_CELLS + " cells of detour each), cost } or { found: false, reason }. 1 point.",
 	},
 	observations: {
 		de: "was frühere Generationen beobachtet haben: jede Landung der Flut in den gezeigten Episoden, eingefroren, wenn die Generation dieses Beitrags begann: {} → { observations: Array<{ island, seed, piece, minute, room, x, y, exits, fromFire }> } (piece: das wievielte Stück dieser Welt, ab 0; minute: Weltminuten seit Beginn; exits: die Ausgänge des Raums; fromFire: Ausgänge zwischen dem Raum und dem Raum des Feuers). Leer in der ersten Generation. 1 Punkt.",
@@ -149,8 +157,8 @@ const DESCRIPTIONS: Record<BotTool, { de: string; en: string }> = {
 		en: "the harbour master's logbook of this island: earlier days of the tide, not today's: {} → { days: Array<{ island, day, minutes, rooms: Array<{ room, exits, fromFire, pieces: Array<{ minute, x, y }> }> }> } (one entry per day; minutes: the world minutes since the start at which the tide came; rooms: every room of the island with its exits, the exits between it and the fire's room, and the pieces washed up there: when and where). 1 point.",
 	},
 	subgoals: {
-		de: "die Teilziele des Plans, dem dieser Beitrag folgt, der Reihe nach: {} → { subgoals: Array<{ room?, near?: { x, y }, holds? }> } (leer ohne Plan). Ein Teilziel gilt, wenn die Figur in `room` ist (ohne room: überall), höchstens 3 Zellen von `near` entfernt, und `holds` zutrifft (\"pack:treibholz\": sie trägt Treibholz; \"beacon:<id>\": das Feuer brennt, von ihr genährt). 0 Punkte.",
-		en: "the subgoals of the plan this contribution follows, in order: {} → { subgoals: Array<{ room?, near?: { x, y }, holds? }> } (empty without a plan). A subgoal holds when the figure is in `room` (anywhere without one), at most 3 cells from `near`, and `holds` is true (\"pack:treibholz\": it carries driftwood; \"beacon:<id>\": the fire burns, fed by it). 0 points.",
+		de: "die Teilziele des Plans, dem dieser Beitrag folgt, der Reihe nach: {} → { subgoals: Array<{ room?, near?: { x, y }, holds? }> } (leer ohne Plan). Ein Teilziel gilt, wenn die Figur in `room` ist (ohne room: überall), höchstens " + SUBGOAL_NEAR + " Zellen von `near` entfernt, und `holds` zutrifft (\"pack:treibholz\": sie trägt Treibholz; \"beacon:<id>\": das Feuer brennt, von ihr genährt). 0 Punkte.",
+		en: "the subgoals of the plan this contribution follows, in order: {} → { subgoals: Array<{ room?, near?: { x, y }, holds? }> } (empty without a plan). A subgoal holds when the figure is in `room` (anywhere without one), at most " + SUBGOAL_NEAR + " cells from `near`, and `holds` is true (\"pack:treibholz\": it carries driftwood; \"beacon:<id>\": the fire burns, fed by it). 0 points.",
 	},
 };
 

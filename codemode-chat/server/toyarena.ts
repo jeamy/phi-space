@@ -11,6 +11,7 @@
 // of its own (SHORE_RULES), and `logbook` gives earlier days of the island's tide.
 import type { Arena, PathStep } from "./bottask.ts";
 import { CHANCE_RULES, chanceDay, islandError, SHORE_RULES, shoreLog, TIDE_RULES, toyCellError, toyRoomMap, ToyIsland, worldOf } from "./toyisland.ts";
+import { GRID_SCALE } from "./grid.ts";
 
 const PATH_STEPS = 200;
 /** The trail as the arena's `path` gives it: the start, the turns and room changes, the last cell; at most PATH_STEPS. */
@@ -42,7 +43,7 @@ export function toyArena(): Arena {
 			const id = `t${++n}`;
 			if (a.rules !== undefined && a.rules !== "tide" && a.rules !== "chance" && a.rules !== "shore") throw new Error(`unknown rules ${String(a.rules)}`);
 			worlds.set(id, new ToyIsland(cell(start), (setup.items ?? []).map(cell), Number.isInteger(seed) && seed >= 0 ? seed : 0, w, a.rules === "tide" ? TIDE_RULES : a.rules === "chance" ? CHANCE_RULES : a.rules === "shore" ? SHORE_RULES : null));
-			return { world: id, charId: `c-${id}`, name: "Strandläufer-1" };
+			return { world: id, charId: `c-${id}`, name: "Strandläufer-1", ...(GRID_SCALE > 1 ? { gridScale: GRID_SCALE } : {}) };
 		}
 		if (op === "map") { const m = toyRoomMap(String(a.room ?? "")); if (!m) throw new Error(`no room ${String(a.room)}`); return m as unknown as Record<string, unknown>; }
 		const t = worlds.get(String(a.world));

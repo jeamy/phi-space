@@ -22,6 +22,10 @@ import { LOG_DAYS, LOG_SEED, logSeeds, SHORE_ODDS, SHORE_RULES, shoreCell, shore
 import { episodeSeed } from "../server/bottask.ts";
 import { TIDE_HIDDEN, TIDE_LAW_COST, TIDE_LIMIT, TIDE_SAMPLES } from "../server/tides.ts";
 import { readFileSync } from "node:fs";
+import { area, cells, GRID_SCALE, point } from "../server/grid.ts";
+import type { PathStep } from "../server/bottask.ts";
+/** A cell of scale 1 at the grid scale (server/grid.ts): the test runs at both (CODEMODE_GRID_SCALE). */
+const at = (room: string, x: number, y: number) => point({ room, x, y }), step = (room: string, x: number, y: number): PathStep => [room, x * GRID_SCALE, y * GRID_SCALE];
 import { callArgs } from "../server/context.ts";
 import { freezeMemory, runFreezeId } from "../server/memory.ts";
 import { NEULAND_HIDDEN, NEULAND_SAMPLES } from "../server/neuland.ts";
@@ -155,7 +159,7 @@ t("a planning task plays every episode in a world of its own: the explorer reach
 		// one world per episode (no wait, one seed), every one closed; the last one opened with its episode's start and setup
 		assert.equal(arena.opened(), 4 * 9);
 		assert.equal(arena.open(), 0);
-		assert.deepEqual(arena.lastOpen()!.start, { room: "graue-bucht", x: 14, y: 9 });
+		assert.deepEqual(arena.lastOpen()!.start, at("graue-bucht", 14, 9));
 		assert.equal(arena.lastOpen()!.seed, undefined, "no seed without wait");
 		// a hidden episode says reached or not, nothing else; a shown one keeps the arena's detail
 		const hidden = m!.episodes!.filter((e) => e.kind === "holdout");
@@ -185,7 +189,7 @@ t("a fire fed and then left burns out: the goal must still hold after the judge'
 	const arena = await startFakeArena();
 	try {
 		// feeds the fire, then waits it out (beacon-bucht has wait): with hold 5 the episode would not count
-		const v = await withArena(arena.address, () => judge(cm!, { ...island, bot: { ...island.bot!, noWait: undefined, episodes: island.bot!.episodes!.slice(0, 1) } }, `async function bot(){const s=await tools.look();const w=s.things[0];await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});await tools.act({line:"move 9 9"});await tools.act({line:"lege holz ins feuer"});await tools.wait({minutes:8})}`));
+		const v = await withArena(arena.address, () => judge(cm!, { ...island, bot: { ...island.bot!, noWait: undefined, episodes: island.bot!.episodes!.slice(0, 1) } }, `async function bot(){const s=await tools.look();const w=s.things[0];await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});await tools.act({line:"move ${cells(9)} ${cells(9)}"});await tools.act({line:"lege holz ins feuer"});await tools.wait({minutes:8})}`));
 		assert.equal(v.ok, false);
 		assert.match(v.error!, /not held 5 world minutes/);
 		assert.equal(v.episodes![0]!.reached.length, 3, "a task with wait runs three seeds");
@@ -203,12 +207,12 @@ t("a shown episode keeps its way, a hidden one none; the verdict entry carries n
 		const shown = v.episodes!.filter((e) => e.kind === "sample"), hidden = v.episodes!.filter((e) => e.kind === "holdout");
 		assert.ok(hidden.every((e) => e.path === undefined));
 		const s3 = shown.find((e) => e.id === "S3")!;
-		assert.deepEqual(s3.path![0], ["klippenpfad", 2, 8], "from the episode's start");
+		assert.deepEqual(s3.path![0], step("klippenpfad", 2, 8), "from the episode's start");
 		assert.ok(s3.path!.some((p) => p[0] === "graue-bucht"));
-		assert.deepEqual(s3.path!.at(-1), ["graue-bucht", 9, 9], "to the fire");
+		assert.deepEqual(s3.path!.at(-1), [...step("graue-bucht", 9, 10).slice(0, 2), cells(10) - 1], "to the fire (the cell north of it)");
 		// the rooms the paths cross, from the arena's map
 		assert.deepEqual(v.rooms!.map((r) => r.room), ["fischerdorf", "graue-bucht", "klippenpfad"]);
-		assert.deepEqual(v.rooms!.find((r) => r.room === "graue-bucht")!.fires, [{ beaconId: "feuer-bucht", x: 9, y: 10 }]);
+		assert.deepEqual(v.rooms!.find((r) => r.room === "graue-bucht")!.fires, [{ beaconId: "feuer-bucht", x: cells(9), y: cells(10), ...area() }]);
 		// the CodeScore entry stays small: no path, no rooms; the BotEpisode entries have them
 		const f = verdictFields(v) as Record<string, any>;
 		assert.equal(f.rooms, undefined);
@@ -263,14 +267,14 @@ t("the panel of a planning contribution gets its paths and the rooms' geometry; 
 		assert.equal(c.ok, true, c.error);
 		// the snapshot's task names the shown episodes' cells (for the marks on the map), the hidden ones' not
 		const shown = snap.task.episodes.filter((e: any) => e.kind === "sample");
-		assert.deepEqual(shown[0].start, { room: "graue-bucht", x: 10, y: 8 });
-		assert.deepEqual(shown[0].items, [{ proto: "treibholz", room: "graue-bucht", x: 5, y: 7 }]);
+		assert.deepEqual(shown[0].start, at("graue-bucht", 10, 8));
+		assert.deepEqual(shown[0].items, [{ proto: "treibholz", ...at("graue-bucht", 5, 7) }]);
 		assert.ok(snap.task.episodes.filter((e: any) => e.kind === "holdout").every((e: any) => e.start === undefined && e.items === undefined));
 		const d = await (await fetch(`${srv.url}/api/sessions/paths1/source/${c.candidateId}`)).json() as any;
 		assert.deepEqual(d.paths.map((p: any) => p.episode), ["S1", "S2", "S3"]);
-		assert.deepEqual(d.paths[2].path[0], ["klippenpfad", 2, 8]);
+		assert.deepEqual(d.paths[2].path[0], step("klippenpfad", 2, 8));
 		assert.deepEqual(d.rooms.map((r: any) => r.room).sort(), ["fischerdorf", "graue-bucht", "klippenpfad"]);
-		assert.equal(d.rooms[0].ground.length, 16);
+		assert.equal(d.rooms[0].ground.length, cells(16));
 		assert.equal(await srv.stack.space.count({ type: "BotEpisode" }), 3);
 		// deleting the block takes the paths with it; the rooms stay for the next block
 		assert.equal((await post("/api/sessions/paths1/delete", { blockId: snap.current })).status, 200);
@@ -284,25 +288,28 @@ const memTask = taskById("beacon-insel-memory")!;
 const [mExplorer, mRecaller, mReplayer, mNoWood] = memTask.variants;
 const asMemory = (v: Awaited<ReturnType<typeof judge>>, gen = 1): MemoryPath[] => memoryEntries(v, memTask.bot!.goal).map((m) => ({ ...m, gen, author: "a" }));
 
-test("recall: the nearest remembered cell, along a path to its end, a jump to another path costs 10 cells", () => {
+test("recall: the nearest remembered cell, along a path to its end, a jump to another path costs 10 cells (of scale 1)", () => {
+	// cells of scale 1, at the grid scale (server/grid.ts): every distance and cost with them
+	const P = (r: string, x: number, y: number): PathStep => [r, x * GRID_SCALE, y * GRID_SCALE], C = (room: string, x: number, y: number) => ({ room, x: x * GRID_SCALE, y: y * GRID_SCALE });
 	const goal = "beacon:x";
-	const a: MemoryPath = { memoryId: "a", gen: 1, author: "a", episode: "S1", goal, path: [["r", 0, 0], ["r", 5, 0], ["s", 1, 1]] };
-	const b: MemoryPath = { memoryId: "b", gen: 1, author: "b", episode: "S2", goal, path: [["q", 0, 0], ["q", 9, 9], ["r", 6, 1]] };
-	const one = recall([a], goal, { room: "r", x: 1, y: 0 });
+	const a: MemoryPath = { memoryId: "a", gen: 1, author: "a", episode: "S1", goal, path: [P("r", 0, 0), P("r", 5, 0), P("s", 1, 1)] };
+	const b: MemoryPath = { memoryId: "b", gen: 1, author: "b", episode: "S2", goal, path: [P("q", 0, 0), P("q", 9, 9), P("r", 6, 1)] };
+	const one = recall([a], goal, C("r", 1, 0));
 	assert.ok(one.found);
-	assert.deepEqual([one.from, one.distance, one.jumps, one.steps], [["r", 0, 0], 1, 0, [["r", 0, 0], ["r", 5, 0], ["s", 1, 1]]]);
+	assert.deepEqual([one.from, one.distance, one.jumps, one.steps], [P("r", 0, 0), cells(1), 0, [P("r", 0, 0), P("r", 5, 0), P("s", 1, 1)]]);
 	// from q: b leads into r, where it ends; a jump onto a would go further: b's own end is cheaper
-	const two = recall([a, b], goal, { room: "q", x: 0, y: 0 });
+	const two = recall([a, b], goal, C("q", 0, 0));
 	assert.ok(two.found && two.jumps === 0 && two.steps.at(-1)![0] === "r");
-	// a path whose own end lies far: the way jumps over to a (2 cells apart) and on to a's end, 10 cells for the jump
-	const d: MemoryPath = { memoryId: "d", gen: 2, author: "d", episode: "S3", goal, path: [["q", 0, 0], ["r", 6, 1], ["r", 22, 1]] };
-	const three = recall([a, d], goal, { room: "q", x: 0, y: 0 });
+	// a path whose own end lies far: the way jumps over to a (2 cells apart) and on to a's end, 10 cells for the jump (a
+	// change of room is one step at either scale)
+	const d: MemoryPath = { memoryId: "d", gen: 2, author: "d", episode: "S3", goal, path: [P("q", 0, 0), P("r", 6, 1), P("r", 22, 1)] };
+	const three = recall([a, d], goal, C("q", 0, 0));
 	assert.ok(three.found);
-	assert.deepEqual([three.jumps, three.cost, three.links, three.steps.at(-1)], [1, 1 + JUMP_CELLS + 2 + 1, [[["r", 6, 1], ["r", 5, 0]]], ["s", 1, 1]]);
-	assert.equal(recall([a], goal, { room: "elsewhere", x: 0, y: 0 }).found, false);
-	assert.equal(recall([a], "beacon:y", { room: "r", x: 0, y: 0 }).found, false, "only paths of that goal");
-	assert.equal(covers([a], goal, { room: "r", x: 3, y: 0 }), true);
-	assert.equal(covers([a], goal, { room: "r", x: 2, y: 9 }), false, "more than 3 cells from every remembered cell");
+	assert.deepEqual([three.jumps, three.cost, three.links, three.steps.at(-1)], [1, 1 + JUMP_CELLS + cells(2) + 1, [[P("r", 6, 1), P("r", 5, 0)]], P("s", 1, 1)]);
+	assert.equal(recall([a], goal, C("elsewhere", 0, 0)).found, false);
+	assert.equal(recall([a], "beacon:y", C("r", 0, 0)).found, false, "only paths of that goal");
+	assert.equal(covers([a], goal, C("r", 3, 0)), true);
+	assert.equal(covers([a], goal, C("r", 2, 9)), false, "more than NEAR cells from every remembered cell");
 });
 
 t("with memory: a correct contribution's shown paths are remembered, recall answers from them, coverage counts the hidden starts they reach", async () => {
@@ -435,7 +442,7 @@ t("the Anleger: a bot follows its plan's subgoals; the judge reports how far eac
 		assert.match(good.cases.find((c) => c.call.startsWith("S1"))!.got!, /subgoals 4 of 4/);
 		// where the figure reached each: the wood, the Dünen, the fire's side twice (near it, then burning)
 		const s1 = good.episodes!.find((e) => e.id === "S1")!;
-		assert.deepEqual(s1.subgoalAt, [["duenen", 6, 4], ["duenen", 6, 4], ["anleger", 7, 4], ["anleger", 7, 4]]);
+		assert.deepEqual(s1.subgoalAt, [step("duenen", 6, 4), step("duenen", 6, 4), [...step("anleger", 7, 5).slice(0, 2), cells(5) - 1], [...step("anleger", 7, 5).slice(0, 2), cells(5) - 1]], "the cell north of the fire's north-west cell");
 		assert.equal((episodeEntries(good).find((e) => e.episode === "S1") as any).subgoals, 4);
 		assert.ok((verdictFields(good).episodes as any[]).every((e) => e.subgoalAt === undefined && e.path === undefined));
 		// the Dünen plan breaks at its first subgoal wherever the wood lies elsewhere
@@ -504,16 +511,16 @@ test("the toy arena: open on a made island, look, act, path, score with a hold, 
 	const a = toyArena(), w = genIsland(4), { start, wood } = w.episode;
 	const { world } = await a.ask("open", { island: 4, setup: { items: [{ proto: "treibholz", ...wood }] } });
 	const l = await a.ask("look", { world });
-	assert.deepEqual([l.room.id, l.at], [start.room, { x: 12, y: 8 }]);
+	assert.deepEqual([l.room.id, l.at], [start.room, { x: cells(12), y: cells(8) }]);
 	assert.deepEqual(l.exits.map((e: any) => e.name).sort(), Object.keys(w.rooms[start.room]!.exits).sort());
 	const d = Object.keys(w.rooms[start.room]!.exits)[0]!;
 	assert.equal((await a.ask("act", { world, line: d })).at.room, w.rooms[start.room]!.exits[d]);
 	assert.match((await a.ask("act", { world, line: "fliegen" })).said[0], /Unbekannter Befehl/);
 	const p = await a.ask("path", { world });
-	assert.deepEqual(p.path[0], [start.room, 12, 8]);
+	assert.deepEqual(p.path[0], [start.room, cells(12), cells(8)]);
 	assert.equal((await a.ask("score", { world, goal: "beacon:island", hold: 5 })).done, false);
 	const m = await a.ask("map", { room: start.room });
-	assert.deepEqual([m.island, m.ground.length, m.ground[0].length], ["Neuland 4", 16, 24]);
+	assert.deepEqual([m.island, m.ground.length, m.ground[0].length], ["Neuland 4", cells(16), cells(24)]);
 	await assert.rejects(a.ask("open", { island: 1.5 }), /island/);
 	await assert.rejects(a.ask("open", { island: 4, start: { room: "duenen", x: 12, y: 8 } }), /no room duenen/);
 	await assert.rejects(a.ask("score", { world, goal: "beacon:feuer-bucht" }), /unknown goal/);
