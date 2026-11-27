@@ -20,7 +20,7 @@
 /* places */
 main.fp-main { display: block; padding: 20px 16px 40px; padding-bottom: max(40px, env(safe-area-inset-bottom)); }
 main.fp-narrow { max-width: 760px; margin: 0 auto; }
-.fp-center { display: grid !important; place-items: center; min-height: 60vh; }
+.fp-center { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; place-items: center; min-height: 60vh; } /* layout.css gives every main the expert page's two columns */
 .fp-title { font-size: 24px; margin: 4px 0 16px; color: var(--text-strong); display: flex; align-items: center; gap: 8px; }
 .fp-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 0 0 14px; max-width: 760px; }
 .fp-card h1, .fp-card h2 { margin: 0 0 10px; color: var(--text-strong); }
