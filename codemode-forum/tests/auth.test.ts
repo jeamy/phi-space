@@ -162,6 +162,13 @@ test("administrators by identity; the admin password only from scripts", async (
 		assert.equal((await lea.request("GET", "/api/admin/session")).json.admin, false);
 		assert.equal((await lea.request("GET", "/api/admin/models")).status, 403);
 		assert.equal((await ada.request("GET", "/api/admin/models")).status, 200);
+		// models, providers and limits from the page: administrators only
+		assert.equal((await lea.request("GET", "/api/admin/providers")).status, 403);
+		assert.equal((await lea.post("/api/admin/providers/job", { procId: "x", provider: "anthropic", kind: "logout" })).status, 403);
+		assert.equal((await lea.post("/api/admin/limits", { perMin: 1 })).status, 403);
+		assert.equal((await ada.request("GET", "/api/admin/providers")).status, 200);
+		assert.equal((await ada.post("/api/admin/limits", { perMin: 5 })).json.effective.perMin, 5);
+		assert.match((await ada.post("/api/admin/limits", { perMin: 100_000 })).json.error, /above the operator's ceiling/);
 		assert.equal((await lea.post("/api/admin/login", { password: "pw-for-scripts" })).status, 404, "no browser login with the password");
 		// a script: the password as x-admin-token, without a session
 		const script = new Browser(srv.url);
@@ -225,6 +232,14 @@ test("rooms: the owner invites by ID; a room one has no role in does not exist; 
 		assert.equal((await tom.post("/api/rooms/sky-app/message", { text: "hello" })).status, 403);
 		assert.equal((await mia.post("/api/rooms/sky-app/stop", {})).status, 200);
 		assert.equal((await mia.post("/api/rooms/sky-app/access", { userId: await id(ada), role: "member" })).status, 403);
+		// the room's defaults: its owner sets them within the ceilings, its people read them, a member changes none
+		assert.equal((await mia.post("/api/rooms/sky-app/settings", { rounds: 1 })).status, 403);
+		assert.equal((await tom.post("/api/rooms/sky-app/settings", { rounds: 1 })).status, 403);
+		assert.match((await owner.post("/api/rooms/sky-app/settings", { budgetTokens: 10_000_000 })).json.error, /above the operator's ceiling/);
+		assert.match((await owner.post("/api/rooms/sky-app/settings", { models: ["a/b", "c/d", "e/f"] })).json.error, /not available/);
+		assert.deepEqual((await owner.post("/api/rooms/sky-app/settings", { rounds: 1, way: "turns", budgetTokens: 50_000, personWaitS: 30 })).json.defaults, { rounds: 1, way: "turns", budgetTokens: 50_000, personWaitS: 30 });
+		assert.deepEqual((await mia.request("GET", "/api/rooms/sky-app/settings")).json.defaults.budgetTokens, 50_000);
+		assert.match(JSON.stringify((await mia.request("GET", "/api/rooms/sky-app")).json.lines), /set the room's defaults: way turns; 1 rounds; budget 50000 tokens; waits 30 s for the person/);
 		assert.equal((await mia.request("GET", "/api/rooms/sky-app/access")).status, 200, "a member reads who is in the room");
 		assert.equal((await owner.post("/api/rooms/sky-app/access", { userId: await id(owner), role: null })).status, 400, "the owner keeps the room");
 		// taken out again: the room is gone for her

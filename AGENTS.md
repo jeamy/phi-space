@@ -65,7 +65,7 @@ so a relative path still means the repository root (`checks/root-scripts.mjs` ke
   of `client/forum/controls.tsx` with label and tip, `tests/page.test.ts`; screenshots `node --experimental-strip-types codemode-forum/tests/screenshots.ts`
   with phi-idp running and the page built)):
   `npm --prefix codemode-forum run dev`, `npm run codemode-forum` (after `npm --prefix codemode-forum run build`), tests
-  `npm run test:codemode-forum` (they start the processes, with the fake models of `tests/fakes.ts`), typecheck
+  `npm run test:codemode-forum` (they start the processes, with the fake models of `tests/fakes.ts`; the logins from the page with the made-up provider of `tests/providers.ts` in `tests/providers.test.ts`; the model process keeps credentials in `FORUM_AUTH_FILE`, seeded once from `~/.pi/agent/auth.json`), typecheck
   `npm --prefix codemode-forum run typecheck` (own tsconfig, not part of the root `tsc`); the result of a plan task as Markdown with
   its generated appendix: `node --experimental-strip-types codemode-forum/server/export-plan.ts --room <room> --block <id> --out <file>`;
   Docker `npm --prefix codemode-forum run docker:image`, then `docker:local:up|down|logs` (one container per role on this

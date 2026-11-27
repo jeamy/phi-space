@@ -23,6 +23,8 @@ import { Auth, loginConfig, type LoginConfig, type Who } from "./auth.ts";
 import { ForumHub } from "./hub.ts";
 import { accessOf, createRoom, may, roleIn, roomsOf, setRole, type Role } from "./rooms.ts";
 import { announce, connectSpace, takeAll } from "./space.ts";
+import { answerPrompt, askProvider, cancelLogin, providerState } from "./providers.ts";
+import { ceilings, checkLimits, effectiveLimits, readLimits, saveLimits } from "./settings.ts";
 
 const ID = /^[a-zA-Z0-9._-]{1,48}$/;
 
@@ -151,7 +153,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				// a script with the admin password stands for the operator; a person needs a role in the room, and a room
 				// they have none in does not exist for them
 				const role: Role | null = who ? roleIn(await accessOf(conn.space, inRoom), who.user.userId) : "owner";
-				const need = req.method === "GET" ? "read" : /\/access$/.test(p) ? "own" : "write";
+				const need = req.method === "GET" ? "read" : /\/(access|settings)$/.test(p) ? "own" : "write";
 				if (!may(role, need)) return role ? json(res, 403, { error: "Your role in this room does not allow this" }) : json(res, 404, { error: "No such room" });
 			}
 			const ac = /^\/api\/rooms\/([^/]+)\/access$/.exec(p);
@@ -162,6 +164,30 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (!a) return json(res, 404, { error: "No such room" });
 				const named = async (id: string) => ({ id, name: ((await conn.space.readIfExists({ type: "ForumUser", fields: { userId: id } }, NO_WAIT))?.fields as { name?: string } | undefined)?.name ?? id });
 				return json(res, 200, { owner: await named(a.owner), members: await Promise.all(a.members.map(named)), viewers: await Promise.all(a.viewers.map(named)) });
+			}
+			// ---- a room's defaults: its owner sets them, its people read them (settings.ts) ----
+			const rs = /^\/api\/rooms\/([^/]+)\/settings$/.exec(p);
+			if (rs) {
+				if (!ID.test(rs[1]!)) return json(res, 400, { error: "Invalid room id" });
+				if (req.method === "POST") await hub.saveRoomSettings(rs[1]!, who ? who.user.name : "script", await readBody(req));
+				return json(res, 200, await hub.roomSettings(rs[1]!));
+			}
+			// ---- models and providers, limits: administrators only (providers.ts, settings.ts) ----
+			if (p.startsWith("/api/admin/providers") || p === "/api/admin/limits") {
+				if (!(await isAdmin(req, who))) return json(res, 403, { error: "Only administrators" });
+				const actor = who ? `${who.user.name} (${who.user.userId})` : "script";
+				if (p === "/api/admin/limits") {
+					if (req.method === "POST") await saveLimits(conn.space, actor, checkLimits(await readBody(req)));
+					const l = await readLimits(conn.space);
+					return json(res, 200, { limits: l, ceilings: ceilings(), effective: effectiveLimits(l) });
+				}
+				if (p === "/api/admin/providers" && req.method === "GET") return json(res, 200, await providerState(conn.space));
+				if (req.method !== "POST") return json(res, 405, { error: "POST expected" });
+				const b = await readBody(req, 16_000);
+				if (p === "/api/admin/providers/job") return json(res, 200, { jobId: await askProvider(conn.space, actor, b) });
+				if (p === "/api/admin/providers/answer") { await answerPrompt(conn.space, b); return json(res, 200, { ok: true }); }
+				if (p === "/api/admin/providers/cancel") { await cancelLogin(conn.space, String(b.loginId ?? "")); return json(res, 200, { ok: true }); }
+				return json(res, 404, { error: "Not found" });
 			}
 			if (p === "/api/system") return json(res, 200, await hub.systemInfo());
 			if (p === "/api/models" && req.method === "GET") return json(res, 200, (await hub.modelInfo()).info);

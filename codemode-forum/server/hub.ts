@@ -6,7 +6,8 @@
 // codemode-chat/server/hub.ts.
 import { FOREVER, NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import type { WsConnection } from "phi-spaces/ws";
-import { ipTokensPerDay, MAX_AGENTS_PER_MODEL, MAX_MODELS, MIN_MODELS, runBudgetTokens, today } from "./limits.ts";
+import { MAX_AGENTS_PER_MODEL, MAX_MODELS, MIN_MODELS, today } from "./limits.ts";
+import { ceilings, checkRoom, effectiveLimits, readLimits, readRoom, saveRoom, type RoomDefaults } from "./settings.ts";
 import { modelInfoOf, spentToday, type ModelInfoView, type Spend } from "./models.ts";
 import { fullDoc, headOf, versionsOf, type FullDoc, type PlanDoc } from "./plandoc.ts";
 import { planTask, type PlanTask } from "./plantask.ts";
@@ -58,7 +59,9 @@ export type Block = Omit<PlanTask, "session"> & {
 export type PlanView = { blockId: string; doc: Omit<FullDoc, "session" | "slot">; check: { ok: boolean; failures: Failure[] } | null; versions: Array<Pick<PlanDoc, "version" | "author" | "model" | "changed" | "ts">> };
 /** What the page shows of a room. `blocks`: oldest first; a run works on the block it names. */
 export type Snapshot = { /** Over all runs with both tables: how often each table's document was the base of the result. */
-	standings: { runs: number; A: number; B: number; tokens: Record<Table, number> }; session: string; blocks: Block[]; run: RunInfo | null; rollcall: Array<Omit<RollCall, "session">>; lines: Line[]; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number } };
+	standings: { runs: number; A: number; B: number; tokens: Record<Table, number> }; session: string; blocks: Block[]; run: RunInfo | null; rollcall: Array<Omit<RollCall, "session">>; lines: Line[]; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number };
+	/** The room owner's defaults for a run (settings.ts). */
+	defaults?: RoomDefaults };
 
 export class ForumHub {
 	/** The shared space of all processes (a RemoteSpace on the space host's socket). */
@@ -253,7 +256,7 @@ export class ForumHub {
 			for (const x of ["A", "B"] as const) { const h = x === TABLE ? head : await headOf(this.host, { ...d, table: x }); if (h) heads[x] = h.version; }
 			return { ...t, table: TABLE, heads, result: res ? { table: res.table, version: res.version } : null, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
 		}));
-		return { standings: await standings(this.host), session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: runBudgetTokens() } };
+		return { standings: await standings(this.host), session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: effectiveLimits(await readLimits(this.host)).runBudgetTokens }, defaults: await readRoom(this.host, s.id) };
 	}
 
 	/** A room's state for a list of rooms, read without opening the room (no session, no ForumRoom entry): "waiting" while
@@ -501,7 +504,11 @@ export class ForumHub {
 	 *  counts against the day's allowance of the address. Without it (tests, scripts in-process) it counts as admin. */
 	async startRun(id: string, o: { blockId?: unknown; way?: unknown; rounds?: unknown; models?: unknown; perModel?: unknown; budgetTokens?: unknown; budgetUsd?: unknown; client?: { ip: string; admin: boolean } }): Promise<{ runId: string }> {
 		const s = await this.session(id);
-		const models = [...new Set(Array.isArray(o.models) ? o.models.map(String) : [])];
+		// what the request leaves open comes from the room's defaults (settings.ts)
+		const room = await readRoom(this.host, s.id), limitsNow = effectiveLimits(await readLimits(this.host));
+		const given = Array.isArray(o.models) && o.models.length ? o.models : room.models ?? [];
+		o = { ...o, way: o.way ?? room.way, rounds: o.rounds ?? room.rounds, perModel: o.perModel ?? room.perModel };
+		const models = [...new Set(given.map(String))];
 		if (models.length < MIN_MODELS) throw new Error(`A run needs at least ${MIN_MODELS} different models`);
 		if (models.length > MAX_MODELS) throw new Error(`A run takes at most ${MAX_MODELS} models`);
 		const { info } = await this.modelInfo();
@@ -510,19 +517,21 @@ export class ForumHub {
 		const perModel = Math.min(MAX_AGENTS_PER_MODEL, Math.max(1, Math.floor(Number(o.perModel ?? 1)) || 1));
 		const positive = (v: unknown) => { const n = Number(v); return v !== undefined && v !== null && v !== "" && Number.isFinite(n) && n > 0 ? n : undefined; };
 		const visitor = o.client && !o.client.admin ? o.client : undefined;
-		// a visitor's run never goes without a token limit, and never above the default one
-		const cap = visitor ? runBudgetTokens() : 0;
-		const tokens = positive(o.budgetTokens) ? Math.floor(positive(o.budgetTokens)!) : undefined;
+		// a visitor's (a member's) run never goes without a token limit, and never above the largest one: the
+		// administrator's within FORUM_RUN_BUDGET_TOKENS, and the room's when its owner set one
+		const caps = [limitsNow.runBudgetTokens, room.budgetTokens ?? 0].filter((x) => x > 0);
+		const cap = visitor && caps.length ? Math.min(...caps) : 0;
+		const tokens = positive(o.budgetTokens) ? Math.floor(positive(o.budgetTokens)!) : room.budgetTokens;
 		const budgetTokens = cap ? Math.min(tokens ?? cap, cap) : tokens;
 		const budget = { ...(budgetTokens ? { tokens: budgetTokens } : {}), ...(positive(o.budgetUsd) ? { usd: positive(o.budgetUsd)! } : {}) };
 		if (!Object.keys(budget).length) throw new Error("A run needs a budget in tokens or dollars");
-		if (visitor && ipTokensPerDay() && (await spentToday(this.host, visitor.ip)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (FORUM_TOKENS_PER_IP_DAY); try again tomorrow");
+		if (visitor && limitsNow.personTokensPerDay && (await spentToday(this.host, visitor.ip)) >= limitsNow.personTokensPerDay) throw new Error("The model budget of today for your address is used up (FORUM_TOKENS_PER_IP_DAY); try again tomorrow");
 		// the way of working: the models take turns (table A), or all write at the same time and review each other
 		// (table B), in at most `rounds` rounds
 		const table: Table = o.way === "parallel" ? "B" : "A", rounds = Math.min(MAX_ROUNDS, Math.max(0, Math.floor(Number(o.rounds ?? (o.way === "parallel" || o.way === "turns" || o.way === "both" ? 2 : 0))) || 0)), both = o.way === "both";
 		const tasks = await this.#tasks(s.id), task = o.blockId ? tasks.find((t) => t.blockId === String(o.blockId)) : tasks.at(-1);
 		if (!task) throw new Error(o.blockId ? "Unknown plan task" : "No plan task yet: create one first");
-		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, blockId: task.blockId, table, rounds, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: task.lang, budget, ...(both ? { both } : {}), ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
+		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, blockId: task.blockId, table, rounds, startedAt: Date.now(), models, perModel, aliases: drawAliases(models), lang: task.lang, budget, ...(both ? { both } : {}), ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}), ...(room.personWaitS !== undefined ? { personWaitMs: room.personWaitS * 1000 } : {}) };
 		// a request that was refused above started nothing and does not count
 		if (!this.#allow(s, "run", 6)) throw new Error("Too many runs, slow down");
 		await this.#trimLines(s);
@@ -543,6 +552,25 @@ export class ForumHub {
 		});
 		this.push(s);
 		return { runId: params.runId };
+	}
+
+	/** The room's defaults for a run, with the limits a member's run is held to now. */
+	async roomSettings(id: string): Promise<{ defaults: RoomDefaults; ceilings: { runBudgetTokens: number; personWaitS: number }; allowed: string[] }> {
+		const s = await this.session(id);
+		const { info } = await this.modelInfo();
+		return { defaults: await readRoom(this.host, s.id), ceilings: { runBudgetTokens: effectiveLimits(await readLimits(this.host)).runBudgetTokens, personWaitS: ceilings().personWaitS }, allowed: info.enabled && info.on ? info.models.map((m) => m.label) : [] };
+	}
+
+	/** The owner sets the room's defaults (checked against the ceilings of now); a line in the room says who and what. */
+	async saveRoomSettings(id: string, by: string, b: Record<string, unknown>): Promise<RoomDefaults> {
+		const s = await this.session(id);
+		const now = await this.roomSettings(s.id);
+		const d = checkRoom(b, { allowed: now.allowed, runCeiling: now.ceilings.runBudgetTokens });
+		await saveRoom(this.host, s.id, by, d);
+		const said = [d.models ? `models ${d.models.join(", ")}` : "", d.way ? `way ${d.way}` : "", d.rounds !== undefined ? `${d.rounds} rounds` : "", d.perModel ? `${d.perModel} agents per model` : "", d.budgetTokens ? `budget ${d.budgetTokens} tokens` : "", d.personWaitS !== undefined ? `waits ${d.personWaitS} s for the person` : ""].filter(Boolean).join("; ");
+		await systemLine(this.host, null, this.#ttl, s.id, `${by} set the room's defaults: ${said || "none"}`);
+		this.push(s);
+		return d;
 	}
 
 	/** Stops the room's run: whoever takes its ForumRun ends it, with its closing line, exactly once. */

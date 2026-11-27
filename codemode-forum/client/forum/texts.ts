@@ -24,7 +24,9 @@ export const P = {
 		you: "Du", yourName: "Dein Name am Tisch", saveName: "Speichern", signOut: "Abmelden", yourId: "Deine ID zum Einladen",
 		look: "Aussehen", language: "Sprache", mode: "Hell oder dunkel", dark: "dunkel", light: "hell", palette: "Farben",
 		owned: "Räume, die dir gehören", noneOwned: "Dir gehört noch kein Raum.", people: "Personen", peopleN: (n: number) => `${n} Person${n === 1 ? "" : "en"}`, invite: "ID der Person", asMember: "Als Mitglied einladen", asViewer: "Zum Mitlesen einladen", remove: "Entfernen",
-		admin: "Verwaltung", adminText: "Modelle, Anbieter und die Prozesse des Systems stellst du vorerst in der Expertenansicht ein.",
+		roomDefaults: "Voreinstellungen des Raums", roomDefaultsText: "Was ein Lauf in diesem Raum nimmt, wenn niemand etwas anderes wählt. Das Budget ist zugleich das Höchste, das ein Mitglied für einen Lauf verlangen kann.",
+		noDefault: "keine Vorgabe", perModel: "Agenten je Modell", personWait: "Wartezeit auf dich (Sekunden)", saveDefaults: "Voreinstellungen speichern", saved: "Gespeichert.",
+		ceilings: (tokens: number, wait: number) => `Grenzen des Betriebs: ${tokens ? `höchstens ${tokens.toLocaleString("de-DE")} Tokens je Lauf` : "kein Höchstbudget"}, höchstens ${wait} s Wartezeit.`,
 		waitingTitle: "wartet auf dich",
 	},
 	en: {
@@ -50,7 +52,9 @@ export const P = {
 		you: "You", yourName: "Your name at the table", saveName: "Save", signOut: "Sign out", yourId: "Your ID for invitations",
 		look: "Look", language: "Language", mode: "Light or dark", dark: "dark", light: "light", palette: "Colours",
 		owned: "Rooms you own", noneOwned: "You own no room yet.", people: "People", peopleN: (n: number) => `${n} ${n === 1 ? "person" : "people"}`, invite: "The person's ID", asMember: "Invite as a member", asViewer: "Invite to read along", remove: "Remove",
-		admin: "Administration", adminText: "For now you set models, providers and the system's processes in the expert view.",
+		roomDefaults: "The room's defaults", roomDefaultsText: "What a run in this room takes when nobody chooses otherwise. The budget is also the most a member may ask for in one run.",
+		noDefault: "no default", perModel: "Agents per model", personWait: "Waiting for you (seconds)", saveDefaults: "Save the defaults", saved: "Saved.",
+		ceilings: (tokens: number, wait: number) => `The operator's limits: ${tokens ? `at most ${tokens.toLocaleString("en-US")} tokens per run` : "no largest budget"}, at most ${wait} s of waiting.`,
 		waitingTitle: "waiting for you",
 	},
 } as const;

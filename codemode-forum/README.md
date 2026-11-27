@@ -47,7 +47,9 @@ places:
   time with a bar of the three at the bottom, the Table's tab counting the open questions. The pane stays in the
   address (`#files`, `#table`, `#plan`), so a link leads to it.
 - **Settings** (`/settings`): the name at the table, the ID, signing out, language, light or dark, the colours, and
-  for each room one owns the people in it (inviting by ID, removing).
+  for each room one owns the people in it (inviting by ID, removing) and its defaults for a run (models, way, rounds,
+  agents a model, budget, the answer time). For an administrator also the providers of every model process (adding a
+  key, signing in, a test call, removing), the allowed models and the limits (`client/forum/AdminPlace.tsx`).
 - **Help** (`/help`) and, for administrators, the **expert view** (`/expert`): the earlier page with everything at
   once, also models, providers, repository sources and the system's processes (until the administration moves to the
   page in a later phase).
@@ -353,8 +355,15 @@ lock, one per room), `AgentSlot`, `WorkItem`, `ItemStart`, `RollCall`, `ForumRun
 
 ## Models
 
-Off by default. `FORUM_LLM=1` plus credentials (environment keys or `~/.pi/agent/auth.json`) turns them on; model
-calls cost tokens. No model may take part until an admin chooses some in the panel on the left, or `FORUM_MODELS`
+Off by default. `FORUM_LLM=1` plus credentials turns them on; model calls cost tokens. The model process keeps its
+credentials in `FORUM_AUTH_FILE` (default `.local/auth/credentials.json`, mode 600; in Docker the volume `forum-auth`),
+filled once from `~/.pi/agent/auth.json` (`FORUM_AUTH_SEED` names another file, empty for none) while it does not
+exist; environment keys go on working. An administrator adds a key or signs in on the page: the model process asks
+through the space what the provider's flow asks, the page seals each answer to that login's public key
+(`server/seal.ts`), and nothing typed is kept in the space (`server/providers.ts` the web side,
+`server/provider-host.ts` the model side, every login, removal and test in `AdminAudit`). A login calls no model, so
+it works with `FORUM_LLM=0`; the test call needs it. The limits the page sets (`ForumSetting`, `server/settings.ts`)
+are held to the environment's values as ceilings. No model may take part until an admin chooses some in the panel on the left, or `FORUM_MODELS`
 names parts of model ids. The admin password is `FORUM_ADMIN_PASSWORD`.
 
 Guards: `FORUM_MODEL_PARALLEL` calls at once per model process (default 2); `FORUM_LLM_PER_MIN` calls per minute
@@ -462,7 +471,12 @@ repository that is too large and a server that is too slow, of which nothing sta
 covers the switch to the Rust space server. `tests/page.test.ts` holds the FORUM page to its controls with label and
 tip, its widths and its routes; `tests/auth.test.ts`, `tests/forum.test.ts` and `tests/talk.test.ts` also check the
 rooms' states in the list. `tests/help.test.ts` holds the help articles to both languages, the
-same anchors in each, and links that lead somewhere.
+same anchors in each, and links that lead somewhere. `tests/providers.test.ts` covers the logins from the page with the
+made-up provider of `tests/providers.ts` (`FORUM_PROVIDER_MODULE`, only with `FORUM_TEST=1`): a key login with every
+kind of prompt whose key is nowhere in the space's files, a wrong key scrubbed from the message, the test call, a
+removal, the audit, a sign-in whose refreshed token survives a restart, a model process killed during a login and a
+cancelled one, and the ceilings; `tests/auth.test.ts` refuses providers, limits and a room's defaults to those who may
+not set them.
 
 ## Sign-in
 

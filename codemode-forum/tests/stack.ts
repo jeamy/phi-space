@@ -5,7 +5,9 @@
 // stops them all. Taken over from codemode-chat/tests/stack.ts.
 import { spaceServer } from "../server/space-server.ts";
 import { spawn, type ChildProcess } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer as startWeb } from "../server/index.ts";
 import { connectSpace } from "../server/space.ts";
@@ -30,8 +32,10 @@ const stop = (c: ChildProcess, sig: NodeJS.Signals = "SIGTERM") => new Promise<v
 
 export type Stack = {
 	spec: string; space: SpaceLike;
-	/** Starts one more model process (`fakes`: the fake models of tests/fakes.ts, or the names of some of them). */
-	model(o?: { fakes?: boolean | string[] }): Promise<ChildProcess>;
+	/** Starts one more model process (`fakes`: the fake models of tests/fakes.ts, or the names of some of them;
+	 *  `authFile`: its credential file, by default one in a directory of its own that close() removes; `providers`: the
+	 *  test providers of tests/providers.ts beside the built-in ones; `env`: further variables, e.g. FORUM_LLM). */
+	model(o?: { fakes?: boolean | string[]; authFile?: string; providers?: boolean; env?: Record<string, string> }): Promise<ChildProcess>;
 	/** Starts one more agents process. */
 	agents(o?: { leaseMs?: number; replyWaitS?: number; turnWaitS?: number; personWaitS?: number }): Promise<ChildProcess>;
 	/** Starts one more sources process (`repos`: FORUM_REPOS; `pause`: a marker file, see holdBeforeAnswer). */
@@ -53,10 +57,14 @@ export async function startStack(o: { dbPath?: string; agents?: boolean; model?:
 	let space = await startSpace();
 	const conn = connectSpace(spec);
 	const others: ChildProcess[] = [];
+	const dirs: string[] = [];
 	const stack: Stack = {
 		spec, space: conn.space,
 		async model(m = {}) {
-			const c = await run("server/model-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", ...(m.fakes ? { FORUM_TEST: "1", FORUM_LLM_MODULE: "tests/fakes.ts", FORUM_FAKE_MODELS: Array.isArray(m.fakes) ? m.fakes.join(",") : "" } : {}) }, (l) => l.startsWith("[model]"));
+			// never the developer's credentials: a file of its own, filled from nothing
+			const authFile = m.authFile ?? join(await mkdtemp(join(tmpdir(), "forum-auth-")), "auth", "credentials.json");
+			if (!m.authFile) dirs.push(join(authFile, "..", ".."));
+			const c = await run("server/model-host.ts", { FORUM_SPACE: spec, FORUM_HOST_NAME: "", FORUM_AUTH_FILE: authFile, FORUM_AUTH_SEED: "", ...(m.providers ? { FORUM_TEST: "1", FORUM_PROVIDER_MODULE: "tests/providers.ts" } : {}), ...(m.env ?? {}), ...(m.fakes ? { FORUM_TEST: "1", FORUM_LLM_MODULE: "tests/fakes.ts", FORUM_FAKE_MODELS: Array.isArray(m.fakes) ? m.fakes.join(",") : "" } : {}) }, (l) => l.startsWith("[model]"));
 			others.push(c);
 			return c;
 		},
@@ -77,7 +85,7 @@ export async function startStack(o: { dbPath?: string; agents?: boolean; model?:
 		},
 		async restartSpace() { await stop(space); space = await startSpace(); },
 		kill: (c, sig) => stop(c, sig),
-		async close() { await Promise.all(others.map((c) => stop(c))); conn.close(); await stop(space); await rm(sock, { force: true }); },
+		async close() { await Promise.all(others.map((c) => stop(c))); conn.close(); await stop(space); await rm(sock, { force: true }); await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true }))); },
 	};
 	if (o.checker !== false && o.model !== false) await stack.checker();
 	if (o.agents !== false) await stack.agents();

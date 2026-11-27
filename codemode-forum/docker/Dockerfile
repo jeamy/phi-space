@@ -67,7 +67,8 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/.next ./cod
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/app ./codemode-forum/app
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/client ./codemode-forum/client
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-forum/server ./codemode-forum/server
-RUN mkdir -p /data /repos /cache && chown -R node:node /data /cache
+# /auth: the model process's credential file (FORUM_AUTH_FILE), a volume of its own; mode 700, the node user's alone
+RUN mkdir -p /data /repos /cache /auth && chown -R node:node /data /cache /auth && chmod 700 /auth
 USER node
 EXPOSE 4100 4180
 WORKDIR /opt/phi-spaces/codemode-forum

@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { HelpTip } from "../HelpTip.tsx";
 import { api, firstLine } from "../lib/api.ts";
-import type { Table } from "../lib/forum-types.ts";
+import type { RoomDefaults, Table } from "../lib/forum-types.ts";
 import type { Text } from "../lib/texts.ts";
 import type { Lang } from "../lib/theme.ts";
 import { useRoom } from "../lib/use-room.ts";
@@ -92,7 +92,8 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 						) : <p className="fp-empty">{canWrite ? p.noTask : p.viewer}</p>}
 						{!canWrite ? (block ? <p className="fp-meta">{p.viewer}</p> : null) : <NewTask lang={lang} p={p} t={t} rid={rid} open={!block} act={act} onMade={(id) => { setFocus(id); setTableSel(null); }} />}
 						{runHere ? <RunPanel t={t} locale={locale} runHere={runHere} table={table} answers={answers} /> : null}
-						{canWrite && block ? <StartRun lang={lang} p={p} t={t} rid={rid} blockId={block.blockId} available={available} limits={limits} active={!!run?.active} act={act} /> : null}
+						{canWrite && block ? <StartRun key={JSON.stringify(snap.defaults ?? {})} lang={lang} p={p} t={t} rid={rid} blockId={block.blockId} available={available} limits={limits} defaults={snap.defaults ?? {}} active={!!run?.active} act={act} /> : null}
+						{(!login || row?.role === "owner") ? <RoomDefaultsForm lang={lang} p={p} t={t} rid={rid} available={available} defaults={snap.defaults ?? {}} act={act} /> : null}
 						{msg ? <p className="fp-error" role="alert">{msg}</p> : null}
 						{block ? <TalkPane t={t} lang={lang} block={block} said={said} docTables={docTables} shown={shown} name={name} who={who} threads={threads} send={send} /> : null}
 					</>
@@ -205,13 +206,15 @@ function NewTask({ lang, p, t, rid, open, act, onMade }: { lang: Lang; p: PageTe
 }
 
 /** Starting a run on the task shown: the models at the table, the way of working, the rounds and the budget. */
-function StartRun({ lang, p, t, rid, blockId, available, limits, active, act }: { lang: Lang; p: PageText; t: Text; rid: string; blockId: string; available: Array<{ id: string; label: string }>; limits: { minModels: number; maxModels: number; maxPerModel: number }; active: boolean; act: (fn: () => Promise<unknown>) => Promise<boolean> }) {
-	const [chosen, setChosen] = useState<Set<string>>(new Set());
-	const [way, setWay] = useState<"both" | "parallel" | "turns">("both");
-	const [rounds, setRounds] = useState(2);
-	const [budget, setBudget] = useState("100000");
+function StartRun({ lang, p, t, rid, blockId, available, limits, defaults, active, act }: { lang: Lang; p: PageText; t: Text; rid: string; blockId: string; available: Array<{ id: string; label: string }>; limits: { minModels: number; maxModels: number; maxPerModel: number; visitorTokens: number }; defaults: RoomDefaults; active: boolean; act: (fn: () => Promise<unknown>) => Promise<boolean> }) {
+	// the room's defaults come first, the page's own otherwise; a member's budget is held to the room's and the largest one
+	const [chosen, setChosen] = useState<Set<string>>(new Set(defaults.models ?? []));
+	const [way, setWay] = useState<"both" | "parallel" | "turns">(defaults.way ?? "both");
+	const [rounds, setRounds] = useState(defaults.rounds ?? 2);
+	const most = Math.min(...[limits.visitorTokens, defaults.budgetTokens ?? 0].filter((x) => x > 0), Infinity);
+	const [budget, setBudget] = useState(String(defaults.budgetTokens ?? Math.min(100_000, most)));
 	const picked = available.filter((m) => chosen.has(m.label)).map((m) => m.label);
-	const start = () => { askToNotify(); return act(() => api(`/rooms/${rid}/run`, { blockId, way, rounds, models: picked, perModel: 1, budgetTokens: budget || undefined })); };
+	const start = () => { askToNotify(); return act(() => api(`/rooms/${rid}/run`, { blockId, way, rounds, models: picked, perModel: defaults.perModel ?? 1, budgetTokens: budget || undefined })); };
 	return (
 		<details className="fp-fold">
 			<summary>{p.startRun}</summary>
@@ -224,7 +227,7 @@ function StartRun({ lang, p, t, rid, blockId, available, limits, active, act }: 
 					<Choice label={t.way} tip="way" lang={lang} value={way} onChange={(e) => setWay(e.target.value as "both" | "parallel" | "turns")}><option value="both">{t.wayBoth}</option><option value="parallel">{t.wayB}</option><option value="turns">{t.wayA}</option></Choice>
 					<div className="fp-row">
 						<Field label={t.rounds} tip="rounds" lang={lang} type="number" min={0} max={8} value={rounds} onChange={(e) => setRounds(Math.min(8, Math.max(0, Number(e.target.value) || 0)))} />
-						<Field label={t.tokens} tip="budget" lang={lang} type="number" min={1000} step={1000} value={budget} onChange={(e) => setBudget(e.target.value)} />
+						<Field label={t.tokens} tip="budget" lang={lang} type="number" min={1000} step={1000} max={Number.isFinite(most) ? most : undefined} value={budget} onChange={(e) => setBudget(e.target.value)} />
 					</div>
 					{picked.length < limits.minModels ? <p className="fp-meta">{t.need(limits.minModels)}</p> : null}
 				</>
@@ -233,6 +236,51 @@ function StartRun({ lang, p, t, rid, blockId, available, limits, active, act }: 
 				<Act kind="primary" label={t.start} tip="start" lang={lang} disabled={active || picked.length < limits.minModels} onClick={() => void start()} />
 				<Act kind="danger" label={t.stop} tip="stop" lang={lang} disabled={!active} onClick={() => void act(() => api(`/rooms/${rid}/stop`, {}))} />
 			</div>
+		</details>
+	);
+}
+
+/** The room's defaults for a run, set by its owner within the operator's ceilings (server/settings.ts): the models, the
+ *  way, the rounds, agents per model, the budget (also the most a member's run may ask for) and how long the table waits
+ *  for the person. */
+function RoomDefaultsForm({ lang, p, t, rid, available, defaults, act }: { lang: Lang; p: PageText; t: Text; rid: string; available: Array<{ id: string; label: string }>; defaults: RoomDefaults; act: (fn: () => Promise<unknown>) => Promise<boolean> }) {
+	const [models, setModels] = useState<Set<string>>(new Set(defaults.models ?? []));
+	const [way, setWay] = useState<string>(defaults.way ?? "");
+	const [rounds, setRounds] = useState(defaults.rounds === undefined ? "" : String(defaults.rounds));
+	const [perModel, setPerModel] = useState(defaults.perModel === undefined ? "" : String(defaults.perModel));
+	const [budget, setBudget] = useState(defaults.budgetTokens === undefined ? "" : String(defaults.budgetTokens));
+	const [wait, setWait] = useState(defaults.personWaitS === undefined ? "" : String(defaults.personWaitS));
+	const [ceil, setCeil] = useState<{ runBudgetTokens: number; personWaitS: number } | null>(null);
+	const [saved, setSaved] = useState(false);
+	const load = () => api<{ ceilings: { runBudgetTokens: number; personWaitS: number } }>(`/rooms/${rid}/settings`).then((x) => setCeil(x.ceilings)).catch(() => {});
+	const num = (v: string) => (v === "" ? undefined : Number(v));
+	const save = () => act(async () => {
+		setSaved(false);
+		await api(`/rooms/${rid}/settings`, { models: [...models], way: way || undefined, rounds: num(rounds), perModel: num(perModel), budgetTokens: num(budget), personWaitS: num(wait) });
+		setSaved(true);
+	});
+	return (
+		<details className="fp-fold" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open && !ceil) void load(); }}>
+			<summary>{p.roomDefaults}</summary>
+			<p className="fp-meta">{p.roomDefaultsText}</p>
+			{available.length ? (
+				<fieldset className="fp-models">
+					<legend>{p.models}</legend>
+					{available.map((m) => <Tick key={m.label} label={m.label} tip="roomdefaults" lang={lang} checked={models.has(m.label)} onChange={(e) => setModels((cur) => { const n = new Set(cur); if (e.target.checked) n.add(m.label); else n.delete(m.label); return n; })} />)}
+				</fieldset>
+			) : null}
+			<Choice label={t.way} tip="roomdefaults" lang={lang} value={way} onChange={(e) => setWay(e.target.value)}><option value="">{p.noDefault}</option><option value="both">{t.wayBoth}</option><option value="parallel">{t.wayB}</option><option value="turns">{t.wayA}</option></Choice>
+			<div className="fp-row">
+				<Field label={t.rounds} tip="roomdefaults" lang={lang} type="number" min={0} max={8} value={rounds} onChange={(e) => setRounds(e.target.value)} />
+				<Field label={p.perModel} tip="roomdefaults" lang={lang} type="number" min={1} max={3} value={perModel} onChange={(e) => setPerModel(e.target.value)} />
+			</div>
+			<div className="fp-row">
+				<Field label={t.tokens} tip="roomdefaults" lang={lang} type="number" min={1000} step={1000} max={ceil?.runBudgetTokens || undefined} value={budget} onChange={(e) => setBudget(e.target.value)} />
+				<Field label={p.personWait} tip="roomdefaults" lang={lang} type="number" min={0} max={ceil?.personWaitS} value={wait} onChange={(e) => setWait(e.target.value)} />
+			</div>
+			{ceil ? <p className="fp-meta">{p.ceilings(ceil.runBudgetTokens, ceil.personWaitS)}</p> : null}
+			<Act kind="primary" label={p.saveDefaults} tip="roomdefaults" lang={lang} onClick={() => void save()} />
+			{saved ? <p className="fp-meta" role="status">{p.saved}</p> : null}
 		</details>
 	);
 }

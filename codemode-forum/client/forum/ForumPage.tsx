@@ -9,6 +9,7 @@ import { loadMe, rename, signOut, type Me } from "../lib/me.ts";
 import { PALETTES } from "../lib/palettes.ts";
 import { T } from "../lib/texts.ts";
 import { useTheme, type Lang, type Mode } from "../lib/theme.ts";
+import { AdminPlace } from "./AdminPlace.tsx";
 import { Act, Choice, Field } from "./controls.tsx";
 import { RoomPlace } from "./RoomPlace.tsx";
 import { P, type PageText } from "./texts.ts";
@@ -159,12 +160,7 @@ function SettingsPlace({ lang, p, me, setMe, rooms, theme }: { lang: Lang; p: Pa
 					{rooms === null ? <Skeleton label={p.loading} /> : owned.length ? owned.map((r) => <People key={r.room} lang={lang} p={p} room={r.room} setErr={setErr} />) : <p className="fp-empty">{p.noneOwned}</p>}
 				</section>
 			) : null}
-			{me.login && me.admin ? (
-				<section className="fp-card">
-					<h2>{p.admin}</h2>
-					<p>{p.adminText} <a href="/expert">{p.expert}</a></p>
-				</section>
-			) : null}
+			{me.login && me.admin ? <AdminPlace lang={lang} p={p} /> : null}
 			{err ? <p className="fp-error" role="alert">{err}</p> : null}
 		</main>
 	);

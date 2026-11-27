@@ -8,17 +8,21 @@
 //   FORUM_SPACE=unix:/tmp/codemode-forum-space.sock   (default) or tcp:host:4180
 //   FORUM_MODEL_PARALLEL=2                            model calls this process makes at once
 //   FORUM_LLM_MODULE=tests/fakes.ts                   tests only (FORUM_TEST=1): fake models instead of real ones
+// It also serves the providers of the page (provider-host.ts): their state, the logins, removing a credential, the
+// test call; and it applies the administrator's limits (settings.ts).
 import { ROOT } from "./env.ts";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
-import { adminModels, callLimits, llmInfo, llmModels, llmText, metered, setAllowedModels, setCallGate, setLlmOn, type TextAnswer, type TextCall, type Usage } from "./llm.ts";
+import { adminModels, callLimits, llmEnabled, llmInfo, llmModels, llmText, metered, providerModels, providerTest, setAllowedModels, setCallGate, setCallLimits, setLlmOn, type TextAnswer, type TextCall, type Usage } from "./llm.ts";
+import { startProviderHost } from "./provider-host.ts";
+import { effectiveLimits, readLimits } from "./settings.ts";
 import { packModels, spentToday, type ModelInfoView, type Spend } from "./models.ts";
 import { callPrompt, type LlmCall } from "./calls.ts";
 import { runType } from "./run.ts";
 import { awaitQuota } from "./quota.ts";
-import { ipTokensPerDay, today } from "./limits.ts";
+import { today } from "./limits.ts";
 import { announce, awaitWork, connectSpace, DEFAULT_SPACE, keepAlive, readExisting } from "./space.ts";
 
 /** What the model process can be asked for; a test module may stand in for the real models. `text` gets the call it
@@ -42,6 +46,15 @@ async function loadFakes(): Promise<FakeModule | null> {
 	if (!path) return null;
 	if (process.env.FORUM_TEST !== "1") throw new Error("FORUM_LLM_MODULE is for tests only (FORUM_TEST=1)");
 	return (await import(pathToFileURL(join(ROOT, path)).href)) as FakeModule;
+}
+
+/** The tokens a person's runs may use per day, as the administrator set it within FORUM_TOKENS_PER_IP_DAY (0: none). */
+let personTokensPerDay = 0;
+/** The administrator's limits, within the environment's: calls per minute and day, a person's tokens per day. */
+async function applyLimits(space: SpaceLike): Promise<void> {
+	const l = effectiveLimits(await readLimits(space));
+	setCallLimits({ perMin: l.perMin, perDay: l.perDay });
+	personTokensPerDay = l.personTokensPerDay;
 }
 
 /** The admin's choices kept in the space, applied to the real models: the allowed models, on/off. */
@@ -71,6 +84,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 	let infoLease: string | null = null, lastInfo = "";
 	const publish = async () => {
 		try {
+			await applyLimits(space);
 			if (!fakes) await applyAdmin(space);
 			const info: ModelInfoView = fakes
 				? await (async () => { const labels = await fakes.models(); return { info: { enabled: true, on: true, models: labels.map((l) => ({ id: l.split("/")[1] ?? l, label: l })) }, admin: { enabled: true, on: true, models: labels.map((l) => ({ label: l, provider: l.split("/")[0] ?? "", id: l.split("/")[1] ?? l, name: l })), allowed: labels, custom: false } }; })()
@@ -85,7 +99,13 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 		} catch (e) { if (!stopping) console.error("[model] publishing the models failed", (e as Error).message); }
 	};
 	await publish();
-	const beat = setInterval(() => void publish(), 10_000); beat.unref?.();
+	// the providers of the page: logins, removals and test calls addressed to this process
+	const providers = startProviderHost({
+		space, procId, models: providerModels, llmOn: llmEnabled, test: providerTest,
+		onTestSpend: async (u) => { if (u.tokens > 0) await space.write({ type: "Spend", fields: { ip: u.by, admin: true, day: today(), tokens: u.tokens, costUsd: u.costUsd, model: u.model, kind: "test", session: "", ts: Date.now() } satisfies Spend as never }, null, SPEND_LEASE_MS); },
+	});
+	await providers.publish().catch((e) => console.error("[model] publishing the providers failed", (e as Error).message));
+	const beat = setInterval(() => { void publish(); void providers.publish().catch(() => {}); }, 10_000); beat.unref?.();
 	const runOf = (call: LlmCall) => ({ type: runType(call.runId!), fields: { session: call.session, runId: call.runId! } });
 
 	/** One call: taken, answered and the answer written in one transaction. */
@@ -100,11 +120,12 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 			const call = e.fields as unknown as LlmCall;
 			let result: { ok: boolean; value?: Record<string, unknown>; error?: string }, usage: Usage | undefined;
 			try {
+				await applyLimits(space);
 				if (!fakes) await applyAdmin(space);
 				// a call of a run that is over (stopped, ended) is not made: nobody waits for its answer
 				if (call.runId && !(await readExisting(space, runOf(call)).catch(() => true))) throw new Error("the run is over");
 				const visitor = call.client && !call.client.admin ? call.client.ip : null;
-				if (visitor && ipTokensPerDay() > 0 && (await spentToday(space, visitor)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (FORUM_TOKENS_PER_IP_DAY)");
+				if (visitor && personTokensPerDay > 0 && (await spentToday(space, visitor)) >= personTokensPerDay) throw new Error("The model budget of today for your address is used up (FORUM_TOKENS_PER_IP_DAY)");
 				const api = apiFor(call.session);
 				if (!(await api.models()).includes(call.model)) throw new Error(`model ${call.model} is not allowed`);
 				const prompt = await callPrompt(space, call);
@@ -145,6 +166,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 	return {
 		async close() {
 			stopping = true; halt.abort(); clearInterval(beat);
+			await providers.close();
 			await Promise.allSettled([...open].map((id) => space.abort(id)));
 			await Promise.race([Promise.allSettled(loops), new Promise((r) => setTimeout(r, 3000))]);
 			if (infoLease) await space.cancel(infoLease).catch(() => {});

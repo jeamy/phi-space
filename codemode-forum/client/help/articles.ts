@@ -1226,7 +1226,7 @@ Die Seite läuft unter \`https://codeforum.eibrain.org\`, die Anmeldung unter \`
 | Keycloak und seine Datenbank | big, Compose-Projekt \`phi-idp\` auf 127.0.0.1:4300: \`idp/server.sh\` |
 | nginx | \`codemode-forum/docker/nginx-codeforum.conf\` und \`idp/nginx-id.conf\` |
 
-Ein Update ist \`git pull --ff-only\` und das Skript des Hosts. Die Admin-Konsole von Keycloak ist von außen gesperrt; sie ist über \`ssh -L 4300:127.0.0.1:4300 big\` und \`http://localhost:4300/admin/\` erreichbar. Modellaufrufe bleiben dort aus (\`FORUM_LLM=0\`), bis es Budgets je Person gibt.
+Ein Update ist \`git pull --ff-only\` und das Skript des Hosts. Die Admin-Konsole von Keycloak ist von außen gesperrt; sie ist über \`ssh -L 4300:127.0.0.1:4300 big\` und \`http://localhost:4300/admin/\` erreichbar. Modellaufrufe bleiben dort aus (\`FORUM_LLM=0\`), bis der Betrieb sie einschaltet. Zugänge zu den Anbietern gibt die Verwaltung auf der Seite ([Modelle und Anbieter](help.topic.models_and_providers#overview)); die Grenzen stehen in [Budgets und Grenzen](help.topic.budgets_and_limits#ceilings).
 
 Die Sicherung macht \`codemode-forum/deploy/forum-backup.sh\` täglich über einen systemd-Timer: nano kopiert den Speicher des Space, big sichert die Datenbank von Keycloak. Beide tauschen ihre Kopien aus, sodass jeder Host beide hat (\`~/phi-backup/forum\`, 30 Tage). Wie eine Kopie zurückgespielt wird, steht im Kopf des Skripts.
 
@@ -1308,7 +1308,7 @@ The page runs at \`https://codeforum.eibrain.org\`, the sign-in at \`https://id.
 | Keycloak and its database | big, compose project \`phi-idp\` on 127.0.0.1:4300: \`idp/server.sh\` |
 | nginx | \`codemode-forum/docker/nginx-codeforum.conf\` and \`idp/nginx-id.conf\` |
 
-An update is \`git pull --ff-only\` and the host's script. Keycloak's admin console is closed from outside; it is reached through \`ssh -L 4300:127.0.0.1:4300 big\` and \`http://localhost:4300/admin/\`. Model calls stay off there (\`FORUM_LLM=0\`) until there are budgets per person.
+An update is \`git pull --ff-only\` and the host's script. Keycloak's admin console is closed from outside; it is reached through \`ssh -L 4300:127.0.0.1:4300 big\` and \`http://localhost:4300/admin/\`. Model calls stay off there (\`FORUM_LLM=0\`) until the operator turns them on. Administrators give the providers access on the page ([Models and providers](help.topic.models_and_providers#overview)); the limits are in [Budgets and limits](help.topic.budgets_and_limits#ceilings).
 
 The backup is \`codemode-forum/deploy/forum-backup.sh\`, run daily by a systemd timer: nano copies the space's store and big dumps Keycloak's database. They exchange their copies, so each host holds both (\`~/phi-backup/forum\`, 30 days). The script's head says how to restore a copy.
 
@@ -1454,6 +1454,184 @@ What a model writes is not trusted. The page shows it as text: HTML is escaped, 
 ## What is not verified yet {#open}
 
 The forum is under development. Runs with real models are not evaluated yet: how reliably real models write the forms asked for is not measured.`,
+		},
+	},
+	{
+		id: "help.topic.models_and_providers",
+		section: "configure",
+		title: { de: "Modelle und Anbieter", en: "Models and providers" },
+		short: {
+			de: "Wie eine Administratorin oder ein Administrator den Modellen Zugang gibt: Schlüssel eintragen, anmelden, testen, entfernen.",
+			en: "How an administrator gives the models access: enter a key, sign in, test, remove.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Die Modelle am Tisch kommen von Anbietern wie Anthropic, OpenAI oder Mistral. Jeder Anbieter braucht einen Zugang: einen Schlüssel oder eine Anmeldung mit deinem Konto dort. Unter **Einstellungen → Modelle und Anbieter** gibst du ihn, ohne den Server anzufassen. Das dürfen nur Administratorinnen und Administratoren.
+
+## Wo der Zugang liegt {#where}
+
+Nur der Modell-Prozess ruft Modelle auf, und nur er hält die Zugänge: in einer Datei, die nur er lesen kann. Die Seite und der gemeinsame Space sehen nie einen Schlüssel im Klartext. Was du in ein Feld der Anmeldung tippst, wird schon im Web-Prozess für genau diesen Modell-Prozess und genau diese Frage verschlüsselt und ist nach einer Minute weg, ob er es abgeholt hat oder nicht.
+
+Zugänge aus der Umgebung des Servers (etwa \`ANTHROPIC_API_KEY\`) zeigt die Liste mit ihrer Herkunft. Ändern kann sie nur, wer den Server betreibt.
+
+## Die Liste der Anbieter {#providers}
+
+Oben stehen die Anbieter, die schon Zugang haben, mit seiner Art (Schlüssel oder angemeldet) und Herkunft. Die übrigen liegen in einer Falte darunter; das Suchfeld findet einen nach Namen. Laufen mehrere Modell-Prozesse, hat jeder seine eigene Liste und seine eigenen Zugänge.
+
+## Einen Schlüssel eintragen {#key}
+
+**Schlüssel eintragen** startet die Anmeldung des Anbieters. Sie fragt nacheinander, was sie braucht, meist nur den Schlüssel, manchmal auch eine Region oder ein Konto. Jede Frage erscheint unter dem Anbieter mit einem Feld und **Senden**. Den Schlüssel holst du dir in der Konsole des Anbieters; der Link steht oft schon in der Anmeldung.
+
+## Mit einem Konto anmelden {#signin}
+
+Manche Anbieter erlauben die Anmeldung mit einem Abo oder Konto statt eines Schlüssels. Die Anmeldung zeigt dann einen Link zum Öffnen, manchmal einen Code, den du dort eingibst, und fragt am Ende nach dem Code, den dir der Anbieter zeigt. Das geht auch vom Telefon: nichts muss auf dem Rechner des Modell-Prozesses geöffnet werden. Eine Anmeldung, die zehn Minuten keine Antwort bekommt, endet von selbst. **Abbrechen** beendet sie sofort.
+
+## Eine Frage beantworten {#answer}
+
+Was du in ein Feld der Anmeldung schreibst, geht verschlüsselt an den Modell-Prozess, der gefragt hat. Ein Tippfehler ist kein Problem: Die Anmeldung meldet, dass sie nicht geklappt hat, und du beginnst sie neu. Die Meldung wiederholt nie, was du eingegeben hast.
+
+## Testen {#test}
+
+**Testen** schickt einem Modell des Anbieters eine Frage von ein paar Tokens und zeigt, ob und wie schnell es antwortet. So merkst du ein abgelaufenes Konto vor einem Lauf und nicht mittendrin. Der Test kostet ein paar Tokens und zählt wie jeder Aufruf. Wenn Modellaufrufe im Prozess aus sind (\`FORUM_LLM\`), kannst du dich anmelden, aber nicht testen.
+
+## Entfernen {#remove}
+
+**Entfernen** löscht einen Zugang, den eine Anmeldung auf der Seite angelegt hat. Zugänge aus der Umgebung des Servers bleiben.
+
+## Erlaubte Modelle {#allowed}
+
+Nicht jedes Modell mit Zugang soll mitarbeiten. Unter **Erlaubte Modelle** hakst du die an, die Räume für ihre Läufe wählen dürfen, und schaltest die Modell-Agenten insgesamt an oder aus. Ohne eigene Wahl gilt, was \`FORUM_MODELS\` nennt. Wie viel die erlaubten Modelle verbrauchen dürfen, steht in [Budgets und Grenzen](help.topic.budgets_and_limits#overview).
+
+## Wer was sieht {#audit}
+
+Jede Anmeldung, jedes Entfernen, jeder Test und jede geänderte Grenze wird mit Name und Zeit vermerkt, nie mit einem Schlüssel.`,
+			en: `## Overview {#overview}
+
+The models at the table come from providers such as Anthropic, OpenAI or Mistral. Each provider needs access: a key, or a sign-in with your account there. Under **Settings → Models and providers** you give it without touching the server. Only administrators may.
+
+## Where the access is kept {#where}
+
+Only the model process calls models, and only it holds the access: in a file only it can read. The page and the shared space never see a key in the clear. What you type into a field of a login is encrypted in the web process for exactly that model process and that question, and is gone after a minute whether it was fetched or not.
+
+Access from the server's environment (such as \`ANTHROPIC_API_KEY\`) is listed with where it comes from. Only the person who runs the server can change it.
+
+## The list of providers {#providers}
+
+At the top are the providers that already have access, with its kind (key or signed in) and where it comes from. The others are in a fold below; the search field finds one by name. When several model processes run, each has a list and access of its own.
+
+## Entering a key {#key}
+
+**Enter a key** starts the provider's login. It asks for what it needs one after the other, mostly just the key, sometimes a region or an account as well. Each question appears below the provider with a field and **Send**. You get the key from the provider's console; the login often shows the link.
+
+## Signing in with an account {#signin}
+
+Some providers let you sign in with a subscription or account instead of a key. The login then shows a link to open, sometimes a code to enter there, and at the end asks for the code the provider shows you. This works from a phone too: nothing needs to be opened on the model process's machine. A login that gets no answer for ten minutes ends by itself. **Cancel** ends it at once.
+
+## Answering a question {#answer}
+
+What you write into a field of a login goes encrypted to the model process that asked. A typing mistake does no harm: the login says it failed and you start it again. The message never repeats what you typed.
+
+## Testing {#test}
+
+**Test** sends one of the provider's models a question of a few tokens and shows whether and how quickly it answers. So you notice an expired account before a run, not in the middle of one. The test costs a few tokens and counts like every call. When model calls are off in the process (\`FORUM_LLM\`), you can sign in but not test.
+
+## Removing {#remove}
+
+**Remove** deletes access that a login on the page created. Access from the server's environment stays.
+
+## Allowed models {#allowed}
+
+Not every model with access should take part. Under **Allowed models** you tick those rooms may choose for their runs, and turn the model agents on or off as a whole. Without a choice of your own, \`FORUM_MODELS\` decides. How much the allowed models may use is in [Budgets and limits](help.topic.budgets_and_limits#overview).
+
+## Who sees what {#audit}
+
+Every login, removal, test and changed limit is recorded with a name and a time, never with a key.`,
+		},
+	},
+	{
+		id: "help.topic.budgets_and_limits",
+		section: "configure",
+		title: { de: "Budgets und Grenzen", en: "Budgets and limits" },
+		short: {
+			de: "Wie viel Modellaufrufe kosten dürfen: die Grenzen des Betriebs, die der Verwaltung, die Voreinstellungen eines Raums und ein einzelner Lauf.",
+			en: "How much model calls may cost: the operator's limits, the administrators', a room's defaults and a single run.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Jeder Modellaufruf kostet Tokens und damit Geld. Vier Stufen begrenzen das, jede innerhalb der darüber:
+
+1. **Der Betrieb** legt in der Umgebung des Servers die Obergrenzen fest. Die Seite kann sie nicht überschreiten.
+2. **Die Verwaltung** setzt auf der Seite engere Grenzen für alle.
+3. **Die Besitzerin oder der Besitzer eines Raums** setzt Voreinstellungen für die Läufe dort.
+4. **Wer einen Lauf startet**, wählt Modelle und Budget innerhalb dessen, was der Raum erlaubt.
+
+## Die Grenzen der Verwaltung {#limits}
+
+Unter **Einstellungen → Grenzen** stehen vier Werte, jeder mit der Obergrenze des Betriebs daneben und dem, was gerade gilt:
+
+| Wert | Bedeutung |
+|---|---|
+| Modellaufrufe pro Minute | alle Modell-Prozesse zusammen; ein voller Takt wartet auf die nächste Minute |
+| Modellaufrufe pro Tag | alle zusammen, je Tag (UTC) |
+| Tokens pro Person und Tag | was die Läufe einer Person an einem Tag zusammen verbrauchen dürfen |
+| Größtes Budget eines Laufs | das Höchste, was der Lauf eines Mitglieds verlangen kann |
+
+Ein leeres Feld heißt: es gilt die Grenze des Betriebs. Ein Wert darüber wird abgelehnt.
+
+## Die Obergrenzen des Betriebs {#ceilings}
+
+Sie stehen in der \`.env\` des Servers: \`FORUM_LLM_PER_MIN\`, \`FORUM_LLM_PER_DAY\`, \`FORUM_TOKENS_PER_IP_DAY\`, \`FORUM_RUN_BUDGET_TOKENS\` und \`FORUM_PERSON_WAIT_S\`. Senkt der Betrieb eine davon später, gilt ein höherer Wert der Seite nur noch bis zur neuen Grenze.
+
+## Die Voreinstellungen eines Raums {#room}
+
+Wem ein Raum gehört, der findet am Tisch die Falte **Voreinstellungen des Raums**: die Modelle (drei bis fünf), die Arbeitsweise, die Runden, die Agenten je Modell, das Budget eines Laufs und wie lange der Tisch auf dich wartet. Ein neuer Lauf übernimmt sie, solange niemand etwas anderes wählt. Das Budget ist zugleich das Höchste, was ein Mitglied für einen Lauf verlangen kann. Jede Änderung steht als Zeile im Raum.
+
+## Ein einzelner Lauf {#run}
+
+Beim Start eines Laufs wählst du die Modelle und das Budget. Ein Lauf endet, sobald sein Budget verbraucht ist; der Plan bleibt in dem Stand, den er bis dahin hat.
+
+## Was ein Test kostet {#test}
+
+Der Test eines Anbieters ([Modelle und Anbieter](help.topic.models_and_providers#test)) kostet ein paar Tokens und zählt bei den Aufrufen mit, nicht beim Budget einer Person.`,
+			en: `## Overview {#overview}
+
+Every model call costs tokens, and so money. Four levels limit that, each within the one above:
+
+1. **The operator** sets the ceilings in the server's environment. The page cannot go above them.
+2. **The administrators** set tighter limits for everyone on the page.
+3. **A room's owner** sets defaults for the runs there.
+4. **Whoever starts a run** chooses models and budget within what the room allows.
+
+## The administrators' limits {#limits}
+
+Under **Settings → Limits** are four values, each with the operator's ceiling beside it and what is in force now:
+
+| Value | Meaning |
+|---|---|
+| Model calls per minute | all model processes together; a full minute waits for the next |
+| Model calls per day | all together, per day (UTC) |
+| Tokens per person and day | what one person's runs may use together in a day |
+| Largest budget of a run | the most a member's run may ask for |
+
+An empty field means the operator's limit applies. A value above it is refused.
+
+## The operator's ceilings {#ceilings}
+
+They are in the server's \`.env\`: \`FORUM_LLM_PER_MIN\`, \`FORUM_LLM_PER_DAY\`, \`FORUM_TOKENS_PER_IP_DAY\`, \`FORUM_RUN_BUDGET_TOKENS\` and \`FORUM_PERSON_WAIT_S\`. If the operator lowers one later, a higher value from the page only counts up to the new ceiling.
+
+## A room's defaults {#room}
+
+A room's owner finds the fold **The room's defaults** at the table: the models (three to five), the way of working, the rounds, the agents per model, a run's budget and how long the table waits for you. A new run takes them as long as nobody chooses otherwise. The budget is also the most a member may ask for in one run. Every change is a line in the room.
+
+## A single run {#run}
+
+When you start a run you choose the models and the budget. A run ends as soon as its budget is used up; the plan stays as far as it got.
+
+## What a test costs {#test}
+
+Testing a provider ([Models and providers](help.topic.models_and_providers#test)) costs a few tokens and counts among the calls, not against a person's budget.`,
 		},
 	},
 ];

@@ -6,7 +6,8 @@ import type { Lang } from "./theme.ts";
 export type TipId = "signin" | "name" | "signout" | "rooms" | "newroom" | "invite" | "yourid"
 	| "files" | "table" | "plan" | "panes" | "task" | "brief" | "doclang" | "outline" | "criteria" | "docs"
 	| "models" | "way" | "rounds" | "budget" | "start" | "stop" | "answer" | "say"
-	| "version" | "compare" | "accept" | "object" | "tableview" | "language" | "mode" | "palette";
+	| "version" | "compare" | "accept" | "object" | "tableview" | "language" | "mode" | "palette"
+	| "providers" | "providerkey" | "providersignin" | "loginanswer" | "providertest" | "providerremove" | "allowed" | "limits" | "roomdefaults";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -240,5 +241,68 @@ export const TIPS: Record<TipId, Tip> = {
 			en: "The colours of the page. Your browser remembers them.",
 		},
 		article: "help.topic.forum", anchor: "settings",
+	},
+	providers: {
+		text: {
+			de: "Die Anbieter dieses Modell-Prozesses; oben die mit Zugang. Das Feld sucht nach Namen.",
+			en: "This model process's providers; those with access at the top. The field finds one by name.",
+		},
+		article: "help.topic.models_and_providers", anchor: "providers",
+	},
+	providerkey: {
+		text: {
+			de: "Startet die Anmeldung mit einem Schlüssel. Ihre Fragen erscheinen darunter; der Schlüssel geht verschlüsselt an den Modell-Prozess.",
+			en: "Starts the login with a key. Its questions appear below; the key goes encrypted to the model process.",
+		},
+		article: "help.topic.models_and_providers", anchor: "key",
+	},
+	providersignin: {
+		text: {
+			de: "Anmelden mit deinem Konto beim Anbieter: ein Link, vielleicht ein Code, am Ende der Code, den der Anbieter zeigt. Abbrechen beendet die Anmeldung.",
+			en: "Signing in with your account at the provider: a link, perhaps a code, at the end the code the provider shows. Cancel ends the login.",
+		},
+		article: "help.topic.models_and_providers", anchor: "signin",
+	},
+	loginanswer: {
+		text: {
+			de: "Deine Antwort auf die Frage der Anmeldung. Sie wird hier verschlüsselt und ist nach einer Minute weg.",
+			en: "Your answer to the login's question. It is encrypted here and gone after a minute.",
+		},
+		article: "help.topic.models_and_providers", anchor: "answer",
+	},
+	providertest: {
+		text: {
+			de: "Fragt ein Modell des Anbieters mit ein paar Tokens, ob es antwortet. Braucht eingeschaltete Modellaufrufe.",
+			en: "Asks one of the provider's models, with a few tokens, whether it answers. Needs model calls on.",
+		},
+		article: "help.topic.models_and_providers", anchor: "test",
+	},
+	providerremove: {
+		text: {
+			de: "Löscht den Zugang, den eine Anmeldung hier angelegt hat. Zugänge aus der Umgebung des Servers bleiben.",
+			en: "Deletes the access a login here created. Access from the server's environment stays.",
+		},
+		article: "help.topic.models_and_providers", anchor: "remove",
+	},
+	allowed: {
+		text: {
+			de: "Welche Modelle die Räume für ihre Läufe wählen dürfen, und ob die Modell-Agenten überhaupt arbeiten.",
+			en: "Which models rooms may choose for their runs, and whether the model agents work at all.",
+		},
+		article: "help.topic.models_and_providers", anchor: "allowed",
+	},
+	limits: {
+		text: {
+			de: "Grenzen für alle, innerhalb der Obergrenzen des Betriebs daneben. Leer heißt: die des Betriebs gilt.",
+			en: "Limits for everyone, within the operator's ceilings beside them. Empty means the operator's applies.",
+		},
+		article: "help.topic.budgets_and_limits", anchor: "limits",
+	},
+	roomdefaults: {
+		text: {
+			de: "Was ein Lauf in diesem Raum nimmt, wenn niemand anderes wählt. Das Budget ist zugleich das Höchste für ein Mitglied.",
+			en: "What a run in this room takes when nobody chooses otherwise. The budget is also the most a member may ask for.",
+		},
+		article: "help.topic.budgets_and_limits", anchor: "room",
 	},
 };

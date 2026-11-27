@@ -57,6 +57,8 @@ import { newMsgId, type PlanMessage } from "./talk.ts";
 import { baseOf, comparesOf, other, parseCompare, pointsFor, sides, type PlanCompare, type PlanResult, type PlanStrategyStat, type TableId } from "./compare.ts";
 import { deal, objectionsOf, outlinesOf, parsePick, parseReview, pickedOutline, type OutlinePick, type PlanObjection, type PlanOutline } from "./review.ts";
 import { FATAL_LLM, MIN_MODELS, modelWaitMs, personWaitMs, replyWaitMs, turnWaitMs } from "./limits.ts";
+/** How long this run's table waits for the person: the room's setting, cut to the ceiling of now, else the environment's. */
+const waitFor = (r: { params: { personWaitMs?: number } }) => r.params.personWaitMs === undefined ? personWaitMs() : Math.min(r.params.personWaitMs, personWaitMs());
 import { decide, decisionsOf, keep, messagesOf, owed, parseKickoff, parseMessages, takeoverOf, type Said } from "./talk.ts";
 import { DocRefused, headOf, writeVersion, type PlanDoc } from "./plandoc.ts";
 import type { PlanTask } from "./plantask.ts";
@@ -106,7 +108,9 @@ export const tableInfo = (i: RunInfo, active: boolean): TableInfo => ({ active, 
  *  `both`: a run with both tables. `parent`: the run a table belongs to; `final`: its joint final round. */
 export type RunParams = { way?: "turns" | "parallel"; both?: boolean; parent?: string; final?: boolean; runId: string; blockId: string; table: "A" | "B"; rounds: number; startedAt: number; models: string[]; perModel: number; aliases: Record<string, string>; lang: "de" | "en"; budget: { tokens?: number; usd?: number };
 	/** Who started it: a visitor's usage counts against the day's allowance of their address; an admin's does not. */
-	client?: { ip: string; admin: boolean } };
+	client?: { ip: string; admin: boolean };
+	/** How long the table waits for the person in this run (the room's setting; else FORUM_PERSON_WAIT_S). */
+	personWaitMs?: number };
 export type RunEntry = { session: string; runId: string; params: RunParams; info: RunInfo;
 	/** Work items written and not done yet (a waiting item that goes back stays counted), and how many of them the
 	 *  phase still waits for before the next one begins. */
@@ -726,9 +730,9 @@ async function afterReview(d: AgentDeps, txn: string, r: RunEntry): Promise<Work
 		text: `The table is stuck after round ${round}: ${t.approvals.length} of ${present.length} approve version ${head.version} (${t.why ?? "no majority"}).${standing.length ? ` Still standing:\n${standing.map((o) => `- ${aliases[o.model] ?? "the person"} on "${head.sections.find((x) => x.sectionId === o.sectionId)?.title ?? "?"}": ${o.defect}${o.state === "declined" ? " (the reviser found it wrong)" : ""}`).join("\n")}` : ""}\nHow shall the table go on?`, ts: Date.now() };
 	question.thread = question.msgId;
 	await d.space.write({ type: "PlanMessage", fields: question as never }, txn, d.ttl);
-	if (personWaitMs() <= 0) { r.info.ended = "stalled"; r.info.phase = "done"; return []; }
+	if (waitFor(r) <= 0) { r.info.ended = "stalled"; r.info.phase = "done"; return []; }
 	r.info.phase = "stalled";
-	return [newItem(r, "person", { table, deadline: Date.now() + personWaitMs() })];
+	return [newItem(r, "person", { table, deadline: Date.now() + waitFor(r) })];
 }
 
 /** The table was stuck and asked the person: with their answer it goes on (the open objections to their revisions, or
@@ -765,7 +769,7 @@ async function finish(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spaw
 			const messages = (await messagesOf(d.space, docOf(r), txn)).filter((m) => m.runId === r.runId);
 			const o = owed(messages, r.info.present ?? [], r.params.aliases), now = Date.now();
 			for (const [model, threads] of o.byModel) items.push(newItem(r, "reply", { onlyModel: model, table, threads, deadline: now + replyWaitMs() }));
-			if (o.person.length && personWaitMs() > 0) items.push(newItem(r, "person", { table, deadline: now + personWaitMs() }));
+			if (o.person.length && waitFor(r) > 0) items.push(newItem(r, "person", { table, deadline: now + waitFor(r) }));
 			if (items.length) r.info.phase = "discuss"; else items.push(...(await afterTalk(d, txn, r)));
 		} else if ((it.kind === "reply" || it.kind === "person") && r.info.phase === "discuss") items.push(...(await afterTalk(d, txn, r)));
 		else if (it.kind === "person") items.push(...(await afterStall(d, txn, r)));

@@ -1,6 +1,6 @@
 # FORUM: people and models turn a folder into a plan and its documents, on one page (plan, 2026-11-26)
 
-Status: phase 0 done on 2026-11-26 (`idp/`, the two changes in spaces-files); phase 1 done on 2026-11-26 (sign-in, people and rooms in codemode-forum, the help's base); phase 2 done on 2026-11-27 (the page); phase 3 on the servers since 2026-11-27, the walk on a phone open; phases 4 to 13 open. Proposed on 2026-11-26; second version of the same day, after the person's word on the name,
+Status: phase 0 done on 2026-11-26 (`idp/`, the two changes in spaces-files); phase 1 done on 2026-11-26 (sign-in, people and rooms in codemode-forum, the help's base); phase 2 done on 2026-11-27 (the page); phase 3 on the servers since 2026-11-27, the walk on a phone open; phase 4 done on 2026-11-27 (models and providers from the page); phases 5 to 13 open. Proposed on 2026-11-26; second version of the same day, after the person's word on the name,
 binary files, the servers, the example brief, sources and scripts (section 2). The decisions of section 2 are open until confirmed.
 Starting point: `codemode-forum/` (phases 0 to 11 of `docs/gemeinsame-planung-plan-2026-11-22.en.md`) and
 `spaces-files/` (phases 1 to 5 of `docs/zanzibar-agent-filesystem-plan.en.md` and what followed) as of commit
@@ -349,7 +349,7 @@ Not changed: the browser API, the cookies, the origin check, the rule that no te
 ## 8. Models and their providers, from the page
 
 **Pi in the background.** Every model call of the forum already goes through pi-ai (`completeSimple`, loaded by the
-model process through `spaces/agent/src/live-models.ts`, version 1.5.2). pi-ai also brings what this section needs:
+model process through `spaces/agent/src/live-models.ts`, version 1.6.1 since 2026-11-27). pi-ai also brings what this section needs:
 the list of 43 providers, the state of each one's credentials (`checkAuth`), and the login flows
 (`Models.login(provider, "api_key" | "oauth", interaction)`), nine of them OAuth. Nothing is added to the
 dependencies. pi-durable stays out (decision 10): a work item that reads in steps already survives a crash through its
@@ -357,22 +357,29 @@ dependencies. pi-durable stays out (decision 10): a work item that reads in step
 
 **Where credentials live.** Only in the model process, as today. New is a store of its own:
 `fileCredentialStore(path)` in `spaces/agent/src/live-models.ts` implements pi-ai's `CredentialStore` on one file
-(`FORUM_AUTH_FILE`, mode 600, in a directory of mode 700, written to a temporary file and renamed). A refreshed token
-is written back. Environment keys go on working. `~/.pi/agent/auth.json` is read once to fill an empty store and never
-written.
+(`FORUM_AUTH_FILE`, mode 600, in a directory of mode 700, written to a temporary file and renamed; the writes of one
+provider serialized). A refreshed token is written back. Environment keys go on working. `~/.pi/agent/auth.json`
+(`FORUM_AUTH_SEED`) is read once to fill a store that does not exist yet and never written. In Docker the file is in
+the volume `forum-auth`. The providers are loaded whether `FORUM_LLM` is on or not: a login calls no model; the test
+call does and needs it.
 
 **A login from the page.** The web process never holds a credential at rest and the Space never holds one in the
 clear.
 
-1. An administrator chooses a provider and "add key" or "sign in". The web process writes a `ProviderLogin`.
-2. The model process takes it, starts pi-ai's flow and writes what the flow asks or says as `ProviderPrompt` entries:
+1. An administrator chooses a provider and "add key" or "sign in". The web process writes a `ProviderJob` addressed
+   to one model process.
+2. The model process takes it, writes the login's state as a `ProviderLogin` it renews while the flow runs (a process
+   that dies lets it lapse; the job is gone, so the login is never run again; the page cancels by taking it), starts
+   pi-ai's flow and writes what the flow asks or says as `ProviderPrompt` entries:
    a link to open, a device code to type in, a field for a key or for a code to paste. Each prompt that expects a
    secret carries a public key the model process made for this login only.
 3. The page shows the prompt. The administrator's answer goes to the web process over HTTPS, is sealed there to that
-   public key (X25519, HKDF, AES-256-GCM, all from `node:crypto`) and written as a `ProviderAnswer` with a lease of
+   public key (X25519, HKDF, AES-256-GCM, all from `node:crypto`; the login, the prompt and the model process as
+   additional data, so an answer opens for its own prompt alone) and written as a `ProviderAnswer` with a lease of
    one minute.
 4. The model process opens it, hands it to the flow, removes the entry, stores the credential and publishes the
-   provider's new state. The private key never leaves its memory.
+   provider's new state. The private key never leaves its memory. A flow's error message is scrubbed of everything
+   typed into the login before it is written back.
 
 A login that needs a browser on the model's own machine falls back to the flow's "paste the code" form, so it works
 from a phone. With several model processes a login is addressed to one of them; the page lists each.
@@ -380,7 +387,10 @@ from a phone. With several model processes a login is addressed to one of them; 
 | Entry | Content |
 |---|---|
 | `ProviderInfo` | per model process: each provider, which kinds of login it offers, whether credentials are there and of which kind, never the credential |
-| `ProviderLogin`, `ProviderPrompt`, `ProviderAnswer` | one login in progress, as above; leased, gone when it ends |
+| `ProviderJob` | a login, a removal or a test call asked of one model process; taken by it |
+| `ProviderLogin`, `ProviderPrompt`, `ProviderAnswer` | one login in progress, as above; leased, gone when it ends (the login's end kept ten minutes) |
+| `ProviderResult` | what a removal or a test call came to |
+| `AdminAudit` | who did what, when: logins, removals, tests, limits; never a secret |
 | `ForumSetting` | one setting an administrator or a room's owner made on the page |
 
 **What the page sets.**
@@ -569,7 +579,7 @@ codemode-chat's bot tasks start the arena of spaces-mmo. No application imports 
 | 1 ✓ | Sign-in, people and rooms in the forum (section 5): `oidc.ts`, sessions, `ForumUser`, `RoomAccess`, every route and the WebSocket checked, administrators by identity, limits per person. The help's base: tips, "Words used here", "Signing in", the sign-in diagram, the extended help test. The registrations (`checks/shared-copies.test.mjs`, `AGENTS.md`). | every route refused without a session and with too low a role; a session that expires; two people who do not see each other's rooms; a request from another origin; without `FORUM_LOGIN` the present suite passes unchanged. Done: `codemode-forum/tests/auth.test.ts` (the session's end by its twelve hours with a shifted clock; the hour of idleness is the session entry's lease in the Space, not waited for in a test) and `tests/help.test.ts` (the words linked where they first appear, the diagrams in both languages, every tip used and linked); the walk through a real browser against Keycloak is still to be done by hand |
 | 2 ✓ | The page (sections 4 and 10): the four places, three panes and their phone form, tokens, states, routes, the manifest; task, run, table and document moved in; `/expert` keeps the present page. Articles of *Start* and *Use* that need no workspace; the table diagram. | the task list at four widths, both languages and modes, with screenshots; names and tips on every control; the present suite passes. Done: `client/forum/` (rooms `/`, a room `/r/<room>`, `/settings`; the controls with label and tip in `controls.tsx`), the panes shared with `/expert` in `client/panes.tsx` and `client/lib/use-room.ts`, `client/styles/page.css`, the manifest and icon; the rooms' states in `GET /api/rooms` (`ForumHub.summary`: "waiting for you" while a run is stuck or a question to the person is open, also after the run), the waiting count in the bar and the tab's title, a notification from the open page (permission asked when a run is started), the bar at the bottom giving way to the keyboard; articles "What is FORUM?", "Your first plan in six steps", "The table", "The plan", "On the phone", the `forum-table` diagram. `tests/page.test.ts` (every control a wrapper with label and tip, no width above 360 px, routes, manifest, viewport), the rooms' states in `tests/auth.test.ts`, `forum.test.ts` and `talk.test.ts`; screenshots in `codemode-forum/docs/screenshots/` by `codemode-forum/tests/screenshots.ts` (fake models, Keycloak on loopback, headless Chromium: sign in, start a run with both tables, a question waiting, at 360, 390, 768 and 1280 px, German and English, light and dark, no sideways scroll, no error of the page, sign out). Moved: the answer time as a room setting to phase 4 (with `ForumSetting` and its ceilings); the tasks link, upload a photo, write a section, save and resolve a conflict to the phases that bring them (5, 6, 7); the document's sections and the settings' groups are folds and cards, not drawers; the German `forum-journey` with "Your first plan" in phase 13 |
 | 3 | On the servers (section 13): Keycloak under its final name, the forum on big and nano, the nginx site of `codeforum.eibrain.org`, the tunnel, the backup timer; models off. The operator's article. | sign-in from outside; nothing but the sign-in without a session; a room and a walk through the page on a phone; the space on nano survives a restart of big's containers; a backup restored on this machine. **On the servers 2026-11-27**: sign-in from outside through Cloudflare (account `jeamy`, a test account; bootstrap admin kept until going live), without a session `/api/*` answers 401 and the page shows the sign-in only, the admin console and realm master 404 from outside; a room `golomb2026` made; big's four containers recreated while nano's space ran on; nano's backup restored on this machine with the room and the person in it. Open: the walk on a phone. Found on the way: Cloudflare rejected OpenSSL 3.5's HelloRetryRequest for X25519MLKEM768 (525 on fresh origin connections to every site on big), fixed by `ssl_ecdh_curve X25519MLKEM768:X25519:prime256v1:secp384r1;` in big's nginx.conf; the admin panel named no administrator with a sign-in (fixed in 74d5e62) |
-| 4 | Models and providers from the page (section 8): the credential store, `ProviderInfo`, logins through sealed entries, the test call, `ForumSetting` with the ceilings, room defaults. Articles "Models and providers", "Budgets and limits". | a fake provider with every kind of prompt; the key's bytes are nowhere in the store's file; a model process killed during a login; a refreshed token survives a restart; a value above a ceiling is refused; a member refused |
+| 4 ✓ | Models and providers from the page (section 8): the credential store, `ProviderInfo`, logins through sealed entries, the test call, `ForumSetting` with the ceilings, room defaults. Articles "Models and providers", "Budgets and limits". | a fake provider with every kind of prompt; the key's bytes are nowhere in the store's file; a model process killed during a login; a refreshed token survives a restart; a value above a ceiling is refused; a member refused. Done: `fileCredentialStore`/`fileModels` in `spaces/agent/src/live-models.ts` (`spaces/agent/test/credential-store.test.ts`); `server/seal.ts`, `server/providers.ts` (the web side), `server/provider-host.ts` (the model side), `server/settings.ts` (`ForumSetting`: the limits and a room's defaults, each checked against the environment's ceilings and clamped again on use), the answer time per room in `run.ts`; the page's Settings for administrators (`client/forum/AdminPlace.tsx`: providers per model process, the login box, allowed models, limits) and a room's defaults for its owner (`RoomPlace.tsx`); the credential file in the volume `forum-auth` in Docker. `tests/providers.test.ts` with the provider of `tests/providers.ts` (a key login with a choice, a text and a secret, no byte of the key in the Space's database, its WAL or shared memory; a wrong key scrubbed from the message; the test call and its spend; removal; the audit; a sign-in with a link, a device code and a pasted code whose refreshed token is in the file after a restart; a model process killed during a login: the login lapses and is not run again; a cancel), the refusals for a member and above a ceiling in `tests/auth.test.ts` |
 | 5 | The files connection, reading text (section 6): the client copy, the sources process as agent host over the unix socket, `RoomLink`, check and link, the `files` source with every file in its index, the Files pane. Articles "Material", "Who sees what", "What leaves this system"; the access diagram in German. | a room reads granted folders and nothing beside them; an owner agent is refused; each limit at its edge; denied names not offered, other kinds listed; a revocation stops the next copy and leaves the taken one; a sources process killed with a request taken; a run whose writer reads the copy |
 | 6 | Pictures and other files (section 6, *Files that are not text*): upload through the room's agent, kinds by content, pictures in the pane, the reduced copy from the browser as byte pages, `ImageNote`, pictures in the model call, PDF text with page marks through pdfjs-dist in the sandbox container (the `sandbox` role starts here with this one job; scripts follow in phase 10), notes on other files. Article "Photos and other files". | an upload retried after a lost reply is one file; a file whose name lies about its kind; a picture over a limit; a run without a model that accepts pictures is refused; the description reaches every model and the picture only those that take it; a corrected description counts; a reduced copy holds no camera metadata; a PDF's text is found by `search` with its page; a scanned PDF, a broken one, an encrypted one and one over a limit each say what they are; the extraction cannot reach the network or a file |
 | 7 | The room as a project, and saving (section 6): kinds of task, the room's documents as a source, sections written by people, `SourceRef` and the register, `PlanSave`, save one and save all, the operation ID in the request, the conflict view, save on acceptance as a room setting. Articles "The plan", "Documents of a project"; the conflict diagram. | a person's section and a model's on the same base: the second is told the newer text; a document written against another's accepted version; a lost reply and a retry give one file version; a conflict writes nothing and shows both; a revoked editor is refused and said so; a process killed between the ID and the write |

@@ -130,9 +130,13 @@ services:
       NODE_ENV: production
       FORUM_SPACE: "${FORUM_DOCKER_SPACE:-tcp:space:4180}"
       FORUM_HOST_NAME: "${BIG_HOST_NAME:-big}"
+      # the credentials of the page's logins, in a volume of their own (server/llm.ts); filled once from the pi CLI login
+      # below while the file does not exist
+      FORUM_AUTH_FILE: /auth/credentials.json
     volumes:
       # the only process with model credentials: the host's pi CLI login (or API keys in .env); PI_AUTH_DIR= skips it
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+      - forum-auth:/auth
 
   sources:
     <<: *big
@@ -183,3 +187,4 @@ networks:
 volumes:
   forum-space-data: {}
   forum-git-cache: {}
+  forum-auth: {}
