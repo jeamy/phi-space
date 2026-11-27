@@ -1,7 +1,7 @@
 // Full rooms gain land at an edge or at a safe seam before the coast. Geometry and positions commit together.
 import { holdIsland, holdRoomVersion, lockVersion, roomLock } from "../room-lock.ts";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken, type Template } from "phi-spaces";
-import { fieldsOf, WORLD_LOCK, type ExitFields, type FootprintFields, type RoomFields, type RoomGrowthFields, type RoomGrowthStep } from "../../model.ts";
+import { fieldsOf, GROWTH_TURN, WORLD_LOCK, type ExitFields, type FootprintFields, type RoomFields, type RoomGrowthFields, type RoomGrowthStep } from "../../model.ts";
 import { msgOptions } from "../context.ts";
 import { PATH } from "./build.ts";
 import { footprintCells, isPassage } from "../occupancy.ts";
@@ -133,7 +133,12 @@ export type GrowthView = { readAll(tmpl: Template): Taken[] | Promise<Taken[]>; 
 /** Per space, the key (growthKey) of each room whose last decision was no step. */
 const noStep = new WeakMap<object, Map<string, string>>();
 
-/** A busy world defers growth; a room and every displaced position change in one transaction under the world lock.
+/** How long a growth run waits for the world lock, its turn visible, before it leaves the rest to the next run. */
+export const GROWTH_LOCK_WAIT_MS = 2_000;
+/** The lease of a growth run's turn (GROWTH_TURN): the wait for the lock and the room's change, with room to spare. */
+export const GROWTH_TURN_MS = 5_000;
+
+/** A world busy for longer than GROWTH_LOCK_WAIT_MS with its turn visible defers growth; a room and every displaced position change in one transaction under the world lock.
  *  A room is decided first on `view`, without a lock (plan section 3, growth step 3): one held by another transaction
  *  (its lock not visible), one whose decision is kept (growthKey) and one with no step are passed over without taking
  *  anything. Only a room with a step takes the locks; there its lock's version must still be the one the view showed
@@ -156,41 +161,47 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number,
 		if (kept.get(roomId) === key) continue;
 		if (!growthStep(w, fieldsOf<RoomFields>(entry), seen)) { kept.set(roomId, key); continue; }
 		kept.delete(roomId);
-		const txn = (await space.createTransaction(30_000)).id;
+		// the turn first: under steady load the commands that read WORLD_LOCK overlap without a gap, and a take, even one
+		// that waits, was refused in most runs (docs/raster-inventur-2026-11-24.en.md 6.1, runs C and D); with the turn
+		// visible no new command starts, the open ones run out and the take below gets the lock
+		const turn = await space.write({ type: GROWTH_TURN.type, fields: { roomId } }, null, GROWTH_TURN_MS);
 		try {
-			if (!(await space.takeIfExists(WORLD_LOCK, NO_WAIT, { txn }))) { await space.abort(txn); break; }
-			// the island's lock after WORLD_LOCK, then the room's (room-lock.ts): a job that holds only the room's lock (a
-			// jetty moved, a sweep) and no WORLD_LOCK would otherwise write a footprint where the room is shifting
-			const island = entry.fields.island;
-			if (typeof island === "string" && !(await holdIsland(space, txn, island, [], NO_WAIT))) { await space.abort(txn); continue; }
-			if ((await holdRoomVersion(space, txn, roomId, NO_WAIT)) !== lockVersion(lock.fields)) { await space.abort(txn); continue; }
-			const e = await space.takeIfExists({ id: entry.id }, NO_WAIT, { txn });
-			if (!e) { await space.abort(txn); continue; }
-			const room = fieldsOf<RoomFields>(e);
-			const groups = await Promise.all([
-				...POSITIONED.map((type) => space.readAll({ type, fields: { room: room.roomId } }, { txn })),
-				space.readAll({ type: "Item", fields: { location: room.roomId } }, { txn }),
-				space.readAll({ type: "Exit" }, { txn }),
-			]);
-			const entries = groups.flat();
-			const step = growthStep(w, room, entries);
-			if (!step) { await space.abort(txn); continue; }
-			const was = await space.takeIfExists({ type: "RoomGrowth", fields: { roomId: room.roomId } }, NO_WAIT, { txn });
-			const before: RoomGrowthFields = was ? fieldsOf<RoomGrowthFields>(was) : { roomId: room.roomId, east: 0, south: 0 };
-			const after: RoomGrowthFields = { ...before, east: before.east + (step.axis === "x" ? step.size : 0), south: before.south + (step.axis === "y" ? step.size : 0), steps: [...before.steps ?? [], step], baseWidth: before.baseWidth ?? room.ground[0]!.length - before.east, baseHeight: before.baseHeight ?? room.ground.length - before.south };
-			const changes = entries.map((x) => ({ e: x, fields: moved(x, room.roomId, before, step) })).filter((x) => JSON.stringify(x.fields) !== JSON.stringify(x.e.fields));
-			let busy = false;
-			for (const change of changes) if (!(await space.takeIfExists({ id: change.e.id }, NO_WAIT, { txn }))) { busy = true; break; }
-			if (busy) { await space.abort(txn); continue; }
-			for (const { e: old, fields } of changes) await space.write({ type: old.type, types: old.types.slice(1), fields }, txn, FOREVER, is(old, "Spot") ? { unique: ["room", "x", "y"] } : {});
-			await space.write({ type: "RoomGrowth", fields: after as never }, txn, FOREVER);
-			const g = { east: 0, south: 0, steps: [step] };
-			await space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, ground: insertStrip(room.ground, step), ...(room.decor ? { decor: insertStrip(room.decor, step, true) } : {}), ...(room.spawn ? { spawn: grownPoint(room.spawn, g) } : {}) } as never }, txn, FOREVER);
-			await space.write({ type: "Msg", fields: { room: room.roomId, to: "*", kind: "world", text: `${room.name} wächst: Im ${step.axis === "x" ? "Osten" : "Süden"} ist neues Land frei.`, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
-			await space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, txn, FOREVER);
-			await space.commit(txn);
-			grew++;
-		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+			const txn = (await space.createTransaction(30_000)).id;
+			try {
+				if (!(await space.takeIfExists(WORLD_LOCK, GROWTH_LOCK_WAIT_MS, { txn }))) { await space.abort(txn); break; }
+				// the island's lock after WORLD_LOCK, then the room's (room-lock.ts): a job that holds only the room's lock (a
+				// jetty moved, a sweep) and no WORLD_LOCK would otherwise write a footprint where the room is shifting
+				const island = entry.fields.island;
+				if (typeof island === "string" && !(await holdIsland(space, txn, island, [], NO_WAIT))) { await space.abort(txn); continue; }
+				if ((await holdRoomVersion(space, txn, roomId, NO_WAIT)) !== lockVersion(lock.fields)) { await space.abort(txn); continue; }
+				const e = await space.takeIfExists({ id: entry.id }, NO_WAIT, { txn });
+				if (!e) { await space.abort(txn); continue; }
+				const room = fieldsOf<RoomFields>(e);
+				const groups = await Promise.all([
+					...POSITIONED.map((type) => space.readAll({ type, fields: { room: room.roomId } }, { txn })),
+					space.readAll({ type: "Item", fields: { location: room.roomId } }, { txn }),
+					space.readAll({ type: "Exit" }, { txn }),
+				]);
+				const entries = groups.flat();
+				const step = growthStep(w, room, entries);
+				if (!step) { await space.abort(txn); continue; }
+				const was = await space.takeIfExists({ type: "RoomGrowth", fields: { roomId: room.roomId } }, NO_WAIT, { txn });
+				const before: RoomGrowthFields = was ? fieldsOf<RoomGrowthFields>(was) : { roomId: room.roomId, east: 0, south: 0 };
+				const after: RoomGrowthFields = { ...before, east: before.east + (step.axis === "x" ? step.size : 0), south: before.south + (step.axis === "y" ? step.size : 0), steps: [...before.steps ?? [], step], baseWidth: before.baseWidth ?? room.ground[0]!.length - before.east, baseHeight: before.baseHeight ?? room.ground.length - before.south };
+				const changes = entries.map((x) => ({ e: x, fields: moved(x, room.roomId, before, step) })).filter((x) => JSON.stringify(x.fields) !== JSON.stringify(x.e.fields));
+				let busy = false;
+				for (const change of changes) if (!(await space.takeIfExists({ id: change.e.id }, NO_WAIT, { txn }))) { busy = true; break; }
+				if (busy) { await space.abort(txn); continue; }
+				for (const { e: old, fields } of changes) await space.write({ type: old.type, types: old.types.slice(1), fields }, txn, FOREVER, is(old, "Spot") ? { unique: ["room", "x", "y"] } : {});
+				await space.write({ type: "RoomGrowth", fields: after as never }, txn, FOREVER);
+				const g = { east: 0, south: 0, steps: [step] };
+				await space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, ground: insertStrip(room.ground, step), ...(room.decor ? { decor: insertStrip(room.decor, step, true) } : {}), ...(room.spawn ? { spawn: grownPoint(room.spawn, g) } : {}) } as never }, txn, FOREVER);
+				await space.write({ type: "Msg", fields: { room: room.roomId, to: "*", kind: "world", text: `${room.name} wächst: Im ${step.axis === "x" ? "Osten" : "Süden"} ist neues Land frei.`, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
+				await space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, txn, FOREVER);
+				await space.commit(txn);
+				grew++;
+			} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+		} finally { await space.takeIfExists({ id: turn.id }, NO_WAIT).catch(() => {}); } // else it lapses with its lease
 	}
 	return grew;
 }

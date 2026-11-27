@@ -218,6 +218,12 @@ export type SpotFields = { room: string; x: number; y: number; charId: string; n
 /** World space: the lock a world worker takes while it loads the world definition, so two loading at once cannot
  *  both spawn the placed items. */
 export const WORLD_LOCK = { type: "Lock", fields: { name: "world" } } as const;
+/** World space: a growth run's turn before new commands (engine/commands/growth.ts, the owner's decision 2026-11-27):
+ *  written, outside a transaction, before the run takes WORLD_LOCK for a room with a step and taken when the room is
+ *  done; while one is visible the world workers start no command, so the commands that read WORLD_LOCK run out and the
+ *  run gets it. Its lease (GROWTH_TURN_MS) ends a turn whose run died. */
+export const GROWTH_TURN = { type: "GrowthTurn" } as const;
+export type GrowthTurnFields = { roomId: string };
 /** World space: the lock under which an npc process claims a role (so two processes never play one) and under which
  *  an NPC is woken (so no more than SPACES_MMO_NPC_MAX are awake). */
 export const NPC_LOCK = { type: "Lock", fields: { name: "npc" } } as const;

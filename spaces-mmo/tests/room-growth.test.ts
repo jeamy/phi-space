@@ -107,7 +107,8 @@ test("growth defers while a command pins coordinates and rolls back a failed com
 	try {
 		const txn = (await s.createTransaction(10_000)).id;
 		await pinTerrain(s, txn);
-		assert.equal(await growthTick(s, w, 60_000), 0);
+		assert.equal(await growthTick(s, w, 60_000), 0, "a command open longer than GROWTH_LOCK_WAIT_MS");
+		assert.equal(await s.count({ type: "GrowthTurn" }), 0, "the turn ends with the run");
 		await s.abort(txn);
 		const failing = new Proxy(s, { get(target, prop) { if (prop === "commit") return async () => { throw new Error("injected commit failure"); }; const v = Reflect.get(target, prop); return typeof v === "function" ? v.bind(target) : v; } });
 		await assert.rejects(growthTick(failing, w, 60_000), /injected/);
@@ -116,6 +117,22 @@ test("growth defers while a command pins coordinates and rolls back a failed com
 		assert.equal((await get<ExitFields>(s, "Exit", { exitId: "out" })).x, 11);
 		assert.equal(await s.count({ type: "RoomGrowth" }), 0);
 		assert.equal(await growthTick(s, w, 60_000), 1);
+	} finally { await host.close(BACKGROUND_CONTEXT); }
+});
+
+test("growth waits for a command that holds the world lock with its turn visible, and takes the turn away after", async () => {
+	const { host, s, w } = await fixture();
+	try {
+		const txn = (await s.createTransaction(10_000)).id;
+		await pinTerrain(s, txn);
+		const run = growthTick(s, w, 60_000);
+		// the turn is visible while the run waits: the world workers start no command (world-host.ts)
+		const t0 = Date.now();
+		while (!(await s.count({ type: "GrowthTurn" })) && Date.now() - t0 < 1_500) await new Promise((r) => setTimeout(r, 10));
+		assert.equal(await s.count({ type: "GrowthTurn" }), 1);
+		await s.abort(txn);
+		assert.equal(await run, 1, "grew once the command had ended");
+		assert.equal(await s.count({ type: "GrowthTurn" }), 0);
 	} finally { await host.close(BACKGROUND_CONTEXT); }
 });
 

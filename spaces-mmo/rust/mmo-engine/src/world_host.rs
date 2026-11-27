@@ -344,6 +344,13 @@ pub async fn run_world(o: HostOptions, ready: impl FnOnce(), halt: watch::Receiv
 				let r: Result<()> = async {
 					let free = lanes.saturating_sub(busy.borrow().len());
 					if free == 0 { tokio::select! { _ = done.notified() => {}, _ = halt.wait_for(|h| *h) => {} } return Ok(()); }
+					// a growth run's turn (model.rs growth_turn): no new command until it is over, read from the copy of the
+					// world (no call to the space) or, without one, from the space
+					let turn = crate::model::growth_turn();
+					if match &worker.mirror { Some(m) => m.count(&turn) > 0.0, None => space.count(&turn, None).await? > 0.0 } {
+						tokio::select! { _ = done.notified() => {}, _ = tokio::time::sleep(Duration::from_millis(20)) => {} }
+						return Ok(());
+					}
 					let pending = space.read_limit(&obj! { "type" => "Intent" }, (free * 4).max(8), None).await?;
 					if pending.is_empty() && busy.borrow().is_empty() { await_work(space.remote(), &obj! { "type" => "Intent" }, 20_000.0, Some(halt.clone())).await?; return Ok(()); }
 					let now = real_now();

@@ -18,6 +18,10 @@ use crate::grid::Grid;
 use crate::world::walkable;
 
 const POSITIONED: [&str; 17] = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Footprint", "Zone", "Motion", "Animal", "Tree"];
+/// How long a growth run waits for the world lock, its turn visible, before it leaves the rest to the next run (growth.ts GROWTH_LOCK_WAIT_MS).
+pub const GROWTH_LOCK_WAIT_MS: f64 = 2_000.0;
+/// The lease of a growth run's turn (growth.ts GROWTH_TURN_MS).
+pub const GROWTH_TURN_MS: f64 = 5_000.0;
 fn is(e: &Json, ty: &str) -> bool { j::a(e, "types").iter().any(|t| t.as_str() == Some(ty)) }
 fn key(x: f64, y: f64) -> String { format!("{},{}", phi_json::number_text(x), phi_json::number_text(y)) }
 #[cfg(test)]
@@ -209,7 +213,7 @@ thread_local! {
 	static NO_STEP: std::cell::RefCell<std::collections::HashMap<(usize, String), String>> = Default::default();
 }
 
-/// `growthTick`: a busy world defers growth; a room and every displaced position change in one transaction under the
+/// `growthTick`: a world busy for longer than GROWTH_LOCK_WAIT_MS with its turn visible defers growth; a room and every displaced position change in one transaction under the
 /// world lock. How many rooms grew. A room is decided first on `view` (the world's copy, or the space outside a transaction), without a
 /// lock: one held right now, one whose decision is kept and one with no step are passed over without taking anything.
 /// Only a room with a step takes the locks; its lock's version must still be the one the view showed, and the decision
@@ -235,69 +239,76 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64, view: &Space) -
 		if NO_STEP.with(|m| m.borrow().get(&slot) == Some(&k)) { continue; }
 		if growth_step(w, fields(&entry), &seen).is_none() { NO_STEP.with(|m| m.borrow_mut().insert(slot, k)); continue; }
 		NO_STEP.with(|m| m.borrow_mut().remove(&slot));
-		let txn = space.create_transaction(30_000.0).await?;
-		let r: Result<Option<bool>> = async {
-			if space.take_if_exists(&world_lock(), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(None); }
-			// the island's lock after WORLD_LOCK, then the room's (room_lock.rs): a job that holds only the room's lock and no
-			// WORLD_LOCK would otherwise write a footprint where the room is shifting
-			if let Some(island) = j::at(fields(&entry), "island").as_str() {
-				if !crate::room_lock::hold_island(space, &txn, island, &[], NO_WAIT).await? { return Ok(Some(false)); }
-			}
-			if crate::room_lock::hold_room_version(space, &txn, &rid, NO_WAIT).await? != Some(version) { return Ok(Some(false)); }
-			let Some(e) = space.take_if_exists(&obj! { "id" => j::at(&entry, "id").clone() }, NO_WAIT, Some(&txn)).await? else { return Ok(Some(false)) };
-			let room = fields(&e).clone();
-			let room_id = j::s(&room, "roomId").to_owned();
-			let ground = rows(j::at(&room, "ground"));
-			let mut entries: Vec<Json> = Vec::new();
-			// the groups at once, as TypeScript's Promise.all, in the same order
-			let mut templates: Vec<Json> = POSITIONED.iter().map(|ty| tmpl(ty, obj! { "room" => room_id.as_str() })).collect();
-			templates.push(tmpl("Item", obj! { "location" => room_id.as_str() }));
-			templates.push(obj! { "type" => "Exit" });
-			let reads = templates.iter().map(|t| Box::pin(space.read_all(t, Some(&txn))) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Json>>> + '_>>).collect();
-			for group in join_all(reads).await { entries.extend(group?); }
-			let Some(step) = growth_step(w, &room, &entries) else { return Ok(Some(false)) };
-			let was = space.take_if_exists(&tmpl("RoomGrowth", obj! { "roomId" => room_id.as_str() }), NO_WAIT, Some(&txn)).await?;
-			let before = was.map_or_else(|| obj! { "roomId" => room_id.as_str(), "east" => 0.0, "south" => 0.0 }, |x| fields(&x).clone());
-			let size = j::n(&step, "size");
-			let x_axis = j::s(&step, "axis") == "x";
-			let mut after = before.clone();
-			j::set(&mut after, "east", j::n(&before, "east") + if x_axis { size } else { 0.0 });
-			j::set(&mut after, "south", j::n(&before, "south") + if x_axis { 0.0 } else { size });
-			let mut steps: Vec<Json> = j::a(&before, "steps").to_vec();
-			steps.push(step.clone());
-			j::set(&mut after, "steps", Json::Array(steps));
-			let width = ground.first().map_or(0, |r| js::len16(r)) as f64;
-			j::set(&mut after, "baseWidth", j::opt(&before, "baseWidth").cloned().unwrap_or_else(|| Json::from(width - j::n(&before, "east"))));
-			j::set(&mut after, "baseHeight", j::opt(&before, "baseHeight").cloned().unwrap_or_else(|| Json::from(ground.len() as f64 - j::n(&before, "south"))));
-			let changes: Vec<(Json, Json)> = entries.iter().map(|x| (x.clone(), moved(x, &room_id, &before, &step))).filter(|(x, f)| f.to_json_text() != fields(x).to_json_text()).collect();
-			for (old, _) in &changes {
-				if space.take_if_exists(&obj! { "id" => j::at(old, "id").clone() }, NO_WAIT, Some(&txn)).await?.is_none() { return Ok(Some(false)); }
-			}
-			for (old, f) in changes {
-				let types: Vec<Json> = j::a(&old, "types").iter().skip(1).cloned().collect();
-				let entry = obj! { "type" => j::at(&old, "type").clone(), "types" => Json::Array(types), "fields" => f };
-				if is(&old, "Spot") { space.write_unique(&entry, Some(&txn), FOREVER, &["room", "x", "y"]).await?; } else { space.write(&entry, Some(&txn), FOREVER).await?; }
-			}
-			space.write(&tmpl("RoomGrowth", after), Some(&txn), FOREVER).await?;
-			let g = obj! { "east" => 0.0, "south" => 0.0, "steps" => Json::Array(vec![step.clone()]) };
-			let mut rf = room.clone();
-			j::set(&mut rf, "ground", rows_json(&insert_strip(&ground, &step, false)?));
-			if j::opt(&room, "decor").is_some_and(j::truthy) { j::set(&mut rf, "decor", rows_json(&insert_strip(&rows(j::at(&room, "decor")), &step, true)?)); }
-			if j::opt(&room, "spawn").is_some_and(j::truthy) { j::set(&mut rf, "spawn", grown_point(j::at(&room, "spawn"), &g, 0)); }
-			let types: Vec<Json> = j::a(&e, "types").iter().skip(1).cloned().collect();
-			space.write(&obj! { "type" => j::at(&e, "type").clone(), "types" => Json::Array(types), "fields" => rf }, Some(&txn), FOREVER).await?;
-			let text = format!("{} wächst: Im {} ist neues Land frei.", key_text(j::at(&room, "name")), if x_axis { "Osten" } else { "Süden" });
-			let m = obj! { "room" => room_id.as_str(), "to" => "*", "kind" => "world", "text" => text.as_str(), "from" => "", "at" => time_now() };
-			space.write_with(&obj! { "type" => "Msg", "fields" => m }, Some(&txn), lease_ms, msg_transient(space, "*", "world").await).await?;
-			space.write(&world_lock(), Some(&txn), FOREVER).await?;
-			Ok(Some(true))
+		// the turn first (growth.ts): with it visible no new command starts, the open ones run out and the take gets the lock
+		let turn = space.write(&obj! { "type" => "GrowthTurn", "fields" => obj! { "roomId" => rid.as_str() } }, None, GROWTH_TURN_MS).await?;
+		let ended: Result<bool> = async {
+			let txn = space.create_transaction(30_000.0).await?;
+			let r: Result<Option<bool>> = async {
+				if space.take_if_exists(&world_lock(), GROWTH_LOCK_WAIT_MS, Some(&txn)).await?.is_none() { return Ok(None); }
+				// the island's lock after WORLD_LOCK, then the room's (room_lock.rs): a job that holds only the room's lock and no
+				// WORLD_LOCK would otherwise write a footprint where the room is shifting
+				if let Some(island) = j::at(fields(&entry), "island").as_str() {
+					if !crate::room_lock::hold_island(space, &txn, island, &[], NO_WAIT).await? { return Ok(Some(false)); }
+				}
+				if crate::room_lock::hold_room_version(space, &txn, &rid, NO_WAIT).await? != Some(version) { return Ok(Some(false)); }
+				let Some(e) = space.take_if_exists(&obj! { "id" => j::at(&entry, "id").clone() }, NO_WAIT, Some(&txn)).await? else { return Ok(Some(false)) };
+				let room = fields(&e).clone();
+				let room_id = j::s(&room, "roomId").to_owned();
+				let ground = rows(j::at(&room, "ground"));
+				let mut entries: Vec<Json> = Vec::new();
+				// the groups at once, as TypeScript's Promise.all, in the same order
+				let mut templates: Vec<Json> = POSITIONED.iter().map(|ty| tmpl(ty, obj! { "room" => room_id.as_str() })).collect();
+				templates.push(tmpl("Item", obj! { "location" => room_id.as_str() }));
+				templates.push(obj! { "type" => "Exit" });
+				let reads = templates.iter().map(|t| Box::pin(space.read_all(t, Some(&txn))) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Json>>> + '_>>).collect();
+				for group in join_all(reads).await { entries.extend(group?); }
+				let Some(step) = growth_step(w, &room, &entries) else { return Ok(Some(false)) };
+				let was = space.take_if_exists(&tmpl("RoomGrowth", obj! { "roomId" => room_id.as_str() }), NO_WAIT, Some(&txn)).await?;
+				let before = was.map_or_else(|| obj! { "roomId" => room_id.as_str(), "east" => 0.0, "south" => 0.0 }, |x| fields(&x).clone());
+				let size = j::n(&step, "size");
+				let x_axis = j::s(&step, "axis") == "x";
+				let mut after = before.clone();
+				j::set(&mut after, "east", j::n(&before, "east") + if x_axis { size } else { 0.0 });
+				j::set(&mut after, "south", j::n(&before, "south") + if x_axis { 0.0 } else { size });
+				let mut steps: Vec<Json> = j::a(&before, "steps").to_vec();
+				steps.push(step.clone());
+				j::set(&mut after, "steps", Json::Array(steps));
+				let width = ground.first().map_or(0, |r| js::len16(r)) as f64;
+				j::set(&mut after, "baseWidth", j::opt(&before, "baseWidth").cloned().unwrap_or_else(|| Json::from(width - j::n(&before, "east"))));
+				j::set(&mut after, "baseHeight", j::opt(&before, "baseHeight").cloned().unwrap_or_else(|| Json::from(ground.len() as f64 - j::n(&before, "south"))));
+				let changes: Vec<(Json, Json)> = entries.iter().map(|x| (x.clone(), moved(x, &room_id, &before, &step))).filter(|(x, f)| f.to_json_text() != fields(x).to_json_text()).collect();
+				for (old, _) in &changes {
+					if space.take_if_exists(&obj! { "id" => j::at(old, "id").clone() }, NO_WAIT, Some(&txn)).await?.is_none() { return Ok(Some(false)); }
+				}
+				for (old, f) in changes {
+					let types: Vec<Json> = j::a(&old, "types").iter().skip(1).cloned().collect();
+					let entry = obj! { "type" => j::at(&old, "type").clone(), "types" => Json::Array(types), "fields" => f };
+					if is(&old, "Spot") { space.write_unique(&entry, Some(&txn), FOREVER, &["room", "x", "y"]).await?; } else { space.write(&entry, Some(&txn), FOREVER).await?; }
+				}
+				space.write(&tmpl("RoomGrowth", after), Some(&txn), FOREVER).await?;
+				let g = obj! { "east" => 0.0, "south" => 0.0, "steps" => Json::Array(vec![step.clone()]) };
+				let mut rf = room.clone();
+				j::set(&mut rf, "ground", rows_json(&insert_strip(&ground, &step, false)?));
+				if j::opt(&room, "decor").is_some_and(j::truthy) { j::set(&mut rf, "decor", rows_json(&insert_strip(&rows(j::at(&room, "decor")), &step, true)?)); }
+				if j::opt(&room, "spawn").is_some_and(j::truthy) { j::set(&mut rf, "spawn", grown_point(j::at(&room, "spawn"), &g, 0)); }
+				let types: Vec<Json> = j::a(&e, "types").iter().skip(1).cloned().collect();
+				space.write(&obj! { "type" => j::at(&e, "type").clone(), "types" => Json::Array(types), "fields" => rf }, Some(&txn), FOREVER).await?;
+				let text = format!("{} wächst: Im {} ist neues Land frei.", key_text(j::at(&room, "name")), if x_axis { "Osten" } else { "Süden" });
+				let m = obj! { "room" => room_id.as_str(), "to" => "*", "kind" => "world", "text" => text.as_str(), "from" => "", "at" => time_now() };
+				space.write_with(&obj! { "type" => "Msg", "fields" => m }, Some(&txn), lease_ms, msg_transient(space, "*", "world").await).await?;
+				space.write(&world_lock(), Some(&txn), FOREVER).await?;
+				Ok(Some(true))
 		}.await;
 		match r {
-			Ok(Some(true)) => { space.commit(&txn).await?; grew += 1.0; }
-			Ok(Some(false)) => space.abort(&txn).await?,
-			Ok(None) => { space.abort(&txn).await?; break; }
-			Err(e) => { let _ = space.abort(&txn).await; return Err(e); }
+			Ok(Some(true)) => { space.commit(&txn).await?; grew += 1.0; Ok(false) }
+			Ok(Some(false)) => { space.abort(&txn).await?; Ok(false) }
+			Ok(None) => { space.abort(&txn).await?; Ok(true) }
+			Err(e) => { let _ = space.abort(&txn).await; Err(e) }
 		}
+		}.await;
+		// else it lapses with its lease
+		let _ = space.take_if_exists(&obj! { "id" => j::at(&turn, "id").clone() }, NO_WAIT, None).await;
+		if ended? { break; }
 	}
 	Ok(grew)
 }

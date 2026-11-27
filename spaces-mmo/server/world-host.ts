@@ -55,7 +55,7 @@ import { abortableSleep } from "./abort-sleep.ts";
 import { seeded, withSource } from "./engine/source.ts";
 import { deliver } from "./engine/handover.ts";
 import { carryCouriers } from "./engine/courier.ts";
-import { WORLD_LOCK, actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields, type TranslateFields } from "./model.ts";
+import { GROWTH_TURN, WORLD_LOCK, actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields, type TranslateFields } from "./model.ts";
 import { announce, awaitWork, batching, bufferedTxn, connectSpace, DEFAULT_SPACE, envMs, Mirror, readExisting, StillHeld } from "./space.ts";
 
 export async function startWorld(o: { space?: string; world?: WorldDef; region?: string } = {}) {
@@ -225,6 +225,12 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 				const free = LANES - busy.size;
 				const settled = new Promise<void>((r) => (laneDone = r));
 				if (free > 0) {
+					// a growth run's turn (model.ts GROWTH_TURN): no new command until it is over, read from the copy of the
+					// world (no call to the space) or, without one, from the space
+					if (mirror ? mirror.readAll(GROWTH_TURN, 1).length : await space.count(GROWTH_TURN)) {
+						await Promise.race([settled, new Promise((r) => setTimeout(r, 20))]);
+						continue;
+					}
 					// the oldest intents, a few per free lane (the gateway caps what an account sends, so a window this small
 					// reaches every character that waits; a larger one would make each look cost the space more when it is busiest)
 					const pending = await space.readAll({ type: "Intent" }, { limit: Math.max(8, free * 4) });

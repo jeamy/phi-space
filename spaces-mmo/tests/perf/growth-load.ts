@@ -11,8 +11,9 @@
 // at the clock rate 24 of the servers every 150 s per region, so this samples many runs, it is not the production cadence), timed as in growth-lock.ts. The Rust engine is measured on the
 // fixture alone (growth-lock.ts): this script cannot see how far its runs get.
 //
-// Every command reads the world lock in its transaction (world-host.ts), and growth takes it without waiting: while a
-// command is open a growth run stops ("a busy world defers growth"), and while growth holds a room the commands wait.
+// Every command reads the world lock in its transaction (world-host.ts). For a room with a step growth writes its turn
+// (GrowthTurn: the workers start no new command) and waits up to GROWTH_LOCK_WAIT_MS for the lock; a world busy for
+// longer defers growth, and while growth holds a room the commands wait.
 // So under load what counts is how far a run gets (rooms reached) and how long a single hold makes the commands wait:
 // in the window with growth the answers are split into the commands sent while a run was open and the others.
 // Since growth steps 2 and 3 a room without a step takes no lock (growth.ts decides on a view first), so the worst

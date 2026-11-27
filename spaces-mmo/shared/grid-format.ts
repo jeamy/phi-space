@@ -73,7 +73,7 @@ export const GRID_CLASSES: Record<string, Record<string, GridClass>> = {
 	...Object.fromEntries([
 		"Account", "ActorToken", "BeamRest", "BedCommons", "Blessing", "ChatBlock", "ChatGroup", "ChatInvite", "ChatKey", "ChatMember",
 		"ChatMsg", "ChatReport", "ChatWait", "Contribution", "Courier", "Credential", "Deed", "Epoch", "Estate", "FireBuilder",
-		"FireChain", "Flame", "Fog", "Freight", "GridFormat", "HelpEntry", "LightUse", "Listing", "LlmCount", "LlmStatus", "Loan",
+		"FireChain", "Flame", "Fog", "Freight", "GridFormat", "GrowthTurn", "HelpEntry", "LightUse", "Listing", "LlmCount", "LlmStatus", "Loan",
 		"IslandLock", "Lock", "Migrated", "ModelInfo", "NameAlias", "NpcAwake", "NpcBorn", "NpcOwner", "NpcVisit", "Offer", "Order", "ParkCare",
 		"Passage", "Process", "Prototype", "Rested", "Restock", "RoomLock", "Sated", "SceneryGone", "Season", "SeedRest", "Session",
 		"Setting", "Settlement", "SettlementName", "ShopOrder", "Show", "ShowEntry", "Sleep", "StoreLog", "Tag", "Think",

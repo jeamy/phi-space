@@ -463,7 +463,20 @@ What it says:
 
 - **The wait does not get growth through.** With 50 figures the commands that read `WORLD_LOCK` overlap without a gap of 2 s: 5 of 8 runs were still refused, against 8 of 11 with `NO_WAIT`. One room waited 5 runs, as long as before. A first run without the measurement fix gave the same: 5 of 7 refused, a room waiting 5 runs (43.6 s).
 - **It only makes a run longer.** Each refused run waits the full 2 s, so a run took 6.4 s (median) against 1.7 s. A hold, once taken, is as short as before (79 to 92 ms), and the commands answer no worse than in run C; the windows drift as before.
-- A longer wait would not change this: a take that waits gets the lock only in a moment when no command holds it, and under this load there is none. What would get growth through is a turn before new commands (they wait for a growth run that is waiting). That changes every command, so the change was not kept: growth takes `WORLD_LOCK` with `NO_WAIT` as before, until the owner decides (the 10 s answers at p99 in both load windows are timeouts of the figures, with and without growth).
+- A longer wait would not change this: a take that waits gets the lock only in a moment when no command holds it, and under this load there is none. What would get growth through is a turn before new commands (they wait for a growth run that is waiting). That changes every command, so the wait alone was not kept (the 10 s answers at p99 in both load windows are timeouts of the figures, with and without growth).
+
+**A turn before new commands (2026-11-27, the owner's decision after run D).** Before a growth run takes `WORLD_LOCK` for a room with a step, it writes a `GrowthTurn` outside a transaction (lease 5 s, `GROWTH_TURN_MS`) and takes it away when the room is done. The world workers' intent loops (`server/world-host.ts`, `world_host.rs`) start no command while a turn is visible. They read it from their copy of the world, so the check costs no call to the space. The commands already open run out, and the take, waiting up to 2 s as in run D, gets the lock. A turn whose run died lapses with its lease, and both copies drop a lapsed entry. Registrations, ferries and the other `pinTerrain` users are not held back: they are rare and wait for the lock themselves. Measured as runs C and D.
+
+| Run | Window | Growth runs | Longest single hold | Rooms with a step | Answers p50 / p95: all, during a run, outside one |
+| --- | --- | --- | --- | --- | --- |
+| E: five, turn | idle | 28, median 105 ms | 36 ms | 5 of 5 in their first run, 148 ms (median) | – |
+| | load | – | – | – | 71 / 428 |
+| | load+growth | 10, median 4.6 s; `WORLD_LOCK` refused in none | 69 ms | 5 of 5 in their first run, 1.9 s (median), at most 5.0 s; none waiting; lock held 63 ms | 547 / 1,268; 558 / 1,314 (633); 536 / 1,259 (593) |
+| | load again | – | – | – | 965 / 1,893 |
+
+- **Growth gets through under load.** No run was refused the lock, and every room with a step grew in its first run, against up to 4 or 5 runs in C and D. At the servers' 150 s between runs a room now grows in the run that finds it, not 600 s later.
+- **The commands pay no more than before.** Those sent during a run answer like the others (558 against 536 ms at p50), and the window with growth answers as in run C. A hold is as short as before (63 to 69 ms).
+- **A run takes longer under load** (4.6 s median against 1.7 s in C): with a room to grow it waits until the open commands have run out. It holds no lock while it waits; only new commands wait, at most until the run's room is done.
 
 ### 6.2 Cells looked at per target choice
 
