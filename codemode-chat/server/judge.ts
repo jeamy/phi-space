@@ -13,7 +13,7 @@
 // contribution's reach: patched builtins cannot make the rule pass.
 import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
-import { covers, memoryIdOf, recall, type MemoryPath } from "./memory.ts";
+import { covers, memoryIdOf, observationIdOf, recall, type MemoryPath } from "./memory.ts";
 import { subgoalText, type Subgoal } from "./subgoals.ts";
 import { toyArena } from "./toyarena.ts";
 import type { ChanceSeen, TideSeen } from "./toyisland.ts";
@@ -550,7 +550,7 @@ export const episodeEntries = (v: Verdict) => (v.episodes ?? []).filter((e) => e
 export const memoryEntries = (v: Verdict, goal: string, observe = false): Array<{ memoryId: string; episode: string; goal: string; path: PathStep[]; obs?: TideSeen | ChanceSeen }> => observe
 	// observations: every landing the sample episodes logged, reached or not (step 7), every day of the chance tide they
 	// played (step 8); the same landing, the same day once
-	? (v.episodes ?? []).filter((e) => e.kind === "sample").flatMap((e) => [...(e.days ?? []).map((d) => ({ memoryId: memoryIdOf("tide", [["day", 0, 0], [d.island, d.seed, -1]] as never), episode: e.id, goal: "tide", path: [[d.rooms[0]?.room ?? d.island, 0, 0]] as PathStep[], obs: d })), ...(e.tides ?? []).map((t) => ({ memoryId: memoryIdOf("tide", [[t.room, t.x, t.y], [t.island, t.seed, t.piece]] as never), episode: e.id, goal: "tide", path: [[t.room, t.x, t.y]] as PathStep[], obs: t }))])
+	? (v.episodes ?? []).filter((e) => e.kind === "sample").flatMap((e) => [...(e.days ?? []).map((d) => ({ memoryId: observationIdOf(d), episode: e.id, goal: "tide", path: [[d.rooms[0]?.room ?? d.island, 0, 0]] as PathStep[], obs: d })), ...(e.tides ?? []).map((t) => ({ memoryId: observationIdOf(t), episode: e.id, goal: "tide", path: [[t.room, t.x, t.y]] as PathStep[], obs: t }))])
 	: (v.episodes ?? []).filter((e) => e.kind === "sample" && e.path?.length && !e.cut && e.reached.length && e.reached.every(Boolean)).map((e) => ({ memoryId: memoryIdOf(goal, e.path!), episode: e.id, goal, path: e.path! }));
 
 /** What a judge hands along for a durable task: the candidate's call log in the space (judge-host.ts). Without it a

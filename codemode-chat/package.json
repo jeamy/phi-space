@@ -14,6 +14,7 @@
     "agents": "node --no-warnings --experimental-strip-types server/agent-host.ts",
     "model": "node --no-warnings --experimental-strip-types server/model-host.ts",
     "web": "node --no-warnings --experimental-strip-types server/index.ts",
+    "migrate:grid": "node --no-warnings --experimental-strip-types server/migrate-grid.ts",
     "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts",
     "test:durable": "node --no-warnings --experimental-strip-types tests/run-durable.ts",
     "docker:test": "docker compose --env-file .env -f docker/docker-compose.yml --profile test run --rm --build codemode-chat-test",

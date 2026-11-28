@@ -295,6 +295,23 @@ docker compose -f docker/docker-compose.yml --profile nano run --rm --no-deps sp
 This does not cover `codemode-agent.sqlite`. Back it up separately, with its WAL state, before an upgrade: pi-durable
 1.4.0 moves an older file to schema 2, and 1.3.0 or older cannot open it afterwards (`docs/upgrade-pi-1.4.0.en.md`).
 
+### The grid migration
+
+The cells the space keeps (`BotEpisode` paths, `PlanMemory` paths and observations with their ids, the ids in
+`MemoryFreeze`, `Subgoals` near) go from gridScale 1 to 2 with the world's cut
+(`spaces-mmo/docs/3d-welt-und-raster-plan-2026-11-21.en.md`, phase 2 step 7). Run it on a backup's copy with only
+the space process running, then start everything with `CODEMODE_GRID_SCALE=2`:
+
+```bash
+npm --prefix codemode-chat run migrate:grid -- --space unix:/path/to/space.sock --check   # what it would change
+npm --prefix codemode-chat run migrate:grid -- --space unix:/path/to/space.sock
+```
+
+It refuses while another process of codemode-chat is announced or a durable judge's run is in flight (`BotRun`,
+`BotCall`). It takes the `BotRoom` entries (the next verdicts store them anew), and writes a `GridFormat` entry, first
+"running", then "complete". A run that was cut off leaves it "running" and is refused: restore the backup. A second
+run on a migrated space changes nothing. The entries written anew get a fresh lease of `CODEMODE_TTL_HOURS`.
+
 ## Help pages and themes
 
 `/help` has the help pages in the style of the phi-spaces help system: navigation on the left, the article in the middle,

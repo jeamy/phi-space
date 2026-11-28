@@ -36,6 +36,9 @@ export const MAX_MEMORY = 300;
 
 /** The same path gets the same id in a block, so a bot that walks it again adds nothing. */
 export const memoryIdOf = (goal: string, path: PathStep[]): string => createHash("sha256").update(JSON.stringify([goal, path])).digest("hex").slice(0, 20);
+/** The id of an observation (goal "tide"): a landing by its cell and piece (step 7), a day of the chance tide by its
+ *  island and seed (step 8). */
+export const observationIdOf = (o: TideSeen | ChanceSeen): string => "rooms" in o ? memoryIdOf("tide", [["day", 0, 0], [o.island, o.seed, -1]] as never) : memoryIdOf("tide", [[o.room, o.x, o.y], [o.island, o.seed, o.piece]] as never);
 
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 

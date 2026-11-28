@@ -269,9 +269,11 @@ The class table of plan section 2.2 is this list. The start check fails on a coo
 
 **Stored entries (cell points, scaled with the cut, plan section 2.2).**
 
-- `BotEpisode`: `path: PathStep[]` (`[room, x, y]`), `start`, `setup.items`.
-- `PlanMemory` (`MemoryPath`): `path`, `obs` (tide observations with `x, y`).
+- `BotEpisode` (as `judge.ts` `episodeEntries` writes it, not the task's `BotEpisode` type): `path`, `jumps` (pairs of steps) and `subgoalAt`, each `[room, x, y]`. It keeps no `start` or `setup` (corrected 2026-11-28; those are in the task definitions in code).
+- `PlanMemory` (`MemoryPath`): `path`, `obs` (`TideSeen` `x, y`; `ChanceSeen` `rooms[].pieces[].x, y`). Its `memoryId` is made of its content (`memoryIdOf`, `observationIdOf`), and `MemoryFreeze.memoryIds` names those ids. `fromFire` counts exits between rooms, not cells.
+- `Subgoals`: `subgoals[].near` (found 2026-11-28).
 - `BotRoom`: `geo`. Not converted, read anew from the arena (plan section 2.2).
+- `BotRun`/`BotCall`: a durable judge's log of a run in flight (6 h lease), with the calls of its scale.
 
 **Not cells.** `PATH_MAX = 200` (`judge.ts:517`, the number of path points kept) and `MAX_MEMORY`.
 
@@ -827,3 +829,19 @@ A run cut off is not resumed, because a coordinate doubled twice has no repair. 
 - The second run answered "already", and the start check at scale 2 (`checkGridFormat`) passed on all four.
 - On west, the TS loader of the scale-2 region world ran twice and left every room as migrated.
 - The Rust `mmo-world` at scale 2 started on west, with the four migrated regions behind it, and ran 40 s without an error. The check of the store afterwards found nothing.
+
+### The codemode-chat Space
+
+`npm --prefix codemode-chat run migrate:grid -- --space <address> [--check]` (`codemode-chat/server/migrate-grid.ts`) takes the Space's cells (section 4) from scale 1 to 2:
+
+- Every cell point of `BotEpisode` (`path`, `jumps`, `subgoalAt`), `PlanMemory` (`path`, the observations' cells) and `Subgoals` (`near`) is doubled. A path is the arena's turn points (`arena.ts` `pathOf`) and `recall` costs a step by its Manhattan length, so the doubled turn points are the same way at scale 2. Their cost doubles as `NEAR` and `JUMP_CELLS` do, and nothing is inserted, unlike a Route. `fromFire` and the minutes stay.
+- A `PlanMemory`'s id is computed anew from its doubled content, and every `MemoryFreeze` names the new ids of its block, in its order. A judge at scale 2 that walks a remembered way finds it a duplicate. A day of the chance tide keeps its id (it names no cell).
+- `BotRoom` is taken; the next verdicts store the rooms anew from the arena.
+- The script refuses before a write when a `BotRun` or `BotCall` entry is there, or a `Process` entry other than the Space's own, or a `GridFormat` entry at gridScale 2 "running".
+- The order is the world stores' order: computed in memory, `GridFormat` { gridScale 2, derivedFrom 1 } "running", batches each entry taken without waiting, read back and compared, "complete". A Space without the entry is at scale 1.
+- The entries written anew get a fresh lease of `CODEMODE_TTL_HOURS`, since the Space does not tell an entry's remaining one; `ts`, which orders the memory and its eviction, stays.
+- Text is not migrated: the models' plans and critiques, chat messages and a verdict's case lines. Neither is the bots' code.
+
+`codemode-chat/tests/migrate-grid.test.ts` writes a landing and a day of the chance tide as a judge logs them at scale 1, migrates, and compares with what a judge at scale 2 logs of the same island and seed (computed in a process at `CODEMODE_GRID_SCALE=2`): the observations, their ids, the freeze's order, `remember` adding nothing. It runs against the TypeScript and the Rust space. Observations of six toy islands, four seeds each, and the Graue Insel were compared the same way: at scale 2 each is the one of scale 1 with its cells doubled. The local test bed's store (October, 160 MB, no planning entries yet) migrated with nothing to change. A copy of nano's codemode store has not been tried.
+
+Open: a start check of codemode-chat's processes, so that a judge at `CODEMODE_GRID_SCALE` 2 refuses a Space without the "complete" entry at that scale (and one at 1 a migrated Space). Today the Space's scale and the processes' scale agree only by the operator's order of steps.
