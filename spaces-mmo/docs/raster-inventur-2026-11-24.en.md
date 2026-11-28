@@ -11,6 +11,8 @@ Phase 0 inventories what the grid switch touches before any format changes. This
 5. [Decisions for phase 1](#offen), collected from the four
 6. [References at scale 1](#referenzen) (plan section 6, cases 4 and 6, phase 0; semantic examples in 6.6)
 7. [Plot writers and readers, the occupancy query](#belegung) (plan section 3, "Occupancy"; phase 1; the searches on the shared grid in 7.7, a road's cells in 7.8)
+8. [The grid migration](#migration) (phase 2 step 7)
+9. [Measures at scale 2](#messungen) (phase 2 step 8, cases 4 and 6)
 
 Each inventory names the TypeScript place. The Rust engine (`rust/mmo-engine/src`) mirrors it file for file and function for function (`commands/build.ts` → `commands/build.rs`, `npc/economy.ts` → `npc/economy.rs`). The plan's single table of rule values is written in phase 1 from this list in both engines. When it is written, every Rust counterpart is checked line by line, and differences are added here.
 
@@ -782,6 +784,8 @@ It was the tests, not the engine. A new figure holds no cell until it comes onli
 
 `tests/planks.test.ts` failed for a reason of its own. It put a workshop, two huts and the cell to walk to beside wherever the newcomer started, and from some cells around the spawn that cell fell on the bay's fire. It now walks the figure to 18,12 first. With these changes, six parallel runs of the railway tests and four of planks all pass.
 
+<a id="migration"></a>
+
 ## 8. The grid migration (phase 2 step 7)
 
 `npm --prefix spaces-mmo run migrate:grid -- --space <address> [--check]` (`scripts/migrate-grid.ts`) takes a world or region store from gridScale 1 to 2 (plan section 5). It runs with the world stopped, on each region's space, on a copy of the backup, after the footprint migration (7.5).
@@ -847,3 +851,49 @@ A run cut off is not resumed, because a coordinate doubled twice has no repair. 
 **Rehearsal on nano's store, 2026-11-28.** A read-only copy of nano's codemode-chat Space (1.7 GB with its WAL, no checkpoint between them; `~/phi-backup/2026-11-28-grid-codemode/`, the same on nano) was migrated on a working copy behind the Rust `codemode-space`. It holds no `BotEpisode`, `PlanMemory`, `MemoryFreeze` or `Subgoals` entry, and none of its 102 `CodeScore` entries has episodes: no planning task has been judged in production yet. Only its 22 `BotRoom` entries were taken. The check, the migration and the second run ("already") took under a second each, and no `BotRun`, `BotCall` or foreign `Process` entry was there. The cut on nano is therefore a marker and the rooms' geometry; the conversion of paths and memory is held by the test alone.
 
 **Start check, 2026-11-28.** The judge, agents, model and web processes read the `GridFormat` entry before their first work (`codemode-chat/server/grid-format.ts`, `awaitGridFormat` before `announce`) and stop on a Space of another scale than their `CODEMODE_GRID_SCALE`, naming the migration or the variable. No entry is scale 1, a "running" entry admits no process, entries that disagree are a damaged Space. A process at scale 1 never writes the entry, so today's binaries run on today's Space unchanged. A process at scale 2 begins an empty Space at its scale (no `BotEpisode`, `PlanMemory`, `MemoryFreeze`, `Subgoals` or `BotRoom`): it writes { gridScale 2, "complete" } unique by `gridScale`, so processes starting at once write one. A Space of scale 1 with cells refuses it and names `migrate:grid`. `codemode-chat/tests/grid-format.test.ts` (also against the Rust space) holds the refusals, three checks at once on an empty Space writing one entry, and a judge process at scale 1 that stops on a migrated Space without announcing itself.
+
+<a id="messungen"></a>
+
+## 9. Measures at scale 2 (phase 2 step 8)
+
+**Setup, 2026-11-28.** This development machine (16 cores), at 9157584, the Rust processes as on big and nano (`mmo-space`, `mmo-world`, `mmo-npc`, `mmo-web`), each script of `tests/perf/` once with `SPACES_MMO_GRID_SCALE=1` and once with `2`; logs and scripts in `~/phi-backup/2026-11-28-grid-measures/`. A first series ran while another session's suite kept the machine at a load of about 21: its byte and commit counts stand, its times were discarded. The timed measures ran again once the 1-minute load had stayed below 4 for a minute (`quiet.sh`, `fixed.sh`; a long-running process of another project keeps about one core busy).
+
+**The fixture of case 6 was wrong at scale 2.** `tests/growth-worst.ts` wrote one 1×1 footprint a cell, at scale 2 as well: 25,623 footprints in 13 rooms instead of 6,565, a world four times as full. With it the space process ran a core at its limit under load, and the answers at scale 2 were 928 / 1,551 ms (p50 / p95) against 62 / 346 ms. The space's CPU per command was the same at both scales on a world without the fixture (`space-cost.ts`, 7.3 and 7.0 ms). At scale 2 the fixture is now the scene of scale 1 as the migration leaves it: every object two by two on its cell point, the free part doubled, so both scales hold the same objects (2,020 cells taken of 2,560 a room, 79 %, as at scale 1). At scale 1 it writes what it wrote.
+
+**Case 4, the frames** (`frame-bytes.ts`, bytes UTF-8; scale 1 as in 6.4, the atlas grown by about 900 bytes since):
+
+| State | Scale | `hello` | its `room` | `atlas` | `atlasState` | The player's room |
+| --- | --- | --- | --- | --- | --- | --- |
+| base | 1 | 30,649 | 1,124 | 22,280 | 807 | 24 × 16 |
+| base | 2 | 33,108 | 3,525 | 22,403 | 807 | 48 × 32 |
+| maximal | 1 | 32,188 | 2,132 | 39,992 | 807 | 36 × 24 |
+| maximal | 2 | 37,575 | 7,461 | 40,115 | 807 | 72 × 48 |
+
+The atlas of the 37 base rooms stays under the target of 25 KiB (25,600 bytes) at scale 2: its preview samples 2 × 2 cells (plan section 4), 123 bytes more than at scale 1 for the rooms' `w`, `h` and `sample`. The room's share of `hello` grows with its cells (3.1 and 3.5 times; no target was set before this measurement): 11 % of `hello` for a base room, 20 % for a maximal one. The time of a room change on the phone is open (below).
+
+**Case 6, the server** (medians; scale 1 / scale 2):
+
+| Measure (script) | Scale 1 | Scale 2 | Target |
+| --- | --- | --- | --- |
+| A run that grows nothing: lock held (`growth-lock.ts`) | 0 | 0 | at most the reference, 513 ms ✓ |
+| One room that grows: lock held, longest hold (TS engine) | 25.1, 26.4 ms | 27.7, 28.0 ms | at most 42 ms ✓ |
+| A run's reads, outside the lock (Rust engine) | 80 ms | 111 ms | – |
+| Under load, no growth: answers p50 / p95 (`growth-load.ts`, 50 figures) | 62 / 360 ms | 60 / 256 ms | – |
+| Under load with growth runs: longest hold | 66.6 ms | 54.0 ms | at most scale 1 ✓ |
+| … answers sent during a run against outside one (p50) | 347 / 184 ms (1.9) | 174 / 186 ms (0.94) | at most scale 1 ✓ |
+| Commits a second, under load | 180 | 190 | – |
+| Commits of the movers without players, 60 s (`mover-commits.ts`) | 214 (`Character` 3) | 212 (`Character` 3) | unchanged ✓ |
+
+In the window after the growth runs ("load again") the answers drift at both scales (p50 680 and 461 ms); it is the test's drift, not the scale's. Searches over a room at scale 2 (`search-cost.ts`) cost 2 to 6 times those of scale 1, all under 2.1 ms (the road's trace across 72 × 48 the dearest).
+
+**Case 6, the client's choice** (`target-choice.ts`, now also the whole tap as `walkTo` does it: `chooseTarget`, then the first move by `nextMove` over the whole room; the largest room, node on this machine):
+
+| Case | Scale 1: cells looked at, bound, time | Scale 2: cells looked at, bound, time |
+| --- | --- | --- |
+| reachable | 858 of 1,032, 1.7 ms | 3,450 of 4,080, 0.8 ms |
+| unreachable | 744 of 1,032, 1.3 ms | 3,216 of 4,080, 0.8 ms |
+| occupied and enclosed | 312 of 1,032, 0.4 ms | 912 of 4,080, 0.8 ms |
+
+The bound is case 6's, the room's cells plus the candidates of `TARGET_RINGS` (6 and 12). The script's `legacy` column keeps the search of before with its limit of 1,024 cells and finds no way across the largest room at scale 2; the client has not used it since step 5.
+
+**Open, on the phone.** These need the phone in hand and are not measured: the time of a room change (case 4), the tap's time against one tick of 150 ms (case 6), the 50 taps each on a figure, a 2×2 thing and an exit (step 5), and the whole of case 5 (`messprotokoll-fall5.en.md`).

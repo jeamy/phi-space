@@ -7,7 +7,11 @@
 // seam lies at or beyond half the room, so the cells on both sides of it are occupied: the strip would be cut off from
 // the free part, and `connected` runs both of its searches before it says no. Nothing crosses a seam, so no candidate is dropped before that check.
 //
-// The sizes follow the world definition (w.growth), so the same fixture serves the finer grid after the switch.
+// The sizes follow the world definition (w.growth), so the same fixture serves the finer grid after the switch. At
+// gridScale 2 it is the scene of scale 1 as the grid migration leaves it: every object two by two on its cell point
+// (no object is smaller than a cell of scale 1), the free part the doubled one, the room twice as wide and high. So
+// both scales hold the same objects; a footprint of 1×1 a cell at scale 2 would be four times as many things (before
+// 2026-11-28 it was, and the load measure of case 6 measured a world four times as full).
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import type { WorldDef } from "../server/engine/world.ts";
 import { WORLD_LOCK } from "../server/model.ts";
@@ -29,8 +33,9 @@ export function largestRegionRooms(w: WorldDef): number {
 export async function writeWorstGrowth(space: SpaceLike, w: WorldDef, rooms = largestRegionRooms(w), prefix = "worst"): Promise<WorstGrowth> {
 	const d = w.growth;
 	if (!d) throw new Error(`the world ${w.id} does not grow`);
-	const width = d.maxW - d.strip, height = d.maxH - d.strip;
-	const freeW = Math.ceil(width / 2) - 1, freeH = Math.ceil(height / 2) - 1; // left of and above every seam's cells
+	const width = d.maxW - d.strip, height = d.maxH - d.strip, unit = w.gridScale ?? 1;
+	// left of and above every seam's cells, in cells of scale 1 (at scale 1: ceil(width / 2) - 1)
+	const freeW = (Math.ceil(width / unit / 2) - 1) * unit, freeH = (Math.ceil(height / unit / 2) - 1) * unit;
 	const ground = Array.from({ length: height }, () => d.tile.repeat(width));
 	const ids: string[] = [];
 	let plots = 0;
@@ -40,10 +45,11 @@ export async function writeWorstGrowth(space: SpaceLike, w: WorldDef, rooms = la
 		await space.write({ type: "Room", fields: { roomId, name: `Engpass ${i}`, desc: "", ground, spawn: { x: 0, y: 0 } } as never }, null, FOREVER);
 		await writeRoomLock(space, null, roomId);
 		const batch: Promise<unknown>[] = [];
-		for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+		for (let y = 0; y < height; y += unit) for (let x = 0; x < width; x += unit) {
 			if (x < freeW && y < freeH) continue;
-			// one object a cell (the cells of old, one Plot each): a footprint crosses no seam, only the ways decide
-			batch.push(space.write({ type: "Footprint", fields: { room: roomId, of: worstOf(x, y), x, y, w: 1, h: 1 } as never }, null, FOREVER));
+			// one object a cell of scale 1 (the cells of old, one Plot each): at scale 1 a footprint crosses no seam, only the
+			// ways decide; at scale 2 a seam at an odd column or row crosses the objects beside it
+			batch.push(space.write({ type: "Footprint", fields: { room: roomId, of: worstOf(x, y), x, y, w: unit, h: unit } as never }, null, FOREVER));
 			if (batch.length >= 256) await Promise.all(batch.splice(0));
 		}
 		await Promise.all(batch);

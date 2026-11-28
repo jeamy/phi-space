@@ -3,15 +3,19 @@
 // and an occupied target whose surroundings are unreachable. No space, no browser: the search of client/walk.ts
 // (`nextStep`) with a counting `free`, and the choice App.tsx `walkTo` made before 2026-11-24 copied here (`legacy`: the
 // goal when it is free, else the first cell of the rings 1 to 6 that is free and has a way, a search per candidate),
-// beside the one search of client/walk.ts `chooseTarget` that replaced it (`oneSearch`).
+// beside the one search of client/walk.ts `chooseTarget` that replaced it (`oneSearch`), and the whole tap as App.tsx
+// `walkTo` does it since phase 2 step 5 (`tap`): `chooseTarget`, then the first move of the way there by `nextMove`, a
+// search over the whole room (its area the budget). `legacy` keeps the `nextStep` of before with its limit of 1024
+// cells, so at scale 2 it finds no way across the largest room; `tap` is what case 6 measures.
 //
 //   node --no-warnings --experimental-strip-types tests/perf/target-choice.ts
 //
-// Prints one JSON line per case: the room, the candidates tried, the searches run, the cells looked at (calls of `free`)
-// and the median time of TARGET_RUNS choices (default 20) on this machine. The phone's time is recorded on the phone.
-import { chooseTarget, nextStep } from "../../client/walk.ts";
+// Prints one JSON line per case: the room, the rings (TARGET_RINGS at the world's scale), the candidates tried, the
+// searches run, the cells looked at (calls of `free`) and the median time of TARGET_RUNS choices (default 20) on this
+// machine; for `tap` the bound of case 6, the room's cells plus the candidates of the rings. The phone's time is recorded on the phone.
+import { chooseTarget, nextMove, nextStep } from "../../client/walk.ts";
 import { loadWorld } from "../../server/engine/world.ts";
-import { TARGET_RINGS } from "../../shared/rules.ts";
+import { STEP_LENGTH, TARGET_RINGS } from "../../shared/rules.ts";
 
 type Cell = { x: number; y: number };
 const RUNS = Number(process.env.TARGET_RUNS ?? 20);
@@ -62,5 +66,12 @@ for (const c of cases) {
 	times2.sort((a, b) => a - b);
 	if (JSON.stringify(end2) !== JSON.stringify(result.end ?? null)) throw new Error(`${c.name}: the one search chose ${JSON.stringify(end2)}, the legacy choice ${JSON.stringify(result.end)}`);
 	const ms = (t: number[]) => Math.round(t[Math.floor(t.length / 2)]! * 1000) / 1000;
-	console.log(JSON.stringify({ case: c.name, room: `${W}x${H}`, cells: W * H, end: result.end ?? null, way: result.way, legacy: { candidates: result.candidates, searches, looks, medianMs: ms(times) }, oneSearch: { looks: looks2, medianMs: ms(times2) } }));
+	// the whole tap: the choice, then the first move of the way to it
+	const { free: f3, counter: c3 } = room(c.wall, c.taken);
+	const tap = () => { const end = chooseTarget(f3, c.start, c.goal, W, H, TARGET_RINGS); return end ? nextMove(f3, c.start, end, W, H, STEP_LENGTH, null) : null; };
+	const move = tap(), looks3 = c3.looks, times3: number[] = [];
+	for (let i = 0; i < RUNS; i++) { const t = performance.now(); tap(); times3.push(performance.now() - t); }
+	times3.sort((a, b) => a - b);
+	const candidates = (2 * TARGET_RINGS + 1) ** 2 - 1;
+	console.log(JSON.stringify({ case: c.name, room: `${W}x${H}`, cells: W * H, rings: TARGET_RINGS, end: result.end ?? null, way: result.way, legacy: { candidates: result.candidates, searches, looks, medianMs: ms(times) }, oneSearch: { looks: looks2, medianMs: ms(times2) }, tap: { end: end2, way: !!move, looks: looks3, bound: W * H + candidates, medianMs: ms(times3) } }));
 }
