@@ -29,7 +29,7 @@ import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, t
 import { deliverer } from "./settlers.ts";
 import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scripts.ts";
 import { SAY_MAX, sayParts } from "./say-parts.ts";
-import { besideArea, distToArea, type Area } from "../../shared/grid.ts";
+import { besideArea, distToArea, wanderBounds, type Area } from "../../shared/grid.ts";
 import { BESIDE, FEED_FIRE, NPC_WANDER_X, NPC_WANDER_Y, onRing, REACH_POINT } from "../../shared/rules.ts";
 
 /** One round of a trader or a worker: every look is several calls to the space (each a transaction), and players do not
@@ -538,7 +538,8 @@ function plauderer(): Script {
 			else if (randomInt(0, 6) === 0 && homes.length > 1) { home = (home + 1) % homes.length; await travel(n, l, homes[home]!); }
 			else if (randomInt(0, 3) === 0) {
 				const ground = n.world.rooms.find((r) => r.roomId === l.me.room)?.ground ?? [];
-				const x = Math.min(22, Math.max(1, l.me.x + randomInt(-NPC_WANDER_X, NPC_WANDER_X + 1))), y = Math.min(14, Math.max(1, l.me.y + randomInt(-NPC_WANDER_Y, NPC_WANDER_Y + 1)));
+				const { maxX, maxY } = wanderBounds(ground);
+				const x = Math.min(maxX, Math.max(1, l.me.x + randomInt(-NPC_WANDER_X, NPC_WANDER_X + 1))), y = Math.min(maxY, Math.max(1, l.me.y + randomInt(-NPC_WANDER_Y, NPC_WANDER_Y + 1)));
 				if (",.".includes(ground[y]?.[x] ?? "~")) await n.act(`move ${x} ${y}`);
 			}
 		}

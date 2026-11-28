@@ -46,6 +46,13 @@ pub fn tile(ground: &[String], x: f64, y: f64) -> String {
 	if x < 0.0 || y < 0.0 { return "~".into(); }
 	ground.get(y as usize).and_then(|row| row.encode_utf16().nth(x as usize)).map_or_else(|| "~".into(), |u| String::from_utf16_lossy(&[u]))
 }
+/// `wanderBounds`: the farthest cell an idle NPC wanders to, the room's inner edge by its ground (22 × 14 for a room of
+/// 24 × 16 at scale 1, 46 × 30 at scale 2; a room without ground counts as 24 × 16).
+pub fn wander_bounds(ground: &[String]) -> (f64, f64) {
+	let w = ground.first().map_or(24, |r| r.encode_utf16().count());
+	let h = if ground.is_empty() { 16 } else { ground.len() };
+	(w as f64 - 2.0, h as f64 - 2.0)
+}
 pub fn homes_of(def: &Json, fallback: &str) -> Vec<String> { j::ao(def, "home").map_or_else(|| vec![fallback.to_owned()], |h| j::strs(h).into_iter().map(str::to_owned).collect()) }
 
 /// One round of a trader or a worker.
@@ -691,8 +698,9 @@ impl Plauderer {
 			else if rand(3.0) == 0.0 {
 				let ground = ground_of(&w, l.room());
 				let (mx, my) = l.xy();
-				let x = 22f64.min(1f64.max(mx + random_int(-npc_wander_x(), npc_wander_x() + 1.0)));
-				let y = 14f64.min(1f64.max(my + random_int(-npc_wander_y(), npc_wander_y() + 1.0)));
+				let (max_x, max_y) = wander_bounds(&ground);
+				let x = max_x.min(1f64.max(mx + random_int(-npc_wander_x(), npc_wander_x() + 1.0)));
+				let y = max_y.min(1f64.max(my + random_int(-npc_wander_y(), npc_wander_y() + 1.0)));
 				if ",.".contains(tile(&ground, x, y).as_str()) { n.act(&format!("move {} {}", nt(x), nt(y))).await?; }
 			}
 		}
@@ -722,7 +730,16 @@ async fn gossip(n: &Npc) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-	use super::say_parts;
+	use super::{say_parts, wander_bounds};
+
+	#[test]
+	fn an_idle_npc_wanders_within_its_room() {
+		let room = |w: usize, h: usize| vec![".".repeat(w); h];
+		assert_eq!(wander_bounds(&room(24, 16)), (22.0, 14.0));
+		assert_eq!(wander_bounds(&room(48, 32)), (46.0, 30.0));
+		assert_eq!(wander_bounds(&[]), (22.0, 14.0));
+		assert_eq!(wander_bounds(&["äö".repeat(12)]), (22.0, -1.0), "counted as the page counts, in UTF-16 units");
+	}
 
 	#[test]
 	fn a_long_text_goes_in_several_says() {

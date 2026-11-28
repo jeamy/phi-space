@@ -16,14 +16,21 @@ export const defaultDb = () => process.env.CODEMODE_SQLITE || join(ROOT, ".local
 const PREFIX = "codemode-space-";
 
 /** Writes one backup of `db` into `dir` and keeps the newest `keep`; returns its path. */
-export async function backup(o: { db?: string; dir?: string; keep?: number } = {}): Promise<{ file: string; bytes: number; removed: string[] }> {
+export async function backup(o: { db?: string; dir?: string; keep?: number; /** the clock that names it (tests) */ now?: () => number } = {}): Promise<{ file: string; bytes: number; removed: string[] }> {
 	const db = resolve(o.db ?? defaultDb()), dir = resolve(o.dir ?? join(dirname(db), "backups"));
 	await stat(db); // a store that is not there is an error, not an empty backup
 	await mkdir(dir, { recursive: true });
-	const file = join(dir, `${PREFIX}${new Date().toISOString().replace(/[:.]/g, "-")}.sqlite`);
+	// named by its time; a backup of the same millisecond (two at once) takes the next one, so the names still sort by time
+	const named = (t: number) => join(dir, `${PREFIX}${new Date(t).toISOString().replace(/[:.]/g, "-")}.sqlite`);
 	const conn = new DatabaseSync(db, { readOnly: true, timeout: 10_000 });
-	try { conn.prepare("VACUUM INTO ?").run(file); }
-	finally { conn.close(); }
+	let file = "";
+	try {
+		for (let t = (o.now ?? Date.now)(), tries = 0; ; t++, tries++) {
+			file = named(t);
+			try { conn.prepare("VACUUM INTO ?").run(file); break; }
+			catch (e) { if (tries >= 1000 || !/already exists/i.test((e as Error).message)) throw e; }
+		}
+	} finally { conn.close(); }
 	// the newest `keep` stay (their names sort by time)
 	const keep = Math.max(1, o.keep ?? Number(process.env.CODEMODE_BACKUP_KEEP || 7));
 	const all = (await readdir(dir)).filter((f) => f.startsWith(PREFIX) && f.endsWith(".sqlite")).sort();

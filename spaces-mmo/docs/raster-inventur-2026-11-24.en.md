@@ -94,7 +94,7 @@ These should take one named reach (`BESIDE`) from the table rather than 30 liter
 
 - `commands/build.ts:185`: candidate places for moving a building, tested within `distTo > 3` of the old one, over a window of `±2`. Length: 6 and `±4`.
 - `npc/settlers.ts:91`: a settler's new place keeps Chebyshev `<= 2` from exits and fires. Length: 4.
-- `npc/economy.ts:540` (found with the rule table): an idle NPC wanders up to `±4` across and `±3` down. Length: 8 and 6. Its target is clamped to `1…22` and `1…14`, the inner edge of the base room of 24 × 16. That clamp is not a length (at scale 2 it is `1…46`, `1…30`, or better the room's own size, since a grown room is larger): *open for phase 2*. The Rust engine has the same at `npc/economy.rs:694`.
+- `npc/economy.ts:540` (found with the rule table): an idle NPC wanders up to `±4` across and `±3` down. Length: 8 and 6. Its target is clamped to `1…22` and `1…14`, the inner edge of the base room of 24 × 16. That clamp is not a length (at scale 2 it is `1…46`, `1…30`, or better the room's own size, since a grown room is larger). *Done 2026-11-28:* the target is clamped to the room's inner edge taken from its ground (`shared/grid.ts` `wanderBounds`, `npc/economy.rs` `wander_bounds`): 22 × 14 for every room at scale 1, as before, 46 × 30 at scale 2 (`tests/npc-wander.test.ts` over the 37 rooms at both scales).
 - `commands/garden.ts:297`: crossing of flowers needs a neighbouring plant, Manhattan `=== 1`. *Open question for phase 1:* plants are cell points in a bed whose capacity is `w·h/gridScale²` (plan section 2.1). At scale 2 two plants of a converted bed stand two cells apart. The rule becomes Manhattan `<= 2`, plants not on the same cell.
 
 **Not cells or not scaled.**

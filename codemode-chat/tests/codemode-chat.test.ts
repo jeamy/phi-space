@@ -1729,6 +1729,11 @@ test("a backup of the running space comes back with restore, only while no space
 		// only the newest backups stay
 		for (let i = 0; i < 3; i++) await backup({ db, dir: `${dir}/backups`, keep: 2 });
 		assert.equal((await readdir(`${dir}/backups`)).length, 2);
+		// backups of the same millisecond each get a name of their own, in the order they were made
+		const many = [];
+		for (let i = 0; i < 5; i++) many.push((await backup({ db, dir: `${dir}/many`, keep: 10, now: () => 1_800_000_000_000 })).file);
+		assert.equal(new Set(many).size, 5);
+		assert.deepEqual([...many].sort(), many);
 	} finally { await stack.close(); await rm(dir, { recursive: true, force: true }); }
 });
 

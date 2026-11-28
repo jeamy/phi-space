@@ -29,7 +29,7 @@ export const RULE_TABLE = {
 	COMMAND_PATH: { value: 40, kind: "length", places: "the steps of a command-bound path (world.ts findPath: default.ts move, the step check, and the other callers)" },
 	SPAWN_SCATTER_X: { value: 3, kind: "length", places: "a new character starts this far beside the spawn, across (accounts.ts)" },
 	SPAWN_SCATTER_Y: { value: 2, kind: "length", places: "the same, down (accounts.ts)" },
-	NPC_WANDER_X: { value: 4, kind: "length", places: "an idle NPC wanders this far across (npc/economy.ts; its clamp to the base room's inner edge is not a length, inventory 1.3)" },
+	NPC_WANDER_X: { value: 4, kind: "length", places: "an idle NPC wanders this far across (npc/economy.ts; its target stays within the room's inner edge, taken from the room's ground, inventory 1.3)" },
 	NPC_WANDER_Y: { value: 3, kind: "length", places: "the same, down (npc/economy.ts)" },
 	ARENA_TRAIL_PATH: { value: 400, kind: "length", places: "the path of a bot's drawn trail (arena.ts)" },
 	ARENA_SUBGOAL_NEAR: { value: 3, kind: "length", places: "a bot's subgoal is reached within this, Manhattan (arena.ts SUBGOAL_NEAR)" },

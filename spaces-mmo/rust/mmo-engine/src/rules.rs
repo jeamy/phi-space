@@ -58,7 +58,7 @@ pub fn command_path() -> f64 { length(40.0) }
 pub fn spawn_scatter_x() -> f64 { length(3.0) }
 /// the same, down (accounts.ts)
 pub fn spawn_scatter_y() -> f64 { length(2.0) }
-/// an idle NPC wanders this far across (npc/economy.ts; its clamp to the base room's inner edge is not a length, inventory 1.3)
+/// an idle NPC wanders this far across (npc/economy.ts; its target stays within the room's inner edge, taken from the room's ground, inventory 1.3)
 pub fn npc_wander_x() -> f64 { length(4.0) }
 /// the same, down (npc/economy.ts)
 pub fn npc_wander_y() -> f64 { length(3.0) }

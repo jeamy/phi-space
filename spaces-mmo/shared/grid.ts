@@ -179,3 +179,7 @@ export function previewGround(ground: string[], sample: number): string[] {
 	}
 	return out;
 }
+
+/** The farthest cell an idle NPC wanders to: the room's inner edge, by its ground (22 × 14 for a room of 24 × 16 at scale 1,
+ *  46 × 30 at scale 2; a room without ground counts as 24 × 16). */
+export const wanderBounds = (ground: readonly string[]): { maxX: number; maxY: number } => ({ maxX: (ground[0]?.length ?? 24) - 2, maxY: (ground.length || 16) - 2 });
