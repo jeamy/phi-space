@@ -12,11 +12,14 @@ import { loadCodemode } from "./judge.ts";
 import { agentLoop, ITEM_LEASE_MS, type Slot } from "./run.ts";
 import { modelInfoOf } from "./room.ts";
 import { deadlineOf, verifyTask, writeCriteria, type TaskRequest } from "./task-agent.ts";
+import { awaitGridFormat } from "./grid-format.ts";
 
 
 export async function startAgentHost(o: { space?: string; slots?: number } = {}) {
 	const conn = connectSpace(o.space);
 	const space = conn.space, ttl = entryLeaseMs();
+	// a Space of another grid scale is refused before any work (grid-format.ts)
+	try { await awaitGridFormat(space); } catch (e) { conn.close(); throw e; }
 	const presence = announce(space, "agents");
 	const max = Math.max(1, o.slots ?? Number(process.env.CODEMODE_AGENT_SLOTS ?? 16));
 	// every transaction in progress (slots and work items): a shutdown aborts them, so nothing stays held for a process that

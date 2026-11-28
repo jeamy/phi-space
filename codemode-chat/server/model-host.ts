@@ -24,6 +24,7 @@ import { announce, awaitWork, connectSpace, keepAlive, readExisting } from "./sp
 import { openDurableContributions } from "./durable-agent.ts";
 import { admitAgentAttempt } from "./run.ts";
 import { packModels } from "./room.ts";
+import { awaitGridFormat } from "./grid-format.ts";
 
 /** What the model process can be asked for; a test module may stand in for the real models. */
 export type ModelApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; critique: typeof llmCritique; propose: typeof llmPropose; vote: typeof llmVote; judge: typeof llmJudge; research: typeof llmResearch; verify: typeof llmVerifier; criteria: typeof llmCriteria; reviewCriteria: typeof llmReviewCriteria };
@@ -93,6 +94,8 @@ export async function spentToday(space: SpaceLike, ip: string): Promise<number> 
 export async function startModelHost(o: { space?: string; parallel?: number } = {}) {
 	const conn = connectSpace(o.space);
 	const space = conn.space;
+	// a Space of another grid scale is refused before any work (grid-format.ts)
+	try { await awaitGridFormat(space); } catch (e) { conn.close(); throw e; }
 	const presence = announce(space, "model");
 	const fakes = await loadFakes();
 	const log = (session: string) => async (e: Record<string, unknown>) => { await space.write({ type: "FakeCall", fields: { session, seq: Date.now() + Math.random(), ...e } as never }, null, 600_000); };

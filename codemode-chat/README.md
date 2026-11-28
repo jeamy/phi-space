@@ -312,6 +312,11 @@ It refuses while another process of codemode-chat is announced or a durable judg
 "running", then "complete". A run that was cut off leaves it "running" and is refused: restore the backup. A second
 run on a migrated space changes nothing. The entries written anew get a fresh lease of `CODEMODE_TTL_HOURS`.
 
+Every process but the space (judge, agents, model, web) checks the `GridFormat` entry at start
+(`server/grid-format.ts`) and stops with a message on a space of another scale than its `CODEMODE_GRID_SCALE`: a space
+without the entry is at scale 1, a migration "running" admits none. A process at scale 2 that finds an empty space (no
+entry with cells, no `BotRoom`) writes the entry itself; at scale 1 nothing is written.
+
 ## Help pages and themes
 
 `/help` has the help pages in the style of the phi-spaces help system: navigation on the left, the article in the middle,

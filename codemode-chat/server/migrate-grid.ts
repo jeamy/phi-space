@@ -27,20 +27,18 @@
 import { fileURLToPath } from "node:url";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import type { PathStep } from "./bottask.ts";
+import { CELL_TYPES, GEOMETRY_TYPES, type GridFormatFields } from "./grid-format.ts";
 import { memoryIdOf, observationIdOf } from "./memory.ts";
 import type { Subgoal } from "./subgoals.ts";
 import type { ChanceSeen, TideSeen } from "./toyisland.ts";
 
 export const FROM = 1, TO = 2;
-export type GridFormatFields = { gridScale: number; derivedFrom?: number; state: "running" | "complete" };
 type E = { id: string; type: string; types: string[]; fields: Record<string, unknown> };
 /** A change: the entry taken and what is written instead (none: it goes). */
 type Change = { from: E; to: E | null };
 export type GridMigrationResult = { outcome: "migrated" | "already" | "checked" | "refused"; report: string[]; notes: string[]; changed: number; dropped: number };
 
-/** The types this migration reads (the rest of the Space holds no cells). */
-export const CELL_TYPES = ["BotEpisode", "PlanMemory", "MemoryFreeze", "Subgoals"] as const;
-const DROP = ["BotRoom"], REFUSE = ["BotRun", "BotCall", "Process"];
+const DROP: readonly string[] = GEOMETRY_TYPES, REFUSE = ["BotRun", "BotCall", "Process"];
 const BATCH_ENTRIES = 100, BATCH_BYTES = 64 * 1024, TXN_MS = 60_000;
 
 const step = (s: PathStep): PathStep => [s[0], s[1] * TO, s[2] * TO];
@@ -110,7 +108,7 @@ export async function migrateGrid(space: SpaceLike, o: { check?: boolean; ttl: n
 	const log = o.log ?? (() => {});
 	const result = (outcome: GridMigrationResult["outcome"], report: string[], more: Partial<GridMigrationResult> = {}): GridMigrationResult => ({ outcome, report, notes: [], changed: 0, dropped: 0, ...more });
 	const markers = (await space.readAll({ type: "GridFormat" })).map((e) => e.fields as unknown as GridFormatFields);
-	if (markers.length > 1) return result("refused", [`the Space holds ${markers.length} GridFormat entries; it is damaged, restore it from its backup`]);
+	if (new Set(markers.map((x) => `${x.gridScale}/${x.state}`)).size > 1) return result("refused", [`the Space holds GridFormat entries that disagree; it is damaged, restore it from its backup`]);
 	const m = markers[0];
 	if (m?.gridScale === TO && m.state === "running") return result("refused", [`a grid migration of this Space was cut off (GridFormat gridScale ${TO} running): restore it from its backup and run the migration again`]);
 	if (m?.gridScale === TO) return result("already", []);
@@ -124,7 +122,7 @@ export async function migrateGrid(space: SpaceLike, o: { check?: boolean; ttl: n
 
 	// the marker first: from here on the Space is "running" until the last step writes "complete"
 	await inTxn(space, async (txn) => {
-		if (m && !(await space.takeIfExists({ type: "GridFormat" }, NO_WAIT, { txn }))) throw new Error("the GridFormat entry is gone or held: is another migration running?");
+		for (let i = 0; i < markers.length; i++) if (!(await space.takeIfExists({ type: "GridFormat" }, NO_WAIT, { txn }))) throw new Error("the GridFormat entry is gone or held: is another migration running?");
 		await space.write({ type: "GridFormat", fields: { gridScale: TO, derivedFrom: FROM, state: "running" } satisfies GridFormatFields as never }, txn, FOREVER);
 	});
 	log(`[migrate-grid] GridFormat gridScale ${TO} running`);

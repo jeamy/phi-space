@@ -19,6 +19,7 @@ import { announce, connectSpace, takeAll } from "./space.ts";
 import { NO_WAIT } from "phi-spaces";
 import { upgradeWebSocket } from "phi-spaces/ws";
 import { offeredTasks } from "./tasks.ts";
+import { awaitGridFormat } from "./grid-format.ts";
 
 const ID = /^[a-zA-Z0-9._-]{1,48}$/;
 const CANDIDATE = /^[a-z0-9-]{1,40}$/;
@@ -67,6 +68,8 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded");
 	const conn = connectSpace(o.space);
 	const hub = new CodeChatHub(conn.space, cm);
+	// a Space of another grid scale is refused before any work (grid-format.ts)
+	try { await awaitGridFormat(conn.space); } catch (e) { conn.close(); throw e; }
 	const presence = announce(conn.space, "web");
 
 	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;

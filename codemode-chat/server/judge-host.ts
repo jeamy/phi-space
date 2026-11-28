@@ -19,6 +19,7 @@ import { ArenaDown, arenaAddress, type RoomMap } from "./bottask.ts";
 import { announce, awaitWork, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld, takeAll } from "./space.ts";
 import { dataTask, taskFromSpec } from "./tasks.ts";
 import { loadHoldout } from "./datatask.ts";
+import { awaitGridFormat } from "./grid-format.ts";
 
 /** A judge's transaction lease, renewed while it judges: a dead judge's candidate is back within this time
  *  (CODEMODE_JUDGE_LEASE_MS). The sandbox holds the judge's thread while the code runs, so no renewal comes during a
@@ -192,6 +193,8 @@ export async function startJudgeHost(o: { space?: string; judges?: number; cm?: 
 	if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded");
 	const conn = connectSpace(o.space);
 	const space = conn.space, host = hostFacts().name, ttl = entryLeaseMs();
+	// a Space of another grid scale is refused before any work (grid-format.ts)
+	try { await awaitGridFormat(space); } catch (e) { conn.close(); throw e; }
 	const presence = announce(space, "judge");
 	let stopping = false, rounds = 0;
 	const open = new Set<string>(), halt = new AbortController();
