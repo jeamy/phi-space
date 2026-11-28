@@ -1,0 +1,19 @@
+// Saving a document into the project folder, and what happens when the file was changed there since the last save
+// (docs/forum-seite-plan-2026-11-26.en.md, section 6). The labels are in a file per language (forum-conflict.en.sed,
+// forum-conflict.de.sed): render as style.inc says, with "-f forum-conflict.en.sed" added to the sed for
+// ../forum-conflict.svg and "-f forum-conflict.de.sed" for ../forum-conflict-de.svg.
+digraph "@title@" {
+#include
+	rankdir=TB; nodesep=0.5;
+	save [label="@save@", fillcolor="#fcf2d9"];
+	ask [label="@ask@"];
+	same [label="@same@", fillcolor="#d8eeea"];
+	changed [label="@changed@", fillcolor="#f6dede"];
+	both [label="@both@"];
+	choose [label="@choose@", fillcolor="#fcf2d9"];
+	save -> ask;
+	ask -> same [label="@unchanged@"];
+	ask -> changed [label="@other@"];
+	changed -> both -> choose;
+	choose -> save [style=dashed, label="@again@", constraint=false];
+}

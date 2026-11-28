@@ -17,8 +17,9 @@ export type PlanSource = { session: string; blockId: string; sourceId: SourceId;
 	copy?: string; tenant?: string; texts?: number;
 	/** A remote repository: the address it was fetched from (remote.ts); a local one has none. */
 	url?: string; commit?: string; ref?: string; files: number; bytes: number; indexHash: string; ts: number };
-/** The kinds of source: uploaded documents, a git repository, a copy of the room's workspace folders. */
-export type SourceId = "docs" | "repo" | "files";
+/** The kinds of source: uploaded documents, a git repository, a copy of the room's workspace folders, the room's other
+ *  documents as they were when the task was created. */
+export type SourceId = "docs" | "repo" | "files" | "room";
 /** A file of a pack: its path and size in bytes; a file of a workspace that was not copied (files.ts) also its kind
  *  and version: it is listed, but has no text to read. */
 export type IndexEntry = [path: string, size: number, kind?: string, version?: number];

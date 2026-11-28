@@ -30,6 +30,9 @@ export const CONVENTIONS = [
 	"- Number the phases of the plan (\"Phase 1\", \"Phase 2\", …) and say for each how it is verified: a test or a check that can fail.",
 	"- Link another section as [its title](#its-title-in-lower-case-with-dashes).",
 ].join("\n");
+/** The same for a document that is not a plan: it has no phases. */
+export const DOCUMENT_CONVENTIONS = CONVENTIONS.split("\n").filter((l) => !l.startsWith("- Number the phases")).join("\n").replace("One the plan creates is marked", "One that does not exist yet is marked");
+export const conventionsOf = (t: Pick<PlanTask, "kind">) => (t.kind === "document" ? DOCUMENT_CONVENTIONS : CONVENTIONS);
 
 /** File endings by which a name without a slash counts as a file. */
 const ENDINGS = /\.(tsx?|jsx?|mjs|cjs|json|md|markdown|rs|toml|css|scss|html?|ya?ml|sh|sql|py|go|java|kt|c|h|cpp|txt|csv|lock|svg|png|jpe?g|gif|webp|env|conf|ini|xml|proto|glsl|wgsl|vue|svelte)$/i;
@@ -82,7 +85,7 @@ export function phasesIn(text: string): Array<{ n: number; text: string }> {
 
 /** Runs the checks on a version. `files`: the task's source files (null: the task has no sources, and paths and
  *  quotes are not checked). `quoted`: whether a file of a source holds a line (asked of the sources process). */
-export async function checkDoc(doc: FullDoc, task: Pick<PlanTask, "outline">, files: SourceFiles | null, quoted: (source: string, path: string, line: string) => Promise<boolean>): Promise<Pick<PlanCheck, "ok" | "failures" | "counted">> {
+export async function checkDoc(doc: FullDoc, task: Pick<PlanTask, "outline" | "kind">, files: SourceFiles | null, quoted: (source: string, path: string, line: string) => Promise<boolean>): Promise<Pick<PlanCheck, "ok" | "failures" | "counted">> {
 	const failures: Failure[] = [], counted = { paths: 0, quotes: 0, phases: 0, links: 0 };
 	const fail = (check: CheckName, text: string, sectionId?: string) => { if (failures.length < 60) failures.push({ check, ...(sectionId ? { sectionId } : {}), text }); };
 	const dirs = files ? dirsOf(files) : new Set<string>(), tops = new Set([...(files?.keys() ?? [])].map((p) => p.split("/")[0]!));
@@ -125,11 +128,11 @@ export async function checkDoc(doc: FullDoc, task: Pick<PlanTask, "outline">, fi
 		for (const m of withoutFences(s.text).matchAll(/\]\(#([^)\s]*)\)/g)) { counted.links++; if (!anchors.has(m[1]!.toLowerCase())) fail("link", `The link #${m[1]} leads to no section. The sections are: ${[...anchors].map((a) => `#${a}`).join(", ")}.`, s.sectionId); }
 		for (const p of phasesIn(s.text)) phases.push({ ...p, sectionId: s.sectionId });
 	}
-	// phase: there are some, and each says how it is verified
+	// phase: there are some, and each says how it is verified (a plan's; a document of another kind has none to name)
 	counted.phases = new Set(phases.map((p) => p.n)).size;
 	const written = doc.sections.filter((s) => s.rev > 1);
-	if (written.length && !phases.length) fail("phase", "The plan names no phases. Number them (\"Phase 1\", \"Phase 2\", …) and say for each how it is verified.", [...written].sort((a, b) => b.bytes - a.bytes)[0]!.sectionId);
-	for (const n of new Set(phases.map((p) => p.n))) {
+	if (task.kind !== "document" && written.length && !phases.length) fail("phase", "The plan names no phases. Number them (\"Phase 1\", \"Phase 2\", …) and say for each how it is verified.", [...written].sort((a, b) => b.bytes - a.bytes)[0]!.sectionId);
+	for (const n of task.kind === "document" ? [] : new Set(phases.map((p) => p.n))) {
 		const of = phases.filter((p) => p.n === n);
 		if (!of.some((p) => VERIFIED.test(p.text.replace(PHASE, "")))) fail("phase", `Phase ${n} does not say how it is verified: name a test or a check that can fail.`, of[0]!.sectionId);
 	}

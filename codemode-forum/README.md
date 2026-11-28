@@ -117,6 +117,27 @@ sections and 96 kB). A new version writes only the sections that changed. Two `u
   second is told the newer text and works with that. A model whose section was revised while it wrote writes again;
 - a version has one number. Writers of different sections do not exclude each other: the second takes the next number.
 
+A task is a **plan** or a **document** (`kind: "document"` with a `name`: requirements, an architecture, a
+comparison), held against three general criteria (`DOCUMENT_CRITERIA`) and the person's, its prompts speaking of a
+document and without the phase rule. A task may read the room's other documents (`room`: their block IDs): each as it
+stands when the task is created (the accepted version, else the newest draft, said so), copied into the task as a
+source of kind `room`, read with the `room:` calls. A member writes a section on the page (`POST
+/api/rooms/<room>/section`): a revision with the person as author under the same rule, a stale base answered 409 with
+the newer text. A section that names a picture of the task in backticks shows it beside itself.
+
+**The project folder** (`server/files.ts` `save`, phase 7). `POST /api/rooms/<room>/save/<block>` with an ID drawn by
+the page writes the document's export to `<project folder>/<name>.md` through the room's agent: the bytes fixed once
+under the save ID, the operation ID written back before the write, against the file version the block's last save
+returned (`PlanSave`), so a retry and a sources process killed on either side of the write give one file version. A
+file changed or removed in the workspace is not overwritten: 409 with its text beside the room's. `save/register`
+writes the register as `sources.md`; the room's default `saveOnAccept` saves every accepted version by itself.
+
+**The register of sources** (`server/register.ts`): every source a task reads is a `SourceRef` of the room, proposed
+when the task is created (one entry per source however many tasks read it); a member adds a link by hand and accepts or
+declines with the reason (`GET`/`POST /api/rooms/<room>/register`); the sections that cite a source are worked out from
+the documents as they stand (a path in backticks, a quoted line, a link's address). A table vote on sources and the
+checker's report on claims resting on sources not accepted follow with research (phase 9).
+
 `GET /api/rooms/<room>/plan/<block>` returns a version with its texts (`?version=n`, else the newest) and the list of
 versions; `GET /api/rooms/<room>/plan/<block>.md` the newest version as Markdown. Text from a model is untrusted: the
 page escapes its HTML and keeps only http(s) and mailto links (`client/lib/safe-markdown.ts`).
@@ -504,6 +525,14 @@ sources process killed after the write, a taken name, a lying name, a revoked ed
 without a sandbox, previews, file notes, and the isolation of the reader (a probe that reaches no file, no Space socket
 and no network; the pdf worker over its socket). `tests/images.test.ts` covers the pictures of a task: the JPEG checks,
 the description by a model that takes pictures, a corrected one, a run refused without such a model.
+The room as a project (phase 7): `tests/kinds.test.ts` holds a document task to its own criteria and words and a task
+that reads another's accepted version, which a later version does not move; `tests/people.test.ts` a person's section
+and a model's on the same base (whoever comes second is told the newer text); `tests/save.test.ts` saving into the
+project folder against a real spaces-files (a retry and a sources process killed before and after the write each give
+one file version, a changed or removed file is not overwritten and both texts come back, a revoked editor is told,
+save on acceptance); `tests/register.test.ts` the register of sources (`server/register.ts`: proposed once per source,
+a link by hand, accepted or declined with the reason, the citing sections worked out from the documents) and
+`sources.md`.
 
 ## Sign-in
 

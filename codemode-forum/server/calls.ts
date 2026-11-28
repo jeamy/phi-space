@@ -31,7 +31,7 @@
 // no tool support of a provider, and an agent that takes the item over finds the steps and does not read again.
 import type { SpaceLike } from "phi-spaces";
 import type { TextCall, Usage } from "./llm.ts";
-import { CONVENTIONS, type PlanCheck } from "./checks.ts";
+import { conventionsOf, type PlanCheck } from "./checks.ts";
 import { cleanText, cleanTitle, DOC_LIMITS, fullDoc, headOf } from "./plandoc.ts";
 import { criteriaOf, TASK_LIMITS, type PlanTask } from "./plantask.ts";
 import { runType, type RunEntry } from "./run.ts";
@@ -95,7 +95,7 @@ export const mayRead = (steps: ReadStep[]) => steps.length < READING.steps && st
 /** The part of a prompt about the sources: what there is, what was read so far, and how to ask for more. */
 function readingText(sources: PlanSource[], steps: ReadStep[]): string[] {
 	if (!sources.length) return [];
-	const one = sources.length === 1, name = (s: PlanSource) => (s.kind === "repo" ? `the git repository "${s.name}" at commit ${s.commit!.slice(0, 12)}` : s.kind === "files" ? `a copy of the room's workspace (reference/: material that is only read, project/: the project's folder; ${s.texts ?? 0} files as text, the others listed with their kind)` : "the documents the person uploaded");
+	const one = sources.length === 1, name = (s: PlanSource) => (s.kind === "repo" ? `the git repository "${s.name}" at commit ${s.commit!.slice(0, 12)}` : s.kind === "files" ? `a copy of the room's workspace (reference/: material that is only read, project/: the project's folder; ${s.texts ?? 0} files as text, the others listed with their kind)` : s.kind === "room" ? `the room's other documents as they were when this task was created (${s.name})` : "the documents the person uploaded");
 	const parts = [`Sources you can read (read-only):\n${sources.map((s) => `- ${s.sourceId}: ${name(s)}, ${s.files} files`).join("\n")}`];
 	if (steps.length) {
 		let room = READING.shownBytes;
@@ -171,7 +171,37 @@ async function exchangeText(space: SpaceLike, run: RunEntry): Promise<string[]> 
 const EXCHANGE_BYTES = 20_000;
 
 /** The prompt of a call, built from the space. */
+/** The prompts' words for a plan, as they read for a document of another kind. Only the instructions' own phrases:
+ *  the brief, the sources and the document are data and keep their words. */
+const DOCUMENT_WORDS: Array<[string, string]> = [
+	["work out a plan together in a forum", "write a document together in a forum"],
+	["until a majority agrees the plan can be carried out", "until a majority agrees the document does what its brief asks"],
+	["The plan will be held against these criteria", "The document will be held against these criteria"],
+	["whether a plan can be carried out", "whether a document does what its brief asks"],
+	["Two plan documents were written", "Two documents were written"],
+	["what the plan must achieve", "what the document must achieve"],
+	["sections of the plan document", "sections of the document"],
+	["so that the plan can be carried out", "so that the document does what its brief asks"],
+	["outlines for the plan document", "outlines for the document"],
+	["write the plan along", "write the document along"],
+	["The plan document as it is now", "The document as it is now"],
+	["Can this plan be carried out as it stands?", "Does this document do what its brief asks, as it stands?"],
+	["can this plan be carried out as it stands?", "does this document do what its brief asks, as it stands?"],
+	["words of the plan", "words of the document"],
+	["does not hold the plan up", "does not hold the document up"],
+	["as an assumption in the plan", "as an assumption in the document"],
+];
+const asDocument = (text: string) => DOCUMENT_WORDS.reduce((t, [a, b]) => t.split(a).join(b), text);
+
+/** The prompt of a call; a task of kind document reads "document" where a plan's prompt says "plan". */
 export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextCall> {
+	const p = await promptOf(space, call);
+	const run = call.runId ? ((await readExisting(space, { type: runType(call.runId), fields: { session: call.session, runId: call.runId } }))?.fields as unknown as RunEntry | undefined) : undefined;
+	const task = run ? ((await readExisting(space, { type: "PlanTask", fields: { session: call.session, blockId: run.params.blockId } }))?.fields as unknown as PlanTask | undefined) : undefined;
+	return task?.kind === "document" ? { ...p, system: asDocument(p.system ?? ""), user: asDocument(p.user) } : p;
+}
+
+async function promptOf(space: SpaceLike, call: LlmCall): Promise<TextCall> {
 	const run = call.runId ? ((await readExisting(space, { type: runType(call.runId), fields: { session: call.session, runId: call.runId } }))?.fields as unknown as RunEntry | undefined) : undefined;
 	if (!run) throw new Error("the run is over");
 	const aliases = run.params.aliases, me = aliases[call.model] ?? "a model", others = Object.values(aliases).filter((a) => a !== me).sort();
@@ -367,7 +397,7 @@ export async function callPrompt(space: SpaceLike, call: LlmCall): Promise<TextC
 		user: [
 			who, brief, ...talk, ...reading,
 			`The document so far (a section not yet written shows what it is to say):\n"""\n${sofar}\n"""`,
-			...job, CONVENTIONS,
+			...job, conventionsOf(task),
 			`Write the section's body only, as Markdown: no heading for the section itself (use ### inside it if needed), concrete enough to act on, nothing the other sections already say. At most ${Math.floor(DOC_LIMITS.sectionBytes / 1000)} kB. ${answerIn(call.lang)}`,
 		].join("\n\n"),
 	};

@@ -163,3 +163,14 @@ main.fp-room { display: grid; gap: 14px; padding: 12px 16px 24px; align-items: s
 .fp-wspic { display: block; max-width: min(100%, 220px); max-height: 180px; margin: 6px 0; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); object-fit: contain; }
 .fp-filenote { display: grid; gap: 6px; margin: 6px 0 2px; }
 .fp-drop { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; }
+.fp-conflict { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 6px; }
+.fp-conflict h3 { font-size: 1rem; margin: 4px 0; }
+.fp-conflict .diff { max-height: 50vh; overflow: auto; }
+/* the register of sources (Register.tsx) */
+.fp-refs { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 10px; }
+.fp-ref { border-left: 3px solid var(--line); padding-left: 8px; }
+.fp-ref--accepted { border-left-color: var(--success); }
+.fp-ref--declined { border-left-color: var(--danger); }
+.fp-ref p { margin: 2px 0; overflow-wrap: anywhere; }
+.fp-ref b, .fp-ref a { overflow-wrap: anywhere; }
+.fp-refadd { display: grid; gap: 6px; margin-top: 8px; }

@@ -205,6 +205,14 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			// a member's file into the project folder's material/ (files.ts): the bytes as they are, any kind
 			const up = /^\/api\/rooms\/([^/]+)\/upload$/.exec(p);
 			if (up && req.method === "POST") { if (!ID.test(up[1]!)) return json(res, 400, { error: "Invalid room id" }); return json(res, 200, await hub.upload(up[1]!, { uploadId: String(url.searchParams.get("id") ?? ""), name: url.searchParams.get("name"), bytes: await readRaw(req, UPLOAD.bytes, `A file has at most ${UPLOAD.bytes / 1024 / 1024} MB`), by: who ? who.user.name : "script" })); }
+			// a task's document into the project folder (files.ts `save`): a conflict is 409 with both texts
+			const sv = /^\/api\/rooms\/([^/]+)\/save\/([a-z0-9]{1,40})$/.exec(p);
+			if (sv && req.method === "POST") {
+				if (!ID.test(sv[1]!)) return json(res, 400, { error: "Invalid room id" });
+				const b = await readBody(req, 4_000);
+				const got = await hub.save(sv[1]!, sv[2]!, { saveId: String(b.id ?? ""), ...(b.name !== undefined ? { name: b.name } : {}), by: who ? who.user.name : "script" });
+				return json(res, "conflict" in got ? 409 : 200, got);
+			}
 			// a note on a file that has no text to read (files.ts FileNote): its members write it
 			const fn = /^\/api\/rooms\/([^/]+)\/filenote$/.exec(p);
 			if (fn && req.method === "POST") { if (!ID.test(fn[1]!)) return json(res, 400, { error: "Invalid room id" }); const b = await readBody(req, 8_000); return json(res, 200, await hub.noteFile(fn[1]!, { path: b.path, text: b.text, by: who ? who.user.name : "script" })); }
@@ -304,11 +312,20 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				const got = await hub.plan(pl[1]!, pl[2]!, v === null ? undefined : Number(v), url.searchParams.get("table"));
 				return got ? json(res, 200, got) : json(res, 404, { error: "No document yet" });
 			}
+			// ---- the room's register of sources (register.ts): its people read it, its members add and decide ----
+			const rg = /^\/api\/rooms\/([^/]+)\/register$/.exec(p);
+			if (rg) {
+				if (!ID.test(rg[1]!)) return json(res, 400, { error: "Invalid room id" });
+				if (req.method === "GET") return json(res, 200, await hub.register(rg[1]!));
+				if (req.method !== "POST") return json(res, 405, { error: "GET or POST expected" });
+				const b = await readBody(req, 8_000);
+				return json(res, 200, { ok: true, ...(await hub.registerAct(rg[1]!, b, by(b) || "person")) });
+			}
 			const oc = /^\/api\/rooms\/([^/]+)\/outcome\/([a-z0-9]{1,40})$/.exec(p);
 			if (oc && req.method === "GET") return ID.test(oc[1]!) ? json(res, 200, await hub.outcome(oc[1]!, oc[2]!)) : json(res, 400, { error: "Invalid room id" });
 			const tk = /^\/api\/rooms\/([^/]+)\/talk\/([a-z0-9]{1,40})$/.exec(p);
 			if (tk && req.method === "GET") return ID.test(tk[1]!) ? json(res, 200, await hub.talk(tk[1]!, tk[2]!, url.searchParams.get("table"))) : json(res, 400, { error: "Invalid room id" });
-			const m = /^\/api\/rooms\/([^/]+)(?:\/(task|run|stop|message|accept|objection))?$/.exec(p);
+			const m = /^\/api\/rooms\/([^/]+)(?:\/(task|run|stop|message|accept|objection|section))?$/.exec(p);
 			if (m) {
 				const id = m[1]!, action = m[2];
 				if (!ID.test(id)) return json(res, 400, { error: "Invalid room id" });
@@ -317,10 +334,11 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				// a task may bring documents (sources.ts: at most 800 kB together)
 				const b = await readBody(req, action === "task" ? 1_500_000 : 64_000);
 				// a visitor's run: the default token budget at most, counted against the day's allowance of the address
-				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria, docs: b.docs, repo: b.repo, files: b.files, admin: await isAdmin(req, who) })) });
+				if (action === "task") return json(res, 200, { ok: true, ...(await hub.createTask(id, { brief: b.brief, lang: b.lang, outline: b.outline, criteria: b.criteria, docs: b.docs, repo: b.repo, files: b.files, room: b.room, kind: b.kind, name: b.name, admin: await isAdmin(req, who), by: by(b) || "person" })) });
 				if (action === "run") return json(res, 200, { ok: true, ...(await hub.startRun(id, { blockId: b.blockId, way: b.way, rounds: b.rounds, models: b.models, perModel: b.perModel, budgetTokens: b.budgetTokens, budgetUsd: b.budgetUsd, client: { ...client(), admin: await isAdmin(req, who) } })) });
 				if (action === "accept") return json(res, 200, { ok: true, ...(await hub.accept(id, { blockId: b.blockId, version: b.version, by: by(b), table: b.table })) });
 				if (action === "objection") return json(res, 200, { ok: true, ...(await hub.object(id, { blockId: b.blockId, section: b.section, text: b.text, fix: b.fix, by: by(b), table: b.table })) });
+				if (action === "section") { const got = await hub.writeSection(id, { blockId: b.blockId, table: b.table, sectionId: b.sectionId, base: b.base, title: b.title, text: b.text, after: b.after, by: by(b) }); return json(res, "stale" in got ? 409 : 200, { ok: !("stale" in got), ...got }); }
 				if (action === "message") return json(res, 200, { ok: true, ...(await hub.say(id, { blockId: b.blockId, thread: b.thread, text: b.text, by: by(b) })) });
 				await hub.stopRun(id);
 				return json(res, 200, { ok: true });

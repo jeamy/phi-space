@@ -10,14 +10,15 @@ import type { WsConnection } from "phi-spaces/ws";
 import { MAX_AGENTS_PER_MODEL, MAX_MODELS, MIN_MODELS, today } from "./limits.ts";
 import { ceilings, checkRoom, effectiveLimits, readLimits, readRoom, saveRoom, type RoomDefaults } from "./settings.ts";
 import { modelInfoOf, spentToday, type ModelInfoView, type Spend } from "./models.ts";
-import { fullDoc, headOf, versionsOf, type FullDoc, type PlanDoc } from "./plandoc.ts";
+import { DocRefused, fullDoc, headOf, StaleSection, versionsOf, writeVersion, type FullDoc, type PlanDoc } from "./plandoc.ts";
 import { planTask, type PlanTask } from "./plantask.ts";
-import { checkOf } from "./check-host.ts";
+import { checkOf, sourceFiles } from "./check-host.ts";
+import { addRef, citesOf, decideRef, proposeRefs, refsOf, refsOfTask, registerMarkdown, REGISTER_BLOCK, type Cite, type SourceRef } from "./register.ts";
 import type { Failure } from "./checks.ts";
 import { askSources, indexPages, sourceWaitMs } from "./source-host.ts";
 import { remoteLimits } from "./remote.ts";
 import { checkDocs, docsPack, indexHash, readable, type IndexEntry, type PlanSource } from "./sources.ts";
-import { agentOf, askFiles, fileNotes, PICTURE_TYPES, saveFileNote, UPLOAD, uploadName, type UploadAnswer, type UploadDone, checkFolder, filesInfo, filesWaitMs, folderName, readLink, saveLink, type CheckAnswer, type FilesInfo, type RoomLink } from "./files.ts";
+import { agentOf, askFiles, fileNotes, saveName, savesOf, type ConflictAnswer, type PlanSave, PICTURE_TYPES, saveFileNote, UPLOAD, uploadName, type UploadAnswer, type UploadDone, checkFolder, filesInfo, filesWaitMs, folderName, readLink, saveLink, type CheckAnswer, type FilesInfo, type RoomLink } from "./files.ts";
 import { decisionsOf, messagesOf, newMsgId, owed, PERSON_TABLE, TALK_LIMITS, type PlanDecision, type PlanMessage } from "./talk.ts";
 import { objectionsOf, type PlanObjection } from "./review.ts";
 import { acceptOf, ballotsOf, type PlanAccept, type PlanBallot } from "./ballots.ts";
@@ -47,6 +48,8 @@ export type Line = { text: string; ts: number };
 export type Block = Omit<PlanTask, "session"> & {
 	/** The pictures the task holds for the models (images.ts). */
 	images: number;
+	/** The newest save of the block's document to the workspace (files.ts PlanSave), if any. */
+	saved: Pick<PlanSave, "workspace" | "path" | "fileVersion" | "docVersion" | "table" | "by" | "ts"> | null;
 	/** The table whose document and discussion the block shows: the one of the newest run on it, else one that has a
 	 *  document. */
 	table: Table;
@@ -93,12 +96,16 @@ export class ForumHub {
 			try {
 				if (rev < 0) { rev = await this.#currentRev(); for (const s of this.#sessions.values()) this.push(s); }
 				const ch = await this.host.changes(rev, { waitMs: 20_000 });
-				const rooms = new Set<string>();
+				const rooms = new Set<string>(), accepted: PlanAccept[] = [];
 				let removed = false;
 				for (const b of ch.batches) for (const op of b.ops) {
 					if (op.op === "del") removed = true;
-					else if (typeof (op.fields as { session?: unknown }).session === "string") rooms.add((op.fields as { session: string }).session);
+					else {
+						if (typeof (op.fields as { session?: unknown }).session === "string") rooms.add((op.fields as { session: string }).session);
+						if (op.type === "PlanAccept") accepted.push(op.fields as unknown as PlanAccept);
+					}
 				}
+				for (const a of accepted) void this.#saveAccepted(a);
 				for (const s of this.#sessions.values()) if (s.clients.size && (removed || rooms.has(s.id))) this.push(s);
 				rev = ch.next;
 			} catch {
@@ -106,6 +113,18 @@ export class ForumHub {
 				rev = -1; // history dropped, or the space restarted: start again from where it is now
 				await new Promise((r) => setTimeout(r, 1000));
 			}
+		}
+	}
+
+	/** A version just accepted, saved to the project folder when the room says so (its setting saveOnAccept, off by
+	 *  default). One save ID per accepted version: seen twice, it is the same save. A failure is a line in the room. */
+	async #saveAccepted(a: PlanAccept): Promise<void> {
+		try {
+			if (!(await readRoom(this.host, a.session)).saveOnAccept || !(await readLink(this.host, a.session))) return;
+			const got = await this.save(a.session, a.blockId, { saveId: `acc-${a.blockId}-${a.table}-${a.version}`.slice(0, 40), by: "FORUM (on acceptance)" });
+			if ("conflict" in got) await systemLine(this.host, null, this.#ttl, a.session, `Not saved on acceptance: ${got.conflict.gone ? `${got.conflict.path} was removed in the workspace` : `${got.conflict.path} was changed in the workspace`}; save it on the page`);
+		} catch (e) {
+			if (!this.#closed) await systemLine(this.host, null, this.#ttl, a.session, `Not saved on acceptance: ${String((e as Error).message ?? e).slice(0, 200)}`).catch(() => {});
 		}
 	}
 
@@ -261,7 +280,8 @@ export class ForumHub {
 			const res = await resultOf(this.host, s.id, t.blockId);
 			const heads: Block["heads"] = {};
 			for (const x of ["A", "B"] as const) { const h = x === TABLE ? head : await headOf(this.host, { ...d, table: x }); if (h) heads[x] = h.version; }
-			return { ...t, images: await this.host.count({ type: "TaskImage", fields: { session: s.id, blockId: t.blockId } }), table: TABLE, heads, result: res ? { table: res.table, version: res.version } : null, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
+			const sv = (await savesOf(this.host, s.id, t.blockId))[0];
+			return { ...t, saved: sv ? { workspace: sv.workspace, path: sv.path, fileVersion: sv.fileVersion, docVersion: sv.docVersion, table: sv.table, by: sv.by, ts: sv.ts } : null, images: await this.host.count({ type: "TaskImage", fields: { session: s.id, blockId: t.blockId } }), table: TABLE, heads, result: res ? { table: res.table, version: res.version } : null, accepted: acc ? { version: acc.version, by: acc.by, ...(acc.who ? { who: acc.who } : {}), approvals: acc.approvals, of: acc.of, ...(acc.round ? { round: acc.round } : {}) } : null, sources, talk, doc: head ? { table: TABLE, version: head.version, versions: versions.length, bytes: head.bytes, sections: head.sections, check: check ? { ok: check.ok, failures: check.failures } : null } : null };
 		}));
 		return { standings: await standings(this.host), session: s.id, blocks, run, rollcall, lines, limits: { minModels: MIN_MODELS, maxModels: MAX_MODELS, maxPerModel: MAX_AGENTS_PER_MODEL, visitorTokens: effectiveLimits(await readLimits(this.host)).runBudgetTokens }, defaults: await readRoom(this.host, s.id), link: await readLink(this.host, s.id).then((l) => (l ? { tenant: l.tenant, read: l.read, project: l.project } : null)) };
 	}
@@ -312,9 +332,11 @@ export class ForumHub {
 	 *  each), kept in the space, and a repository at a branch, tag or commit (`repo`: one of the sources process by its
 	 *  `name`, or a remote one by its https `url`, which the sources process fetches now if its host is allowed; the
 	 *  server lets only an admin name one: `admin`). Its document begins with the first run on it. */
-	async createTask(id: string, o: { brief?: unknown; lang?: unknown; outline?: unknown; criteria?: unknown; docs?: unknown; repo?: unknown; files?: unknown; admin?: boolean }): Promise<{ blockId: string }> {
+	async createTask(id: string, o: { brief?: unknown; lang?: unknown; outline?: unknown; criteria?: unknown; docs?: unknown; repo?: unknown; files?: unknown; room?: unknown; kind?: unknown; name?: unknown; admin?: boolean; by?: string }): Promise<{ blockId: string }> {
 		const s = await this.session(id);
 		const task = planTask(o), docs = checkDocs(o.docs), blockId = `b${Date.now().toString(36)}${rid()}`;
+		const room = o.room === undefined || o.room === null ? [] : Array.isArray(o.room) ? [...new Set(o.room.map(String))] : (() => { throw new Error("room: the block IDs of the room's documents to read"); })();
+		if (task.name && (await this.#tasks(s.id)).some((t) => t.name?.toLowerCase() === task.name!.toLowerCase())) throw new Error(`The room has a document named ${task.name} already`);
 		const repo = o.repo && typeof o.repo === "object" ? { name: String((o.repo as { name?: unknown }).name ?? ""), url: String((o.repo as { url?: unknown }).url ?? "").trim(), ref: String((o.repo as { ref?: unknown }).ref ?? "").trim() || "HEAD" } : null;
 		if (repo && o.admin === false) throw new Error("A repository as a source needs the admin login");
 		if (repo?.url && repo.name) throw new Error("Name a repository of the sources process or a remote one, not both");
@@ -326,7 +348,7 @@ export class ForumHub {
 		await this.#trimLines(s);
 		await this.#exclusive(s, async () => {
 			if ((await this.#tasks(s.id)).length >= LIMITS.blocks) throw new Error(`A room holds at most ${LIMITS.blocks} plan tasks`);
-			const sources: PlanSource[] = [], key = { session: s.id, blockId };
+			const sources: PlanSource[] = [], key = { session: s.id, blockId }, read: Array<{ path: string; blockId: string; version: number; how: string }> = [];
 			// the repository first: its sources process resolves the commit and writes the pack's index, or says why not
 			if (repo) {
 				// a remote repository is fetched while this waits: as long as a fetch may take, and the usual wait on top
@@ -340,6 +362,24 @@ export class ForumHub {
 				const { snapshot: c } = await askFiles(this.host, { requestId: `copy-${blockId}`, session: s.id, op: "snapshot", blockId, ttl: this.#ttl, ts: Date.now() }, sourceWaitMs() + filesWaitMs());
 				sources.push({ ...key, sourceId: "files", kind: "files", name: "workspace", copy: c!.copy, tenant: c!.tenant, files: c!.files, texts: c!.texts, bytes: c!.bytes, indexHash: c!.indexHash, ts: Date.now() });
 			}
+			// the room's other documents: the version each stands at now, the accepted one where there is one, kept with
+			// the task so a later version does not move under it
+			if (room.length) {
+				const tasks = await this.#tasks(s.id), copy = `r${rid()}${rid()}`, index: IndexEntry[] = [], said: string[] = [];
+				for (const other of room) {
+					const at = tasks.findIndex((t) => t.blockId === other);
+					if (at < 0) throw new Error("A document to read is not a task of this room");
+					const x = await exportPlan(this.host, s.id, other, { shown: await this.#tableOf(s.id, other) });
+					if (!x) throw new Error(`${tasks[at]!.name ?? tasks[at]!.brief.split("\n")[0]!.slice(0, 60)}: no document yet to read`);
+					const path = `${tasks[at]!.name ?? (at === 0 ? "plan" : `document-${at + 1}`)}.md`, text = x.plan;
+					for (let part = 0; part * 12_000 < text.length; part++) await this.host.write({ type: "SourceFile", fields: { ...key, sourceId: "room", copy, path, part, text: text.slice(part * 12_000, (part + 1) * 12_000) } }, null, this.#ttl);
+					index.push([path, Buffer.byteLength(text)]);
+					read.push({ path, blockId: other, version: x.chosen.version, how: x.chosen.how === "draft" ? "a draft" : "accepted" });
+					said.push(`${path}: version ${x.chosen.version}, ${x.chosen.how === "draft" ? "a draft nobody accepted" : x.chosen.how === "person" ? "accepted by a person" : x.chosen.how === "majority" ? "accepted by its table" : "the result of a run with both tables"}`);
+				}
+				for (const [part, paths] of indexPages(index).entries()) await this.host.write({ type: "SourceIndex", fields: { ...key, sourceId: "room", copy, part, parts: 1, paths } as never }, null, this.#ttl);
+				sources.push({ ...key, sourceId: "room", kind: "room", name: said.join("; "), copy, files: index.length, bytes: index.reduce((n, [, size]) => n + size, 0), indexHash: indexHash(index), ts: Date.now() });
+			}
 			if (docs.length) {
 				const pack = docsPack(docs);
 				// a document in parts of 12 000 characters: an entry stays under the space's 64 KiB whatever the letters
@@ -350,8 +390,10 @@ export class ForumHub {
 			for (const src of sources) await this.host.write({ type: "PlanSource", fields: src as never }, null, this.#ttl);
 			const entry: PlanTask = { ...key, ...task, ts: Date.now() };
 			await this.host.write({ type: "PlanTask", fields: entry as never }, null, this.#ttl);
-			const with_ = sources.map((x) => (x.kind === "repo" ? `${x.name} at ${x.commit!.slice(0, 12)} (${x.files} files)` : x.kind === "files" ? `the workspace's ${x.files} file${x.files === 1 ? "" : "s"} (${x.texts} as text)` : `${x.files} document${x.files === 1 ? "" : "s"}`)).join(" and ");
-			await systemLine(this.host, null, this.#ttl, s.id, `Plan task created${with_ ? ` with ${with_}` : ""}: ${task.brief.replace(/\s+/g, " ").slice(0, 100)}${task.brief.length > 100 ? "…" : ""}`);
+			// each source the task reads is proposed for the room's register (register.ts); one read before is the same
+			await proposeRefs(this.host, this.#ttl, s.id, o.by ?? "person", refsOfTask(blockId, sources, { docs: docs.map((d) => d.path), room: read }));
+			const with_ = sources.map((x) => (x.kind === "repo" ? `${x.name} at ${x.commit!.slice(0, 12)} (${x.files} files)` : x.kind === "room" ? `the room's ${x.files} other document${x.files === 1 ? "" : "s"}` : x.kind === "files" ? `the workspace's ${x.files} file${x.files === 1 ? "" : "s"} (${x.texts} as text)` : `${x.files} document${x.files === 1 ? "" : "s"}`)).join(" and ");
+			await systemLine(this.host, null, this.#ttl, s.id, `${task.kind === "document" ? `Document task "${task.name}"` : "Plan task"} created${with_ ? ` with ${with_}` : ""}: ${task.brief.replace(/\s+/g, " ").slice(0, 100)}${task.brief.length > 100 ? "…" : ""}`);
 		});
 		this.push(s);
 		return { blockId };
@@ -411,6 +453,36 @@ export class ForumHub {
 		if (run?.blockId === blockId) await this.stopRun(id);
 		this.push(s);
 		return { version: doc.version };
+	}
+
+	/** A person writes a section of a block's document: a new revision of `sectionId` written against revision `base`
+	 *  (the one the page showed), or a new section placed after `after`. The same rule as for a model: who wrote against
+	 *  an older revision is not let in and gets the newer text (`stale`), and a model that revises afterwards is told
+	 *  the person's text. */
+	async writeSection(id: string, o: { blockId?: unknown; table?: unknown; sectionId?: unknown; base?: unknown; title?: unknown; text?: unknown; after?: unknown; by: string }): Promise<{ version: number } | { stale: { sectionId: string; rev: number; title: string; text: string; author: string } }> {
+		const s = await this.session(id), blockId = String(o.blockId ?? "");
+		if (!(await this.#tasks(s.id)).some((t) => t.blockId === blockId)) throw new Error("Unknown plan task");
+		if (!this.#allow(s, "section", 30)) throw new Error("Too many changes, slow down");
+		const d = { session: s.id, blockId, table: asTable(o.table) ?? (await this.#tableOf(s.id, blockId)) };
+		const sectionId = o.sectionId === undefined || o.sectionId === null || o.sectionId === "" ? undefined : String(o.sectionId);
+		const base = sectionId ? Number(o.base) : undefined;
+		if (sectionId && !Number.isInteger(base)) throw new Error("Name the revision the change was written against");
+		if (!sectionId && !String(o.title ?? "").trim()) throw new Error("A new section needs a title");
+		const who = { author: String(o.by ?? "").replace(/\s+/g, " ").trim().slice(0, 40) || "guest", model: "human" };
+		const t = await this.host.createTransaction(30_000);
+		try {
+			const doc = await writeVersion(this.host, t.id, this.#ttl, d, who, { changes: [{ ...(sectionId ? { sectionId, base } : {}), ...(o.title !== undefined && String(o.title).trim() ? { title: String(o.title) } : {}), text: String(o.text ?? ""), ...(!sectionId && o.after !== undefined ? { after: o.after === null ? null : String(o.after) } : {}) }] });
+			await this.host.commit(t.id);
+			const title = doc.sections.find((x) => doc.changed.includes(x.sectionId))?.title ?? "";
+			await systemLine(this.host, null, this.#ttl, s.id, `${who.author} wrote the section "${title}" (version ${doc.version} of table ${d.table})`);
+			this.push(s);
+			return { version: doc.version };
+		} catch (e) {
+			await this.host.abort(t.id).catch(() => {});
+			if (e instanceof StaleSection) return { stale: { sectionId: e.current.sectionId, rev: e.current.rev, title: e.current.title, text: e.current.text, author: e.current.author } };
+			if (e instanceof DocRefused) throw new Error(e.message.replace(/^./, (c) => c.toUpperCase()));
+			throw e;
+		}
 	}
 
 	/** A person objects to a section of a block's document (`section`: its heading or id): an objection no reviser can
@@ -677,6 +749,76 @@ export class ForumHub {
 		const { upload } = await askFiles(this.host, { requestId: `up-${o.uploadId}-${rid()}`, session: s.id, op: "upload", uploadId: o.uploadId, name, parts, hash: createHash("sha256").update(o.bytes).digest("hex"), bytes: o.bytes.length, by: o.by, ttl, ts: Date.now() }, filesWaitMs());
 		this.push(s);
 		return { upload: upload!, again: false };
+	}
+
+	/** A block's document as Markdown into the room's project folder (files.ts `save`): exported once and kept with the
+	 *  request, so a retry writes the same bytes. `name` is the file's name in the project folder; without one, the
+	 *  block's last save names it, else plan.md for the room's first task and document-<n>.md for the others. Sent again
+	 *  under the same save ID (a lost reply) it is answered with the save already made. A file changed in the workspace
+	 *  since the last save is not overwritten: the answer is the conflict with both texts. */
+	async save(id: string, blockId: string, o: { saveId: string; name?: unknown; by: string }): Promise<{ save: PlanSave; again: boolean } | { conflict: ConflictAnswer & { text: string | null; mine: string } }> {
+		const s = await this.session(id);
+		if (!/^[a-zA-Z0-9_-]{8,40}$/.test(o.saveId)) throw new Error("A save needs an ID of 8 to 40 letters and digits");
+		const saves = await savesOf(this.host, s.id, blockId), had = saves.find((x) => x.saveId === o.saveId);
+		if (had) return { save: had, again: true };
+		const link = await readLink(this.host, s.id);
+		if (!link) throw new Error("The room is not linked to a workspace");
+		const tasks = await this.#tasks(s.id), at = tasks.findIndex((t) => t.blockId === blockId), isRegister = blockId === REGISTER_BLOCK;
+		if (at < 0 && !isRegister) throw new Error("No such task in this room");
+		const last = saves[0];
+		const name = o.name !== undefined && String(o.name).trim() ? saveName(o.name) : last ? last.path.split("/").at(-1)! : isRegister ? "sources.md" : tasks[at]!.name ? `${tasks[at]!.name}.md` : at === 0 ? "plan.md" : `document-${at + 1}.md`;
+		const path = [link.project.path, name].filter(Boolean).join("/");
+		// against the version this block's last save of that file returned; a file it never saved is written new
+		const expected = saves.find((x) => x.path === path && x.workspace === link.project.workspace)?.fileVersion ?? 0;
+		// the register is written as it stands now, and kept with the request like a document: a retry writes these bytes
+		const x = isRegister ? await (async () => { const reg = await this.register(s.id); return { markdown: registerMarkdown(reg.refs, new Map(reg.refs.map((r) => [r.refId, r.cites])), tasks[0]?.lang === "de" ? "de" : "en"), chosen: { table: "-", version: reg.refs.length } }; })()
+			: await exportPlan(this.host, s.id, blockId, { shown: await this.#tableOf(s.id, blockId) });
+		if (!x) throw new Error("The task has no document yet");
+		if (!this.#allow(s, "save", 30)) throw new Error("Too many saves, slow down");
+		const key = { session: s.id, uploadId: o.saveId }, bytes = Buffer.from(x.markdown, "utf8"), data = bytes.toString("base64"), parts = Math.ceil(data.length / UPLOAD.part), ttl = 3600_000;
+		while (await this.host.take({ type: "UploadPart", fields: key }, NO_WAIT)) { /* an attempt cut off */ }
+		for (let part = 0; part < parts; part++) await this.host.write({ type: "UploadPart", fields: { ...key, part, data: data.slice(part * UPLOAD.part, (part + 1) * UPLOAD.part) } }, null, ttl);
+		const res = await askFiles(this.host, { requestId: `save-${o.saveId}-${rid()}`, session: s.id, op: "save", saveId: o.saveId, blockId, table: x.chosen.table, docVersion: x.chosen.version, path, expected, parts, hash: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.length, by: o.by, ttl, keep: this.#ttl, ts: Date.now() }, filesWaitMs(), { refusals: true });
+		this.push(s);
+		if (res.ok) return { save: (await savesOf(this.host, s.id, blockId)).find((y) => y.saveId === o.saveId)!, again: false };
+		if (!res.conflict) throw new Error(res.error ?? "spaces-files refused the save");
+		let text: string | null = null;
+		if (res.conflict.parts) {
+			const got = (await this.host.readAll({ type: "PreviewPart", fields: { session: s.id, previewId: o.saveId } }, { limit: res.conflict.parts + 2 })).map((e) => e.fields as { part: number; data: string }).sort((a, b) => a.part - b.part);
+			while (await this.host.take({ type: "PreviewPart", fields: { session: s.id, previewId: o.saveId } }, NO_WAIT)) { /* read: gone */ }
+			if (got.length === res.conflict.parts) text = Buffer.from(got.map((p) => p.data).join(""), "base64").toString("utf8");
+		}
+		return { conflict: { ...res.conflict, text, mine: x.markdown } };
+	}
+
+	/** The room's register of sources (register.ts), each with the sections that cite it in the documents as they
+	 *  stand (each task's chosen version), and the last save of `sources.md`. */
+	async register(id: string): Promise<{ refs: Array<SourceRef & { cites: Cite[] }>; saved: PlanSave | null }> {
+		const s = await this.session(id), refs = await refsOf(this.host, s.id), tasks = await this.#tasks(s.id);
+		const docs: Parameters<typeof citesOf>[1] = [];
+		if (refs.length) for (const [at, t] of tasks.entries()) {
+			const chosen = await chosenOf(this.host, s.id, t.blockId, await this.#tableOf(s.id, t.blockId));
+			const head = chosen && (await headOf(this.host, { session: s.id, blockId: t.blockId, table: chosen.table }, chosen.version));
+			if (!head) continue;
+			docs.push({ blockId: t.blockId, doc: `${t.name ?? (at === 0 ? "plan" : `document-${at + 1}`)}.md`, files: await sourceFiles(this.host, s.id, t.blockId), sections: (await fullDoc(this.host, head)).sections });
+		}
+		const cites = citesOf(refs, docs);
+		return { refs: refs.map((r) => ({ ...r, cites: cites.get(r.refId) ?? [] })), saved: (await savesOf(this.host, s.id, REGISTER_BLOCK))[0] ?? null };
+	}
+
+	/** A source a person adds to the register by hand, or their word on one (accepted, declined with the reason). */
+	async registerAct(id: string, b: Record<string, unknown>, by: string): Promise<{ ref: SourceRef; again?: boolean }> {
+		const s = await this.session(id);
+		if (!this.#allow(s, "register", 30)) throw new Error("Too many changes to the register, slow down");
+		if (b.op === "add") {
+			const got = await addRef(this.host, this.#ttl, s.id, { address: b.address, title: b.title, note: b.note, licence: b.licence, by });
+			if (!got.again) { await systemLine(this.host, null, this.#ttl, s.id, `${by} added the source "${got.ref.title}" to the register: ${got.ref.address}`); this.push(s); }
+			return got;
+		}
+		if (b.op !== "decide") throw new Error("op: add or decide");
+		const got = await decideRef(this.host, this.#ttl, s.id, { refId: b.refId, state: b.state, reason: b.reason, licence: b.licence, by });
+		if (got.changed) { await systemLine(this.host, null, this.#ttl, s.id, got.ref.state === "accepted" ? `${by} accepted the source "${got.ref.title}"` : got.ref.state === "declined" ? `${by} declined the source "${got.ref.title}": ${got.ref.reason}` : `${by} set the source "${got.ref.title}" back to proposed`); this.push(s); }
+		return { ref: got.ref };
 	}
 
 	/** A person's note on a file of the room's workspace that has no text to read; the models get it with the file. */

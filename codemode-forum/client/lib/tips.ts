@@ -8,7 +8,8 @@ export type TipId = "signin" | "name" | "signout" | "rooms" | "newroom" | "invit
 	| "models" | "way" | "rounds" | "budget" | "start" | "stop" | "answer" | "say"
 	| "version" | "compare" | "accept" | "object" | "tableview" | "language" | "mode" | "palette"
 	| "providers" | "providerkey" | "providersignin" | "loginanswer" | "providertest" | "providerremove" | "allowed" | "limits" | "roomdefaults"
-	| "roomlink" | "folders" | "linkcheck" | "fromworkspace" | "workspacefiles" | "pictures" | "picturenote" | "upload" | "filenote";
+	| "roomlink" | "folders" | "linkcheck" | "fromworkspace" | "workspacefiles" | "pictures" | "picturenote" | "upload" | "filenote"
+	| "save" | "saveall" | "savename" | "conflict" | "saveonaccept" | "writesection" | "taskkind" | "roomdocs" | "register" | "refadd" | "refdecide";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -361,6 +362,83 @@ export const TIPS: Record<TipId, Tip> = {
 			en: "Puts files into material/ of the project folder in spaces-files, as the room's agent. Up to 16 MB a file; nothing is overwritten.",
 		},
 		article: "help.topic.pictures", anchor: "upload",
+	},
+	save: {
+		text: {
+			de: "Schreibt das Dokument dieser Aufgabe als Markdown in den Projektordner, mit dem erzeugten Anhang. Eine geänderte Datei wird nie überschrieben.",
+			en: "Writes this task's document as Markdown into the project folder, with the generated appendix. A changed file is never overwritten.",
+		},
+		article: "help.topic.documents", anchor: "save",
+	},
+	saveall: {
+		text: {
+			de: "Speichert jedes Dokument des Raums in seine eigene Datei und das Quellenregister als sources.md. Was nicht gespeichert werden konnte, steht danach in der Liste.",
+			en: "Saves every document of the room into a file of its own, and the register of sources as sources.md. What could not be saved is listed afterwards.",
+		},
+		article: "help.topic.documents", anchor: "save",
+	},
+	savename: {
+		text: {
+			de: "Der Name der Datei im Projektordner; .md wird ergänzt. Leer: der Name vom letzten Speichern.",
+			en: "The file's name in the project folder; .md is added. Empty: the name of the last save.",
+		},
+		article: "help.topic.documents", anchor: "save",
+	},
+	saveonaccept: {
+		text: {
+			de: "Wird eine Fassung angenommen, von der Mehrheit oder von dir, speichert FORUM sie gleich in den Projektordner. Aus, bis du es einschaltest.",
+			en: "When a version is accepted, by the majority or by you, FORUM saves it to the project folder right away. Off until you switch it on.",
+		},
+		article: "help.topic.documents", anchor: "save",
+	},
+	taskkind: {
+		text: {
+			de: "Ein Plan wird an den sieben Kriterien des Forums gemessen. Ein Dokument (Anforderungen, Architektur, Vergleich) an drei allgemeinen und deinen eigenen; es braucht einen Namen, unter dem es gespeichert wird.",
+			en: "A plan is held against the forum's seven criteria. A document (requirements, an architecture, a comparison) against three general ones and your own; it needs a name to be saved under.",
+		},
+		article: "help.topic.documents", anchor: "kinds",
+	},
+	roomdocs: {
+		text: {
+			de: "Die Modelle lesen diese Dokumente des Raums so, wie sie jetzt sind: die angenommene Fassung, sonst den neuesten Entwurf. Spätere Fassungen ändern die Kopie nicht.",
+			en: "The models read these documents of the room as they are now: the accepted version, else the newest draft. Later versions do not change the copy.",
+		},
+		article: "help.topic.documents", anchor: "room",
+	},
+	register: {
+		text: {
+			de: "Jede Quelle, die eine Aufgabe liest, kommt als Vorschlag ins Register. Daneben steht, welche Abschnitte sie zitieren. Ein Mitglied nimmt eine Quelle an oder lehnt sie mit Grund ab. Mit „Alle speichern“ wird das Register als sources.md gespeichert.",
+			en: "Every source a task reads comes into the register as proposed, with the sections that cite it. A member accepts it, or declines it with the reason. Save all writes the register as sources.md.",
+		},
+		article: "help.topic.documents", anchor: "register",
+	},
+	refadd: {
+		text: {
+			de: "Eine Quelle von Hand: ihre Adresse (https://…), ein Titel und wofür sie da ist. Dieselbe Adresse zweimal bleibt ein Eintrag.",
+			en: "A source by hand: its address (https://…), a title and what it is for. The same address twice stays one entry.",
+		},
+		article: "help.topic.documents", anchor: "register",
+	},
+	refdecide: {
+		text: {
+			de: "Angenommen heißt: Diese Quelle darf eine Aussage tragen. Ein Ablehnen braucht den Grund, etwa veraltet, Lizenz unklar oder sagt etwas anderes. Die Lizenz trägst du ein, soweit du sie gefunden hast.",
+			en: "Accepted means this source may carry a claim. Declining needs the reason: out of date, licence unclear, says something else. Enter the licence as far as you found it.",
+		},
+		article: "help.topic.documents", anchor: "register",
+	},
+	writesection: {
+		text: {
+			de: "Du schreibst den Abschnitt selbst. Er wird eine neue Fassung mit dir als Autor; ein Modell, das ihn danach überarbeitet, bekommt deinen Text.",
+			en: "You write the section yourself. It becomes a new version with you as its author; a model that revises it later gets your text.",
+		},
+		article: "help.topic.documents", anchor: "people",
+	},
+	conflict: {
+		text: {
+			de: "Die Datei im Workspace wurde seit dem letzten Speichern geändert. Beide Texte stehen hier; nichts wurde überschrieben.",
+			en: "The file in the workspace was changed since the last save. Both texts are here; nothing was overwritten.",
+		},
+		article: "help.topic.documents", anchor: "conflict",
 	},
 	filenote: {
 		text: {

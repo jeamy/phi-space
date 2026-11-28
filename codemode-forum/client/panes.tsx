@@ -4,21 +4,31 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./lib/api.ts";
 import { diffCount, diffText, withContext, type Line } from "./lib/diff.ts";
-import { Act, Choice, Field } from "./forum/controls.tsx";
-import type { Answer, Block, Message, Objection, Outcome, PlanView, RunInfo, Snapshot, Table, Talk } from "./lib/forum-types.ts";
+import { Act, Area, Choice, Field } from "./forum/controls.tsx";
+import { authHeaders } from "./lib/me.ts";
+import type { Answer, Block, Message, Objection, Outcome, PlanView, RunInfo, Snapshot, Table, Talk, TaskPicture } from "./lib/forum-types.ts";
 import type { Lang } from "./lib/theme.ts";
 import { renderSection } from "./lib/safe-markdown.ts";
 import type { Named, Text } from "./lib/texts.ts";
 
 /** One table's document: a version of it, optionally as the difference to another version, with the objections beside
  *  their sections, the checker's findings, and the person's yes and no. */
-export function DocPane({ t, lang, locale, rid, block, table, head, titled, resultVersion, objections, docKey, name, act }: { t: Text; lang: Lang; locale: string; rid: string; block: Block; table: Table; head: number; titled: boolean; resultVersion: number; objections: Objection[]; docKey: string; name: Named; act: (fn: () => Promise<unknown>) => Promise<void> }) {
+export function DocPane({ t, lang, locale, rid, block, table, head, titled, resultVersion, objections, docKey, name, act, canEdit }: { t: Text; lang: Lang; locale: string; rid: string; block: Block; table: Table; head: number; titled: boolean; resultVersion: number; objections: Objection[]; docKey: string; name: Named; act: (fn: () => Promise<unknown>) => Promise<void>; canEdit?: boolean }) {
 	const [version, setVersion] = useState<number | null>(null); // the version shown; null: the result, else the newest
 	const [against, setAgainst] = useState<"" | "prev" | number>(""); // the version it is compared with
 	const [view, setView] = useState<PlanView | null>(null);
 	const [base, setBase] = useState<PlanView | null>(null);
 	const [objSection, setObjSection] = useState("");
 	const [objText, setObjText] = useState("");
+	const [editing, setEditing] = useState<string | null>(null); // the section being written, "+" for a new one
+	// the task's pictures: one a section names in backticks (server/images.ts) is shown beside that section
+	const [pics, setPics] = useState<TaskPicture[]>([]);
+	useEffect(() => {
+		if (!block.images) { setPics([]); return; }
+		let dead = false;
+		api<{ images: TaskPicture[] }>(`/rooms/${rid}/images/${block.blockId}`).then((x) => { if (!dead) setPics(x.images); }).catch(() => {});
+		return () => { dead = true; };
+	}, [rid, block.blockId, block.images]);
 	const want = version || resultVersion || 0;
 	// the texts are fetched when the version asked for, the newest version or the state of the work changes
 	useEffect(() => {
@@ -54,6 +64,8 @@ export function DocPane({ t, lang, locale, rid, block, table, head, titled, resu
 	const objectNow = () => act(async () => { await api(`/rooms/${rid}/objection`, { blockId: block.blockId, table, section: objSection || view?.doc.sections[0]?.sectionId, text: objText }); setObjText(""); });
 	const standing = (o: Objection) => o.state === "open" || o.state === "declined";
 	const isResultTable = (block.result?.table ?? block.table) === table;
+	// a person writes in the newest version only, and never while comparing
+	const editable = !!view && view.doc.version === head && !baseVersion;
 
 	return (
 		<div className="panel">
@@ -100,11 +112,14 @@ export function DocPane({ t, lang, locale, rid, block, table, head, titled, resu
 							const marked = d ? d.kind !== "same" : view.doc.changed.includes(s.sectionId), n = d ? diffCount(d.lines) : null;
 							return (
 								<section key={s.sectionId} className={marked ? "doc__section is-changed" : "doc__section"}>
-									<h3>{s.title} <span className="muted">{t.rev} {s.rev} · {name(s.model)}{d ? ` · ${d.kind === "same" ? t.unchanged : d.kind === "new" ? t.newSection : t.linesChanged(n!.del, n!.add)}` : view.doc.changed.includes(s.sectionId) ? ` · ${t.changed}` : ""}</span></h3>
+									<h3>{s.title} <span className="muted">{t.rev} {s.rev} · {s.model === "human" ? s.author : name(s.model)}{d ? ` · ${d.kind === "same" ? t.unchanged : d.kind === "new" ? t.newSection : t.linesChanged(n!.del, n!.add)}` : view.doc.changed.includes(s.sectionId) ? ` · ${t.changed}` : ""}</span></h3>
 									{s.origin ? <p className="muted doc__origin">{t.origin} {s.origin}</p> : null}
 									{mine.filter(standing).map((o) => <div key={o.objId} className="doc__objection"><span className={"chip " + (o.state === "open" ? "chip--wait" : "chip--bad")}>{t.objStates[o.state]}</span> <b>{o.model === "human" ? t.you : name(o.model)}</b> {o.defect} <span className="muted">{t.fix}: {o.fix}</span></div>)}
 									{settled ? <div className="muted doc__settled">{t.settled(settled)}</div> : null}
-									{d ? (d.kind === "same" ? null : <DiffLines t={t} lines={d.lines} />) : s.rev === 1 ? <p className="muted">{t.intent} {s.text}</p> : <div dangerouslySetInnerHTML={{ __html: s.html }} />}
+									{editing === s.sectionId ? <SectionEditor t={t} lang={lang} rid={rid} block={block} table={table} section={s} done={() => setEditing(null)} />
+										: d ? (d.kind === "same" ? null : <DiffLines t={t} lines={d.lines} />) : s.rev === 1 && s.model !== "human" ? <p className="muted">{t.intent} {s.text}</p> : <div dangerouslySetInnerHTML={{ __html: s.html }} />}
+									<CitedPictures t={t} rid={rid} blockId={block.blockId} pics={pics.filter((x) => s.text.includes("`" + x.name + "`"))} />
+									{canEdit && editable && editing !== s.sectionId ? <Act label={t.editSection} tip="writesection" lang={lang} onClick={() => setEditing(s.sectionId)} /> : null}
 								</section>
 							);
 						})}
@@ -115,8 +130,64 @@ export function DocPane({ t, lang, locale, rid, block, table, head, titled, resu
 							</section>
 						))}
 					</article>
+					{canEdit && editable ? (editing === "+" ? <SectionEditor t={t} lang={lang} rid={rid} block={block} table={table} after={sections.at(-1)?.sectionId ?? null} done={() => setEditing(null)} /> : <Act label={t.addSection} tip="writesection" lang={lang} onClick={() => setEditing("+")} />) : null}
 				</>
 			) : <div className="empty">{t.noDoc}</div>}
+		</div>
+	);
+}
+
+/** The pictures a section names, small, each with its name; a click opens the picture itself. */
+function CitedPictures({ t, rid, blockId, pics }: { t: Text; rid: string; blockId: string; pics: TaskPicture[] }) {
+	if (!pics.length) return null;
+	return (
+		<div className="doc__pics" role="group" aria-label={t.picturesCited}>
+			{pics.map((x) => {
+				const src = `/api/rooms/${rid}/images/${blockId}/${x.imageId}`;
+				return (
+					<figure key={x.imageId}>
+						<a href={src} target="_blank" rel="noreferrer"><img src={src} alt={x.note?.text ?? x.name} width={x.width} height={x.height} loading="lazy" /></a>
+						<figcaption>{x.name}</figcaption>
+					</figure>
+				);
+			})}
+		</div>
+	);
+}
+
+/** A person writing a section: an existing one (written against the revision shown) or a new one at the end. When a
+ *  model or another person revised it first, the newer text is shown beside the person's, and the next save is written
+ *  against it. */
+function SectionEditor({ t, lang, rid, block, table, section, after, done }: { t: Text; lang: Lang; rid: string; block: Block; table: Table; section?: { sectionId: string; rev: number; title: string; text: string }; after?: string | null; done: () => void }) {
+	const [title, setTitle] = useState(section?.title ?? "");
+	const [text, setText] = useState(section?.text ?? "");
+	const [base, setBase] = useState(section?.rev ?? 0);
+	const [stale, setStale] = useState<{ text: string; author: string; rev: number } | null>(null);
+	const [err, setErr] = useState("");
+	const save = async () => {
+		setErr("");
+		const r = await fetch(`/api/rooms/${rid}/section`, { method: "POST", headers: { "content-type": "application/json", "x-forum-admin": "1", ...authHeaders() }, body: JSON.stringify({ blockId: block.blockId, table, ...(section ? { sectionId: section.sectionId, base } : { after }), title, text }) });
+		const data = (await r.json().catch(() => ({}))) as { error?: string; stale?: { text: string; author: string; rev: number } };
+		if (r.status === 409 && data.stale) { setStale(data.stale); setBase(data.stale.rev); return; }
+		if (!r.ok) { setErr(data.error || r.statusText); return; }
+		done();
+	};
+	return (
+		<div className="doc__editor">
+			<Field label={t.sectionTitle} tip="writesection" lang={lang} value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />
+			<Area label={t.sectionText} tip="writesection" lang={lang} rows={10} value={text} onChange={(e) => setText(e.target.value)} />
+			{stale ? (
+				<div className="doc__stale" role="alert">
+					<p>{t.staleSection(stale.author)}</p>
+					<DiffLines t={t} lines={diffText(stale.text, text)} />
+				</div>
+			) : null}
+			{err ? <p className="error" role="alert">{err}</p> : null}
+			<div className="row">
+				<Act label={stale ? t.saveAnyway : t.saveSection} tip="writesection" lang={lang} kind="primary" disabled={!text.trim() || !title.trim()} onClick={() => void save()} />
+				{stale ? <Act label={t.takeTheirs} tip="writesection" lang={lang} onClick={() => { setText(stale.text); setStale(null); }} /> : null}
+				<Act label={t.cancel} tip="writesection" lang={lang} onClick={done} />
+			</div>
 		</div>
 	);
 }

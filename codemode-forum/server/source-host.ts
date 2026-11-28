@@ -22,7 +22,7 @@ import { pathToFileURL } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
 import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
 import { answer, denied, docsPack, gitPack, indexHash, reposOf, resolveCommit, type IndexEntry, type Pack, type PlanSource, type SourceCall, type SourceId } from "./sources.ts";
-import { agentOf, fileNotes, freeName, kindOf, pictureKind, PICTURE_TYPES, PREVIEW_BYTES, workspacePath, type PreviewAnswer, UPLOAD, type UploadAnswer, type UploadDone, folderName, walkFolders, walkedIndex, type CheckAnswer, type FilesRequest, type FilesResult, type RoomLink, type SnapshotAnswer } from "./files.ts";
+import { agentOf, fileNotes, freeName, kindOf, pictureKind, PICTURE_TYPES, PREVIEW_BYTES, workspacePath, type PreviewAnswer, UPLOAD, type UploadAnswer, type SaveAnswer, type ConflictAnswer, type PlanSave, type UploadDone, folderName, walkFolders, walkedIndex, type CheckAnswer, type FilesRequest, type FilesResult, type RoomLink, type SnapshotAnswer } from "./files.ts";
 import { FilesAgentClient, FilesError } from "./files-client.ts";
 import { askPdf } from "./sandbox-host.ts";
 import { fetchRemote, gitHosts, hasCommit, remoteDir, remoteName, remoteUrl } from "./remote.ts";
@@ -113,16 +113,16 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 		});
 		if (src.kind === "repo") return cached(`repo:${src.name}@${src.commit}`, () => gitPack(repoPath(src.name), src.commit!));
 		// the notes people wrote about files without text are read anew each time: they may change after the copy
-		if (src.kind === "files") return cached(`files:${req.session}:${req.blockId}:${src.copy}`, async () => {
-			// the task's copy of the workspace folders: its index (every file) and the parts of its text files
-			const key = { session: req.session, blockId: req.blockId, sourceId: "files", copy: src.copy ?? "" };
+		if (src.kind === "files" || src.kind === "room") return cached(`${src.kind}:${req.session}:${req.blockId}:${src.copy}`, async () => {
+			// the task's copy of the workspace folders, or of the room's other documents: its index and its text files
+			const key = { session: req.session, blockId: req.blockId, sourceId: src.kind, copy: src.copy ?? "" };
 			const index = (await space.readAll({ type: "SourceIndex", fields: key }, { limit: 2000 })).sort((a, b) => Number(a.fields.part) - Number(b.fields.part)).flatMap((e) => (e.fields as unknown as { paths: IndexEntry[] }).paths);
 			const parts = (await space.readAll({ type: "SourceFile", fields: key }, { limit: 2000 })).map((e) => e.fields as unknown as { path: string; part: number; text: string });
 			const by = new Map<string, string[]>();
 			for (const p of parts.sort((a, b) => a.part - b.part)) by.set(p.path, [...(by.get(p.path) ?? []), p.text]);
 			const texts = new Map([...by].map(([path, t]) => [path, Buffer.from(t.join(""), "utf8")]));
 			return { index, read: async (path: string) => texts.get(path) ?? Buffer.alloc(0) };
-		}).then(async (p) => ({ ...p, notes: await fileNotes(space, req.session) }));
+		}).then(async (p) => (src.kind === "files" ? { ...p, notes: await fileNotes(space, req.session) } : p));
 		return cached(`docs:${req.session}:${req.blockId}:${src.indexHash}`, async () => {
 			// the uploaded documents: the parts without a source of their own (a workspace copy's carry `sourceId`)
 			const parts = (await space.readAll({ type: "SourceFile", fields: { session: req.session, blockId: req.blockId } }, { limit: 2000 })).map((e) => e.fields as unknown as { path: string; part: number; text: string; sourceId?: string }).filter((p) => !p.sourceId);
@@ -270,6 +270,39 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 			const r = refusal(e, folderName(link.project)); throw Object.assign(new Error(r.error), { code: r.code });
 		} finally { c.close(); }
 	};
+	/** `save`, its second step: the exported bytes from their parts, written against the version the last save
+	 *  returned under the request's operation ID (sent again after a crash, spaces-files answers from its receipt). A
+	 *  file changed or removed meanwhile is not touched: the answer is the conflict, with the workspace's text. */
+	const doSave = async (req: FilesRequest & { op: "save"; opId: string }): Promise<{ save: SaveAnswer } | { conflict: ConflictAnswer }> => {
+		const link = (await space.readIfExists({ type: "RoomLink", fields: { session: req.session } }, NO_WAIT))?.fields as unknown as RoomLink | undefined;
+		if (!link) throw Object.assign(new Error("The room is not linked to a workspace"), { code: "notLinked" });
+		const parts = (await space.readAll({ type: "UploadPart", fields: { session: req.session, uploadId: req.saveId } }, { limit: req.parts + 2 })).map((e) => e.fields as { part: number; data: string }).sort((a, b) => a.part - b.part);
+		const bytes = Buffer.from(parts.map((p) => p.data).join(""), "base64");
+		if (parts.length !== req.parts || createHash("sha256").update(bytes).digest("hex") !== req.hash) throw Object.assign(new Error("The document arrived incomplete; save again"), { code: "incomplete" });
+		const ws = link.project.workspace, c = clientFor(req.session);
+		await holdBeforeAnswer("FORUM_TEST_SAVE_PAUSE");
+		try {
+			const { version } = await c.write(ws, req.path, bytes, req.expected, req.opId);
+			await holdBeforeAnswer("FORUM_TEST_SAVED_PAUSE");
+			return { save: { workspace: ws, path: req.path, version, bytes: bytes.length } };
+		} catch (e) {
+			const code = (e as FilesError).code;
+			if (code !== "versionConflict" && code !== "alreadyExists" && code !== "notFound") { const r = refusal(e, folderName(link.project)); throw Object.assign(new Error(r.error), { code: r.code }); }
+			// the file as it is now; not found while the project folder is still seen: removed in the workspace
+			let now: { bytes: Buffer; version: number } | null = null;
+			try { now = await c.read(ws, req.path); }
+			catch (err) {
+				if ((err as FilesError).code !== "notFound") { const r = refusal(err, folderName(link.project)); throw Object.assign(new Error(r.error), { code: r.code }); }
+				try { await c.listPage(ws, link.project.path || ".", null); }
+				catch (gone) { const r = refusal(gone, folderName(link.project)); throw Object.assign(new Error(r.error), { code: r.code }); }
+			}
+			if (!now) return { conflict: { workspace: ws, path: req.path, version: 0, parts: 0, bytes: 0, gone: true } };
+			if (now.bytes.length > PREVIEW_BYTES || kindOf(now.bytes) !== "text") return { conflict: { workspace: ws, path: req.path, version: now.version, parts: 0, bytes: now.bytes.length, tooLarge: true } };
+			const data = now.bytes.toString("base64"), n = Math.ceil(data.length / UPLOAD.part);
+			for (let part = 0; part < n; part++) await space.write({ type: "PreviewPart", fields: { session: req.session, previewId: req.saveId, part, data: data.slice(part * UPLOAD.part, (part + 1) * UPLOAD.part) } }, null, 600_000);
+			return { conflict: { workspace: ws, path: req.path, version: now.version, parts: n, bytes: now.bytes.length } };
+		} finally { c.close(); }
+	};
 	/** `preview`: a picture of the linked folders as it is now, its bytes in PreviewPart entries (outside the
 	 *  transaction, ten minutes); anything but a picture is refused. */
 	const preview = async (req: FilesRequest & { op: "preview" }): Promise<PreviewAnswer> => {
@@ -312,6 +345,31 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 				if (named) await space.write({ type: "FilesRequest", fields: { ...req, ...named } as never }, t.id, req.ttl);
 				else await space.write({ type: "FilesResult", fields: { requestId: req.requestId, session: req.session, ...result!, ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
 				await space.commit(t.id);
+				return true;
+			}
+			// a save draws its operation ID first and is put back with it (committed before the write)
+			if (req.op === "save" && !req.opId) {
+				const c = clientFor(req.session);
+				let opId: string | null = null;
+				try { opId = await c.operationId(); } catch (err) { const r = refusal(err, "spaces-files"); result = { ok: false, code: r.code, error: r.error }; } finally { c.close(); }
+				if (opId) await space.write({ type: "FilesRequest", fields: { ...req, opId } as never }, t.id, req.ttl);
+				else await space.write({ type: "FilesResult", fields: { requestId: req.requestId, session: req.session, ...result!, ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
+				await space.commit(t.id);
+				return true;
+			}
+			if (req.op === "save") {
+				let done: Awaited<ReturnType<typeof doSave>> | null = null;
+				try { done = await doSave(req as FilesRequest & { op: "save"; opId: string }); }
+				catch (err) { result = { ok: false, code: (err as { code?: string }).code ?? "error", error: String((err as Error).message ?? err).slice(0, 400) }; }
+				if (done && "save" in done) {
+					result = { ok: true, save: done.save };
+					const saved: PlanSave = { session: req.session, blockId: req.blockId, saveId: req.saveId, table: req.table, docVersion: req.docVersion, workspace: done.save.workspace, path: done.save.path, fileVersion: done.save.version, bytes: done.save.bytes, by: req.by, ts: Date.now() };
+					await space.write({ type: "PlanSave", fields: saved as never }, t.id, req.keep);
+					await space.write({ type: "ForumLine", fields: { session: req.session, text: req.blockId === "register" ? `${req.by} saved the register of sources (${req.docVersion} sources) to ${done.save.workspace}/${done.save.path} (file version ${done.save.version})` : `${req.by} saved version ${req.docVersion} of a document to ${done.save.workspace}/${done.save.path} (file version ${done.save.version})`, ts: Date.now() } }, t.id, req.keep);
+				} else if (done) result = { ok: false, code: "versionConflict", error: done.conflict.gone ? `${done.conflict.path} was removed in the workspace since the last save` : `${done.conflict.path} was changed in the workspace (now version ${done.conflict.version}); nothing was overwritten`, conflict: done.conflict };
+				await space.write({ type: "FilesResult", fields: { requestId: req.requestId, session: req.session, ...result!, ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
+				await space.commit(t.id);
+				while (await space.take({ type: "UploadPart", fields: { session: req.session, uploadId: req.saveId } }, NO_WAIT).catch(() => null)) { /* every part */ }
 				return true;
 			}
 			if (req.op === "upload") {

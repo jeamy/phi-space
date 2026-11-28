@@ -579,6 +579,14 @@ Stimmt mehr als die Hälfte der Modelle einer Fassung zu, ist sie angenommen. Du
 
 Stimmt an einem Abschnitt etwas nicht, wählst du den Abschnitt, schreibst, was falsch ist, und erhebst den [Einwand](help.topic.words#objection). Kein Modell kann einen Einwand von dir ablehnen; die nächste Runde muss ihn aufgreifen. Einwände stehen beim Abschnitt, bis sie erledigt sind.
 
+## Selbst schreiben {#write}
+
+Als Mitglied kannst du einen Abschnitt der neuesten Fassung selbst schreiben („Abschnitt schreiben“) oder einen neuen anhängen. Dein Text wird eine neue Fassung wie die eines Modells; beim Abschnitt steht dann dein Name. Hat ein Modell den Abschnitt inzwischen überarbeitet, wird nichts überschrieben: Du siehst seinen neueren Text neben deinem und entscheidest. Wie das im Einzelnen geht, steht in [Dokumente eines Projekts](help.topic.documents#people).
+
+## Bilder beim Abschnitt {#pictures}
+
+Nennt ein Abschnitt ein Bild der Aufgabe beim Namen, etwa \`skizze.jpg\`, steht das Bild klein darunter. Ein Klick öffnet es. Welche Bilder eine Aufgabe hat, steht in [Fotos und andere Dateien](help.topic.pictures#overview).
+
 ## Zwei Tische {#tables}
 
 Haben in einem Lauf beide Arbeitsweisen gearbeitet, hat jeder [Tisch](help.topic.words#table) ein eigenes Dokument. Unter „Welcher Tisch“ wählst du eines, oder beide nebeneinander. Darüber steht, wie die Modelle beide blind verglichen haben und welches das Ergebnis wurde.
@@ -606,6 +614,14 @@ When more than half of the models agree to a version, it is accepted. You can al
 
 When something is wrong in a section, you choose the section, write what is wrong and raise the [objection](help.topic.words#objection). No model can decline an objection of yours; the next round must take it up. Objections stand beside their section until they are settled.
 
+## Writing yourself {#write}
+
+As a member you can write a section of the newest version yourself ("Write this section") or add a new one at the end. Your text becomes a new version like a model's; your name then stands beside the section. If a model revised the section meanwhile, nothing is overwritten: you see its newer text beside yours and decide. How that goes in detail is in [Documents of a project](help.topic.documents#people).
+
+## Pictures beside a section {#pictures}
+
+When a section names a picture of the task by its name, such as \`sketch.jpg\`, the picture stands small below it. A click opens it. Which pictures a task has is in [Photos and other files](help.topic.pictures#overview).
+
 ## Two tables {#tables}
 
 When both ways of working worked in a run, each [table](help.topic.words#table) has a document of its own. Under "Which table" you choose one, or both side by side. Above them stands how the models compared both blind and which one became the result.
@@ -613,6 +629,138 @@ When both ways of working worked in a run, each [table](help.topic.words#table) 
 ## Downloading {#download}
 
 "Result with appendix (.md)" downloads the plan with its decisions and its course as a Markdown file. "this version (.md)" downloads only the version you are reading.`,
+		},
+	},
+	{
+		id: "help.topic.documents",
+		section: "use",
+		plain: true,
+		title: { de: "Dokumente eines Projekts", en: "Documents of a project" },
+		short: {
+			de: "Plan und weitere Dokumente in einem Raum, selbst geschriebene Abschnitte, das Quellenregister und das Speichern in den Projektordner.",
+			en: "The plan and further documents in one room, sections you write yourself, the register of sources and saving into the project folder.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Nach dieser Seite kannst du in einem [Raum](help.topic.words#room) neben dem Plan weitere Dokumente ausarbeiten lassen, etwa Anforderungen und eine Architektur. Du weißt, wie du selbst Abschnitte schreibst, wie das Quellenregister funktioniert und wie die Dokumente als Dateien in den Projektordner kommen.
+
+## Plan oder Dokument {#kinds}
+
+Beim Anlegen einer Aufgabe wählst du die Art:
+
+- **Plan:** Die [Modelle](help.topic.words#model) messen ihn an den sieben Kriterien des Forums, und er hat nummerierte Phasen.
+- **Dokument:** zum Beispiel Anforderungen, eine Architektur oder ein Vergleich. Gemessen wird es an drei allgemeinen Kriterien und an deinen eigenen; Phasen braucht es nicht.
+
+Ein Dokument braucht einen Namen, etwa \`anforderungen\`. Unter diesem Namen wird es gespeichert (\`anforderungen.md\`). Zwei Aufgaben eines Raums tragen nie denselben Namen.
+
+## Andere Dokumente lesen {#room}
+
+Eine neue Aufgabe kann die anderen Dokumente des Raums lesen: Hake sie unter „Andere Dokumente des Raums lesen“ an. So wird die Architektur gegen die Anforderungen geschrieben. Gelesen wird die angenommene [Fassung](help.topic.words#version); gibt es keine, der neueste Entwurf, und dann steht ausdrücklich „Entwurf“ dabei.
+
+Die Aufgabe nimmt eine Kopie, wie das Dokument beim Anlegen ist. Spätere Fassungen ändern diese Kopie nicht, denn das Prüfprogramm vergleicht Zitate mit genau diesem Text.
+
+## Selbst schreiben {#people}
+
+Als Mitglied schreibst du einen Abschnitt der neuesten Fassung selbst oder hängst einen neuen an. Dein Text wird eine Fassung wie die eines Modells, mit deinem Namen beim Abschnitt.
+
+Es gilt dieselbe Regel wie für die Modelle: Wer auf einem älteren Stand schreibt, bekommt den neueren Text gezeigt.
+
+- Hat ein Modell den Abschnitt überarbeitet, während du geschrieben hast, wird nichts gespeichert. Du siehst seinen Text neben deinem. Dann wählst du „Trotzdem speichern“, das gegen den neueren Text schreibt, oder „Ihren Text übernehmen“.
+- Schreibt ein Modell nach dir an demselben Abschnitt, bekommt es deinen Text und muss darauf aufbauen.
+
+## Das Quellenregister {#register}
+
+Jede Quelle, die eine Aufgabe liest, kommt als Vorschlag ins Register des Raums: hochgeladene Dokumente, das Repository, die Kopie des [Workspace](help.topic.words#workspace) und die anderen Dokumente des Raums. Liest eine zweite Aufgabe dieselbe Quelle, bleibt es ein Eintrag.
+
+Eine eigene Quelle fügst du mit ihrer Adresse (https://…), einem Titel und einer Notiz hinzu.
+
+Bei jeder Quelle steht, welche Abschnitte sie zitieren. Das liest das Forum aus den Dokumenten, wie sie gerade sind: ein Dateiname in Backticks, eine zitierte Zeile oder bei einem Link seine Adresse.
+
+Ein Mitglied **nimmt eine Quelle an** oder **lehnt sie ab**. Ein Ablehnen braucht den Grund, etwa „veraltet“, „Lizenz unklar“ oder „sagt das nicht“. Die Lizenz trägst du ein, soweit du sie gefunden hast. Jede Entscheidung steht als Zeile im Raum.
+
+Dass die Modelle eine Quelle am [Tisch](help.topic.words#table) in Frage stellen und darüber abstimmen, kommt mit der Recherche dazu.
+
+## Speichern in den Projektordner {#save}
+
+Ist der Raum mit einem Workspace verbunden, speicherst du unter „In den Projektordner speichern“:
+
+- **Speichern** schreibt das Dokument dieser Aufgabe als Markdown in den Projektordner, mit dem Anhang, wie es entstand.
+- **Alle speichern** schreibt jedes Dokument des Raums in seine eigene Datei und das Register als \`sources.md\`.
+
+Den Dateinamen kannst du ändern; ohne Angabe gilt der Name der Aufgabe oder der des letzten Speicherns. Was gespeichert wird, ist die angenommene Fassung, sonst der neueste Entwurf.
+
+Ein Speichern wird einmal festgehalten. Geht die Antwort verloren und die Seite versucht es noch einmal, entsteht trotzdem nur eine neue Dateiversion.
+
+Der Raumbesitzer kann einstellen, dass jede angenommene Fassung von selbst gespeichert wird („Beim Annehmen in den Projektordner speichern“). Ohne diese Einstellung speichert nur ein Klick.
+
+## Wenn die Datei geändert wurde {#conflict}
+
+Hat jemand die Datei im Workspace seit dem letzten Speichern geändert oder gelöscht, schreibt das Forum nichts. Du siehst beide Texte nebeneinander: was jetzt im [Ordner](help.topic.words#folder) steht und was der Raum schreiben wollte. Dann speicherst du unter einem neuen Namen oder sprichst mit der Person, die die Datei geändert hat.
+
+![Speichern, und was geschieht, wenn die Datei inzwischen geändert wurde](/help/img/forum-conflict-de.svg)
+
+Hat der Raum seine [Freigabe](help.topic.words#grant) für den Ordner verloren, sagt das Forum das, statt zu speichern. Wer Freigaben vergibt, steht in [Wer was sieht](help.topic.who_sees_what#overview).`,
+			en: `## Overview {#overview}
+
+After this page you can have further documents worked out in a [room](help.topic.words#room) beside the plan, such as requirements and an architecture. You know how to write sections yourself, how the register of sources works and how the documents get into the project [folder](help.topic.words#folder) as files.
+
+## Plan or document {#kinds}
+
+When you create a task you choose its kind:
+
+- **Plan:** the [models](help.topic.words#model) hold it against the forum's seven criteria, and it has numbered phases.
+- **Document:** requirements, an architecture or a comparison, for example. It is held against three general criteria and your own, and needs no phases.
+
+A document needs a name, such as \`requirements\`. It is saved under that name (\`requirements.md\`). No two tasks of a room have the same name.
+
+## Reading the other documents {#room}
+
+A new task can read the room's other documents: tick them under "Read the room's other documents". That way the architecture is written against the requirements. The task reads the accepted [version](help.topic.words#version). Where there is none it reads the newest draft, and then it says "draft" plainly.
+
+The task takes a copy of the document as it is when the task is created. Later versions do not change that copy, because the checker compares quotes against exactly that text.
+
+## Writing yourself {#people}
+
+As a member you write a section of the newest version yourself, or add a new one at the end. Your text becomes a version like a model's, with your name beside the section.
+
+The rule is the same as for the models: whoever writes against an older state is shown the newer text.
+
+- If a model revised the section while you were writing, nothing is saved. You see its text beside yours. Then choose "Save anyway", which writes against the newer text, or "Take theirs".
+- If a model writes the same section after you, it gets your text and must build on it.
+
+## The register of sources {#register}
+
+Every source a task reads comes into the room's register as proposed. That includes uploaded documents, the repository, the copy of the [workspace](help.topic.words#workspace) and the room's other documents. A second task that reads the same source keeps it one entry.
+
+You add a source of your own with its address (https://…), a title and a note.
+
+Each source shows the sections that cite it. The forum reads that from the documents as they stand now: a file name in backticks, a quoted line, or for a link its address.
+
+A member **accepts** a source or **declines** it. Declining needs the reason, such as "out of date", "licence unclear" or "does not say that". Enter the licence as far as you found it. Each decision is a line in the room.
+
+Models questioning a source at the [table](help.topic.words#table) and voting on it come with research.
+
+## Saving into the project folder {#save}
+
+When the room is linked to a workspace, you save under "Save to the project folder":
+
+- **Save** writes this task's document as Markdown into the project folder, with the appendix on how it came about.
+- **Save all** writes every document of the room into a file of its own, and the register as \`sources.md\`.
+
+You can change the file name; without one, the task's name counts, or the name of the last save. What is saved is the accepted version, else the newest draft.
+
+A save is recorded once. If the reply is lost and the page tries again, there is still only one new file version.
+
+The room's owner can set every accepted version to be saved by itself ("Save to the project folder when a version is accepted"). Without that setting, only a click saves.
+
+## When the file was changed {#conflict}
+
+If someone changed or deleted the file in the workspace since the last save, the forum writes nothing. You see both texts side by side: what is in the folder now and what the room wanted to write. Then save under a new name, or talk to whoever changed the file.
+
+![Saving, and what happens when the file was changed meanwhile](/help/img/forum-conflict.svg)
+
+If the room has lost its [grant](help.topic.words#grant) on the folder, the forum says so instead of saving. Who gives grants is in [Who sees what](help.topic.who_sees_what#overview).`,
 		},
 	},
 	{

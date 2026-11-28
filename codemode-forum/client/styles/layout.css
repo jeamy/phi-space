@@ -169,6 +169,16 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); cur
 .doc__origin { margin: 0 0 6px; font-size: 12px; }
 .doc__objection { margin: 4px 0; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 6px; font-size: 13px; }
 .doc__objection .chip { margin-right: 4px; font-size: 11px; }
+/* a person writing a section (panes.tsx SectionEditor), and the newer text it was told of */
+.doc__editor { display: grid; gap: 6px; margin: 6px 0; padding: 8px; border: 1px solid var(--line-strong); border-radius: 6px; }
+.doc__editor textarea { min-height: 8em; }
+.doc__stale { margin: 4px 0; padding: 6px 8px; border: 1px dashed var(--line-strong); border-radius: 6px; font-size: 13px; }
+.doc__stale .diff { max-height: 40vh; overflow: auto; }
+/* the pictures a section names */
+.doc__pics { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.doc__pics figure { margin: 0; max-width: 160px; }
+.doc__pics img { width: 100%; height: auto; max-height: 160px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); }
+.doc__pics figcaption { font-size: 12px; overflow-wrap: anywhere; }
 .doc__settled { font-size: 12px; margin: 2px 0 6px; }
 .diff { margin: 6px 0; padding: 8px 10px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .diff__same { color: var(--muted); }

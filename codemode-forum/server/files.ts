@@ -59,12 +59,22 @@ export type FilesRequest = { requestId: string; session: string; ts: number } & 
 	/** A picture of the workspace to show on the page (`path` as in a copy: reference/… or project/…), read as it is
 	 *  now; its bytes go back in PreviewPart entries under `previewId`. */
 	| { op: "preview"; path: string; previewId: string }
-	| { op: "upload"; uploadId: string; name: string; parts: number; hash: string; bytes: number; by: string; ttl: number; path?: string; opId?: string });
+	| { op: "upload"; uploadId: string; name: string; parts: number; hash: string; bytes: number; by: string; ttl: number; path?: string; opId?: string }
+	/** A document of the room as Markdown into the project folder (`path`, relative to the workspace), its bytes in
+	 *  UploadPart entries under `saveId`, exported once by the web process (a retry sends the same bytes). Written with
+	 *  `expected` (0: a new file; else the version the last save returned); the operation ID is drawn and kept in the
+	 *  request before the write, as for an upload. A changed file is not overwritten: the answer is `versionConflict`
+	 *  with the workspace's text in PreviewPart entries under `saveId`. `keep`: how long the PlanSave is kept. */
+	| { op: "save"; saveId: string; blockId: string; table: string; docVersion: number; path: string; expected: number; parts: number; hash: string; bytes: number; by: string; ttl: number; keep: number; opId?: string });
 export type CheckAnswer = { agent: string; workspaces: string[]; folders: Array<Folder & { role: "read" | "project"; entries: number }> };
 export type SnapshotAnswer = { copy: string; files: number; texts: number; bytes: number; textBytes: number; indexHash: string; tenant: string };
 export type UploadAnswer = { workspace: string; path: string; version: number; kind: string; bytes: number };
 export type PreviewAnswer = { kind: string; parts: number; bytes: number; version: number };
-export type FilesResult = { requestId: string; session: string; ok: boolean; code?: string; error?: string; check?: CheckAnswer; snapshot?: SnapshotAnswer; upload?: UploadAnswer; preview?: PreviewAnswer; ts: number };
+export type SaveAnswer = { workspace: string; path: string; version: number; bytes: number };
+/** A save that found the file changed: its version now and its text in PreviewPart entries (`parts`), or `gone` when
+ *  the file was removed in the workspace since the last save, or `tooLarge` when its text is not shown. */
+export type ConflictAnswer = { workspace: string; path: string; version: number; parts: number; bytes: number; gone?: true; tooLarge?: true };
+export type FilesResult = { requestId: string; session: string; ok: boolean; code?: string; error?: string; check?: CheckAnswer; snapshot?: SnapshotAnswer; upload?: UploadAnswer; preview?: PreviewAnswer; save?: SaveAnswer; conflict?: ConflictAnswer; ts: number };
 /** The kinds shown on the page as a picture, with their media type; an SVG only ever as a picture (an img element),
  *  never placed into the page. A preview has at most 8 MB. */
 export const PICTURE_TYPES: Record<string, string> = { png: "image/png", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml" };
@@ -81,6 +91,20 @@ export function workspacePath(link: Pick<RoomLink, "read" | "project">, path: st
 }
 /** An upload that was done, kept for a day: the same upload sent again (a reply that was lost) is answered from it. */
 export type UploadDone = { session: string; uploadId: string; by: string } & UploadAnswer & { ts: number };
+/** A document saved to the workspace: which version of which table's document, as which file version. The newest of a
+ *  block names the path and the version the next save writes against. */
+export type PlanSave = { session: string; blockId: string; saveId: string; table: string; docVersion: number; workspace: string; path: string; fileVersion: number; bytes: number; by: string; ts: number };
+/** The saves of a block, newest first. */
+export async function savesOf(space: SpaceLike, room: string, blockId?: string): Promise<PlanSave[]> {
+	return (await space.readAll({ type: "PlanSave", fields: { session: room, ...(blockId ? { blockId } : {}) } }, { limit: 2000 })).map((e) => e.fields as unknown as PlanSave).sort((a, b) => b.ts - a.ts);
+}
+/** The name a document is saved under: one Markdown file in the project folder itself. */
+export function saveName(raw: unknown): string {
+	let name = uploadName(String(raw ?? "").trim());
+	if (!/\.md$/i.test(name)) name = `${name.replace(/\.+$/, "")}.md`;
+	if (name.length > UPLOAD.name) throw new Error(`A file name has at most ${UPLOAD.name} characters`);
+	return name;
+}
 /** The largest file a person uploads (spaces-files keeps up to 16 MiB a file), and the characters of a part. */
 export const UPLOAD = { bytes: 16 * 1024 * 1024, part: 48_000, name: 120 };
 /** A file's name as a person sent it: no directories, no control characters, not one the readers are denied. */
@@ -187,7 +211,7 @@ export const walkedIndex = (files: Walked[]): IndexEntry[] => files.map((f) => (
 const RESULT_WAIT = 20_000;
 
 /** Asks the sources process about spaces-files and waits for the answer; a refusal throws its message. */
-export async function askFiles(space: SpaceLike, req: FilesRequest, waitMs: number): Promise<FilesResult> {
+export async function askFiles(space: SpaceLike, req: FilesRequest, waitMs: number, o: { refusals?: boolean } = {}): Promise<FilesResult> {
 	await space.write({ type: "FilesRequest", fields: req as never }, null, waitMs + 60_000);
 	let r = null as Awaited<ReturnType<SpaceLike["take"]>>;
 	for (const end = Date.now() + waitMs; !r && Date.now() < end; ) r = await space.take({ type: "FilesResult", fields: { requestId: req.requestId } }, Math.min(RESULT_WAIT, Math.max(1, end - Date.now())));
@@ -196,7 +220,7 @@ export async function askFiles(space: SpaceLike, req: FilesRequest, waitMs: numb
 		throw new Error(withdrawn ? "No sources process with a spaces-files connection answered" : "The sources process did not answer in time");
 	}
 	const res = r.fields as unknown as FilesResult;
-	if (!res.ok) throw new Error(res.error ?? "spaces-files refused the request");
+	if (!res.ok && !o.refusals) throw new Error(res.error ?? "spaces-files refused the request");
 	return res;
 }
 

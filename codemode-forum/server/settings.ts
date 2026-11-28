@@ -17,7 +17,9 @@ import { takeExisting } from "./space.ts";
 
 export type AdminLimits = { perMin?: number; perDay?: number; personTokensPerDay?: number; runBudgetTokens?: number };
 export type Way = "both" | "parallel" | "turns";
-export type RoomDefaults = { models?: string[]; perModel?: number; rounds?: number; way?: Way; budgetTokens?: number; personWaitS?: number };
+export type RoomDefaults = { models?: string[]; perModel?: number; rounds?: number; way?: Way; budgetTokens?: number; personWaitS?: number;
+	/** Save a task's document to the project folder when a version is accepted (off unless set). */
+	saveOnAccept?: boolean };
 
 const envNum = (name: string, dflt: number) => { const n = Number(process.env[name] ?? dflt); return Number.isFinite(n) && n >= 0 ? n : dflt; };
 /** The operator's ceilings; 0 for the token ones means none. */
@@ -82,6 +84,7 @@ export function checkRoom(b: Record<string, unknown>, o: { allowed: string[]; ru
 	if (budget !== undefined) d.budgetTokens = budget;
 	const wait = within(whole(b.personWaitS, "Waiting for the person", 0), c.personWaitS, "Waiting for the person (s)", false);
 	if (wait !== undefined) d.personWaitS = wait;
+	if (b.saveOnAccept === true) d.saveOnAccept = true;
 	return d;
 }
 

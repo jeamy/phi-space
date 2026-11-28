@@ -16,6 +16,8 @@ import { useRoom } from "../lib/use-room.ts";
 import { DocPane, OutcomePanel, RunPanel, TalkPane } from "../panes.tsx";
 import { Act, Area, Choice, Field, Tick } from "./controls.tsx";
 import { Skeleton, type RoomRow } from "./ForumPage.tsx";
+import { SaveDocs } from "./SaveDocs.tsx";
+import { Register } from "./Register.tsx";
 import type { PageText } from "./texts.ts";
 
 type Pane = "files" | "table" | "plan";
@@ -59,7 +61,7 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 					<ul className="fp-files">
 						{block.sources.map((x) => (
 							<li key={x.sourceId}>
-								<b>{x.kind === "repo" ? `${p.sourceRepo} ${x.name}` : x.kind === "files" ? `${p.sourceFiles}${x.tenant ? ` · ${x.tenant}` : ""}` : p.sourceDocs}</b>
+								<b>{x.kind === "repo" ? `${p.sourceRepo} ${x.name}` : x.kind === "files" ? `${p.sourceFiles}${x.tenant ? ` · ${x.tenant}` : ""}` : x.kind === "room" ? `${p.sourceRoom}: ${x.name}` : p.sourceDocs}</b>
 								<span className="fp-meta">{p.filesN(x.files)}{x.texts !== undefined ? ` (${p.textsN(x.texts)})` : ""} · {(x.bytes / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB{x.commit ? ` · ${x.commit.slice(0, 12)}` : ""}</span>
 							</li>
 						))}
@@ -69,6 +71,7 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 			) : <p className="fp-empty">{p.noSources}</p>}
 			{snap.link && canWrite ? <UploadFiles lang={lang} p={p} rid={rid} act={act} /> : null}
 			<TaskPictures key={`${block.blockId}-${block.images ?? 0}`} lang={lang} p={p} rid={rid} blockId={block.blockId} count={block.images ?? 0} canWrite={canWrite} act={act} />
+			<Register lang={lang} p={p} rid={rid} canWrite={canWrite} act={act} stamp={`${snap.lines.length}:${snap.lines.at(-1)?.ts ?? 0}`} />
 			</>}
 		</section>
 	);
@@ -89,7 +92,7 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 					<>
 						{blocks.length > 1 ? (
 							<Choice label={p.task} tip="task" lang={lang} value={block?.blockId ?? ""} onChange={(e) => { setFocus(e.target.value); setTableSel(null); }}>
-								{blocks.map((b) => <option key={b.blockId} value={b.blockId}>{firstLine(b.brief, 60)}</option>)}
+								{blocks.map((b) => <option key={b.blockId} value={b.blockId}>{b.name ? `${b.name} · ` : ""}{firstLine(b.brief, 60)}</option>)}
 							</Choice>
 						) : null}
 						{block ? (
@@ -98,7 +101,7 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 								{block.criteria.length ? <ul>{block.criteria.map((c) => <li key={c}>{c}</li>)}</ul> : null}
 							</div>
 						) : <p className="fp-empty">{canWrite ? p.noTask : p.viewer}</p>}
-						{!canWrite ? (block ? <p className="fp-meta">{p.viewer}</p> : null) : <NewTask lang={lang} p={p} t={t} rid={rid} open={!block} linked={!!snap.link} act={act} onMade={(id) => { setFocus(id); setTableSel(null); }} />}
+						{!canWrite ? (block ? <p className="fp-meta">{p.viewer}</p> : null) : <NewTask lang={lang} p={p} t={t} rid={rid} open={!block} linked={!!snap.link} others={blocks.filter((b) => b.doc).map((b) => ({ blockId: b.blockId, label: `${b.name ?? firstLine(b.brief, 50)}${b.accepted ? ` · ${p.isAccepted(b.accepted.version)}` : ` · ${p.isDraft}`}` }))} act={act} onMade={(id) => { setFocus(id); setTableSel(null); }} />}
 						{runHere ? <RunPanel t={t} locale={locale} runHere={runHere} table={table} answers={answers} /> : null}
 						{canWrite && block ? <StartRun key={JSON.stringify(snap.defaults ?? {})} lang={lang} p={p} t={t} rid={rid} blockId={block.blockId} available={available} limits={limits} defaults={snap.defaults ?? {}} active={!!run?.active} act={act} /> : null}
 						{(!login || row?.role === "owner") ? <RoomLinkForm lang={lang} p={p} rid={rid} act={act} /> : null}
@@ -119,9 +122,10 @@ export function RoomPlace({ lang, p, t, room, login, row }: { lang: Lang; p: Pag
 							</Choice>
 						) : null}
 						{result && (result.stat || result.compares.length) ? <OutcomePanel t={t} locale={locale} o={result} name={name} /> : null}
+						{snap.link && canWrite ? <SaveDocs lang={lang} p={p} t={t} rid={rid} blocks={blocks} block={block} folder={`${snap.link.project.workspace}/${snap.link.project.path || ""}`.replace(/\/$/, "")} /> : null}
 						<div className={sideBySide ? "docs docs--side" : "docs"}>
 							{(sideBySide ? docTables : [shown]).map((x) => (
-								<DocPane key={`${block.blockId}:${x}`} t={t} lang={lang} locale={locale} rid={rid} block={block} table={x} head={block.heads[x] ?? 0} titled={docTables.length === 2} resultVersion={resultOf(x)} objections={talkOf(x)?.objections ?? []} docKey={docKey} name={name} act={async (fn) => { await act(fn); }} />
+								<DocPane key={`${block.blockId}:${x}`} t={t} lang={lang} locale={locale} rid={rid} block={block} table={x} head={block.heads[x] ?? 0} titled={docTables.length === 2} resultVersion={resultOf(x)} objections={talkOf(x)?.objections ?? []} docKey={docKey} name={name} act={async (fn) => { await act(fn); }} canEdit={canWrite} />
 							))}
 						</div>
 					</>
@@ -179,9 +183,13 @@ function useNotifyWhenAsked(forPerson: number, room: string, title: string): voi
 	}, [forPerson, seen, room, title]);
 }
 
-/** A new plan task: the brief, the document's language, optionally an outline, criteria and documents to read. */
-function NewTask({ lang, p, t, rid, open, linked, act, onMade }: { lang: Lang; p: PageText; t: Text; rid: string; open: boolean; linked: boolean; act: (fn: () => Promise<unknown>) => Promise<boolean>; onMade: (blockId: string) => void }) {
+/** A new task: a plan or a document with its name, the brief, the document's language, optionally an outline,
+ *  criteria, documents to read and the room's other documents. */
+function NewTask({ lang, p, t, rid, open, linked, others, act, onMade }: { lang: Lang; p: PageText; t: Text; rid: string; open: boolean; linked: boolean; others: Array<{ blockId: string; label: string }>; act: (fn: () => Promise<unknown>) => Promise<boolean>; onMade: (blockId: string) => void }) {
 	const [fromWs, setFromWs] = useState(true);
+	const [kind, setKind] = useState<"plan" | "document">(others.length ? "document" : "plan");
+	const [docName, setDocName] = useState("");
+	const [reads, setReads] = useState<Set<string>>(new Set());
 	const [brief, setBrief] = useState("");
 	const [docLang, setDocLang] = useState<Lang>(lang);
 	const [outline, setOutline] = useState("");
@@ -193,8 +201,8 @@ function NewTask({ lang, p, t, rid, open, linked, act, onMade }: { lang: Lang; p
 		setDocs((cur) => [...cur.filter((d) => !read.some((x) => x.name === d.name)), ...read]);
 	};
 	const create = () => act(async () => {
-		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang, outline, criteria, ...(docs.length ? { docs } : {}), ...(linked && fromWs ? { files: true } : {}) });
-		setBrief(""); setOutline(""); setCriteria(""); setDocs([]); onMade(r.blockId);
+		const r = await api<{ blockId: string }>(`/rooms/${rid}/task`, { brief, lang: docLang, outline, criteria, kind, ...(docName.trim() ? { name: docName.trim() } : {}), ...(reads.size ? { room: [...reads] } : {}), ...(docs.length ? { docs } : {}), ...(linked && fromWs ? { files: true } : {}) });
+		setBrief(""); setOutline(""); setCriteria(""); setDocs([]); setDocName(""); setReads(new Set()); onMade(r.blockId);
 		// the pictures go after the task is there, each as its reduced copy; one that fails is named, the others go on
 		const failed: string[] = [];
 		for (const f of pics) { try { await sendPicture(rid, r.blockId, f.name, await reducePicture(f)); } catch (e) { failed.push(`${f.name}: ${(e as Error).message}`); } }
@@ -204,6 +212,16 @@ function NewTask({ lang, p, t, rid, open, linked, act, onMade }: { lang: Lang; p
 	return (
 		<details className="fp-fold" open={open}>
 			<summary>{p.newTask}</summary>
+			<div className="fp-row">
+				<Choice label={p.taskKind} tip="taskkind" lang={lang} value={kind} onChange={(e) => setKind(e.target.value as "plan" | "document")}><option value="plan">{p.kindPlan}</option><option value="document">{p.kindDocument}</option></Choice>
+				<Field label={p.docName} tip="taskkind" lang={lang} value={docName} maxLength={60} placeholder={kind === "document" ? p.docNameHint : "plan"} onChange={(e) => setDocName(e.target.value)} />
+			</div>
+			{others.length ? (
+				<fieldset className="fp-folder">
+					<legend>{p.readRoom} <HelpTip id="roomdocs" lang={lang} label={p.readRoom} /></legend>
+					{others.map((o) => <Tick key={o.blockId} label={o.label} tip="roomdocs" lang={lang} checked={reads.has(o.blockId)} onChange={(e) => setReads((cur) => { const n = new Set(cur); if (e.target.checked) n.add(o.blockId); else n.delete(o.blockId); return n; })} />)}
+				</fieldset>
+			) : null}
 			<Area label={t.brief} tip="brief" lang={lang} rows={5} maxLength={8000} value={brief} onChange={(e) => setBrief(e.target.value)} />
 			<Choice label={t.docLang} tip="doclang" lang={lang} value={docLang} onChange={(e) => setDocLang(e.target.value as Lang)}><option value="de">Deutsch</option><option value="en">English</option></Choice>
 			<Area label={t.outline} tip="outline" lang={lang} rows={3} value={outline} onChange={(e) => setOutline(e.target.value)} />
@@ -224,7 +242,7 @@ function NewTask({ lang, p, t, rid, open, linked, act, onMade }: { lang: Lang; p
 			{linked ? <Tick label={p.fromWorkspace} tip="fromworkspace" lang={lang} checked={fromWs} onChange={(e) => setFromWs(e.target.checked)} /> : null}
 			{docs.length || (linked && fromWs) ? <p className="fp-meta">{t.sourceNote}</p> : null}
 			{brief.trim() && brief.trim().length < 20 ? <p className="fp-meta">{p.briefShort}</p> : null}
-			<Act kind="primary" label={t.create} tip="brief" lang={lang} disabled={brief.trim().length < 20} onClick={() => void create()} />
+			<Act kind="primary" label={t.create} tip="brief" lang={lang} disabled={brief.trim().length < 20 || (kind === "document" && !docName.trim())} onClick={() => void create()} />
 		</details>
 	);
 }
@@ -274,13 +292,14 @@ function RoomDefaultsForm({ lang, p, t, rid, available, defaults, act }: { lang:
 	const [perModel, setPerModel] = useState(defaults.perModel === undefined ? "" : String(defaults.perModel));
 	const [budget, setBudget] = useState(defaults.budgetTokens === undefined ? "" : String(defaults.budgetTokens));
 	const [wait, setWait] = useState(defaults.personWaitS === undefined ? "" : String(defaults.personWaitS));
+	const [onAccept, setOnAccept] = useState(!!defaults.saveOnAccept);
 	const [ceil, setCeil] = useState<{ runBudgetTokens: number; personWaitS: number } | null>(null);
 	const [saved, setSaved] = useState(false);
 	const load = () => api<{ ceilings: { runBudgetTokens: number; personWaitS: number } }>(`/rooms/${rid}/settings`).then((x) => setCeil(x.ceilings)).catch(() => {});
 	const num = (v: string) => (v === "" ? undefined : Number(v));
 	const save = () => act(async () => {
 		setSaved(false);
-		await api(`/rooms/${rid}/settings`, { models: [...models], way: way || undefined, rounds: num(rounds), perModel: num(perModel), budgetTokens: num(budget), personWaitS: num(wait) });
+		await api(`/rooms/${rid}/settings`, { models: [...models], way: way || undefined, rounds: num(rounds), perModel: num(perModel), budgetTokens: num(budget), personWaitS: num(wait), saveOnAccept: onAccept });
 		setSaved(true);
 	});
 	return (
@@ -302,6 +321,7 @@ function RoomDefaultsForm({ lang, p, t, rid, available, defaults, act }: { lang:
 				<Field label={t.tokens} tip="roomdefaults" lang={lang} type="number" min={1000} step={1000} max={ceil?.runBudgetTokens || undefined} value={budget} onChange={(e) => setBudget(e.target.value)} />
 				<Field label={p.personWait} tip="roomdefaults" lang={lang} type="number" min={0} max={ceil?.personWaitS} value={wait} onChange={(e) => setWait(e.target.value)} />
 			</div>
+			<Tick label={p.saveOnAccept} tip="saveonaccept" lang={lang} checked={onAccept} onChange={(e) => setOnAccept(e.target.checked)} />
 			{ceil ? <p className="fp-meta">{p.ceilings(ceil.runBudgetTokens, ceil.personWaitS)}</p> : null}
 			<Act kind="primary" label={p.saveDefaults} tip="roomdefaults" lang={lang} onClick={() => void save()} />
 			{saved ? <p className="fp-meta" role="status">{p.saved}</p> : null}

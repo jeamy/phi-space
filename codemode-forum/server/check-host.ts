@@ -30,6 +30,8 @@ export async function sourceFiles(space: SpaceLike, session: string, blockId: st
 	const files: SourceFiles = new Map();
 	// the documents a person uploaded come first: a name that is in both is the document's
 	for (const p of pages.sort((a, b) => a.sourceId.localeCompare(b.sourceId))) for (const [path] of p.paths) if (!files.has(path)) files.set(path, p.sourceId);
+	// the task's pictures are named by their names (images.ts): one cited in backticks is no file the plan makes up
+	for (const e of await space.readAll({ type: "TaskImage", fields: { session, blockId } }, { limit: 20 })) { const name = (e.fields as { name: string }).name; if (!files.has(name)) files.set(name, "picture"); }
 	return files;
 }
 
@@ -62,7 +64,7 @@ export async function startCheckHost(o: { space?: string } = {}) {
 				const task = (await space.readIfExists({ type: "PlanTask", fields: { session: req.session, blockId: req.blockId } }, NO_WAIT))?.fields as unknown as PlanTask | undefined;
 				if (!doc || !task) throw new Error("the document or its task is gone");
 				// a line is in a file when a search for it in that file finds it (the sources process; fixed text, any case)
-				const quoted = async (source: string, path: string, line: string) => !/^No line contains/.test((await askSources(space, { requestId: `${req.requestId}-q${Math.random().toString(36).slice(2, 8)}`, session: req.session, blockId: req.blockId, op: "call", sourceId: source as SourceId, call: { op: "search", query: line.slice(0, 200), glob: path }, ts: Date.now() })).text ?? "");
+				const quoted = async (source: string, path: string, line: string) => source !== "picture" && !/^No line contains/.test((await askSources(space, { requestId: `${req.requestId}-q${Math.random().toString(36).slice(2, 8)}`, session: req.session, blockId: req.blockId, op: "call", sourceId: source as SourceId, call: { op: "search", query: line.slice(0, 200), glob: path }, ts: Date.now() })).text ?? "");
 				const found = await checkDoc(await fullDoc(space, doc), task, await sourceFiles(space, req.session, req.blockId), quoted);
 				const check: PlanCheck = { ...d, version: doc.version, ...found, ts: Date.now() };
 				// one result a version: an earlier one of the same version is replaced
