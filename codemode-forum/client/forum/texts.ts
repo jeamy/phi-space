@@ -55,7 +55,7 @@ export const P = {
 		conflictGone: (path: string) => `${path} wurde im Workspace gelöscht; nichts wurde geschrieben.`,
 		conflictTitle: "Im Workspace geändert", conflictHow: "Jemand hat die Datei seit dem letzten Speichern geändert. Als entfernt markiert ist, was nur im Workspace steht; als hinzugefügt, was der Raum schreiben wollte.",
 		conflictGoneHow: "Die Datei wurde seit dem letzten Speichern im Workspace gelöscht.", conflictTooLarge: "Die Datei im Workspace ist zu groß oder kein Text, um sie hier zu zeigen.",
-		conflictTheirs: "nur im Workspace", conflictMine: "nur im Raum", conflictNext: "Speichere unter einem neuen Dateinamen, oder sprich mit der Person, die die Datei geändert hat. Den Text des Workspace in den Raum zu holen, kommt mit dem Rückweg.",
+		conflictTheirs: "nur im Workspace", conflictMine: "nur im Raum", conflictNext: "Speichere unter einem neuen Dateinamen, sprich mit der Person, die die Datei geändert hat, oder hol ihren Text als neue Fassung in den Raum.", conflictLoad: "Text des Workspace in den Raum holen", loadBack: "Aus dem Workspace laden", loadUnchanged: (v: number) => `Die Datei ist unverändert (Version ${v}); nichts geladen.`, loadedAs: (path: string, v: number, d: number) => `${path} (Dateiversion ${v}) ist jetzt Fassung ${d}.`, loadSame: (v: number) => `Dateiversion ${v} hat denselben Text wie das Dokument; das nächste Speichern schreibt auf ihr weiter.`, downloadPdf: "PDF herunterladen",
 	},
 	en: {
 		rooms: "Rooms", settings: "Settings", help: "Help", expert: "Expert view", back: "To the rooms",
@@ -111,7 +111,7 @@ export const P = {
 		conflictGone: (path: string) => `${path} was removed in the workspace; nothing was written.`,
 		conflictTitle: "Changed in the workspace", conflictHow: "Someone changed the file since the last save. Marked removed is what only the workspace has; marked added is what the room wanted to write.",
 		conflictGoneHow: "The file was removed in the workspace since the last save.", conflictTooLarge: "The file in the workspace is too large, or no text, to show here.",
-		conflictTheirs: "only in the workspace", conflictMine: "only in the room", conflictNext: "Save under a new file name, or talk to whoever changed the file. Taking the workspace's text into the room comes with the way back.",
+		conflictTheirs: "only in the workspace", conflictMine: "only in the room", conflictNext: "Save under a new file name, talk to whoever changed the file, or take their text into the room as a new version.", conflictLoad: "Take the workspace's text into the room", loadBack: "Load from the workspace", loadUnchanged: (v: number) => `The file has not changed (version ${v}); nothing loaded.`, loadedAs: (path: string, v: number, d: number) => `${path} (file version ${v}) is now version ${d}.`, loadSame: (v: number) => `File version ${v} has the same text as the document; the next save writes on top of it.`, downloadPdf: "Download the PDF",
 	},
 } as const;
 

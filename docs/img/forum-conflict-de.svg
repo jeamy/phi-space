@@ -78,10 +78,10 @@
 <!-- choose -->
 <g id="node6" class="node">
 <title>choose</title>
-<path fill="#fcf2d9" stroke="#7691a4" stroke-width="1.2" d="M500.35,-63.27C500.35,-63.27 223.75,-63.27 223.75,-63.27 217.75,-63.27 211.75,-57.27 211.75,-51.27 211.75,-51.27 211.75,-12 211.75,-12 211.75,-6 217.75,0 223.75,0 223.75,0 500.35,0 500.35,0 506.35,0 512.35,-6 512.35,-12 512.35,-12 512.35,-51.27 512.35,-51.27 512.35,-57.27 506.35,-63.27 500.35,-63.27"/>
+<path fill="#fcf2d9" stroke="#7691a4" stroke-width="1.2" d="M546.48,-63.27C546.48,-63.27 177.62,-63.27 177.62,-63.27 171.62,-63.27 165.62,-57.27 165.62,-51.27 165.62,-51.27 165.62,-12 165.62,-12 165.62,-6 171.62,0 177.62,0 177.62,0 546.48,0 546.48,0 552.48,0 558.48,-6 558.48,-12 558.48,-12 558.48,-51.27 558.48,-51.27 558.48,-57.27 552.48,-63.27 546.48,-63.27"/>
 <text xml:space="preserve" text-anchor="middle" x="362.05" y="-44.21" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">Du entscheidest</text>
-<text xml:space="preserve" text-anchor="middle" x="362.05" y="-26.96" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">unter neuem Namen speichern oder mit</text>
-<text xml:space="preserve" text-anchor="middle" x="362.05" y="-9.71" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">der Person reden, die sie geändert hat</text>
+<text xml:space="preserve" text-anchor="middle" x="362.05" y="-26.96" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">unter neuem Namen speichern, mit der Person reden</text>
+<text xml:space="preserve" text-anchor="middle" x="362.05" y="-9.71" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">oder ihren Text in den Raum laden</text>
 </g>
 <!-- both&#45;&gt;choose -->
 <g id="edge5" class="edge">

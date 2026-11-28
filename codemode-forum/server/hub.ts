@@ -10,7 +10,7 @@ import type { WsConnection } from "phi-spaces/ws";
 import { MAX_AGENTS_PER_MODEL, MAX_MODELS, MIN_MODELS, today } from "./limits.ts";
 import { ceilings, checkRoom, effectiveLimits, readLimits, readRoom, saveRoom, type RoomDefaults } from "./settings.ts";
 import { modelInfoOf, spentToday, type ModelInfoView, type Spend } from "./models.ts";
-import { DocRefused, fullDoc, headOf, StaleSection, versionsOf, writeVersion, type FullDoc, type PlanDoc } from "./plandoc.ts";
+import { DOC_LIMITS, DocRefused, fullDoc, headOf, StaleSection, versionsOf, writeVersion, type FullDoc, type PlanDoc, type Revision } from "./plandoc.ts";
 import { planTask, type PlanTask } from "./plantask.ts";
 import { checkOf, sourceFiles } from "./check-host.ts";
 import { addRef, citesOf, decideRef, proposeRefs, refsOf, refsOfTask, registerMarkdown, REGISTER_BLOCK, type Cite, type SourceRef } from "./register.ts";
@@ -24,7 +24,7 @@ import { objectionsOf, type PlanObjection } from "./review.ts";
 import { acceptOf, ballotsOf, type PlanAccept, type PlanBallot } from "./ballots.ts";
 import { MAX_ROUNDS, runType, TABLE_SHARE, tableInfo } from "./run.ts";
 import { comparesOf, resultOf, standings, type PlanCompare, type PlanStrategyStat } from "./compare.ts";
-import { chosenOf, exportPlan, type Chosen } from "./export.ts";
+import { chosenOf, exportPlan, parseSaved, type Chosen } from "./export.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
 import { addImage, imageData, imagesOf, imageViews, noteImage, removeImage, type ImageView } from "./images.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
@@ -721,14 +721,84 @@ export class ForumHub {
 	/** A picture of the linked folders as it is now, for the page: its bytes and media type (files.ts PICTURE_TYPES). */
 	async preview(id: string, path: string): Promise<{ type: string; bytes: Buffer }> {
 		const s = await this.session(id);
-		if (!(await readLink(this.host, s.id))) throw new Error("The room is not linked to a workspace");
+		const got = await this.#fetch(s.id, path);
+		return { type: PICTURE_TYPES[got.kind]!, bytes: got.bytes };
+	}
+
+	/** A PDF of the linked folders as it is now, to download (the browser's own viewer opens it from there). */
+	async download(id: string, path: string): Promise<{ bytes: Buffer; name: string }> {
+		const s = await this.session(id);
+		const got = await this.#fetch(s.id, path, "pdf");
+		return { bytes: got.bytes, name: path.split("/").at(-1)!.replace(/[^\w.+-]/g, "_") };
+	}
+
+	/** A file of the linked folders as it is now, through the sources process (files.ts `preview`): a picture, or the
+	 *  kind `want` names. */
+	async #fetch(session: string, path: string, want?: "pdf" | "text"): Promise<{ kind: string; bytes: Buffer; version: number }> {
+		if (!(await readLink(this.host, session))) throw new Error("The room is not linked to a workspace");
 		const previewId = `pv${rid()}${rid()}`;
-		const { preview } = await askFiles(this.host, { requestId: `pv-${previewId}`, session: s.id, op: "preview", path, previewId, ts: Date.now() }, sourceWaitMs());
-		const parts = (await this.host.readAll({ type: "PreviewPart", fields: { session: s.id, previewId } }, { limit: preview!.parts + 2 })).map((e) => e.fields as { part: number; data: string }).sort((a, b) => a.part - b.part);
-		for (let n = 0; n <= parts.length && (await this.host.take({ type: "PreviewPart", fields: { session: s.id, previewId } }, NO_WAIT)); n++) { /* read: gone */ }
+		const { preview } = await askFiles(this.host, { requestId: `pv-${previewId}`, session, op: "preview", path, previewId, ...(want ? { want } : {}), ts: Date.now() }, sourceWaitMs());
+		const parts = (await this.host.readAll({ type: "PreviewPart", fields: { session, previewId } }, { limit: preview!.parts + 2 })).map((e) => e.fields as { part: number; data: string }).sort((a, b) => a.part - b.part);
+		for (let n = 0; n <= parts.length && (await this.host.take({ type: "PreviewPart", fields: { session, previewId } }, NO_WAIT)); n++) { /* read: gone */ }
 		const bytes = Buffer.from(parts.map((p) => p.data).join(""), "base64");
-		if (parts.length !== preview!.parts || bytes.length !== preview!.bytes) throw new Error("The picture arrived incomplete");
-		return { type: PICTURE_TYPES[preview!.kind]!, bytes };
+		if (parts.length !== preview!.parts || bytes.length !== preview!.bytes) throw new Error("The file arrived incomplete");
+		return { kind: preview!.kind, bytes, version: preview!.version };
+	}
+
+	/** The way back (docs/forum-seite-plan-2026-11-26.en.md, section 6): a saved document's file read from the project
+	 *  folder. A version newer than the last save's becomes a new version of the document, cut into sections at its
+	 *  headings (each matched to the section of the same title, new ones placed where they stand, missing ones
+	 *  removed), the appendix left out, the person as author; the next save is written against the version loaded. A
+	 *  file no newer than the last save loads nothing. */
+	async load(id: string, blockId: string, o: { by: string }): Promise<{ unchanged: true; fileVersion: number } | { version: number | null; fileVersion: number; path: string }> {
+		const s = await this.session(id);
+		const tasks = await this.#tasks(s.id), task = tasks.find((t) => t.blockId === blockId);
+		if (!task) throw new Error("No such task in this room");
+		const last = (await savesOf(this.host, s.id, blockId))[0];
+		if (!last) throw new Error("This document was never saved to the project folder: there is nothing to load");
+		const link = await readLink(this.host, s.id);
+		if (!link) throw new Error("The room is not linked to a workspace");
+		const dir = link.project.path ? `${link.project.path}/` : "";
+		if (link.project.workspace !== last.workspace || !last.path.startsWith(dir)) throw new Error(`The room's project folder changed since ${last.path} was saved`);
+		if (!this.#allow(s, "load", 20)) throw new Error("Too many loads, slow down");
+		const got = await this.#fetch(s.id, `project/${last.path.slice(dir.length)}`, "text");
+		if (got.version <= last.fileVersion) return { unchanged: true, fileVersion: got.version };
+		if (got.bytes.length > 2 * DOC_LIMITS.docBytes) throw new Error(`${last.path} has ${got.bytes.length} bytes; a document loaded back has at most ${2 * DOC_LIMITS.docBytes} with its appendix`);
+		const parsed = parseSaved(got.bytes.toString("utf8"), task.lang === "de" ? "Einleitung" : "Introduction");
+		if (!parsed.length) throw new Error(`${last.path} has no sections: a document is cut at its "## " headings`);
+		const d = { session: s.id, blockId, table: last.table === "A" || last.table === "B" ? last.table : await this.#tableOf(s.id, blockId) };
+		const head = await headOf(this.host, d), have = head ? (await fullDoc(this.host, head)).sections : [];
+		// each section of the file to the one of the same title; a run of new ones after the section before them
+		const used = new Set<string>(), changes: Revision["changes"] = [];
+		let anchor = "", fresh: Array<{ title: string; text: string }> = [];
+		const flush = () => { for (const x of fresh.reverse()) changes.push({ title: x.title, text: x.text, after: anchor }); fresh = []; };
+		for (const x of parsed) {
+			const m = have.find((h) => !used.has(h.sectionId) && h.title.trim().toLowerCase() === x.title.trim().toLowerCase());
+			if (!m) { fresh.push(x); continue; }
+			flush();
+			used.add(m.sectionId);
+			if (m.text.trim() !== x.text.trim() || m.title !== x.title) changes.push({ sectionId: m.sectionId, base: m.rev, title: x.title, text: x.text });
+			anchor = m.sectionId;
+		}
+		flush();
+		const remove = have.filter((h) => !used.has(h.sectionId)).map((h) => h.sectionId);
+		let version: number | null = null;
+		const t = await this.host.createTransaction(30_000);
+		try {
+			if (changes.length || remove.length) version = (await writeVersion(this.host, t.id, this.#ttl, d, { author: o.by, model: "human" }, { changes, remove })).version;
+			// the next save of this file is written against the version just loaded
+			const saved: PlanSave = { session: s.id, blockId, saveId: `load-${rid()}${rid()}`, table: d.table, docVersion: version ?? head?.version ?? 0, workspace: last.workspace, path: last.path, fileVersion: got.version, bytes: got.bytes.length, by: o.by, ts: Date.now() };
+			await this.host.write({ type: "PlanSave", fields: saved as never }, t.id, this.#ttl);
+			await this.host.commit(t.id);
+		} catch (e) {
+			await this.host.abort(t.id).catch(() => {});
+			if (e instanceof StaleSection) throw new Error(`"${e.current.title}" was revised meanwhile; load again`);
+			if (e instanceof DocRefused) throw new Error(`${last.path} cannot be loaded: ${e.message}`);
+			throw e;
+		}
+		await systemLine(this.host, null, this.#ttl, s.id, version ? `${o.by} loaded ${last.workspace}/${last.path} (file version ${got.version}) as version ${version} of table ${d.table}` : `${o.by} loaded ${last.workspace}/${last.path} (file version ${got.version}): the same text as the document`);
+		this.push(s);
+		return { version, fileVersion: got.version, path: last.path };
 	}
 
 	/** A member's file into `material/` of the room's project folder, through the sources process (files.ts). Sent

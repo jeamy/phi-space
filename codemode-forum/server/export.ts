@@ -166,3 +166,25 @@ export async function exportPlan(space: SpaceLike, session: string, blockId: str
 
 	return { markdown: `${plan}\n${out.join("\n")}`, plan, chosen, doc };
 }
+
+/** A saved document's file as sections again (the way back, docs/forum-seite-plan-2026-11-26.en.md, section 6): the
+ *  generated appendix and the title line removed, cut at its `## ` headings (not those inside a fenced block). Text
+ *  before the first heading becomes a section of its own (`intro`, its title). */
+export function parseSaved(markdown: string, intro: string): Array<{ title: string; text: string }> {
+	let text = markdown.replace(/\r\n?/g, "\n");
+	const at = text.indexOf(APPENDIX_MARK);
+	if (at >= 0) text = text.slice(0, at).replace(/\n*-{3,}\s*$/, "");
+	const lines = text.split("\n");
+	while (lines.length && !lines[0]!.trim()) lines.shift();
+	if (lines[0] && /^# (?!#)/.test(lines[0])) lines.shift();
+	const out: Array<{ title: string; lines: string[] }> = [{ title: intro, lines: [] }];
+	let fence: string | null = null;
+	for (const line of lines) {
+		const f = /^\s*(```+|~~~+)/.exec(line);
+		if (f) fence = fence === null ? f[1]![0]! : line.trim().startsWith(fence) ? null : fence;
+		const h = fence === null && !f ? /^##\s+(.+?)\s*#*\s*$/.exec(line) : null;
+		if (h) out.push({ title: h[1]!, lines: [] }); else out.at(-1)!.lines.push(line);
+	}
+	const body = (l: string[]) => l.join("\n").replace(/^\s*\n/, "").trimEnd();
+	return out.map((s) => ({ title: s.title, text: body(s.lines) })).filter((s, i) => i > 0 || s.text.trim());
+}

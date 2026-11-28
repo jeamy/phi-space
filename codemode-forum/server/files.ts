@@ -56,9 +56,10 @@ export type FilesRequest = { requestId: string; session: string; ts: number } & 
 	 *  sources process names the file and draws the operation ID first and keeps both in the request (`path`, `opId`)
 	 *  before it writes, so a process that takes the request over after a crash sends the same write again and
 	 *  spaces-files answers it from its receipt: one file. */
-	/** A picture of the workspace to show on the page (`path` as in a copy: reference/… or project/…), read as it is
-	 *  now; its bytes go back in PreviewPart entries under `previewId`. */
-	| { op: "preview"; path: string; previewId: string }
+	/** A file of the workspace as it is now (`path` as in a copy: reference/… or project/…), its bytes back in
+	 *  PreviewPart entries under `previewId`: a picture to show on the page (`want` missing), a PDF to download, or a
+	 *  text (a saved document loaded back into the room). Any other kind is refused. */
+	| { op: "preview"; path: string; previewId: string; want?: "pdf" | "text" }
 	| { op: "upload"; uploadId: string; name: string; parts: number; hash: string; bytes: number; by: string; ttl: number; path?: string; opId?: string }
 	/** A document of the room as Markdown into the project folder (`path`, relative to the workspace), its bytes in
 	 *  UploadPart entries under `saveId`, exported once by the web process (a retry sends the same bytes). Written with

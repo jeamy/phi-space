@@ -696,11 +696,22 @@ Der Raumbesitzer kann einstellen, dass jede angenommene Fassung von selbst gespe
 
 ## Wenn die Datei geändert wurde {#conflict}
 
-Hat jemand die Datei im Workspace seit dem letzten Speichern geändert oder gelöscht, schreibt das Forum nichts. Du siehst beide Texte nebeneinander: was jetzt im [Ordner](help.topic.words#folder) steht und was der Raum schreiben wollte. Dann speicherst du unter einem neuen Namen oder sprichst mit der Person, die die Datei geändert hat.
+Hat jemand die Datei im Workspace seit dem letzten Speichern geändert oder gelöscht, schreibt das Forum nichts. Du siehst beide Texte nebeneinander: was jetzt im [Ordner](help.topic.words#folder) steht und was der Raum schreiben wollte. Dann speicherst du unter einem neuen Namen, sprichst mit der Person, die die Datei geändert hat, oder holst ihren Text mit „Text des Workspace in den Raum holen“ als neue Fassung in den Raum (siehe unten).
 
 ![Speichern, und was geschieht, wenn die Datei inzwischen geändert wurde](/help/img/forum-conflict-de.svg)
 
-Hat der Raum seine [Freigabe](help.topic.words#grant) für den Ordner verloren, sagt das Forum das, statt zu speichern. Wer Freigaben vergibt, steht in [Wer was sieht](help.topic.who_sees_what#overview).`,
+Hat der Raum seine [Freigabe](help.topic.words#grant) für den Ordner verloren, sagt das Forum das, statt zu speichern. Wer Freigaben vergibt, steht in [Wer was sieht](help.topic.who_sees_what#overview).
+
+## Aus dem Workspace laden {#load}
+
+Hat jemand ein gespeichertes Dokument im Workspace weitergeschrieben, holst du es mit „Aus dem Workspace laden“ zurück:
+
+- Ist die Datei neuer als das letzte Speichern, wird ihr Text eine neue Fassung, mit dir als Autor.
+- Geschnitten wird an den Überschriften \`## \`. Ein Abschnitt mit demselben Titel ersetzt den bisherigen, ein neuer kommt dazu, und einer, der in der Datei fehlt, fällt weg.
+- Der Anhang, den das Forum beim Speichern anhängt, wird nicht geladen.
+- Ist die Datei unverändert, wird nichts geladen. Eine Datei über 192 kB lädt das Forum nicht.
+
+Ein Lauf auf dieser Aufgabe macht danach mit diesem Text weiter, und das nächste Speichern schreibt auf der geladenen Dateiversion weiter.`,
 			en: `## Overview {#overview}
 
 After this page you can have further documents worked out in a [room](help.topic.words#room) beside the plan, such as requirements and an architecture. You know how to write sections yourself, how the register of sources works and how the documents get into the project [folder](help.topic.words#folder) as files.
@@ -756,11 +767,22 @@ The room's owner can set every accepted version to be saved by itself ("Save to 
 
 ## When the file was changed {#conflict}
 
-If someone changed or deleted the file in the workspace since the last save, the forum writes nothing. You see both texts side by side: what is in the folder now and what the room wanted to write. Then save under a new name, or talk to whoever changed the file.
+If someone changed or deleted the file in the workspace since the last save, the forum writes nothing. You see both texts side by side: what is in the folder now and what the room wanted to write. Then save under a new name, talk to whoever changed the file, or take their text into the room as a new version with "Take the workspace's text into the room" (see below).
 
 ![Saving, and what happens when the file was changed meanwhile](/help/img/forum-conflict.svg)
 
-If the room has lost its [grant](help.topic.words#grant) on the folder, the forum says so instead of saving. Who gives grants is in [Who sees what](help.topic.who_sees_what#overview).`,
+If the room has lost its [grant](help.topic.words#grant) on the folder, the forum says so instead of saving. Who gives grants is in [Who sees what](help.topic.who_sees_what#overview).
+
+## Loading from the workspace {#load}
+
+If someone went on writing a saved document in the workspace, "Load from the workspace" brings it back:
+
+- If the file is newer than the last save, its text becomes a new version, with you as author.
+- It is cut at its \`## \` headings. A section with the same title replaces the one there, a new one is added, and one missing from the file is removed.
+- The appendix the forum adds on saving is not loaded.
+- If the file has not changed, nothing is loaded. A file over 192 kB is not loaded.
+
+A run on this task then goes on from that text, and the next save writes on top of the loaded file version.`,
 		},
 	},
 	{
@@ -988,7 +1010,7 @@ Ist der [Raum](help.topic.words#room) mit einem Workspace verbunden, nimmt der B
 
 Die Kopie einer Aufgabe zeigt Bilder (JPEG, PNG, WebP, GIF) im Bereich **Dateien** als Bild. Ein SVG wird nur als Bild gezeigt, nie in die Seite gesetzt.
 
-Aus einem PDF nimmt FORUM beim Anlegen der Aufgabe den Text, mit einer Marke an jeder Seite, so dass die Modelle darin suchen und eine Stelle als „Seite 12“ nennen können. Das geschieht in einem abgeschotteten Prozess ohne Netz, ohne Dateien und ohne Schlüssel. Grenzen: 300 Seiten und 2 MB Text je PDF. Ein gescanntes PDF hat keinen Text; die Aufgabe sagt das und nennt die Datei mit ihrer Art. Ein verschlüsseltes oder kaputtes PDF wird ebenso benannt.
+Aus einem PDF nimmt FORUM beim Anlegen der Aufgabe den Text, mit einer Marke an jeder Seite, so dass die Modelle darin suchen und eine Stelle als „Seite 12“ nennen können. Das geschieht in einem abgeschotteten Prozess ohne Netz, ohne Dateien und ohne Schlüssel. Grenzen: 300 Seiten und 2 MB Text je PDF. Ein gescanntes PDF hat keinen Text; die Aufgabe sagt das und nennt die Datei mit ihrer Art. Ein verschlüsseltes oder kaputtes PDF wird ebenso benannt. Unter „Dateien“ lädst du ein PDF mit „PDF herunterladen“ herunter; dein Browser öffnet es dann in seinem eigenen Betrachter.
 
 ## Andere Dateien {#other}
 
@@ -1017,7 +1039,7 @@ When the [room](help.topic.words#room) is linked to a workspace, the part **File
 
 A task's copy shows pictures (JPEG, PNG, WebP, GIF) in the part **Files** as pictures. An SVG is shown as a picture only, never placed into the page.
 
-From a PDF FORUM takes the text when the task is created, with a mark at every page, so that the models can search it and name a place as "page 12". That happens in a sealed-off process without network, without files and without keys. Limits: 300 pages and 2 MB of text a PDF. A scanned PDF has no text; the task says so and names the file with its kind. An encrypted or broken PDF is named the same way.
+From a PDF FORUM takes the text when the task is created, with a mark at every page, so that the models can search it and name a place as "page 12". That happens in a sealed-off process without network, without files and without keys. Limits: 300 pages and 2 MB of text a PDF. A scanned PDF has no text; the task says so and names the file with its kind. An encrypted or broken PDF is named the same way. Under "Files" you download a PDF with "Download the PDF"; your browser then opens it in its own viewer.
 
 ## Other files {#other}
 

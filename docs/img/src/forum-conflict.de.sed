@@ -6,5 +6,5 @@ s|@other@|jemand hat sie inzwischen\\ngeändert oder entfernt|
 s|@same@|Gespeichert\\neine neue Dateiversion;\\nnochmals gesendet: dieselbe|
 s|@changed@|Nichts wird geschrieben\\ndie Datei bleibt, wie sie ist|
 s|@both@|Beide Texte nebeneinander\\nwas jetzt im Ordner steht,\\nund das Dokument|
-s|@choose@|Du entscheidest\\nunter neuem Namen speichern oder mit\\nder Person reden, die sie geändert hat|
+s|@choose@|Du entscheidest\\nunter neuem Namen speichern, mit der Person reden\\noder ihren Text in den Raum laden|
 s|@again@|neues Speichern|

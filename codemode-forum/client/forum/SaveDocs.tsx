@@ -4,6 +4,7 @@
 "use client";
 import { useState } from "react";
 import { authHeaders } from "../lib/me.ts";
+import { api } from "../lib/api.ts";
 import { diffText } from "../lib/diff.ts";
 import type { Block } from "../lib/forum-types.ts";
 import type { Text } from "../lib/texts.ts";
@@ -39,6 +40,17 @@ export function SaveDocs({ lang, p, t, rid, blocks, block, folder }: { lang: Lan
 	const [name, setName] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [out, setOut] = useState<Outcome[]>([]);
+	const [loaded, setLoaded] = useState<string>("");
+	// the way back: the saved file read again; a newer one becomes a new version of the document (server/hub.ts load)
+	const load = async () => {
+		setBusy(true); setLoaded("");
+		try {
+			const r = await api<{ unchanged?: true; version?: number | null; fileVersion: number; path?: string }>(`/rooms/${rid}/load/${block.blockId}`, {});
+			setLoaded(r.unchanged ? p.loadUnchanged(r.fileVersion) : r.version ? p.loadedAs(r.path!, r.fileVersion, r.version) : p.loadSame(r.fileVersion));
+			setOut((o) => o.filter((x) => x.blockId !== block.blockId));
+		} catch (e) { setLoaded((e as Error).message); }
+		finally { setBusy(false); }
+	};
 	const withDoc = blocks.filter((b) => b.doc);
 	const run = async (which: Block[], named?: string, all = false) => {
 		setBusy(true);
@@ -59,9 +71,11 @@ export function SaveDocs({ lang, p, t, rid, blocks, block, folder }: { lang: Lan
 			<Field label={p.fileName} tip="savename" lang={lang} value={name} placeholder={block.saved?.path.split("/").at(-1) ?? p.saveNameDefault} maxLength={120} onChange={(e) => setName(e.target.value)} />
 			<div className="fp-row">
 				<Act label={p.saveOne} tip="save" lang={lang} kind="primary" disabled={busy || !block.doc} onClick={() => void run([block], name.trim() || undefined)} />
+				{block.saved ? <Act label={p.loadBack} tip="loadback" lang={lang} disabled={busy} onClick={() => void load()} /> : null}
 				{withDoc.length ? <Act label={p.saveAll(withDoc.length)} tip="saveall" lang={lang} disabled={busy} onClick={() => void run(withDoc, undefined, true)} /> : null}
 			</div>
 			{busy ? <p className="fp-meta">{p.saving}</p> : null}
+			{loaded ? <p className="fp-meta" role="status">{loaded}</p> : null}
 			{out.length ? (
 				<ul className="fp-files">
 					{out.map((o) => (
@@ -83,6 +97,7 @@ export function SaveDocs({ lang, p, t, rid, blocks, block, folder }: { lang: Lan
 						</>
 					) : null}
 					<p className="fp-meta">{p.conflictNext}</p>
+					{!here.conflict.gone && block.saved ? <Act label={p.conflictLoad} tip="loadback" lang={lang} disabled={busy} onClick={() => void load()} /> : null}
 				</div>
 			) : null}
 		</details>

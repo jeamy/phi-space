@@ -202,6 +202,21 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				res.writeHead(200, { "content-type": got.type, "cache-control": "private, max-age=600", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "content-disposition": "inline" });
 				return res.end(got.bytes);
 			}
+			// a PDF of the linked folders to download: never shown in the page, the browser's own viewer opens it
+			const dl = /^\/api\/rooms\/([^/]+)\/download$/.exec(p);
+			if (dl && req.method === "GET") {
+				if (!ID.test(dl[1]!)) return json(res, 400, { error: "Invalid room id" });
+				const got = await hub.download(dl[1]!, String(url.searchParams.get("path") ?? ""));
+				res.writeHead(200, { "content-type": "application/pdf", "cache-control": "private, no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox", "content-disposition": `attachment; filename="${got.name}"` });
+				return res.end(got.bytes);
+			}
+			// the way back: a saved document's file loaded as a new version (hub.load)
+			const ld = /^\/api\/rooms\/([^/]+)\/load\/([a-z0-9]{1,40})$/.exec(p);
+			if (ld && req.method === "POST") {
+				if (!ID.test(ld[1]!)) return json(res, 400, { error: "Invalid room id" });
+				const b = await readBody(req, 4_000);
+				return json(res, 200, { ok: true, ...(await hub.load(ld[1]!, ld[2]!, { by: by(b) || "person" })) });
+			}
 			// a member's file into the project folder's material/ (files.ts): the bytes as they are, any kind
 			const up = /^\/api\/rooms\/([^/]+)\/upload$/.exec(p);
 			if (up && req.method === "POST") { if (!ID.test(up[1]!)) return json(res, 400, { error: "Invalid room id" }); return json(res, 200, await hub.upload(up[1]!, { uploadId: String(url.searchParams.get("id") ?? ""), name: url.searchParams.get("name"), bytes: await readRaw(req, UPLOAD.bytes, `A file has at most ${UPLOAD.bytes / 1024 / 1024} MB`), by: who ? who.user.name : "script" })); }

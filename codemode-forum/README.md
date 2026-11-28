@@ -130,7 +130,10 @@ the page writes the document's export to `<project folder>/<name>.md` through th
 under the save ID, the operation ID written back before the write, against the file version the block's last save
 returned (`PlanSave`), so a retry and a sources process killed on either side of the write give one file version. A
 file changed or removed in the workspace is not overwritten: 409 with its text beside the room's. `save/register`
-writes the register as `sources.md`; the room's default `saveOnAccept` saves every accepted version by itself.
+writes the register as `sources.md`; the room's default `saveOnAccept` saves every accepted version by itself. The way back: `POST /api/rooms/<room>/load/<block>`
+reads the saved file again; a newer version becomes a new version of the document, cut at its `## ` headings and
+matched to the sections by title, the appendix left out, the person as author (`hub.load`, `parseSaved`). A PDF of the
+linked folders is a download (`GET /api/rooms/<room>/download?path=`).
 
 **The register of sources** (`server/register.ts`): every source a task reads is a `SourceRef` of the room, proposed
 when the task is created (one entry per source however many tasks read it); a member adds a link by hand and accepts or
@@ -533,6 +536,9 @@ one file version, a changed or removed file is not overwritten and both texts co
 save on acceptance); `tests/register.test.ts` the register of sources (`server/register.ts`: proposed once per source,
 a link by hand, accepted or declined with the reason, the citing sections worked out from the documents) and
 `sources.md`.
+`tests/loadback.test.ts` the way back (phase 8): a saved file loaded as a new version, matched by heading, without its
+appendix, nothing for an unchanged file, a file too large refused, a run going on from the loaded text, and a PDF
+downloaded.
 
 ## Sign-in
 

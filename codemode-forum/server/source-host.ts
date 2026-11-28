@@ -314,7 +314,7 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 		try {
 			const { bytes, version } = await c.read(at.workspace, at.path);
 			const kind = pictureKind(at.path, bytes);
-			if (!PICTURE_TYPES[kind]) throw Object.assign(new Error(`${req.path} is no picture (${kind})`), { code: "notPicture" });
+			if (req.want === "pdf" ? kind !== "pdf" : req.want === "text" ? kind !== "text" : !PICTURE_TYPES[kind]) throw Object.assign(new Error(`${req.path} is no ${req.want ?? "picture"} (${kind})`), { code: req.want ? "wrongKind" : "notPicture" });
 			if (bytes.length > PREVIEW_BYTES) throw Object.assign(new Error(`${req.path} is larger than ${PREVIEW_BYTES / 1024 / 1024} MB`), { code: "tooLarge" });
 			const data = bytes.toString("base64"), parts = Math.ceil(data.length / UPLOAD.part);
 			for (let part = 0; part < parts; part++) await space.write({ type: "PreviewPart", fields: { session: req.session, previewId: req.previewId, part, data: data.slice(part * UPLOAD.part, (part + 1) * UPLOAD.part) } }, null, 600_000);

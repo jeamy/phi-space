@@ -78,10 +78,10 @@
 <!-- choose -->
 <g id="node6" class="node">
 <title>choose</title>
-<path fill="#fcf2d9" stroke="#7691a4" stroke-width="1.2" d="M429.35,-63.27C429.35,-63.27 198.5,-63.27 198.5,-63.27 192.5,-63.27 186.5,-57.27 186.5,-51.27 186.5,-51.27 186.5,-12 186.5,-12 186.5,-6 192.5,0 198.5,0 198.5,0 429.35,0 429.35,0 435.35,0 441.35,-6 441.35,-12 441.35,-12 441.35,-51.27 441.35,-51.27 441.35,-57.27 435.35,-63.27 429.35,-63.27"/>
+<path fill="#fcf2d9" stroke="#7691a4" stroke-width="1.2" d="M460.85,-63.27C460.85,-63.27 167,-63.27 167,-63.27 161,-63.27 155,-57.27 155,-51.27 155,-51.27 155,-12 155,-12 155,-6 161,0 167,0 167,0 460.85,0 460.85,0 466.85,0 472.85,-6 472.85,-12 472.85,-12 472.85,-51.27 472.85,-51.27 472.85,-57.27 466.85,-63.27 460.85,-63.27"/>
 <text xml:space="preserve" text-anchor="middle" x="313.93" y="-44.21" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">You choose</text>
-<text xml:space="preserve" text-anchor="middle" x="313.93" y="-26.96" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">save under another name, or talk</text>
-<text xml:space="preserve" text-anchor="middle" x="313.93" y="-9.71" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">to whoever changed the file</text>
+<text xml:space="preserve" text-anchor="middle" x="313.93" y="-26.96" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">save under another name, talk to whoever</text>
+<text xml:space="preserve" text-anchor="middle" x="313.93" y="-9.71" font-family="DejaVu Sans" font-size="14.00" fill="#17344a">changed it, or load their text into the room</text>
 </g>
 <!-- both&#45;&gt;choose -->
 <g id="edge5" class="edge">

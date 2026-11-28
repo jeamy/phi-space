@@ -9,7 +9,7 @@ export type TipId = "signin" | "name" | "signout" | "rooms" | "newroom" | "invit
 	| "version" | "compare" | "accept" | "object" | "tableview" | "language" | "mode" | "palette"
 	| "providers" | "providerkey" | "providersignin" | "loginanswer" | "providertest" | "providerremove" | "allowed" | "limits" | "roomdefaults"
 	| "roomlink" | "folders" | "linkcheck" | "fromworkspace" | "workspacefiles" | "pictures" | "picturenote" | "upload" | "filenote"
-	| "save" | "saveall" | "savename" | "conflict" | "saveonaccept" | "writesection" | "taskkind" | "roomdocs" | "register" | "refadd" | "refdecide";
+	| "save" | "saveall" | "savename" | "conflict" | "saveonaccept" | "writesection" | "taskkind" | "roomdocs" | "register" | "refadd" | "refdecide" | "loadback";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -404,6 +404,13 @@ export const TIPS: Record<TipId, Tip> = {
 			en: "The models read these documents of the room as they are now: the accepted version, else the newest draft. Later versions do not change the copy.",
 		},
 		article: "help.topic.documents", anchor: "room",
+	},
+	loadback: {
+		text: {
+			de: "Liest die gespeicherte Datei aus dem Projektordner. Ist sie neuer als das letzte Speichern, wird ihr Text eine neue Fassung: Abschnitte nach ihren Überschriften, ohne Anhang, mit dir als Autor. Ein Lauf macht danach mit diesem Text weiter.",
+			en: "Reads the saved file from the project folder. If it is newer than the last save, its text becomes a new version: sections by their headings, without the appendix, with you as author. A run then goes on from that text.",
+		},
+		article: "help.topic.documents", anchor: "load",
 	},
 	register: {
 		text: {

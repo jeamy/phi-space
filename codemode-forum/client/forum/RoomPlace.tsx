@@ -347,6 +347,7 @@ function WorkspaceFiles({ lang, p, locale, rid, blockId, canWrite, act }: { lang
 						<li key={f.path}>
 							<span className="fp-path">{f.path}</span>
 							<span className="fp-meta">{f.size < 1000 ? `${f.size} B` : `${(f.size / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} kB`}{f.kind === "text" ? "" : ` · ${f.kind}${f.readable ? "" : ` · ${p.notText}`}`}</span>
+							{f.kind.startsWith("pdf") ? <a className="fp-meta" href={`/api/rooms/${rid}/download?path=${encodeURIComponent(f.path)}`} download>{p.downloadPdf}</a> : null}
 							{picture(f) && i < 400 ? <img className="fp-wspic" src={`/api/rooms/${rid}/preview?path=${encodeURIComponent(f.path)}`} alt={f.path} loading="lazy" /> : null}
 							{!f.readable ? <FileNoteForm key={f.note ?? ""} lang={lang} p={p} rid={rid} f={f} canWrite={canWrite} act={act} reload={load} /> : null}
 						</li>

@@ -6,5 +6,5 @@ s|@other@|someone changed or\\nremoved it meanwhile|
 s|@same@|Saved\\na new file version;\\nsent again: the same one|
 s|@changed@|Nothing is written\\nthe file stays as it is|
 s|@both@|Both texts side by side\\nwhat is in the folder now,\\nand the document|
-s|@choose@|You choose\\nsave under another name, or talk\\nto whoever changed the file|
+s|@choose@|You choose\\nsave under another name, talk to whoever\\nchanged it, or load their text into the room|
 s|@again@|a new save|
