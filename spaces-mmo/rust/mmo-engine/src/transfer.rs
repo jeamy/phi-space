@@ -30,17 +30,20 @@ pub fn move_things<'a>(here: &'a Space, there: &'a Space, from: &'a str, to: &'a
 				wrote += move_things(here, there, &id, &id, o).await?;
 			}
 		}
+		let id_of = |e: &Json| j::at(fields(e), "itemId").clone();
+		// what lies at the destination already, read once: nobody else touches it while the order runs, so what this call
+		// writes there is all that comes in meanwhile (reading it at every step cost the square of the pack)
+		let mut at_destination: Option<Vec<Json>> = if o.anywhere { None } else { Some(there.read_all(&tmpl("Item", obj! { "location" => to }), None).await?.iter().map(id_of).collect()) };
 		loop {
 			let step = here.read_limit(&tmpl("Item", obj! { "location" => from }), THINGS_PER_STEP, None).await?;
 			if step.is_empty() { return Ok(wrote); }
-			let id_of = |e: &Json| j::at(fields(e), "itemId").clone();
-			let there_ids: Vec<Json> = if o.anywhere {
+			let fetched: Vec<Json>;
+			let there_ids: &Vec<Json> = if let Some(ids) = &at_destination { ids } else {
 				let ops: Vec<Json> = step.iter().map(|e| obj! { "op" => "read", "template" => tmpl("Item", obj! { "itemId" => id_of(e) }) }).collect();
 				let r = there.batch(&ops).await?;
 				let rs = r.as_array().cloned().unwrap_or_default();
-				step.iter().enumerate().filter(|(i, _)| rs.get(*i).and_then(|x| x.get("entry")).is_some_and(|x| !x.is_null())).map(|(_, e)| id_of(e)).collect()
-			} else {
-				there.read_all(&tmpl("Item", obj! { "location" => to }), None).await?.iter().map(id_of).collect()
+				fetched = step.iter().enumerate().filter(|(i, _)| rs.get(*i).and_then(|x| x.get("entry")).is_some_and(|x| !x.is_null())).map(|(_, e)| id_of(e)).collect();
+				&fetched
 			};
 			let missing: Vec<&Json> = step.iter().filter(|e| !there_ids.contains(&id_of(e))).collect();
 			if !missing.is_empty() {
@@ -50,6 +53,7 @@ pub fn move_things<'a>(here: &'a Space, there: &'a Space, from: &'a str, to: &'a
 					obj! { "op" => "write", "entry" => obj! { "type" => j::at(e, "type").clone(), "types" => Json::Array(types), "fields" => f }, "lease" => FOREVER }
 				}).collect();
 				there.batch(&ops).await?;
+				if let Some(ids) = &mut at_destination { ids.extend(missing.iter().map(|e| id_of(e))); }
 			}
 			wrote += missing.len();
 			let ops: Vec<Json> = step.iter().map(|e| obj! { "op" => "take", "template" => obj! { "id" => e.get("id").cloned().unwrap_or(Json::Null) } }).collect();

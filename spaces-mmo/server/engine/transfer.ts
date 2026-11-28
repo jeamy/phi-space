@@ -37,15 +37,17 @@ export async function moveThings(here: SpaceLike, there: SpaceLike, from: string
 		const id = String(h.fields.itemId);
 		wrote += await moveThings(here, there, id, id, o);
 	}
+	// what lies at the destination already, read once: nobody else touches it while the order runs (step 1), so what this
+	// call writes there is all that comes in meanwhile. Reading it again at every step cost the square of the pack.
+	const atDestination = o.anywhere ? null : new Set((await there.readAll({ type: "Item", fields: { location: to } })).map((e) => e.fields.itemId));
 	for (;;) {
 		const step = await here.readAll({ type: "Item", fields: { location: from } }, { limit: THINGS_PER_STEP });
 		if (!step.length) return wrote;
-		const there_ = o.anywhere
-			? new Set((await batch(there, step.map((e) => ({ op: "read", template: { type: "Item", fields: { itemId: e.fields.itemId } } }) as BatchOp))).flatMap((r, i) => (r && "entry" in r && r.entry ? [step[i]!.fields.itemId] : [])))
-			: new Set((await there.readAll({ type: "Item", fields: { location: to } })).map((e) => e.fields.itemId));
+		const there_ = atDestination ?? new Set((await batch(there, step.map((e) => ({ op: "read", template: { type: "Item", fields: { itemId: e.fields.itemId } } }) as BatchOp))).flatMap((r, i) => (r && "entry" in r && r.entry ? [step[i]!.fields.itemId] : [])));
 		const missing = step.filter((e) => !there_.has(e.fields.itemId));
 		const moved = (e: Taken) => (from === to ? e.fields : { ...e.fields, location: to, x: -1, y: -1 });
 		if (missing.length) await batch(there, missing.map((e) => ({ op: "write", entry: { type: e.type, types: e.types.slice(1), fields: moved(e) as never }, lease: FOREVER })));
+		for (const e of missing) atDestination?.add(e.fields.itemId);
 		wrote += missing.length;
 		await batch(here, step.map((e) => ({ op: "take", template: { id: e.id } })));
 	}

@@ -22,7 +22,13 @@ below it is the consideration before.
   40 things at a time in a pair of transactions (first write in B, then take in A; a full backpack does not fit in
   one transaction). Then it writes the figure in a transaction of B (free cell at the jetty, account, token) and
   commits the transaction of A. If it dies in between, the `Handover` comes back; a thing or a figure that
-  B already has is not written again.
+  B already has is not written again (what lies at the destination is read once per try, then what the try wrote
+  there is added; until 2026-11-27 it was read again at every step, which cost the square of the pack).
+  What a crossing costs by the size of the pack: `tests/perf/handover-pack.ts` (two region spaces on SQLite, no
+  worker wake-up). On 2026-11-27 on this machine, steps 2 to 4 at p50, Rust space server / TypeScript: 0 things
+  8 / 23 ms, 40 things 17 / 37 ms, 130 things (the largest packs on the test bed) 41 / 71 ms, 1000 things 234 /
+  372 ms (before the change 650 to 700 / 864 ms). A pack is not bounded by its load alone: coins weigh nothing,
+  and each is an entry of its own.
 - **The web process** follows the change stream of every region (entries as "region:ID"), writes commands and the
   session of a figure into the region where it stands (immediately after a crossing), and distributes new guests in turn over
   the start bays (`server/region-spaces.ts`). It writes settings and model choice into every region. A thing of the
