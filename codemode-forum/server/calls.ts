@@ -44,6 +44,8 @@ import { ballotsOf, SETTLED_FROM_ROUND } from "./ballots.ts";
 import { readExisting } from "./space.ts";
 import { imageData, imagesOf, imagesText, imageViews, IMAGE_LIMITS } from "./images.ts";
 import { modelInfoOf } from "./models.ts";
+import { researchOn, webResultsOf } from "./research.ts";
+import { linksToVote, refsOf } from "./register.ts";
 
 export type CallKind = "rollcall" | "describe" | "kickoff" | "reply" | "outline" | "pick" | "draft" | "revise" | "review" | "turn" | "compare";
 /** A request for a model call, as an agent writes it (and the model process takes it). */
@@ -93,10 +95,10 @@ export async function sourcesOf(space: SpaceLike, session: string, blockId: stri
 export const mayRead = (steps: ReadStep[]) => steps.length < READING.steps && steps.reduce((n, s) => n + s.requests.length, 0) < READING.calls;
 
 /** The part of a prompt about the sources: what there is, what was read so far, and how to ask for more. */
-function readingText(sources: PlanSource[], steps: ReadStep[]): string[] {
-	if (!sources.length) return [];
+function readingText(sources: PlanSource[], steps: ReadStep[], web = false): string[] {
+	if (!sources.length && !web) return [];
 	const one = sources.length === 1, name = (s: PlanSource) => (s.kind === "repo" ? `the git repository "${s.name}" at commit ${s.commit!.slice(0, 12)}` : s.kind === "files" ? `a copy of the room's workspace (reference/: material that is only read, project/: the project's folder; ${s.texts ?? 0} files as text, the others listed with their kind)` : s.kind === "room" ? `the room's other documents as they were when this task was created (${s.name})` : "the documents the person uploaded");
-	const parts = [`Sources you can read (read-only):\n${sources.map((s) => `- ${s.sourceId}: ${name(s)}, ${s.files} files`).join("\n")}`];
+	const parts = [sources.length ? `Sources you can read (read-only):\n${sources.map((s) => `- ${s.sourceId}: ${name(s)}, ${s.files} files`).join("\n")}` : "The task has no files to read, but you may search the web."];
 	if (steps.length) {
 		let room = READING.shownBytes;
 		const shown = [...steps].reverse().map((s) => { room -= Buffer.byteLength(s.text); return room >= 0 ? s.text : `(step ${s.step + 1}: left out here for length; you asked: ${s.requests.join("; ")})`; }).reverse();
@@ -106,9 +108,12 @@ function readingText(sources: PlanSource[], steps: ReadStep[]): string[] {
 		const p = one ? "" : "<source>:";
 		parts.push([
 			`Before you write you may read. To read, answer with exactly this and nothing else: a first line READ, then up to ${READING.perStep} lines, each one of`,
-			`list ${p}<directory>            (the files and directories there; "list ${one ? "/" : `${sources[0]!.sourceId}:/`}" for the top)`,
-			`read ${p}<path> [first line] [number of lines]     (at most 400 lines or 16 kB a call)`,
-			`search ${p}<text> [in <file pattern like *.ts or docs/*.md>]     (lines that contain the text)`,
+			...(sources.length ? [
+				`list ${p}<directory>            (the files and directories there; "list ${one ? "/" : `${sources[0]!.sourceId}:/`}" for the top)`,
+				`read ${p}<path> [first line] [number of lines]     (at most 400 lines or 16 kB a call)`,
+				`search ${p}<text> [in <file pattern like *.ts or docs/*.md>]     (lines that contain the text)`,
+			] : []),
+			...(web ? ["web <words to search for>     (a web search: the titles, addresses and snippets of at most 5 results; no page is opened. Cite the address of a result you use)"] : []),
 			`You have ${READING.steps - steps.length} such answer${READING.steps - steps.length === 1 ? "" : "s"} left. Read what you need to be concrete (files, names, formats), then hand in your work.`,
 		].join("\n"));
 	} else parts.push("You cannot read any more: hand in your work now.");
@@ -122,9 +127,10 @@ export function parseReads(text: string, sources: string[]): Array<{ line: strin
 	if (!/^READ:?$/i.test(lines[0] ?? "")) return null;
 	const out: Array<{ line: string; sourceId: string; call: SourceCall }> = [];
 	for (const line of lines.slice(1, 1 + READING.perStep)) {
-		const m = /^(list|read|search)\b\s*(.*)$/i.exec(line.replace(/^[-*]\s*/, ""));
+		const m = /^(list|read|search|web)\b\s*(.*)$/i.exec(line.replace(/^[-*]\s*/, ""));
 		if (!m) continue;
-		const op = m[1]!.toLowerCase() as "list" | "read" | "search";
+		const op = m[1]!.toLowerCase() as "list" | "read" | "search" | "web";
+		if (op === "web") { out.push({ line: line.slice(0, 300), sourceId: "web", call: { op, query: m[2]!.trim().replace(/^"(.*)"$/, "$1").slice(0, 200) } }); continue; }
 		let rest = m[2]!.trim(), sourceId = sources[0] ?? "";
 		const pre = /^(\w+):(.*)$/.exec(rest);
 		if (pre && sources.includes(pre[1]!)) { sourceId = pre[1]!; rest = pre[2]!.trim(); }
@@ -275,7 +281,7 @@ async function promptOf(space: SpaceLike, call: LlmCall): Promise<TextCall> {
 			].join("\n\n"),
 		};
 	}
-	const reading = readingText(await sourcesOf(space, call.session, run.params.blockId), call.itemId ? await readSteps(space, call.session, call.itemId) : []);
+	const reading = readingText(await sourcesOf(space, call.session, run.params.blockId), call.itemId ? await readSteps(space, call.session, call.itemId) : [], await researchOn(space, call.session));
 	if (call.kind === "kickoff") return {
 		...withImages, model: call.model, system: SYSTEM, maxTokens: 900,
 		user: [
@@ -342,6 +348,8 @@ async function promptOf(space: SpaceLike, call: LlmCall): Promise<TextCall> {
 		const last = (await ballotsOf(space, d)).filter((x) => x.model === call.model && x.runId === run.runId).at(-1);
 		const before = last ? await headOf(space, d, last.version) : null;
 		const changed = before ? whole.sections.filter((x) => before.sections.find((y) => y.sectionId === x.sectionId)?.rev !== x.rev).map((x) => x.title) : [];
+		// the links this version cites that nobody decided on yet: the table says whether to keep each (register.ts)
+		const toVote = linksToVote(await refsOf(space, call.session), run.params.blockId, whole.sections, await webResultsOf(space, call.session, run.params.blockId));
 		return {
 			...withImages, model: call.model, system: SYSTEM, maxTokens: 1800,
 			user: [
@@ -350,6 +358,7 @@ async function promptOf(space: SpaceLike, call: LlmCall): Promise<TextCall> {
 				...(await exchangeText(space, run)),
 				...(mine.length ? [`Your own earlier objections. Say under CONFIRM what became of each:\n${mine.map((o) => `#${o.objId} on "${title(o.sectionId)}": ${o.defect} (${o.state === "resolved" ? `a revision took it up in version ${o.revisedIn}` : o.state === "declined" ? "the reviser left the section as it was: it found your objection wrong" : "still open, nobody revised the section yet"})`).join("\n")}`] : []),
 				...(open.length ? [`Objections of the others that are open already (do not raise them again):\n${open.map((o) => `- on "${title(o.sectionId)}" by ${aliases[o.model] ?? (o.model === "human" ? "the person" : "an earlier participant")}: ${o.defect}`).join("\n")}`] : []),
+				...(toVote.length ? [`Sources this version cites that nobody has decided on yet. You only see what is listed here; no page was opened. Say for each whether the table should keep it: is it current, may it be used, does it say what the plan claims? Keep only what you can stand behind.\n${toVote.map((x) => `- ${x.address}  "${x.title}", brought by ${x.by}${x.note ? ` (${x.note})` : ""}`).join("\n")}`] : []),
 				`This is round ${round} of the ballots. Vote on this version: can this plan be carried out as it stands? Approve only if every criterion is met, and show it: for each criterion quote words of the plan (at least three, exactly as they stand there) that meet it. If a criterion is not met, reject and raise an objection: it names the section, a concrete defect and what would resolve it; "could be more detailed" is none. At most ${REVIEW_LIMITS.objections}.${round >= SETTLED_FROM_ROUND ? ` From this round on a new objection counts only against a section that changed since your last ballot (${changed.length ? changed.map((x) => `"${x}"`).join(", ") : "none did"}); against any other section it is kept as a note and does not hold the plan up.` : ""}`,
 				[
 					`${reading.length ? "When you hand in: answer" : "Answer"} in this form:`,
@@ -357,6 +366,7 @@ async function promptOf(space: SpaceLike, call: LlmCall): Promise<TextCall> {
 					"CRITERIA",
 					...criteria.map((_c, i) => `${i + 1} met: "<words of the plan>"   (or: ${i + 1} not met: <what is missing>)`),
 					...(mine.length ? ["CONFIRM", "#<id> resolved   (or: #<id> not resolved: <why>   or: #<id> withdrawn)"] : []),
+					...(toVote.length ? ["SOURCES", "source <address> keep   (or: source <address> question: <why it should not carry a claim>)"] : []),
 					"OBJECTIONS   (leave out if you have none)",
 					'objection on "<the section\'s heading>": <the defect> | fix: <what would resolve it> | quote: "<the words of the plan it is about>"',
 					"MESSAGES   (leave out if you have none: question to M2: …, question: …, proposal: …, note: …)",

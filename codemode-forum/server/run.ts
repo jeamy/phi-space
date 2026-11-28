@@ -48,9 +48,11 @@ import { NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import type { Usage } from "./llm.ts";
 import { otherTable } from "./calls.ts";
 import { mayRead, parseOutline, parseReads, parseSection, READING, readSteps, ROLLCALL_CHARS, sourcesOf, type CallKind, type LlmCall, type LlmResultEntry, type ReadStep } from "./calls.ts";
+import { researchOn, webResultsOf } from "./research.ts";
+import { citedLinks, linksToVote, parseSourceVotes, proposeRefs, refsOf, tableDecides, unacceptedIn, unacceptedLine, type SourceVote } from "./register.ts";
 import { askSources } from "./source-host.ts";
 import type { SourceId } from "./sources.ts";
-import { askChecker } from "./check-host.ts";
+import { askChecker, sourceFiles } from "./check-host.ts";
 import type { PlanCheck } from "./checks.ts";
 import { ballotsOf, counts, parseBallot, quoted, SETTLED_FROM_ROUND, stalled, stands, tally, type PlanAccept, type PlanBallot, type RoundMark } from "./ballots.ts";
 import { criteriaOf } from "./plantask.ts";
@@ -539,18 +541,23 @@ async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: Run
  *  last kept step: nothing is read or booked twice. Without sources it is one call. */
 async function work(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, kind: CallKind, more: Partial<LlmCall>, until = Infinity): Promise<{ text: string; usage?: Usage }> {
 	const { space } = d, sources = await sourcesOf(space, it.session, run.params.blockId);
+	// a model may also search the web when research is on for the room (research.ts)
+	const reading = sources.length > 0 || (await researchOn(space, it.session));
 	for (;;) {
-		const steps = sources.length ? await readSteps(space, it.session, it.itemId) : [];
+		const steps = reading ? await readSteps(space, it.session, it.itemId) : [];
 		// the steps before were booked as they were kept: the budget may be gone by now
 		if (steps.length) { const now = await readRun(space, it.session, it.runId); if (!now) throw new RunGone(); if (now.info.ended || overBudget(now)) throw new ModelFailed("the run's budget is used up"); }
 		const v = await ask(d, txn, it, slot, run, steps.length, kind, more, until) as { text: string; usage?: Usage };
-		const reads = sources.length ? parseReads(String(v.text), sources.map((x) => x.sourceId)) : null;
+		const reads = reading ? parseReads(String(v.text), sources.map((x) => x.sourceId)) : null;
 		if (!reads) return v;
 		if (!mayRead(steps)) throw new ModelFailed("the model asked to read when it had to hand in its work", v.usage);
 		const texts: string[] = [];
 		for (const r of reads) {
 			let text: string;
-			try { text = (await askSources(space, { requestId: `${it.itemId}-s${steps.length}-${texts.length}-${rid()}`, session: it.session, blockId: run.params.blockId, op: "call", sourceId: r.sourceId as SourceId, call: r.call, ts: Date.now() })).text ?? ""; }
+			// a call on a source the task does not have is answered here; a search is asked by its model
+			if (r.call.op !== "web" && !sources.some((x) => x.sourceId === r.sourceId)) { texts.push(`> ${r.line}\nThe task has no such source.`); continue; }
+			const call = r.call.op === "web" ? { ...r.call, by: `${run.params.aliases[slot.model] ?? slot.model} (${slot.model})` } : r.call;
+			try { text = (await askSources(space, { requestId: `${it.itemId}-s${steps.length}-${texts.length}-${rid()}`, session: it.session, blockId: run.params.blockId, op: "call", sourceId: r.sourceId as SourceId, call, ts: Date.now() })).text ?? ""; }
 			catch (e) { throw new ModelFailed(`the sources did not answer: ${(e as Error).message}`, v.usage); }
 			texts.push(`> ${r.line}\n${text.length > READING.resultBytes ? text.slice(0, READING.resultBytes) + "\n…" : text}`);
 		}
@@ -722,12 +729,21 @@ async function afterReview(d: AgentDeps, txn: string, r: RunEntry): Promise<Work
 	const t = tally({ present, ballots, owing: [...owing.keys()], changed, first: !before, barred: all.filter((o) => o.state === "open" && (o.model === "human" || o.model === "checker")).length });
 	r.info.ballots = { round, approve: t.approvals.length, of: present.length };
 	r.balloted = head.version;
+	// the table's word on the sources it voted on in this round: once all ballots are in, so no vote goes unseen
+	const votes = (await d.space.readAll({ type: "SourceVote", fields: { session: r.session, runId: r.runId, round } }, { limit: 500, txn })).map((e) => e.fields as unknown as SourceVote);
+	for (const address of [...new Set(votes.map((v) => v.address))]) {
+		const decided = await tableDecides(d.space, txn, d.ttl, r.session, address, votes.filter((v) => v.address === address), present, r.params.aliases);
+		if (decided) await systemLine(d.space, txn, d.ttl, r.session, decided.state === "accepted" ? `The table kept the source "${decided.title}" (${decided.decidedBy})` : `The table declined the source "${decided.title}": ${decided.reason}`);
+	}
 	if (t.accepted) {
 		const accept: PlanAccept = { ...doc, version: head.version, by: "majority", approvals: t.approvals, of: present.length, round, ts: Date.now() };
 		await d.space.write({ type: "PlanAccept", fields: accept as never }, txn, d.ttl);
 		r.info.accepted = { version: head.version, round, approvals: t.approvals.length, of: present.length };
 		r.info.phase = "accepted";
 		await systemLine(d.space, txn, d.ttl, r.session, `The table accepted version ${head.version} in round ${round}: ${t.approvals.map((m) => r.params.aliases[m]).sort().join(", ")} approve (${t.approvals.length} of ${present.length})`);
+		// the report on sources (register.ts): what the accepted version cites that the room has not accepted
+		const not = unacceptedIn(await refsOf(d.space, r.session, txn), r.params.blockId, await sourceFiles(d.space, r.session, r.params.blockId), (await fullDoc(d.space, head)).sections);
+		if (not.length) await systemLine(d.space, txn, d.ttl, r.session, unacceptedLine(head.version, not));
 		return [];
 	}
 	r.history = [...(r.history ?? []), { round, standing: all.filter(stands).map((o) => o.objId).sort(), approvals: t.approvals.length }];
@@ -918,6 +934,16 @@ async function execute(d: AgentDeps, slot: Slot, it: WorkItem, txn: string): Pro
 		await space.write({ type: "PlanBallot", fields: ballot as never }, txn, d.ttl, { unique: ["slot"] });
 		// what it says to the table beside its ballot: questions, proposals, notes
 		await keep(space, txn, d.ttl, doc, { ...who, runId: it.runId, round, aliases: run.params.aliases }, await withTakeovers(space, run, head, parseMessages(b.messages).filter((m) => m.kind === "question" || m.kind === "proposal" || m.kind === "note")));
+		// its word on the sources the version cites that nobody decided yet (register.ts); the round's tally decides them
+		const said = parseSourceVotes(String(v.text));
+		if (said.length) {
+			const sections = (await fullDoc(space, head)).sections, results = await webResultsOf(space, it.session, run.params.blockId);
+			const asked = new Set(linksToVote(await refsOf(space, it.session), run.params.blockId, sections, results).map((x) => x.address));
+			// what the version cites is in the register before the table decides on it
+			await proposeRefs(space, d.ttl, it.session, "a model", citedLinks(await refsOf(space, it.session), [{ blockId: run.params.blockId, sections }], results));
+			for (const sv of said.filter((x) => asked.has(x.address)))
+				await space.write({ type: "SourceVote", fields: { session: it.session, blockId: run.params.blockId, runId: it.runId, round, address: sv.address, model: slot.model, keep: sv.keep, ...(sv.why ? { why: sv.why } : {}), ts: Date.now() } satisfies SourceVote as never }, txn, d.ttl);
+		}
 	} else if (it.kind === "compare") {
 		const versions = run.info.compare, at = (t: TableId) => headOf(space, { ...doc, table: t }, versions?.[t]);
 		const [a, b] = [await at("A"), await at("B")];

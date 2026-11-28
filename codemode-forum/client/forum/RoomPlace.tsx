@@ -293,13 +293,14 @@ function RoomDefaultsForm({ lang, p, t, rid, available, defaults, act }: { lang:
 	const [budget, setBudget] = useState(defaults.budgetTokens === undefined ? "" : String(defaults.budgetTokens));
 	const [wait, setWait] = useState(defaults.personWaitS === undefined ? "" : String(defaults.personWaitS));
 	const [onAccept, setOnAccept] = useState(!!defaults.saveOnAccept);
+	const [research, setResearch] = useState(!!defaults.research);
 	const [ceil, setCeil] = useState<{ runBudgetTokens: number; personWaitS: number } | null>(null);
 	const [saved, setSaved] = useState(false);
 	const load = () => api<{ ceilings: { runBudgetTokens: number; personWaitS: number } }>(`/rooms/${rid}/settings`).then((x) => setCeil(x.ceilings)).catch(() => {});
 	const num = (v: string) => (v === "" ? undefined : Number(v));
 	const save = () => act(async () => {
 		setSaved(false);
-		await api(`/rooms/${rid}/settings`, { models: [...models], way: way || undefined, rounds: num(rounds), perModel: num(perModel), budgetTokens: num(budget), personWaitS: num(wait), saveOnAccept: onAccept });
+		await api(`/rooms/${rid}/settings`, { models: [...models], way: way || undefined, rounds: num(rounds), perModel: num(perModel), budgetTokens: num(budget), personWaitS: num(wait), saveOnAccept: onAccept, research });
 		setSaved(true);
 	});
 	return (
@@ -322,6 +323,7 @@ function RoomDefaultsForm({ lang, p, t, rid, available, defaults, act }: { lang:
 				<Field label={p.personWait} tip="roomdefaults" lang={lang} type="number" min={0} max={ceil?.personWaitS} value={wait} onChange={(e) => setWait(e.target.value)} />
 			</div>
 			<Tick label={p.saveOnAccept} tip="saveonaccept" lang={lang} checked={onAccept} onChange={(e) => setOnAccept(e.target.checked)} />
+			<Tick label={p.researchRoom} tip="researchroom" lang={lang} checked={research} onChange={(e) => setResearch(e.target.checked)} />
 			{ceil ? <p className="fp-meta">{p.ceilings(ceil.runBudgetTokens, ceil.personWaitS)}</p> : null}
 			<Act kind="primary" label={p.saveDefaults} tip="roomdefaults" lang={lang} onClick={() => void save()} />
 			{saved ? <p className="fp-meta" role="status">{p.saved}</p> : null}

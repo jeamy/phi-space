@@ -25,6 +25,7 @@ import { accessOf, createRoom, may, roleIn, roomsOf, setRole, type Role } from "
 import { announce, connectSpace, takeAll } from "./space.ts";
 import { answerPrompt, askProvider, cancelLogin, providerState } from "./providers.ts";
 import { IMAGE_LIMITS } from "./images.ts";
+import { researchAllowed, searchesPerDay } from "./research.ts";
 import { UPLOAD } from "./files.ts";
 import { ceilings, checkLimits, effectiveLimits, readLimits, saveLimits } from "./settings.ts";
 
@@ -293,6 +294,12 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (sid) await takeAll(conn.space, { type: "AdminSession", fields: { key: sessionKey(sid) } });
 				res.writeHead(200, { "content-type": "application/json; charset=utf-8", "set-cookie": `${ADMIN_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0` });
 				return res.end(JSON.stringify({ admin: false }));
+			}
+			// research (research.ts): the administrator's switch for web searches by the models, and the day's bound
+			if (p === "/api/admin/research") {
+				if (!(await isAdmin(req, who))) return json(res, 403, { error: "Admin login required" });
+				if (req.method === "POST") { const b = await readBody(req); if (typeof b.on !== "boolean") return json(res, 400, { error: "on: true or false" }); await hub.saveResearchOn(b.on, who ? who.user.name : "script"); }
+				return json(res, 200, { on: await researchAllowed(conn.space), perDay: searchesPerDay() });
 			}
 			if (p === "/api/admin/models") {
 				if (!(await isAdmin(req, who))) return json(res, 403, { error: "Admin login required" });

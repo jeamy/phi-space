@@ -539,6 +539,12 @@ a link by hand, accepted or declined with the reason, the citing sections worked
 `tests/loadback.test.ts` the way back (phase 8): a saved file loaded as a new version, matched by heading, without its
 appendix, nothing for an unchanged file, a file too large refused, a run going on from the loaded text, and a PDF
 downloaded.
+`tests/research.test.ts` research (phase 9; `server/research.ts`, `server/search.ts` a copy of codemode-chat's): a web
+search refused while the administrator or the room has it off and when FORUM_SEARCH_PER_DAY is used up; a run at table
+B that searches, with the results marked as data, the cited result in the register with who found it and the query, an
+address named from memory marked so, the table keeping one link and declining the other on the round's tally, the
+report on what the accepted version cites that is not accepted (in the room and in the appendix), and a canary server
+named in the results that never gets a request. The fake search is `tests/search-fake.ts` (FORUM_TEST_SEARCH_MODULE).
 
 ## Sign-in
 

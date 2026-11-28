@@ -9,6 +9,7 @@ import type { Lang } from "../lib/theme.ts";
 import { Act, Choice, Field, Tick } from "./controls.tsx";
 import { Skeleton } from "./ForumPage.tsx";
 import type { PageText } from "./texts.ts";
+import { HelpTip } from "../HelpTip.tsx";
 
 type View = { id: string; name: string; models: number; apiKey: string | null; oauth: string | null; state: { type: "api_key" | "oauth"; source?: string } | null; stored: boolean };
 type Proc = { procId: string; host: string; llm: boolean; providers: View[] };
@@ -25,6 +26,7 @@ const A = {
 		llmOff: "Modellaufrufe sind in diesem Prozess aus (FORUM_LLM): Anmelden geht, Testen nicht.", running: "Anmeldung läuft", cancel: "Abbrechen", send: "Senden", answer: "Antwort",
 		openLink: "Link öffnen", deviceCode: "Gib diesen Code dort ein:", done: "Angemeldet.", failed: "Nicht angemeldet:", waiting: "Wartet auf den Modell-Prozess …",
 		testOk: (m: string, ms: number) => `Antwortet (${m}, ${(ms / 1000).toFixed(1)} s)`, testBad: "Test fehlgeschlagen:", removed: "Zugang entfernt.",
+		research: "Recherche", researchOn: "Die Modelle dürfen im Web suchen (wo der Raum es erlaubt)", researchDay: (n: number) => `Höchstens ${n} Suchen am Tag für alle Räume zusammen (FORUM_SEARCH_PER_DAY).`,
 		allowed: "Erlaubte Modelle", allowedNone: "Noch keine Modelle mit Zugang. Trage oben einen Schlüssel ein oder melde dich an.", modelsOn: "Modell-Agenten an", save: "Speichern", saved: "Gespeichert.", std: "Auswahl aus FORUM_MODELS", reset: "Zurück zur Auswahl aus FORUM_MODELS",
 		limits: "Grenzen", ceiling: (n: number) => n ? `höchstens ${n.toLocaleString("de-DE")}` : "keine Grenze vom Betrieb", inForce: (n: number) => n ? `gilt: ${n.toLocaleString("de-DE")}` : "gilt: keine",
 		perMin: "Modellaufrufe pro Minute", perDay: "Modellaufrufe pro Tag", personTokens: "Tokens pro Person und Tag", runBudget: "Größtes Budget eines Laufs (Tokens)",
@@ -35,6 +37,7 @@ const A = {
 		llmOff: "Model calls are off in this process (FORUM_LLM): signing in works, testing does not.", running: "Login in progress", cancel: "Cancel", send: "Send", answer: "Answer",
 		openLink: "Open the link", deviceCode: "Enter this code there:", done: "Signed in.", failed: "Not signed in:", waiting: "Waiting for the model process …",
 		testOk: (m: string, ms: number) => `Answers (${m}, ${(ms / 1000).toFixed(1)} s)`, testBad: "Test failed:", removed: "Access removed.",
+		research: "Research", researchOn: "The models may search the web (where the room allows it)", researchDay: (n: number) => `At most ${n} searches a day for all rooms together (FORUM_SEARCH_PER_DAY).`,
 		allowed: "Allowed models", allowedNone: "No models with access yet. Enter a key above or sign in.", modelsOn: "Model agents on", save: "Save", saved: "Saved.", std: "the choice of FORUM_MODELS", reset: "Back to the choice of FORUM_MODELS",
 		limits: "Limits", ceiling: (n: number) => n ? `at most ${n.toLocaleString("en-US")}` : "no limit from the operator", inForce: (n: number) => n ? `in force: ${n.toLocaleString("en-US")}` : "in force: none",
 		perMin: "Model calls per minute", perDay: "Model calls per day", personTokens: "Tokens per person and day", runBudget: "Largest budget of a run (tokens)",
@@ -66,6 +69,7 @@ export function AdminPlace({ lang, p }: { lang: Lang; p: PageText }) {
 				{err ? <p className="fp-error" role="alert">{err}</p> : null}
 			</section>
 			<Allowed lang={lang} p={p} />
+			<ResearchCard lang={lang} p={p} />
 			<LimitsCard lang={lang} p={p} />
 		</>
 	);
@@ -178,6 +182,27 @@ function Allowed({ lang, p }: { lang: Lang; p: PageText }) {
 						<Act kind="primary" label={a.save} tip="allowed" lang={lang} onClick={() => void save([...chosen])} />
 						<Act label={a.reset} tip="allowed" lang={lang} onClick={() => void save(null)} />
 					</div>
+				</>
+			)}
+			{msg ? <p className="fp-meta" role="status">{msg}</p> : null}
+		</section>
+	);
+}
+
+/** The administrator's switch for web searches by the models (server/research.ts). */
+function ResearchCard({ lang, p }: { lang: Lang; p: PageText }) {
+	const a = A[lang];
+	const [r, setR] = useState<{ on: boolean; perDay: number } | null>(null);
+	const [msg, setMsg] = useState("");
+	useEffect(() => { api<{ on: boolean; perDay: number }>("/admin/research").then(setR).catch((e) => setMsg((e as Error).message)); }, []);
+	const save = (on: boolean) => api<{ on: boolean; perDay: number }>("/admin/research", { on }).then((x) => { setR(x); setMsg(a.saved); }).catch((e) => setMsg((e as Error).message));
+	return (
+		<section className="fp-card">
+			<h2>{a.research} <HelpTip id="research" lang={lang} label={a.research} /></h2>
+			{!r ? <Skeleton label={p.loading} /> : (
+				<>
+					<Tick label={a.researchOn} tip="research" lang={lang} checked={r.on} onChange={(e) => void save(e.target.checked)} />
+					<p className="fp-meta">{a.researchDay(r.perDay)}</p>
 				</>
 			)}
 			{msg ? <p className="fp-meta" role="status">{msg}</p> : null}

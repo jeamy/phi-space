@@ -5,6 +5,7 @@
 import type { SpaceLike } from "phi-spaces";
 import type { LlmCall } from "../server/calls.ts";
 import { callSignal, type TextAnswer, type TextCall } from "../server/llm.ts";
+import { FOUND, MEMORY } from "./search-fake.ts";
 
 type Log = (e: Record<string, unknown>) => Promise<void>;
 type Team = { text: (c: TextCall, call: LlmCall) => Promise<TextAnswer> };
@@ -222,6 +223,16 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 		await log({ model: c.model, kind: call.kind, callId: call.callId, read });
 		if ((call.kind === "outline" || call.kind === "draft") && !read) return { text: "READ\nread README.md", model: c.model, usage: use(200, 0.02) };
 		if (read) await gate(space, s);
+		return answer(c, call);
+	} }),
+	// research (research.test.ts): the outline asks the web once; the Goal cites the result it found and an address it
+	// knows from nowhere; every model keeps the found one and questions the other at the ballot
+	research: (_s, _space, log) => ({ text: async (c, call) => {
+		const read = c.user.includes("What you read so far");
+		await log({ model: c.model, kind: call.kind, callId: call.callId, read, prompt: c.user });
+		if (call.kind === "outline" && !read && c.user.includes("web <words")) return { text: "READ\nweb bright star catalogue", model: c.model, usage: use(200, 0.02) };
+		if (call.kind === "draft" && sectionOf(c) === "Goal") { const d = draft(c); return { ...d, text: `${d.text} The stars come from ${FOUND}, the dates from ${MEMORY}.` }; }
+		if (call.kind === "review" && c.user.includes("Sources this version cites")) { const r = review(c); return { ...r, text: `${r.text}\nSOURCES\nsource ${FOUND} keep\nsource ${MEMORY} question: nobody has opened it` }; }
 		return answer(c, call);
 	} }),
 	// a writer that reads as long as it may: the outline is handed in only when the prompt says it must be

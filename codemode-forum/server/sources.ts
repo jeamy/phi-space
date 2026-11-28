@@ -33,7 +33,9 @@ export type Pack = { index: IndexEntry[]; read: (path: string) => Promise<Buffer
 	/** Lines that contain `query` (fixed text, any case): [path, line number, line]; without it the files are read. */
 	grep?: (query: string, glob?: string) => Promise<Array<[string, number, string]>> };
 /** One reading call. */
-export type SourceCall = { op: "list"; dir?: string } | { op: "read"; path: string; from?: number; lines?: number } | { op: "search"; query: string; glob?: string };
+export type SourceCall = { op: "list"; dir?: string } | { op: "read"; path: string; from?: number; lines?: number } | { op: "search"; query: string; glob?: string }
+	/** A web search (research.ts), answered by the sources process when research is on for the room; `by`: who asked. */
+	| { op: "web"; query: string; by?: string };
 
 /** Files no reader gets, whatever the pack holds: keys and local settings. */
 const DENY = [/(^|\/)\.env[^/]*$/i, /\.(pem|key|p12|pfx|keystore)$/i, /(^|\/)auth\.json$/i, /(^|\/)id_(rsa|dsa|ecdsa|ed25519)[^/]*$/i, /(^|\/)\.npmrc$/i, /(^|\/)\.netrc$/i];
@@ -121,6 +123,7 @@ export async function search(pack: Pack, rawQuery: string, rawGlob?: string): Pr
 
 /** One call on a pack, answered as text. What a caller got wrong (no such file, no pattern) is part of the answer. */
 export function answer(pack: Pack, call: SourceCall): Promise<string> | string {
+	if (call.op === "web") throw new Error("a web search is no call on a pack");
 	return call.op === "list" ? listDir(pack, call.dir) : call.op === "read" ? readLines(pack, call.path, call.from, call.lines) : search(pack, call.query, call.glob);
 }
 

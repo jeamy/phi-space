@@ -786,6 +786,92 @@ A run on this task then goes on from that text, and the next save writes on top 
 		},
 	},
 	{
+		id: "help.topic.research",
+		section: "use",
+		plain: true,
+		title: { de: "Quellen und Recherche", en: "Sources and research" },
+		short: {
+			de: "Wie die Modelle im Web suchen, wie eine gefundene Quelle ins Register kommt und wer über sie entscheidet.",
+			en: "How the models search the web, how a source they found gets into the register and who decides on it.",
+		},
+		body: {
+			de: `## Überblick {#overview}
+
+Nach dieser Seite weißt du, wie die [Modelle](help.topic.words#model) im Web nach Quellen suchen, was davon ins Quellenregister kommt und wie über eine Quelle entschieden wird.
+
+## Einschalten {#switch}
+
+Recherche ist zweimal ausgeschaltet, bis jemand sie einschaltet:
+
+- Ein Administrator schaltet sie für das ganze Forum ein, unter „Einstellungen“ bei „Recherche“. Dort steht auch, wie viele Suchen am Tag alle [Räume](help.topic.words#room) zusammen haben.
+- Der Besitzer eines Raums erlaubt sie für seinen Raum, bei den Voreinstellungen des Raums.
+
+Erst wenn beides an ist, bieten die Aufrufe den Modellen die Suche an.
+
+## Wie ein Modell sucht {#search}
+
+Beim Lesen kann ein Modell neben „list“, „read“ und „search“ auch „web“ mit Suchwörtern schreiben. Zurück kommen höchstens fünf Treffer, je Titel, Adresse und ein kurzer Auszug. Keine Seite wird geöffnet; das Modell weiß von einer Quelle also nur, was in der Trefferliste steht.
+
+Die Treffer stehen im Aufruf ausdrücklich als Daten aus dem Web, nie als Anweisung. Ist die Suche aus oder für heute aufgebraucht, liest das Modell das als Antwort und schreibt ohne sie weiter.
+
+## Ins Register {#register}
+
+Zitiert ein Abschnitt die Adresse eines Treffers, kommt sie als Vorschlag ins Quellenregister, mit dem Modell, das sie gefunden hat, und seinen Suchwörtern.
+
+Nennt ein Modell eine Adresse ohne Suche, kommt auch sie hinein, aber mit dem Vermerk „aus dem Gedächtnis des Modells: niemand hat sie geöffnet“. Solche Quellen öffnest du am besten selbst, bevor du sie annimmst.
+
+Wie das Register sonst funktioniert, steht in [Dokumente eines Projekts](help.topic.documents#register).
+
+## Wer entscheidet {#decide}
+
+- **Am [Tisch](help.topic.words#table):** Bei jeder Abstimmung sehen die Modelle die Links, die die [Fassung](help.topic.words#version) zitiert und über die noch niemand entschieden hat. Jedes sagt „behalten“ oder stellt die Quelle mit Grund in Frage. Behält mehr als die Hälfte sie, ist sie angenommen; stellt mehr als die Hälfte sie in Frage, ist sie abgelehnt, mit ihren Gründen.
+- **Du:** Dein Wort im Register geht vor. Eine Quelle, über die eine Person entschieden hat, legt das Forum dem Tisch nicht mehr vor, und du kannst eine Entscheidung des Tisches ändern.
+
+Über deine eigenen Unterlagen (hochgeladene Dokumente, den [Workspace](help.topic.words#workspace), die Dokumente des Raums) stimmt der Tisch nicht ab. Über sie entscheidest du im Register.
+
+## Der Bericht beim Annehmen {#report}
+
+Nur eine angenommene Quelle darf eine Aussage eines angenommenen Dokuments tragen. Zitiert eine Fassung, die angenommen wird, Quellen, die nicht angenommen sind, steht das als Zeile im Raum. Im Anhang des gespeicherten Dokuments stehen sie unter „Nicht angenommene Quellen“. Das hält das Annehmen nicht auf; es sagt dir, was noch zu prüfen ist.`,
+			en: `## Overview {#overview}
+
+After this page you know how the [models](help.topic.words#model) search the web for sources, what of it comes into the register of sources and how a source is decided on.
+
+## Switching it on {#switch}
+
+Research is switched off twice until someone switches it on:
+
+- An administrator switches it on for the whole forum, under "Settings" at "Research". There it also says how many searches a day all [rooms](help.topic.words#room) have together.
+- The owner of a room allows it for the room, in the room's defaults.
+
+Only when both are on do the calls offer the models a search.
+
+## How a model searches {#search}
+
+When reading, a model can write "web" with search words besides "list", "read" and "search". At most five results come back, each with a title, an address and a short snippet. No page is opened, so the model knows of a source only what the result list says.
+
+The results stand in the call plainly as data from the web, never as an instruction. If the search is off or used up for the day, the model reads that as the answer and goes on without it.
+
+## Into the register {#register}
+
+When a section cites the address of a result, it comes into the register of sources as proposed, with the model that found it and its search words.
+
+When a model names an address without a search, it comes in too, but marked "from the model's memory: nobody has opened it". Best open such a source yourself before you accept it.
+
+How the register works otherwise is in [Documents of a project](help.topic.documents#register).
+
+## Who decides {#decide}
+
+- **At the [table](help.topic.words#table):** at every ballot the models see the links the [version](help.topic.words#version) cites that nobody has decided on yet. Each says "keep" or questions the source with a reason. If more than half keep it, it is accepted; if more than half question it, it is declined, with their reasons.
+- **You:** your word in the register comes first. A source a person decided on is not put to the table again, and you can change a decision of the table.
+
+The table does not vote on your own material (uploaded documents, the [workspace](help.topic.words#workspace), the room's documents). You decide on that in the register.
+
+## The report at acceptance {#report}
+
+Only an accepted source may carry a claim of an accepted document. When a version is accepted that cites sources that are not accepted, a line in the room says so. The appendix of the saved document lists them under "Sources not accepted". That does not hold the acceptance up; it tells you what is still to check.`,
+		},
+	},
+	{
 		id: "help.topic.phone",
 		section: "use",
 		plain: true,
@@ -1104,7 +1190,7 @@ The owner of the folders revokes the access in spaces-files whenever they want. 
 		body: {
 			de: `## Überblick {#overview}
 
-FORUM läuft auf eigenen Rechnern. Hinaus gehen nur die Aufrufe an die [Modelle](help.topic.words#model) und, ab einer späteren Stufe, was ein [Raum](help.topic.words#room) in seinen Projektordner speichert.
+FORUM läuft auf eigenen Rechnern. Hinaus gehen nur die Aufrufe an die [Modelle](help.topic.words#model), was ein [Raum](help.topic.words#room) in seinen Projektordner speichert, und bei eingeschalteter Recherche die Suchwörter der Modelle an die Suchmaschine.
 
 ## An die Modellanbieter {#providers}
 
@@ -1112,14 +1198,18 @@ Jeder Aufruf an ein Modell geht an dessen Anbieter. Darin stehen der [Auftrag](h
 
 ## In spaces-files {#files}
 
-Die Dateien selbst bleiben in spaces-files. FORUM nimmt beim Anlegen einer Aufgabe eine Kopie der Texte (und des Texts aus PDFs) in seinen eigenen Speicher; Bilder und andere Dateien kennt es nur mit Name, Art, Größe und deiner Notiz. Hinein schreibt FORUM nur, was du hochlädst, in den Ordner \`material/\` des Projektordners ([Fotos und andere Dateien](help.topic.pictures#upload)).
+Die Dateien selbst bleiben in spaces-files. FORUM nimmt beim Anlegen einer Aufgabe eine Kopie der Texte (und des Texts aus PDFs) in seinen eigenen Speicher; Bilder und andere Dateien kennt es nur mit Name, Art, Größe und deiner Notiz. Hinein schreibt FORUM nur, was du hochlädst, in den Ordner \`material/\` des Projektordners ([Fotos und andere Dateien](help.topic.pictures#upload)), und was du speicherst: die Dokumente und das Quellenregister ([Dokumente eines Projekts](help.topic.documents#save)).
+
+## An die Suchmaschine {#search}
+
+Hat ein Administrator die Recherche eingeschaltet und erlaubt der Raum sie, schicken die Modelle Suchwörter an DuckDuckGo. Die Suchwörter schreibt das Modell selbst aus dem, was es gelesen hat; sie können also Wörter aus dem Auftrag enthalten. Zurück kommt nur die Trefferliste. Keine Seite wird geöffnet, auch später nicht. Siehe [Quellen und Recherche](help.topic.research#overview).
 
 ## Was nie hinausgeht {#never}
 
 Schlüssel der Anbieter und der Dateien, Dateien mit Schlüsseln und lokalen Einstellungen, deine Anmeldung und was du bei einer Anmeldung eines Anbieters eintippst. Die Gründe stehen in [Sicherheit und Grenzen](help.topic.safety_and_limits#overview).`,
 			en: `## Overview {#overview}
 
-FORUM runs on machines of its own. Only the calls to the [models](help.topic.words#model) leave it and, from a later stage on, what a [room](help.topic.words#room) saves into its project [folder](help.topic.words#folder).
+FORUM runs on machines of its own. Only the calls to the [models](help.topic.words#model) leave it, what a [room](help.topic.words#room) saves into its project [folder](help.topic.words#folder), and, with research on, the models' search words to the search engine.
 
 ## To the model providers {#providers}
 
@@ -1127,7 +1217,11 @@ Every call to a model goes to its provider. It holds the [brief](help.topic.word
 
 ## In spaces-files {#files}
 
-The files themselves stay in spaces-files. When a task is created, FORUM takes a copy of the text (and of the text of PDFs) into its own store; pictures and other files it knows only by name, kind, size and your note. It writes only what you upload, into the project folder's \`material/\` ([Photos and other files](help.topic.pictures#upload)).
+The files themselves stay in spaces-files. When a task is created, FORUM takes a copy of the text (and of the text of PDFs) into its own store; pictures and other files it knows only by name, kind, size and your note. It writes only what you upload, into the project folder's \`material/\` ([Photos and other files](help.topic.pictures#upload)), and what you save: the documents and the register of sources ([Documents of a project](help.topic.documents#save)).
+
+## To the search engine {#search}
+
+When an administrator switched research on and the room allows it, the models send search words to DuckDuckGo. The model writes them itself from what it read, so they can contain words of the brief. Only the list of results comes back. No page is opened, not later either. See [Sources and research](help.topic.research#overview).
 
 ## What never leaves {#never}
 

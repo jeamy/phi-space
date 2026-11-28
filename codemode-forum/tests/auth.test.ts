@@ -166,6 +166,9 @@ test("administrators by identity; the admin password only from scripts", async (
 		assert.equal((await lea.request("GET", "/api/admin/providers")).status, 403);
 		assert.equal((await lea.post("/api/admin/providers/job", { procId: "x", provider: "anthropic", kind: "logout" })).status, 403);
 		assert.equal((await lea.post("/api/admin/limits", { perMin: 1 })).status, 403);
+		assert.equal((await lea.request("GET", "/api/admin/research")).status, 403);
+		assert.equal((await lea.post("/api/admin/research", { on: true })).status, 403);
+		assert.deepEqual((await ada.request("GET", "/api/admin/research")).json.on, false, "research is off until an administrator switches it on");
 		assert.equal((await ada.request("GET", "/api/admin/providers")).status, 200);
 		assert.equal((await ada.post("/api/admin/limits", { perMin: 5 })).json.effective.perMin, 5);
 		assert.match((await ada.post("/api/admin/limits", { perMin: 100_000 })).json.error, /above the operator's ceiling/);

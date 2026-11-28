@@ -34,7 +34,7 @@ test("the register: a task's sources proposed once, a link added by hand, a word
 	const docs = [{ name: "catalogue.md", text: "# Catalogue\nThe Yale Bright Star Catalogue, 9110 stars.\n" }, { name: "notes.md", text: "Nothing cited.\n" }];
 	const a = (await post(srv.url, `/api/rooms/${id}/task`, { brief: "Write the requirements of an app that shows the sky.", kind: "document", name: "requirements", docs, by: "Lea" })).body.blockId as string;
 	const write = async (blockId: string, r: Revision) => { const x = await space.createTransaction(30_000); await writeVersion(space, x.id, 3600_000, { session: id, blockId, table: "A" }, { author: "M1", model: "fake/alpha" }, r); await space.commit(x.id); };
-	await write(a, { changes: [{ title: "Stars", text: "The stars come from `catalogue.md`, as it says:\n> `catalogue.md`: The Yale Bright Star Catalogue, 9110 stars." }, { title: "Screen", text: "Dark red, see https://example.org/night-vision for why." }] });
+	await write(a, { changes: [{ title: "Stars", text: "The stars come from `catalogue.md`, as it says:\n> `catalogue.md`: The Yale Bright Star Catalogue, 9110 stars." }, { title: "Screen", text: "Dark red, for the eyes at night." }] });
 
 	let reg = (await getJson(srv.url, `/api/rooms/${id}/register`)).refs as any[];
 	assert.deepEqual(reg.map((r) => [r.kind, r.title, r.state, r.by]), [["docs", "catalogue.md", "proposed", "Lea"], ["docs", "notes.md", "proposed", "Lea"]]);
@@ -57,9 +57,11 @@ test("the register: a task's sources proposed once, a link added by hand, a word
 	assert.equal(link.status, 200, JSON.stringify(link.body));
 	assert.equal(link.body.again, false);
 	assert.equal((await post(srv.url, `/api/rooms/${id}/register`, { op: "add", address: "https://example.org/night-vision", by: "Lea" })).body.again, true);
+	await write(a, { changes: [{ title: "Light", text: "See https://example.org/night-vision for why." }] });
 	reg = (await getJson(srv.url, `/api/rooms/${id}/register`)).refs;
 	assert.equal(reg.length, 4);
-	assert.deepEqual(reg.find((r) => r.kind === "link").cites, [{ blockId: a, doc: "requirements.md", section: "Screen" }]);
+	assert.deepEqual(reg.find((r) => r.kind === "link").cites, [{ blockId: a, doc: "requirements.md", section: "Light" }]);
+	assert.equal(reg.find((r) => r.kind === "link").by, "Lea", "a link added by hand before a model cites it stays the person's");
 
 	// a word on a source: declining needs the reason; each word is a line in the room, the same word again none
 	const cat = reg[0].refId;

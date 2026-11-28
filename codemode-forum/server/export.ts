@@ -19,6 +19,8 @@ export type Chosen = { table: TableId; version: number;
 	/** Why this version: a person accepted it, a run with both tables ended with it, its table accepted it, or it is
 	 *  only the newest draft. */
 	how: "person" | "result" | "majority" | "draft"; accept?: PlanAccept };
+/** A source the document cites that the room has not accepted (register.ts), for the appendix. */
+export type Unaccepted = { title: string; state: string; reason?: string; sections: string[] };
 export type Export = { markdown: string; plan: string; chosen: Chosen; doc: FullDoc };
 
 /** The line that begins the appendix: everything before it is the plan. */
@@ -38,6 +40,7 @@ const L = {
 		decisions: "Decisions of the table", decided: (a: string[], g: string[], n: number) => `agreed: ${a.join(", ") || "nobody"}${g.length ? `; against: ${g.join(", ")}` : ""}; of ${n}`,
 		assumptions: "Assumptions", assumed: "Questions to the person that got no answer; the models were told to assume and to name the assumption in the plan:", ballots: "Ballots", round: "Round", ver: "Version", model: "Model", vote: "Vote", counts: "Counts as approval", approve: "approve", reject: "reject", yes: "yes", no: "no",
 		open: "Objections still standing", held: (who: string, title: string, defect: string, fix: string, state: string) => `${who} on "${title}" (${state}): ${defect} Fix asked for: ${fix}`, states: { open: "open", declined: "declined by the reviser, stands for its raiser" }, notes: "Notes", note: (who: string, title: string, defect: string) => `${who} on "${title}": ${defect}`,
+		unaccepted: "Sources not accepted", unacceptedSay: "This document cites sources the room has not accepted; only an accepted source may carry a claim of an accepted document:", unacceptedLine: (title: string, state: string, where: string) => `${title} (${state}): cited in ${where}`, refStates: { proposed: "proposed, not decided", declined: "declined" } as Record<string, string>,
 		cost: "Cost", costTables: (tok: number, usd: number) => `The two tables together: ${tok} tokens${usd ? `, $${usd.toFixed(4)}` : ""} (the comparison and the final round come on top).`, costRun: (tok: number, usd: number) => `The last run on this task used ${tok} tokens${usd ? `, $${usd.toFixed(4)}` : ""} in all.`, costNone: "Not recorded for this version.", rounds: (n: number) => `Rounds of ballots: ${n}.`, person: "the person", table: "the table",
 	},
 	de: {
@@ -53,6 +56,7 @@ const L = {
 		decisions: "Entscheidungen des Tischs", decided: (a: string[], g: string[], n: number) => `dafür: ${a.join(", ") || "niemand"}${g.length ? `; dagegen: ${g.join(", ")}` : ""}; von ${n}`,
 		assumptions: "Annahmen", assumed: "Fragen an die Person, die ohne Antwort blieben; die Modelle sollten eine Annahme treffen und sie im Plan nennen:", ballots: "Abstimmungen", round: "Runde", ver: "Fassung", model: "Modell", vote: "Stimme", counts: "Zählt als Zustimmung", approve: "Zustimmung", reject: "Ablehnung", yes: "ja", no: "nein",
 		open: "Einwände, die noch stehen", held: (who: string, title: string, defect: string, fix: string, state: string) => `${who} zu „${title}“ (${state}): ${defect} Verlangte Abhilfe: ${fix}`, states: { open: "offen", declined: "vom Überarbeiter abgelehnt, steht für den Einwender" }, notes: "Notizen", note: (who: string, title: string, defect: string) => `${who} zu „${title}“: ${defect}`,
+		unaccepted: "Nicht angenommene Quellen", unacceptedSay: "Dieses Dokument zitiert Quellen, die der Raum nicht angenommen hat; nur eine angenommene Quelle darf eine Aussage eines angenommenen Dokuments tragen:", unacceptedLine: (title: string, state: string, where: string) => `${title} (${state}): zitiert in ${where}`, refStates: { proposed: "vorgeschlagen, nicht entschieden", declined: "abgelehnt" } as Record<string, string>,
 		cost: "Kosten", costTables: (tok: number, usd: number) => `Beide Tische zusammen: ${tok} Tokens${usd ? `, $${usd.toFixed(4)}` : ""} (Vergleich und Schlussrunde kommen hinzu).`, costRun: (tok: number, usd: number) => `Der letzte Lauf auf dieser Aufgabe hat insgesamt ${tok} Tokens${usd ? `, $${usd.toFixed(4)}` : ""} verbraucht.`, costNone: "Für diese Fassung nicht festgehalten.", rounds: (n: number) => `Abstimmungsrunden: ${n}.`, person: "die Person", table: "der Tisch",
 	},
 } as const;
@@ -81,7 +85,7 @@ export async function chosenOf(space: SpaceLike, session: string, blockId: strin
 
 /** The export of a block: the plan and the appendix; null: no such block or no document. `table` and `version` name a
  *  version instead of the result (the appendix then describes that table). */
-export async function exportPlan(space: SpaceLike, session: string, blockId: string, o: { table?: TableId; version?: number; shown?: TableId; now?: number } = {}): Promise<Export | null> {
+export async function exportPlan(space: SpaceLike, session: string, blockId: string, o: { table?: TableId; version?: number; shown?: TableId; now?: number; unaccepted?: Unaccepted[] } = {}): Promise<Export | null> {
 	const task = (await space.readAll({ type: "PlanTask", fields: { session, blockId } }, { limit: 1 }))[0]?.fields as unknown as PlanTask | undefined;
 	if (!task) return null;
 	let chosen = await chosenOf(space, session, blockId, o.table ?? o.shown);
@@ -154,6 +158,7 @@ export async function exportPlan(space: SpaceLike, session: string, blockId: str
 	list(objections.filter(stands).map((x) => t.held(name(x.model), title(x.sectionId), one(x.defect), one(x.fix), t.states[x.state as "open" | "declined"])));
 	h(t.notes);
 	list(objections.filter((x) => x.state === "note").map((x) => t.note(name(x.model), title(x.sectionId), one(x.defect))));
+	if (o.unaccepted?.length) { h(t.unaccepted); out.push(t.unacceptedSay, ""); list(o.unaccepted.map((u) => `${t.unacceptedLine(one(u.title), t.refStates[u.state] ?? u.state, u.sections.map((x) => `"${one(x)}"`).join(", "))}${u.reason ? ` ${one(u.reason)}` : ""}`)); }
 	h(t.cost);
 	const tables = forStat ? (["A", "B"] as const).map((x) => forStat.tables[x]).filter((s) => !!s) : [];
 	// the room keeps how its last run ended: when that run worked on this block, its whole use is known

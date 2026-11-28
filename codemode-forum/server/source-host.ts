@@ -14,17 +14,23 @@
 //   FORUM_FILES_PAGE=https://files.example            the spaces-files page, linked beside the files it has and FORUM
 //                                                     does not show (it has no address of a single file)
 //                                                     for registering the room's agent (files.ts; FORUM_FILES_MAX_*)
+//   FORUM_SEARCH_PER_DAY=100                          web searches a day for all rooms together (research.ts; 0: none).
+//                                                     The search goes to DuckDuckGo only (search.ts); no page is opened.
+//   FORUM_TEST_SEARCH_MODULE=tests/search-fake.ts     tests only (FORUM_TEST=1): its post() answers instead of DuckDuckGo
 // It is the only process that talks to spaces-files: a room's link is checked and a task's copy of the linked folders
 // taken here (FilesRequest, FilesResult; files.ts).
 import "./env.ts";
 import { existsSync, writeFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
 import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
 import { answer, denied, docsPack, gitPack, indexHash, reposOf, resolveCommit, type IndexEntry, type Pack, type PlanSource, type SourceCall, type SourceId } from "./sources.ts";
 import { agentOf, fileNotes, freeName, kindOf, pictureKind, PICTURE_TYPES, PREVIEW_BYTES, workspacePath, type PreviewAnswer, UPLOAD, type UploadAnswer, type SaveAnswer, type ConflictAnswer, type PlanSave, type UploadDone, folderName, walkFolders, walkedIndex, type CheckAnswer, type FilesRequest, type FilesResult, type RoomLink, type SnapshotAnswer } from "./files.ts";
 import { FilesAgentClient, FilesError } from "./files-client.ts";
 import { askPdf } from "./sandbox-host.ts";
+import { takeQuota } from "./quota.ts";
+import { webSearch } from "./search.ts";
+import { researchOn, resultsText, searchesPerDay, type WebResult } from "./research.ts";
 import { fetchRemote, gitHosts, hasCommit, remoteDir, remoteName, remoteUrl } from "./remote.ts";
 import { announce, awaitWork, connectSpace, DEFAULT_SPACE, keepAlive } from "./space.ts";
 
@@ -38,6 +44,8 @@ export type SourceRequest = { requestId: string; session: string; blockId: strin
  *  is a failure of the request itself (no such repository, the pack is gone). */
 export type SourceResult = { requestId: string; session: string; ok: boolean; text?: string; opened?: Pick<PlanSource, "name" | "url" | "commit" | "ref" | "files" | "bytes" | "indexHash">; error?: string; ts: number };
 
+/** How long a search result is kept: long enough for the documents that cite it to bring it into the register. */
+const WEB_RESULT_MS = 90 * 24 * 3600_000;
 /** A request's transaction lease, renewed while it is answered: a sources process that dies holds its request this
  *  long (FORUM_SOURCE_LEASE_MS, default 20 s). */
 const LEASE_MS = Math.max(1000, Number(process.env.FORUM_SOURCE_LEASE_MS || 20_000));
@@ -132,6 +140,22 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 		});
 	};
 
+	// the web search's transport in the tests (FORUM_TEST=1 only): a module whose `post` answers like DuckDuckGo
+	const fakePost = process.env.FORUM_TEST === "1" && process.env.FORUM_TEST_SEARCH_MODULE ? ((await import(pathToFileURL(fileURLToPath(new URL("../" + process.env.FORUM_TEST_SEARCH_MODULE, import.meta.url))).href)) as { post: NonNullable<Parameters<typeof webSearch>[1]>["post"] }).post : undefined;
+	/** `web`: a search, when research is on for the room and the day's searches are not used up; each result kept as a
+	 *  WebResult with who asked. A refusal is the answer the model reads, not a failure of its work. */
+	const web = async (req: SourceRequest & { op: "call" }, txn: string): Promise<string> => {
+		const call = req.call as Extract<SourceCall, { op: "web" }>, query = call.query.replace(/\s+/g, " ").trim().slice(0, 200);
+		if (!(await researchOn(space, req.session))) return "Web search is switched off for this room.";
+		if (!query) return "A web search needs words to search for.";
+		const perDay = searchesPerDay();
+		let results;
+		try { results = await webSearch(query, { allowed: async () => perDay > 0 && (await takeQuota(space, "search", { perDay })).ok, ...(fakePost ? { post: fakePost } : {}) }); }
+		catch (e) { return `The web search did not answer: ${String((e as Error).message ?? e).replace(/CODEMODE_SEARCH_PER_DAY/, "FORUM_SEARCH_PER_DAY").slice(0, 200)}`; }
+		for (const x of results) await space.write({ type: "WebResult", fields: { session: req.session, blockId: req.blockId, query, url: x.url, title: x.title, snippet: x.snippet, by: call.by ?? "a model", ts: Date.now() } satisfies WebResult as never }, txn, WEB_RESULT_MS);
+		return resultsText(query, results);
+	};
+
 	/** One request: taken, answered and the answer written in one transaction. */
 	const answerOne = async (): Promise<boolean> => {
 		if (!(await awaitWork(space, { type: "SourceRequest" }, halt.signal))) return false; // idle: waiting holds nothing
@@ -155,7 +179,8 @@ export async function startSourceHost(o: { space?: string; parallel?: number } =
 					const pages = indexPages(pack.index);
 					for (const [part, paths] of pages.entries()) await space.write({ type: "SourceIndex", fields: { session: req.session, blockId: req.blockId, sourceId: "repo", part, parts: pages.length, paths } as never }, t.id, req.ttl);
 					result = { ok: true, opened: { name, ...(url ? { url } : {}), commit, ref: req.ref, files: pack.index.length, bytes: pack.index.reduce((n, [, size]) => n + size, 0), indexHash: indexHash(pack.index) } };
-				} else result = { ok: true, text: await answer(await packOf(req), req.call) };
+				} else if (req.call.op === "web") result = { ok: true, text: await web(req, t.id) };
+				else result = { ok: true, text: await answer(await packOf(req), req.call) };
 			} catch (err) { result = { ok: false, error: String((err as Error).message ?? err).slice(0, 300) }; }
 			await space.write({ type: "SourceResult", fields: { requestId: req.requestId, session: req.session, ...result, ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
 			await space.commit(t.id);

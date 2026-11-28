@@ -22,6 +22,8 @@ const COPIES = {
 	"server/oidc.ts": across("server/oidc.ts", ["spaces-files", "codemode-forum"]),
 	// the agent side of spaces-files' agent socket, run by the forum's sources process for each linked room
 	"client/agent-client.ts": ["spaces-files/client/agent-client.ts", "codemode-forum/server/files-client.ts"],
+	// the web search of the research calls (DuckDuckGo result lists, no page fetched); each project counts its own day
+	"server/search.ts": ["codemode-chat/server/search.ts", "codemode-forum/server/search.ts"],
 	// the "?" beside a control; each project has its own client/lib/tips.ts
 	"client/HelpTip.tsx": across("client/HelpTip.tsx", ["codemode-chat", "codemode-forum"]),
 	// the diagrams of the forum's help (codemode-forum/public/help/img), copies of the documentation's, in both languages

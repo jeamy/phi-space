@@ -13,7 +13,8 @@ import { modelInfoOf, spentToday, type ModelInfoView, type Spend } from "./model
 import { DOC_LIMITS, DocRefused, fullDoc, headOf, StaleSection, versionsOf, writeVersion, type FullDoc, type PlanDoc, type Revision } from "./plandoc.ts";
 import { planTask, type PlanTask } from "./plantask.ts";
 import { checkOf, sourceFiles } from "./check-host.ts";
-import { addRef, citesOf, decideRef, proposeRefs, refsOf, refsOfTask, registerMarkdown, REGISTER_BLOCK, type Cite, type SourceRef } from "./register.ts";
+import { webResultsOf } from "./research.ts";
+import { addRef, citedLinks, citesOf, decideRef, proposeRefs, refsOf, refsOfTask, registerMarkdown, REGISTER_BLOCK, type Cite, type SourceRef, unacceptedLine } from "./register.ts";
 import type { Failure } from "./checks.ts";
 import { askSources, indexPages, sourceWaitMs } from "./source-host.ts";
 import { remoteLimits } from "./remote.ts";
@@ -24,7 +25,7 @@ import { objectionsOf, type PlanObjection } from "./review.ts";
 import { acceptOf, ballotsOf, type PlanAccept, type PlanBallot } from "./ballots.ts";
 import { MAX_ROUNDS, runType, TABLE_SHARE, tableInfo } from "./run.ts";
 import { comparesOf, resultOf, standings, type PlanCompare, type PlanStrategyStat } from "./compare.ts";
-import { chosenOf, exportPlan, parseSaved, type Chosen } from "./export.ts";
+import { chosenOf, exportPlan, parseSaved, type Chosen, type Unaccepted } from "./export.ts";
 import { drawAliases, endRun, rid, startSpaceRun, systemLine, type RollCall, type RunEntry, type RunInfo, type RunParams } from "./run.ts";
 import { addImage, imageData, imagesOf, imageViews, noteImage, removeImage, type ImageView } from "./images.ts";
 import { entryLeaseMs, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
@@ -223,6 +224,12 @@ export class ForumHub {
 	async saveLlmOn(on: boolean): Promise<void> {
 		await takeAll(this.host, { type: "ForumAdmin", fields: { key: "llm" } });
 		await this.host.write({ type: "ForumAdmin", fields: { key: "llm", on, ts: Date.now() } }, null, FOREVER);
+	}
+
+	/** The administrator's switch for research (research.ts), kept in the space for the sources process. */
+	async saveResearchOn(on: boolean, by: string): Promise<void> {
+		await takeAll(this.host, { type: "ForumAdmin", fields: { key: "research" } });
+		await this.host.write({ type: "ForumAdmin", fields: { key: "research", on, by, ts: Date.now() } }, null, FOREVER);
 	}
 
 	/** The admin's choice of models, kept in the space so it outlives a restart; null: the choice of FORUM_MODELS. */
@@ -449,6 +456,9 @@ export class ForumHub {
 		const accept: PlanAccept = { ...d, version: doc.version, by: "person", who, approvals: [], of: 0, ts: Date.now() };
 		await this.host.write({ type: "PlanAccept", fields: accept as never }, null, this.#ttl);
 		await systemLine(this.host, null, this.#ttl, s.id, `${who} accepted version ${doc.version} of table ${d.table}`);
+		// the report on sources (register.ts): what the accepted version cites that the room has not accepted
+		const not = await this.#unaccepted(s.id, blockId).catch(() => []);
+		if (not.length) await systemLine(this.host, null, this.#ttl, s.id, unacceptedLine(doc.version, not));
 		const run = await this.#runNow(s);
 		if (run?.blockId === blockId) await this.stopRun(id);
 		this.push(s);
@@ -508,7 +518,7 @@ export class ForumHub {
 	 *  table accepted, else the newest draft of the table shown. null: no document. */
 	async planMarkdown(id: string, blockId: string, o: { table?: unknown; version?: number; plain?: boolean } = {}): Promise<string | null> {
 		const table = asTable(o.table);
-		const x = await exportPlan(this.host, id, blockId, { ...(table ? { table } : {}), ...(o.version !== undefined ? { version: o.version } : {}), shown: await this.#tableOf(id, blockId) });
+		const x = await exportPlan(this.host, id, blockId, { ...(table ? { table } : {}), ...(o.version !== undefined ? { version: o.version } : {}), shown: await this.#tableOf(id, blockId), unaccepted: await this.#unaccepted(id, blockId) });
 		return x ? (o.plain ? x.plan : x.markdown) : null;
 	}
 
@@ -655,7 +665,7 @@ export class ForumHub {
 		const now = await this.roomSettings(s.id);
 		const d = checkRoom(b, { allowed: now.allowed, runCeiling: now.ceilings.runBudgetTokens });
 		await saveRoom(this.host, s.id, by, d);
-		const said = [d.models ? `models ${d.models.join(", ")}` : "", d.way ? `way ${d.way}` : "", d.rounds !== undefined ? `${d.rounds} rounds` : "", d.perModel ? `${d.perModel} agents per model` : "", d.budgetTokens ? `budget ${d.budgetTokens} tokens` : "", d.personWaitS !== undefined ? `waits ${d.personWaitS} s for the person` : ""].filter(Boolean).join("; ");
+		const said = [d.models ? `models ${d.models.join(", ")}` : "", d.way ? `way ${d.way}` : "", d.rounds !== undefined ? `${d.rounds} rounds` : "", d.perModel ? `${d.perModel} agents per model` : "", d.budgetTokens ? `budget ${d.budgetTokens} tokens` : "", d.personWaitS !== undefined ? `waits ${d.personWaitS} s for the person` : "", d.research ? "research allowed" : ""].filter(Boolean).join("; ");
 		await systemLine(this.host, null, this.#ttl, s.id, `${by} set the room's defaults: ${said || "none"}`);
 		this.push(s);
 		return d;
@@ -842,7 +852,7 @@ export class ForumHub {
 		const expected = saves.find((x) => x.path === path && x.workspace === link.project.workspace)?.fileVersion ?? 0;
 		// the register is written as it stands now, and kept with the request like a document: a retry writes these bytes
 		const x = isRegister ? await (async () => { const reg = await this.register(s.id); return { markdown: registerMarkdown(reg.refs, new Map(reg.refs.map((r) => [r.refId, r.cites])), tasks[0]?.lang === "de" ? "de" : "en"), chosen: { table: "-", version: reg.refs.length } }; })()
-			: await exportPlan(this.host, s.id, blockId, { shown: await this.#tableOf(s.id, blockId) });
+			: await exportPlan(this.host, s.id, blockId, { shown: await this.#tableOf(s.id, blockId), unaccepted: await this.#unaccepted(s.id, blockId) });
 		if (!x) throw new Error("The task has no document yet");
 		if (!this.#allow(s, "save", 30)) throw new Error("Too many saves, slow down");
 		const key = { session: s.id, uploadId: o.saveId }, bytes = Buffer.from(x.markdown, "utf8"), data = bytes.toString("base64"), parts = Math.ceil(data.length / UPLOAD.part), ttl = 3600_000;
@@ -864,16 +874,25 @@ export class ForumHub {
 	/** The room's register of sources (register.ts), each with the sections that cite it in the documents as they
 	 *  stand (each task's chosen version), and the last save of `sources.md`. */
 	async register(id: string): Promise<{ refs: Array<SourceRef & { cites: Cite[] }>; saved: PlanSave | null }> {
-		const s = await this.session(id), refs = await refsOf(this.host, s.id), tasks = await this.#tasks(s.id);
-		const docs: Parameters<typeof citesOf>[1] = [];
-		if (refs.length) for (const [at, t] of tasks.entries()) {
+		const s = await this.session(id), tasks = await this.#tasks(s.id);
+		let refs = await refsOf(this.host, s.id);
+		const docs: Array<Parameters<typeof citesOf>[1][number] & { sections: Array<{ title: string; text: string; author: string; model: string }> }> = [];
+		for (const [at, t] of tasks.entries()) {
 			const chosen = await chosenOf(this.host, s.id, t.blockId, await this.#tableOf(s.id, t.blockId));
 			const head = chosen && (await headOf(this.host, { session: s.id, blockId: t.blockId, table: chosen.table }, chosen.version));
 			if (!head) continue;
 			docs.push({ blockId: t.blockId, doc: `${t.name ?? (at === 0 ? "plan" : `document-${at + 1}`)}.md`, files: await sourceFiles(this.host, s.id, t.blockId), sections: (await fullDoc(this.host, head)).sections });
 		}
+		// an address a document cites becomes a proposed link: found by a search, or named from memory (register.ts)
+		const links = citedLinks(refs, docs, await webResultsOf(this.host, s.id));
+		if (links.length) { await proposeRefs(this.host, this.#ttl, s.id, "a model", links); refs = await refsOf(this.host, s.id); }
 		const cites = citesOf(refs, docs);
 		return { refs: refs.map((r) => ({ ...r, cites: cites.get(r.refId) ?? [] })), saved: (await savesOf(this.host, s.id, REGISTER_BLOCK))[0] ?? null };
+	}
+
+	/** The sources a block's document cites that the room has not accepted, for its export and its acceptance. */
+	async #unaccepted(id: string, blockId: string): Promise<Unaccepted[]> {
+		return (await this.register(id)).refs.filter((r) => r.state !== "accepted" && r.cites.some((c) => c.blockId === blockId)).map((r) => ({ title: r.title, state: r.state, ...(r.reason ? { reason: r.reason } : {}), sections: [...new Set(r.cites.filter((c) => c.blockId === blockId).map((c) => c.section))] }));
 	}
 
 	/** A source a person adds to the register by hand, or their word on one (accepted, declined with the reason). */

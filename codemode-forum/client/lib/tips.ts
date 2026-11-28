@@ -9,7 +9,7 @@ export type TipId = "signin" | "name" | "signout" | "rooms" | "newroom" | "invit
 	| "version" | "compare" | "accept" | "object" | "tableview" | "language" | "mode" | "palette"
 	| "providers" | "providerkey" | "providersignin" | "loginanswer" | "providertest" | "providerremove" | "allowed" | "limits" | "roomdefaults"
 	| "roomlink" | "folders" | "linkcheck" | "fromworkspace" | "workspacefiles" | "pictures" | "picturenote" | "upload" | "filenote"
-	| "save" | "saveall" | "savename" | "conflict" | "saveonaccept" | "writesection" | "taskkind" | "roomdocs" | "register" | "refadd" | "refdecide" | "loadback";
+	| "save" | "saveall" | "savename" | "conflict" | "saveonaccept" | "writesection" | "taskkind" | "roomdocs" | "register" | "refadd" | "refdecide" | "loadback" | "research" | "researchroom";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -404,6 +404,20 @@ export const TIPS: Record<TipId, Tip> = {
 			en: "The models read these documents of the room as they are now: the accepted version, else the newest draft. Later versions do not change the copy.",
 		},
 		article: "help.topic.documents", anchor: "room",
+	},
+	research: {
+		text: {
+			de: "Schaltet die Websuche der Modelle für das ganze Forum ein. Zusätzlich muss der Raum sie erlauben. Die Suchwörter gehen an DuckDuckGo; keine Seite wird geöffnet.",
+			en: "Switches the models' web search on for the whole forum. The room must allow it as well. The search words go to DuckDuckGo; no page is opened.",
+		},
+		article: "help.topic.research", anchor: "switch",
+	},
+	researchroom: {
+		text: {
+			de: "Erlaubt den Modellen dieses Raums, im Web nach Quellen zu suchen, wenn ein Administrator die Recherche eingeschaltet hat. Gefundene Quellen kommen als Vorschlag ins Register.",
+			en: "Lets the models of this room search the web for sources, if an administrator switched research on. Sources they find come into the register as proposed.",
+		},
+		article: "help.topic.research", anchor: "switch",
 	},
 	loadback: {
 		text: {
